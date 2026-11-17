@@ -213,6 +213,8 @@ class AuditLog(models.Model):
         ('rpa_document_needs_person',   'روبوت الإدخال — مستند يحتاج موظف'),
         ('rpa_document_resolved',       'روبوت الإدخال — حل مستند'),
         ('rpa_document_verified',       'روبوت الإدخال — التحقق من مستند'),
+        ('rpa_recipe_edited',           'روبوت الإدخال — تعديل مسودة وصفة'),
+        ('rpa_screen_changed',          'روبوت الإدخال — تفعيل أو إيقاف شاشة'),
 
     ]
 

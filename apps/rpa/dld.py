@@ -96,7 +96,11 @@ def recipe_from_dld(template: DldTemplate, *, screen, field_map: list, created_b
     keystrokes from the template's first non-blank row."""
     from apps.audit.models import AuditLog
     from apps.rpa.models import RpaRecipe
+    from apps.rpa.workflow import LINE_FIELDS
 
+    unknown = [n for n in field_map if n not in LINE_FIELDS]
+    if unknown:
+        raise ValueError(f'أسماء حقول غير معروفة: {"، ".join(map(str, unknown))} — المسموح: {"، ".join(LINE_FIELDS)}')
     data_columns = template.column_kinds.count('data')
     if len(field_map) != data_columns:
         raise ValueError(f'field_map has {len(field_map)} names but the template has {data_columns} data columns')

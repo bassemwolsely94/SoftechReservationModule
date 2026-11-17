@@ -65,6 +65,8 @@ class _World:
         self.screen.save()
         self.src = make_branch(f'{prefix} مصدر', f'{prefix}A')
         self.dst = make_branch(f'{prefix} مستلم', f'{prefix}B')
+        self.src.db_host = '10.0.0.1'            # the verifier searches the source branch's server
+        self.src.save(update_fields=['db_host'])
         _, self.staff, _ = make_user(f'{prefix}_op', role='supervisor', branch=self.src, access_all=True)
         self.recipe = RpaRecipe.objects.create(
             screen=self.screen, version=RpaRecipe.objects.filter(screen=self.screen).count() + 1,
@@ -533,6 +535,9 @@ class ResolveTests(_World, TestCase):
 
     def setUp(self):
         self.build_world('T8R')
+        p = mock.patch(FIND, return_value=None)  # retry asks SOFTECH first; nothing there
+        p.start()
+        self.addCleanup(p.stop)
         self.doc = self.make_doc(status='needs_person')
         RpaDocument.objects.filter(pk=self.doc.pk).update(needs_person_reason='unknown_popup')
         self.doc.refresh_from_db()

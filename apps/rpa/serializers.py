@@ -42,10 +42,11 @@ class LineSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     lines = LineSerializer(many=True, read_only=True)
+    reference = serializers.CharField(read_only=True)   # RPA-<id>, the text SOFTECH carries
 
     class Meta:
         model = RpaDocument
-        fields = ['id', 'seq', 'status', 'softech_docnumber', 'needs_person_reason', 'verify_result',
+        fields = ['id', 'reference', 'seq', 'status', 'softech_docnumber', 'needs_person_reason', 'verify_result',
                   'claimed_at', 'lease_until', 'lines']
 
 
@@ -141,8 +142,8 @@ class RecipeSerializer(serializers.ModelSerializer):
     class Meta:
         model = RpaRecipe
         fields = ['id', 'screen', 'screen_title', 'version', 'status', 'window_title', 'cell_delay', 'form_delay',
-                  'line_cells', 'save_keys', 'cancel_keys', 'source_filename', 'created_by_name',
-                  'approved_by_name', 'approved_at']
+                  'line_cells', 'save_keys', 'cancel_keys', 'popups', 'header_checklist', 'ref_cells',
+                  'source_filename', 'created_by_name', 'approved_by_name', 'approved_at']
 
     def get_created_by_name(self, recipe):
         return _staff_name(recipe.created_by)
@@ -157,7 +158,8 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RpaDevice
-        fields = ['id', 'label', 'staff', 'staff_name', 'created_at', 'last_seen_at', 'revoked_at', 'online']
+        fields = ['id', 'label', 'staff', 'staff_name', 'created_at', 'last_seen_at', 'revoked_at', 'online',
+                  'last_claim_error', 'last_claim_error_at']
 
     def get_staff_name(self, device):
         return _staff_name(device.staff)

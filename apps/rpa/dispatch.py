@@ -25,14 +25,15 @@ from core.errors import public_error
 from core.permissions import matrix_allows
 
 from .keyplan import build_keyplan
-from .models import RpaDocument, RpaJob, RpaRun
-from .verifier import find_issue_document, verify_issue_document
+from .models import RpaDevice, RpaDocument, RpaJob, RpaRun
+from .verifier import branch_lookup_problem, find_issue_document, verify_issue_document
 
 logger = logging.getLogger(__name__)
 
 FLAG = 'RPA_SOFTECH_ENTRY_ENABLED'
 LEASE = timedelta(minutes=10)
 LOST_REASON = 'انقطع الروبوت قبل الإبلاغ'
+SOFTECH_DOWN = 'تعذر الاتصال بـ SOFTECH للتحقق قبل الإدخال؛ لن يُستلم أي مستند حتى يعود الاتصال'
 MAX_STEPS = 5000
 _OUTCOMES = {value for value, _ in RpaRun.OUTCOMES if value}
 
@@ -121,6 +122,20 @@ def _still_claimable(doc):
             and RpaJob.objects.filter(pk=doc.job_id, status='approved').exists())
 
 
+_UNREACHABLE = object()      # _claim_loop's answer when SOFTECH could not be searched
+
+
+def _set_claim_error(device, text):
+    """Why the last claim handed nothing out although work may be waiting ('' = no problem).
+    Shown on /api/rpa/status/ next to the device, so the operator is not left guessing."""
+    if (device.last_claim_error or '') == text:
+        return
+    device.last_claim_error = text
+    device.last_claim_error_at = timezone.now() if text else None
+    RpaDevice.objects.filter(pk=device.pk).update(last_claim_error=text,
+                                                  last_claim_error_at=device.last_claim_error_at)
+
+
 def claim_next(device):
     """The next document for this device's operator, claimed under a 10-minute lease, or None.
 
@@ -130,6 +145,15 @@ def claim_next(device):
     sweep_expired_leases()
     if not writer_allowed(FLAG):
         return None
+    claim = _claim_loop(device)
+    if claim is _UNREACHABLE:
+        _set_claim_error(device, SOFTECH_DOWN)
+        return None
+    _set_claim_error(device, '')
+    return claim
+
+
+def _claim_loop(device):
     while True:
         with transaction.atomic():
             doc = _candidates(device).first()
@@ -138,12 +162,17 @@ def claim_next(device):
             job = doc.job
             if not _still_claimable(doc):
                 continue
+            problem = (branch_lookup_problem(job.branch)
+                       or branch_lookup_problem(job.target_branch, needs_server=False))
+            if problem:                              # SOFTECH cannot be searched: never type blind
+                _needs_person(doc, f'لا يمكن التحقق من SOFTECH: {problem}', user=job.created_by)
+                continue
             try:
                 found = find_issue_document(doc)
             except Exception as exc:                 # noqa: BLE001 - SOFTECH unreachable: claim nothing
                 logger.warning('rpa claim: SOFTECH lookup failed for document %s (%s)',
                                doc.pk, type(exc).__name__)
-                return None
+                return _UNREACHABLE
             if found is not None:
                 _record_found(doc, found, user=job.created_by,
                               note=f'{doc.reference}: موجود في SOFTECH قبل الإدخال — لن يُكتب')
@@ -154,7 +183,8 @@ def claim_next(device):
                 continue
             mode = 'dry_run' if job.dry_run else 'live'
             try:
-                keyplan = build_keyplan(doc, mode=mode)
+                with transaction.atomic():           # savepoint: a DB error here must not poison the claim
+                    keyplan = build_keyplan(doc, mode=mode)
             except PermissionError:
                 _needs_person(doc, 'الإدخال الفعلي غير مفعل لهذه الشاشة', user=job.created_by)
                 continue
@@ -248,11 +278,13 @@ def report_run(document, device, payload) -> RpaRun:
 
         old = doc.status
         user = device.staff
+        softech_check = None
         if doc.status == 'in_progress' and doc.claimed_by_id == device.pk:
             if outcome == 'dry_run_ok' and run.mode == 'dry_run':
                 doc.status = 'dry_run_ok'
                 doc.lease_until = None
                 doc.save(update_fields=['status', 'lease_until'])
+                softech_check = _after_dry_run(doc, run, user)
             elif outcome == 'saved' and run.mode == 'live':
                 _after_save(doc, user)
             elif outcome == 'saved':
@@ -261,11 +293,45 @@ def report_run(document, device, payload) -> RpaRun:
                 _needs_person(doc, 'نتيجة تجريبية في تشغيل فعلي', user=user)
             else:
                 _needs_person(doc, LOST_REASON if lease_lost else outcome, user=user)
-        AuditLog.log('rpa_run_reported', user=user, obj=doc, old_data={'status': old},
-                     new_data={'status': doc.status, 'run_id': run.pk, 'mode': run.mode, 'outcome': outcome,
-                               'steps': len(run.steps)},
+        new = {'status': doc.status, 'run_id': run.pk, 'mode': run.mode, 'outcome': outcome,
+               'steps': len(run.steps)}
+        if softech_check is not None:
+            new['softech_check'] = softech_check
+        AuditLog.log('rpa_run_reported', user=user, obj=doc, old_data={'status': old}, new_data=new,
                      note=f'{doc.reference}: {outcome}')
     return run
+
+
+SAVED_IN_DRY_RUN = ('وُجد المستند محفوظاً في SOFTECH برقم {n} بعد تشغيل تجريبي — '
+                    'كان يجب ألا يُحفظ؛ راجع الوصفة قبل أي تشغيل آخر')
+NOT_CHECKED_NOTE = 'لم يتم التحقق من SOFTECH بعد التجربة (تعذر الاتصال)'
+
+
+def _after_dry_run(doc, run, user):
+    """A dry run must leave nothing in SOFTECH: look, and send a hit to a person.
+
+    Returns what the check found, for the run's audit: 'clear', 'found', or 'not_checked'
+    (SOFTECH unreachable: the result stays dry_run_ok and the run carries a note saying so)."""
+    try:
+        found = find_issue_document(doc)
+    except Exception as exc:                         # noqa: BLE001 - the operator sees the note on the run
+        logger.warning('rpa report: SOFTECH check after dry run failed for document %s (%s)',
+                       doc.pk, type(exc).__name__)
+        run.steps = run.steps + [{'i': None, 'label': 'تحقق SOFTECH', 'at': timezone.now().isoformat(),
+                                  'ok': False, 'note': NOT_CHECKED_NOTE}]
+        run.save(update_fields=['steps'])
+        return 'not_checked'
+    if found is None:
+        return 'clear'
+    old = {'softech_docnumber': doc.softech_docnumber}
+    doc.softech_docnumber = found['docnumber']
+    doc.save(update_fields=['softech_docnumber'])
+    AuditLog.log('rpa_document_verified', user=user, obj=doc, old_data=old,
+                 new_data={'softech_docnumber': doc.softech_docnumber, 'matched_by': found.get('matched_by', ''),
+                           'run_id': run.pk, 'saved_in_dry_run': True},
+                 note=f'{doc.reference}: محفوظ في SOFTECH بعد تشغيل تجريبي')
+    _needs_person(doc, SAVED_IN_DRY_RUN.format(n=found['docnumber']), user=user)
+    return 'found'
 
 
 def _after_save(doc, user):
@@ -302,7 +368,19 @@ def resolve_document(document, profile, decision: str, reason: str):
             raise ValidationError({'detail': 'المستند لا ينتظر قرار موظف.'})
         old = {'status': doc.status, 'needs_person_reason': doc.needs_person_reason,
                'softech_docnumber': doc.softech_docnumber}
+        problem = '' if decision == 'cancelled' else branch_lookup_problem(doc.job.branch)
+        if problem:                                  # retry / posted both need SOFTECH searched first
+            raise ValidationError({'detail': f'لا يمكن التحقق من SOFTECH: {problem}'})
         if decision == 'retry':
+            try:
+                found = find_issue_document(doc)
+            except Exception as exc:                 # noqa: BLE001 - shown as a calm message, not the error
+                logger.warning('rpa resolve: SOFTECH lookup failed for document %s (%s)',
+                               doc.pk, type(exc).__name__)
+                raise ValidationError({'detail': 'تعذر الاتصال بـ SOFTECH للتأكد أن المستند غير محفوظ، حاول لاحقاً.'})
+            if found is not None:                    # typing it again would post it twice
+                raise ValidationError({'detail': f'المستند موجود في SOFTECH برقم {found["docnumber"]}؛ '
+                                                 'لا يمكن إعادة المحاولة — اختر «تم الحفظ في SOFTECH».'})
             doc.status = 'approved'
             doc.claimed_by = None
             doc.claimed_at = None

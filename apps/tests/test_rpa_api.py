@@ -1,7 +1,5 @@
 import io
 import json
-import sys
-import types
 from datetime import timedelta
 from unittest import mock
 
@@ -19,7 +17,7 @@ from apps.users.models import RoleModuleAccess
 HEAD = ['كود الصنف', 'الكمية', 'تاريخ الصلاحية']
 DLD = ('begindelays\nCellDelay=0.2\nFormDelay=0.25\nenddelays\n'
        'beginheader\nKey Strokes\tData\nendheader\nbeginother\nWindow=Issue\nendother\n'
-       'begindata\n{TAB}\t1\nenddata\n')
+       'begindata\n\\{TAB}\t1\nenddata\n')   # DataLoad stores special keys as \{KEY}
 
 
 def _xlsx(rows):
@@ -33,10 +31,7 @@ def _xlsx(rows):
     return SimpleUploadedFile('sheet.xlsx', buf.getvalue())
 
 
-def _fake_issue_device(*, staff, label, created_by):
-    device = RpaDevice.objects.create(staff=staff, created_by=created_by, label=label,
-                                      token_hash=f'h-{label}-{staff.id}')
-    return device, 'TOKEN-SHOWN-ONCE'
+FIND = 'apps.rpa.dispatch.find_issue_document'
 
 
 class _Base(TestCase):
@@ -44,6 +39,9 @@ class _Base(TestCase):
     def setUpTestData(cls):
         cls.a = make_branch('RA', 'RPA1')
         cls.b = make_branch('RB', 'RPA2')
+        for branch in (cls.a, cls.b):          # the verifier searches the source branch's server
+            branch.db_host = '10.0.0.2'
+            branch.save(update_fields=['db_host'])
         cls.screen = RpaScreen.objects.get(key='issue_125')
         _, cls.sup, cls.sup_c = make_user('rpa_sup', role='supervisor', branch=cls.a)
         _, cls.sup2, cls.sup2_c = make_user('rpa_sup2', role='supervisor', branch=cls.a)
@@ -77,6 +75,7 @@ class AccessTests(_Base):
             ('post', f'/api/rpa/jobs/{job.id}/cancel/'), ('get', f'/api/rpa/documents/{doc.id}/'),
             ('post', f'/api/rpa/documents/{doc.id}/resolve/'), ('get', '/api/rpa/recipes/'),
             ('post', '/api/rpa/recipes/'), ('post', f'/api/rpa/recipes/{rec.id}/approve/'),
+            ('patch', f'/api/rpa/recipes/{rec.id}/'), ('post', '/api/rpa/screens/issue_125/'),
             ('get', '/api/rpa/devices/'), ('post', '/api/rpa/devices/'),
             ('post', f'/api/rpa/devices/{dev.id}/revoke/'), ('get', '/api/rpa/status/'),
         ]
@@ -88,7 +87,14 @@ class AccessTests(_Base):
         rec = self._recipe()
         self.assertEqual(self.sup_c.post('/api/rpa/recipes/', {}).status_code, 403)
         self.assertEqual(self.sup_c.post(f'/api/rpa/recipes/{rec.id}/approve/').status_code, 403)
+        self.assertEqual(self.sup_c.patch(f'/api/rpa/recipes/{rec.id}/', {'header_checklist': ['x']},
+                                          format='json').status_code, 403)
+        self.assertEqual(self.sup_c.post('/api/rpa/screens/issue_125/', {'enabled': True},
+                                         format='json').status_code, 403)
         self.assertEqual(self.sup_c.get('/api/rpa/recipes/').status_code, 200)
+        rec.refresh_from_db()
+        self.assertEqual(rec.header_checklist, [])
+        self.assertFalse(RpaScreen.objects.get(key='issue_125').enabled)
 
 
 class JobTests(_Base):
@@ -200,16 +206,29 @@ class DocumentTests(_Base):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['runs'], [])
 
-    def test_resolve_delegates(self):
-        job = self._job()
+    def test_resolve_retry(self):
+        job = self._job(status='approved')
         doc = job.documents.first()
-        fake = types.ModuleType('apps.rpa.dispatch')
-        calls = []
-        fake.resolve_document = lambda d, p, decision, reason: calls.append((d.id, p.id, decision, reason))
-        with mock.patch.dict(sys.modules, {'apps.rpa.dispatch': fake}):
-            r = self.sup_c.post(f'/api/rpa/documents/{doc.id}/resolve/', {'decision': 'retry', 'reason': 'ok'})
+        RpaDocument.objects.filter(pk=doc.pk).update(status='needs_person', needs_person_reason='unknown_popup')
+        url = f'/api/rpa/documents/{doc.id}/resolve/'
+        self.assertEqual(self.sup_c.post(url, {'reason': 'ok'}).status_code, 400)       # no decision
+        with mock.patch(FIND, return_value=None):
+            r = self.sup_c.post(url, {'decision': 'retry', 'reason': 'ok'})
         self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(calls, [(doc.id, self.sup.id, 'retry', 'ok')])
+        self.assertEqual(r.data['status'], 'approved')
+        self.assertEqual(r.data['reference'], f'RPA-{doc.id}')
+
+    def test_retry_refused_when_softech_already_has_it(self):
+        doc = self._job(status='approved').documents.first()
+        RpaDocument.objects.filter(pk=doc.pk).update(status='needs_person')
+        found = {'docnumber': 91, 'usercode': '', 'cust_branch_code': 'RPA2', 'matched_by': 'reference',
+                 'lines': []}
+        with mock.patch(FIND, return_value=found):
+            r = self.sup_c.post(f'/api/rpa/documents/{doc.id}/resolve/', {'decision': 'retry', 'reason': 'x'})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('91', r.data['detail'])
+        doc.refresh_from_db()
+        self.assertEqual(doc.status, 'needs_person')
 
     def test_resolve_needs_edit_grant(self):
         doc = self._job().documents.first()
@@ -225,10 +244,35 @@ class RecipeTests(_Base):
                                                   'file': dld}, format='multipart')
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data['status'], 'draft')
-        self.assertEqual(self.adm_c.post(f'/api/rpa/recipes/{r.data["id"]}/approve/').status_code, 403)  # importer
-        ok = self.adm2_c.post(f'/api/rpa/recipes/{r.data["id"]}/approve/')
+        rid = r.data['id']
+        self.assertEqual(self.adm_c.post(f'/api/rpa/recipes/{rid}/approve/').status_code, 403)  # importer
+        # a .dld carries no cancel keys: approving it as is would make every dry run impossible
+        refused = self.adm2_c.post(f'/api/rpa/recipes/{rid}/approve/')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('مفاتيح الإلغاء', refused.data['detail'])
+        bad = self.adm_c.patch(f'/api/rpa/recipes/{rid}/', {'cancel_keys': [{'kind': 'keys', 'value': '{ESC}'}]},
+                               format='json')
+        self.assertEqual(bad.status_code, 400)
+        edit = self.adm_c.patch(f'/api/rpa/recipes/{rid}/', {
+            'cancel_keys': [{'kind': 'keys', 'value': r'\{ESC}'}],
+            'popups': [{'title_contains': 'تأكيد', 'text_contains': '', 'answer_keys': r'\{ENTER}'}],
+            'header_checklist': ['تأكد من المخزن'], 'ref_cells': []}, format='json')
+        self.assertEqual(edit.status_code, 200, edit.content)
+        self.assertEqual(edit.data['cancel_keys'], [{'kind': 'keys', 'value': r'\{ESC}'}])
+        self.assertEqual(edit.data['header_checklist'], ['تأكد من المخزن'])
+        ok = self.adm2_c.post(f'/api/rpa/recipes/{rid}/approve/')
         self.assertEqual(ok.status_code, 200, ok.content)
         self.assertEqual(ok.data['status'], 'approved')
+        frozen = self.adm_c.patch(f'/api/rpa/recipes/{rid}/', {'header_checklist': ['x']}, format='json')
+        self.assertEqual(frozen.status_code, 400)
+
+    def test_field_map_names_checked_at_import(self):
+        dld = SimpleUploadedFile('t.dld', DLD.encode('utf-8'))
+        r = self.adm_c.post('/api/rpa/recipes/', {'screen': 'issue_125', 'field_map': json.dumps(['price']),
+                                                  'file': dld}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('price', r.data['detail'])
+        self.assertFalse(RpaRecipe.objects.exists())
 
     def test_bad_dld_is_400(self):
         bad = SimpleUploadedFile('t.dld', b'garbage')
@@ -247,15 +291,13 @@ class RecipeTests(_Base):
 
 class DeviceTests(_Base):
     def test_token_shown_once(self):
-        fake = types.ModuleType('apps.rpa.auth')
-        fake.issue_device = _fake_issue_device
-        with mock.patch.dict(sys.modules, {'apps.rpa.auth': fake}):
-            r = self.sup_c.post('/api/rpa/devices/', {'label': 'PC-1'})
+        r = self.sup_c.post('/api/rpa/devices/', {'label': 'PC-1'})
         self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(r.data['token'], 'TOKEN-SHOWN-ONCE')
+        token = r.data['token']
+        self.assertGreaterEqual(len(token), 40)
         self.assertNotIn('token_hash', r.data['device'])
         lst = self.sup_c.get('/api/rpa/devices/')
-        self.assertNotIn('TOKEN-SHOWN-ONCE', lst.content.decode())
+        self.assertNotIn(token, lst.content.decode())
         self.assertNotIn('token', lst.content.decode())
 
     def test_own_devices_and_revoke(self):
@@ -272,10 +314,8 @@ class DeviceTests(_Base):
         self.assertEqual(self.adm_c.post(f'/api/rpa/devices/{theirs.id}/revoke/').status_code, 200)
 
     def test_empty_label_400(self):
-        fake = types.ModuleType('apps.rpa.auth')
-        fake.issue_device = _fake_issue_device
-        with mock.patch.dict(sys.modules, {'apps.rpa.auth': fake}):
-            self.assertEqual(self.sup_c.post('/api/rpa/devices/', {'label': ' '}).status_code, 400)
+        self.assertEqual(self.sup_c.post('/api/rpa/devices/', {'label': ' '}).status_code, 400)
+        self.assertFalse(RpaDevice.objects.exists())
 
 
 class StatusTests(_Base):
@@ -287,10 +327,14 @@ class StatusTests(_Base):
                                  last_seen_at=now - timedelta(minutes=5))
         RpaDevice.objects.create(staff=self.sup, created_by=self.sup, label='gone', token_hash='s3',
                                  last_seen_at=now, revoked_at=now)
-        with self.settings(RPA_SOFTECH_ENTRY_ENABLED=True):
+        with self.settings(RPA_SOFTECH_ENTRY_ENABLED=True, WRITER_INSTANCE=True):
             r = self.sup_c.get('/api/rpa/status/')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data['switch_on'])
+        self.assertEqual(r.data['last_claim_error'], '')
+        # the flag alone, off the writer instance: claim_next hands nothing out, so neither does the strip
+        with self.settings(RPA_SOFTECH_ENTRY_ENABLED=True, WRITER_INSTANCE=False):
+            self.assertFalse(self.sup_c.get('/api/rpa/status/').data['switch_on'])
         self.assertEqual([d['label'] for d in r.data['my_devices_online']], ['on'])
         self.assertEqual(r.data['screens'][0]['key'], 'issue_125')
         with self.settings(RPA_SOFTECH_ENTRY_ENABLED=False):
@@ -318,14 +362,12 @@ class FixRoundTests(_Base):
     def test_non_string_reason_or_body_is_400(self):
         job = self._job()
         doc = job.documents.first()
-        fake = types.ModuleType('apps.rpa.dispatch')
-        fake.resolve_document = lambda *a: None
-        for body in ({'reason': ['x']}, {'reason': {'a': 1}}):
-            r = self.sup2_c.post(f'/api/rpa/jobs/{job.id}/cancel/', body, format='json')
-            self.assertEqual(r.status_code, 400, body)
-            with mock.patch.dict(sys.modules, {'apps.rpa.dispatch': fake}):
-                self.assertEqual(self.sup2_c.post(f'/api/rpa/documents/{doc.id}/resolve/', body,
-                                                  format='json').status_code, 400, body)
+        for body in ({'reason': ['x']}, {'reason': {'a': 1}}, {'decision': ['retry'], 'reason': 'x'}):
+            if 'decision' not in body:
+                r = self.sup2_c.post(f'/api/rpa/jobs/{job.id}/cancel/', body, format='json')
+                self.assertEqual(r.status_code, 400, body)
+            self.assertEqual(self.sup2_c.post(f'/api/rpa/documents/{doc.id}/resolve/', body,
+                                              format='json').status_code, 400, body)
         r = self.sup2_c.post(f'/api/rpa/jobs/{job.id}/cancel/', ['x'], format='json')
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self.sup2_c.post('/api/rpa/devices/', ['x'], format='json').status_code, 400)
@@ -351,3 +393,30 @@ class FixRoundTests(_Base):
         # in scope: the id is still returned
         again = self.adm_c.post('/api/rpa/jobs/', dict(data, branch=self.b.id, file=self._file()), format='multipart')
         self.assertEqual(str(again.data['job_id']), str(first.data['id']))
+
+
+class ScreenTests(_Base):
+    def test_admin_enables_screen_and_live_is_refused(self):
+        url = '/api/rpa/screens/issue_125/'
+        self.assertEqual(self.adm_c.post(url, {'enabled': 'yes'}, format='json').status_code, 400)
+        self.assertEqual(self.adm_c.post(url, {'enabled': True, 'live': True}, format='json').status_code, 400)
+        self.assertEqual(self.adm_c.post(url, {'live': False}, format='json').status_code, 400)
+        self.assertEqual(self.adm_c.post('/api/rpa/screens/stockcount/', {'enabled': True},
+                                         format='json').status_code, 400)
+        r = self.adm_c.post(url, {'enabled': True}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.data['enabled'], r.data['live']), (True, False))
+        self.assertTrue(AuditLog.objects.filter(action='rpa_screen_changed').exists())
+        self.assertFalse(RpaScreen.objects.get(key='stockcount').enabled)
+
+
+class CorruptWorkbookTests(_Base):
+    def test_key_error_and_xml_parse_error_are_400(self):
+        from xml.etree.ElementTree import ParseError
+        for exc in (KeyError('xl/worksheets/sheet1.xml'), ParseError('not well-formed')):
+            with mock.patch('apps.rpa.workflow.parse_issue_sheet', side_effect=exc):
+                r = self.sup_c.post('/api/rpa/jobs/', {'screen': 'issue_125', 'branch': self.a.id,
+                                                       'target_branch': self.b.id,
+                                                       'file': _xlsx([['1', 2, None]])}, format='multipart')
+            self.assertEqual(r.status_code, 400, exc)
+            self.assertNotIn('sheet1', r.content.decode())

@@ -21,8 +21,10 @@ DOCCODE = '125'
 _Q5 = Decimal('0.00001')
 
 _HEADER_COLS = 'docnumber, usercode, cust_branch_code, docdate, comments'
-_REF_SQL = (f'SET ROWCOUNT 5 SELECT {_HEADER_COLS} FROM SOFTECHDB9.dbo.stktransm '
-            "WHERE branchcode=? AND doccode='125' AND comments LIKE ?")
+# LIKE '%RPA-12%' also hits RPA-120.., RPA-1200..: the cap is wide and newest-first so our own
+# document is not crowded out, and Python keeps only an exact RPA-<id> (no digit after it).
+_REF_SQL = (f'SET ROWCOUNT 50 SELECT {_HEADER_COLS} FROM SOFTECHDB9.dbo.stktransm '
+            "WHERE branchcode=? AND doccode='125' AND comments LIKE ? ORDER BY docnumber DESC")
 _FINGERPRINT_SQL = (f'SET ROWCOUNT 50 SELECT {_HEADER_COLS} FROM SOFTECHDB9.dbo.stktransm '
                     "WHERE branchcode=? AND doccode='125' AND usercode=? AND cust_branch_code=? "
                     'AND docdate>=? AND docdate<=? ORDER BY docnumber DESC')
@@ -79,10 +81,40 @@ def _names_other_document(comments, document):
     return any(f'RPA-{n}' != document.reference for n in _REF_IN_COMMENT.findall(comments))
 
 
+def branch_lookup_problem(branch, *, needs_server=True):
+    """'' when SOFTECH can be searched for this branch's documents, else the Arabic reason.
+
+    Without the branch code every lookup returns nothing, so the double-post guard would be off."""
+    if branch is None:
+        return 'الفرع غير محدد'
+    if not _s(branch.softech_branch_id):
+        return f'الفرع {branch.name} بلا كود SOFTECH'
+    if needs_server and not _s(branch.effective_db_host):
+        return f'الفرع {branch.name} بلا عنوان سيرفر SOFTECH'
+    return ''
+
+
+def _lines_of(cur, bcode, docnumber):
+    return [{'itemcode': _s(r[0]), 'qty': _qty(r[1]), 'expiry': _date(r[2])}
+            for r in _read(cur, _LINES_SQL, [bcode, DOCCODE, docnumber])]
+
+
+def _found(row, how, lines, docnumber):
+    return {'docnumber': docnumber, 'usercode': _s(row[1]), 'cust_branch_code': _s(row[2]),
+            'matched_by': how, 'lines': lines}
+
+
 def find_issue_document(document):
-    """The doc-125 on the supplying branch's server for this document, or None."""
+    """The doc-125 on the supplying branch's server for this document, or None.
+
+    A header carrying our own RPA-<id> reference IS the document, whatever its lines say (spec
+    5.3): it is returned as found and the caller's verify sends a mismatch to a person. Only a
+    fingerprint candidate (no reference) has to match our lines to count."""
     job = document.job
     branch = job.branch
+    problem = branch_lookup_problem(branch)
+    if problem:
+        raise ValueError(problem)
     bcode = _s(branch.softech_branch_id)
     wanted = _key(_doc_lines(document))
     conn = sybase.get_branch_connection(branch.effective_db_host, branch.db_port or 5000,
@@ -91,25 +123,22 @@ def find_issue_document(document):
     try:
         cur = conn.cursor()
         own = re.compile(rf'{re.escape(document.reference)}(?!\d)')   # LIKE also hits RPA-120 for RPA-12
-        candidates = [(r, 'reference') for r in
-                      _read_headers(cur, _REF_SQL, [bcode, f'%{document.reference}%'])
-                      if own.search(_s(r[4]))]
-        if not candidates:
-            usercode = expected_softech_usercode(job.created_by)
-            target = _s(job.target_branch.softech_branch_id) if job.target_branch_id else ''
-            if usercode and target and job.approved_at:
-                start = timezone.localtime(job.approved_at).date()
-                candidates = [(r, 'fingerprint') for r in
-                              _read_headers(cur, _FINGERPRINT_SQL,
-                                            [bcode, usercode, target, start, timezone.localdate()])
-                              if not _names_other_document(_s(r[4]), document)]   # another RPA doc's
-        for row, how in candidates:
+        for row in _read_headers(cur, _REF_SQL, [bcode, f'%{document.reference}%']):
+            if own.search(_s(row[4])):
+                docnumber = int(Decimal(_s(row[0])))
+                return _found(row, 'reference', _lines_of(cur, bcode, docnumber), docnumber)
+        usercode = expected_softech_usercode(job.created_by)
+        target = _s(job.target_branch.softech_branch_id) if job.target_branch_id else ''
+        if not (usercode and target and job.approved_at):
+            return None
+        start = timezone.localtime(job.approved_at).date()
+        for row in _read_headers(cur, _FINGERPRINT_SQL, [bcode, usercode, target, start, timezone.localdate()]):
+            if _names_other_document(_s(row[4]), document):          # another RPA document's
+                continue
             docnumber = int(Decimal(_s(row[0])))
-            lines = [{'itemcode': _s(r[0]), 'qty': _qty(r[1]), 'expiry': _date(r[2])}
-                     for r in _read(cur, _LINES_SQL, [bcode, DOCCODE, docnumber])]
+            lines = _lines_of(cur, bcode, docnumber)
             if _key(lines) == wanted:
-                return {'docnumber': docnumber, 'usercode': _s(row[1]),
-                        'cust_branch_code': _s(row[2]), 'matched_by': how, 'lines': lines}
+                return _found(row, 'fingerprint', lines, docnumber)
         return None
     finally:
         try:

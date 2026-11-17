@@ -32,6 +32,8 @@ class _Cur:
             self.conn.rowcount = int(m.group(1))
         if 'dbo.stktransm' in sql:
             self._rows = self.conn.headers_for(sql)
+            if 'ORDER BY docnumber DESC' in sql:  # the server sorts before the cap applies
+                self._rows = sorted(self._rows, key=lambda r: r[0], reverse=True)
         elif 'dbo.stktrans ' in sql:
             self._rows = self.conn.lines.get(params[2], [])
         else:
@@ -71,6 +73,8 @@ class VerifierTests(TestCase):
         SoftechIdentityClaim.objects.create(staff=self.staff, kind='salesperson', person_code='5014',
                                             status='approved')
         self.src, self.dst = make_branch('Src', 'B01'), make_branch2('Dst', 'B02')
+        self.src.db_host = '10.9.9.1'          # the test settings blank SYBASE_HOST
+        self.src.save(update_fields=['db_host'])
         self.job = RpaJob.objects.create(
             screen=RpaScreen.objects.get(key='issue_125'), branch=self.src, target_branch=self.dst,
             created_by=self.staff, status='approved', approved_at=timezone.now())
@@ -97,15 +101,46 @@ class VerifierTests(TestCase):
         conn = _Conn(by_print=[_hdr(78)], lines={78: self._good_lines()})
         found = self._find(conn)
         self.assertEqual((found['docnumber'], found['matched_by']), (78, 'fingerprint'))
-        sql, params = [c for c in conn.calls if 'ORDER BY docnumber DESC' in c[0]][0]
+        sql, params = [c for c in conn.calls if 'usercode=?' in c[0]][0]
         self.assertIn('SET ROWCOUNT 50', sql)
         self.assertEqual(params[:3], ['B01', '5014', 'B02'])
         self.assertEqual(params[3], timezone.localtime(self.job.approved_at).date())   # R1 window start
         self.assertEqual(params[4], timezone.localdate())
 
-    def test_candidate_with_extra_line_is_not_a_match(self):
-        conn = _Conn(by_ref=[_hdr(79, comments=self.doc.reference)], lines={79: self._good_lines() + [('300', Decimal('1'), None)]})
+    def test_fingerprint_candidate_with_extra_line_is_not_a_match(self):
+        conn = _Conn(by_print=[_hdr(79)], lines={79: self._good_lines() + [('300', Decimal('1'), None)]})
         self.assertIsNone(self._find(conn))
+
+    def test_reference_hit_with_other_lines_is_still_the_document(self):
+        # spec 5.3: our reference IS the document; differing lines are a mismatch for a person,
+        # never "not found" (which would let a retry type it a second time)
+        extra = self._good_lines() + [('300', Decimal('1'), None)]
+        found = self._find(_Conn(by_ref=[_hdr(79, comments=self.doc.reference)], lines={79: extra}))
+        self.assertEqual((found['docnumber'], found['matched_by']), (79, 'reference'))
+        res = verifier.verify_issue_document(self.doc, found)
+        self.assertFalse(res['ok'])
+        self.assertIn('أصناف أو كميات الإذن لا تطابق المطلوب', res['problems'])
+
+    def test_own_reference_found_among_many_longer_references(self):
+        ref = self.doc.reference
+        longer = [_hdr(100 + n, comments=f'{ref}{n}') for n in range(6)]   # RPA-<id>0 .. RPA-<id>5
+        conn = _Conn(by_ref=longer + [_hdr(60, comments=f'نقل {ref} للفرع')],
+                     lines={60: self._good_lines()})
+        found = self._find(conn)
+        self.assertEqual(found['docnumber'], 60)
+        sql = [c[0] for c in conn.calls if 'LIKE' in c[0]][0]
+        self.assertIn('ORDER BY docnumber DESC', sql)
+        self.assertGreaterEqual(int(re.match(r'SET ROWCOUNT (\d+)', sql).group(1)), 50)
+
+    def test_branch_without_softech_code_or_server_is_refused(self):
+        self.assertEqual(verifier.branch_lookup_problem(self.src), '')
+        self.src.db_host = ''
+        self.assertIn('سيرفر', verifier.branch_lookup_problem(self.src))
+        with self.assertRaises(ValueError):
+            self._find(_Conn())
+        self.src.db_host = '10.9.9.1'
+        self.src.softech_branch_id = ' '
+        self.assertIn('كود', verifier.branch_lookup_problem(self.src))
 
     def test_lines_queried_with_branch_and_doccode(self):
         conn = _Conn(by_ref=[_hdr(77, comments=self.doc.reference)], lines={77: self._good_lines()})

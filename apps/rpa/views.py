@@ -8,8 +8,8 @@ import json
 import re
 import zipfile
 from datetime import timedelta
+from xml.etree.ElementTree import ParseError
 
-from django.conf import settings
 from django.db.models import Count
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
@@ -28,7 +28,10 @@ from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by
 from core.upload_safety import max_upload_bytes
 
-from . import workflow
+from config.writers import writer_allowed
+
+from . import dispatch, workflow
+from .auth import issue_device
 from .dld import decode_dld, parse_dld, recipe_from_dld
 from .models import RpaDevice, RpaDocument, RpaJob, RpaRecipe, RpaScreen
 from .serializers import (DeviceSerializer, DocumentDetailSerializer, JobDetailSerializer, JobListSerializer,
@@ -47,7 +50,8 @@ RECIPE_SORT_KEYS = {'id': 'id', 'screen': 'screen__title_ar', 'version': 'versio
 DEVICE_SORT_KEYS = {'id': 'id', 'label': 'label', 'created_at': 'created_at', 'last_seen_at': 'last_seen_at',
                     'revoked_at': 'revoked_at'}
 # Errors a bad upload can raise while being parsed; anything else is a real fault and must surface as a 500.
-PARSE_ERRORS = (ValueError, InvalidFileException, zipfile.BadZipFile, csv.Error)
+# A zip-valid but corrupt .xlsx makes openpyxl raise KeyError (missing part) or an XML ParseError.
+PARSE_ERRORS = (ValueError, InvalidFileException, zipfile.BadZipFile, csv.Error, KeyError, ParseError)
 
 RPA = matrix_permission('rpa')
 RPA_APPROVE = matrix_permission('rpa', post=('approve',))
@@ -209,9 +213,8 @@ def document_detail(request, pk):
 @permission_classes([IsAuthenticated, RPA_EDIT])
 def document_resolve(request, pk):
     document = _document_or_404(request, pk)
-    from apps.rpa.dispatch import resolve_document   # Task 8 module; imported late so the API loads without it
     body = _body(request)
-    resolve_document(document, _profile(request), _text(body, 'decision'), _text(body, 'reason'))
+    dispatch.resolve_document(document, _profile(request), _text(body, 'decision'), _text(body, 'reason'))
     return _document_response(request, pk)
 
 
@@ -263,6 +266,18 @@ class RecipeListCreateView(generics.ListAPIView):
         return Response(RecipeSerializer(recipe).data, status=status.HTTP_201_CREATED)
 
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, RPA, RpaAdminOnly])
+def recipe_edit(request, pk):
+    """A DRAFT recipe's cancel keys, popup rules, checklist and reference cells (workflow.edit_recipe
+    validates them; an approved recipe is refused there). Company-level, so not branch scoped."""
+    recipe = generics.get_object_or_404(RpaRecipe, pk=pk)
+    body = _body(request)
+    workflow.edit_recipe(recipe, _profile(request), {k: body[k] for k in body})
+    recipe = RpaRecipe.objects.select_related('screen', 'created_by__user', 'approved_by__user').get(pk=pk)
+    return Response(RecipeSerializer(recipe).data)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, RpaAdminOnly])
 def recipe_approve(request, pk):
@@ -293,7 +308,6 @@ class DeviceListCreateView(generics.ListAPIView):
         label = _text(_body(request), 'label')
         if not label:
             raise ValidationError({'label': 'اكتب اسم الجهاز.'})
-        from apps.rpa.auth import issue_device   # Task 8 module
         device, token = issue_device(staff=profile, label=label[:120], created_by=profile)
         # The token is returned here and nowhere else; only its hash is stored.
         return Response({'device': DeviceSerializer(device).data, 'token': token}, status=status.HTTP_201_CREATED)
@@ -312,16 +326,39 @@ def device_revoke(request, pk):
     return Response(DeviceSerializer(device).data)
 
 
+# ── Screens ──────────────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, RPA_EDIT, RpaAdminOnly])
+def screen_enable(request, key):
+    """Admin switch: whether the robot takes this screen's documents. Company-level (screens are
+    shared by every branch). `live` cannot be set in Stage 1."""
+    body = _body(request)
+    if 'live' in body:
+        raise ValidationError({'live': 'الإدخال الفعلي غير متاح في المرحلة الأولى (تجربة بدون حفظ فقط).'})
+    if key not in STAGE1_SCREENS:
+        raise ValidationError({'screen': 'هذه الشاشة غير متاحة في المرحلة الأولى.'})
+    enabled = body.get('enabled')
+    if not isinstance(enabled, bool):
+        raise ValidationError({'enabled': 'القيمة يجب أن تكون true أو false.'})
+    screen = generics.get_object_or_404(RpaScreen, key=key)
+    screen = workflow.set_screen_enabled(screen, _profile(request), enabled)
+    return Response(ScreenSerializer(screen).data)
+
+
 # ── Status ───────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, RPA])
 def rpa_status(request):
     profile = _profile(request)
-    mine = RpaDevice.objects.filter(staff=profile, revoked_at__isnull=True,
-                                    last_seen_at__gte=timezone.now() - timedelta(minutes=2))
+    mine = list(RpaDevice.objects.filter(staff=profile, revoked_at__isnull=True,
+                                         last_seen_at__gte=timezone.now() - timedelta(minutes=2))
+                .select_related('staff__user').order_by('-last_seen_at'))
     return Response({
-        'switch_on': bool(getattr(settings, 'RPA_SOFTECH_ENTRY_ENABLED', False)),
+        'switch_on': writer_allowed(dispatch.FLAG),     # what claim_next itself asks
         'screens': ScreenSerializer(RpaScreen.objects.order_by('id'), many=True).data,
-        'my_devices_online': DeviceSerializer(mine.select_related('staff__user'), many=True).data,
+        'my_devices_online': DeviceSerializer(mine, many=True).data,
+        # why my running agent is idle although work may wait (e.g. SOFTECH unreachable), '' = fine
+        'last_claim_error': next((d.last_claim_error for d in mine if d.last_claim_error), ''),
     })

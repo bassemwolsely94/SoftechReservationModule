@@ -119,6 +119,8 @@ class CreateJobTests(TestCase):
         user = get_user_model().objects.create_user(username='rpa_t4', password='x')
         self.staff = StaffProfile.objects.get_or_create(user=user, defaults={'role': 'admin'})[0]
         self.a = make_branch('أ', 'T4A')
+        self.a.db_host = '10.0.0.4'                # the verifier searches the source branch's server
+        self.a.save(update_fields=['db_host'])
         self.b = make_branch('ب', 'T4B')
         make_item('x', '60')
 
