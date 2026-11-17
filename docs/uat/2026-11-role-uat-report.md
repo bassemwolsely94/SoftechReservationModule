@@ -59,7 +59,9 @@ The questions as originally asked:
 ### W3 — buttons and role checks (branch `claude/uat-w3-buttons-f7eb02`)
 
 - **Live sweep:** 19 users × 11 screens — every `data-perm` button showed or hid exactly as the matrix
-  says, and every allowed primary action was present. **No findings from the live screens.**
+  says, and every allowed primary action was present. **No findings from the live screens.** The
+  first run (1.3 h) outlived the one-hour login, so it was re-run with a sign-in-again guard
+  (`2bc01f1e`): 209/209 screens checked signed in, same result.
 - **Code catalogue:** 200 hard-coded role checks compared with the matrix: 80 match, 14 looser, 93 stricter,
   10 both, 3 routing. Full list: `docs/uat/role-checks-catalogue.md` on the W3 branch.
 - **24 P1 — the code lets a role in that the matrix denies.** Highest:
@@ -72,7 +74,11 @@ The questions as originally asked:
   - Insights run for purchasing, supervisor, quality_manager without `analytics:create`.
   - Freshness-bar refresh (`sync:edit`) open to purchasing on FOC / margin / supplier-performance pages;
     vouchers coupons tab open to quality_manager.
-  - These are frontend gates; whether the server also refuses is W2/W5's check (*pending*).
+  - All 24 now also ask the matrix grant their API checks (PR 161). Two servers were looser than the
+    matrix and are fixed there too: phone alerts and announcement publishing now use their own
+    module «التنبيهات والإعلانات» (admin + supervisor by default, owner 2026-11-17). Still looser on
+    the server (follow-up): `CanPushPosOrders` PUSH_ROLES fallback, procurement trigger (`IsAdminUser`),
+    insights generate, vouchers coupons (settings role lists).
 - **103 P3 — the code is stricter than the matrix** (a role the matrix allows is kept out). Matrix wins → loosen or update the matrix.
 - **3 P3 — role words that do not exist:** `'manager'` (`MobileReservationDetailPage.jsx:33,108`), `'branch'` (`navGroups.js:66`).
 
