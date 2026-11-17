@@ -8,7 +8,7 @@ import { reference } from '../lib/expected.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, sees, branchRule } from './rules.js'
 import { checkPhones, branchLeak, decision, api, xlsxText } from './scan.js'
-import { guardBackend } from './alive.js'
+import { guardBackend, keepSignedIn } from './alive.js'
 
 const XLSX = /spreadsheetml|octet-stream/
 
@@ -17,6 +17,7 @@ guardBackend()
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure exports as ${key}`, () => {
     test.use({ storageState: stateFile(key) })
+    keepSignedIn(key)
 
     test(`${key} reservations Excel export`, async ({ page }) => {
       await gotoSettled(page, '/reservations/list')

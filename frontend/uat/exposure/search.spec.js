@@ -7,7 +7,7 @@ import { phoneDigits } from '../lib/expected.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, sees, DOMAINS } from './rules.js'
 import { captureJson, pageText, checkPhones, refCustomers, branchLeak, api } from './scan.js'
-import { guardBackend } from './alive.js'
+import { guardBackend, keepSignedIn } from './alive.js'
 
 const NAME_ENDPOINTS = [
   q => `/api/customers/?search=${encodeURIComponent(q)}`,
@@ -42,6 +42,7 @@ guardBackend()
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure search as ${key}`, () => {
     test.use({ storageState: stateFile(key) })
+    keepSignedIn(key)
     const all = refCustomers()
     const unseen = all.filter(c => !sees(key, c.branch))
     const own = all.filter(c => sees(key, c.branch))

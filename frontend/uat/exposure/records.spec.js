@@ -7,7 +7,7 @@ import { reference } from '../lib/expected.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, DOMAINS, sees, branchRule, seesBranchValue } from './rules.js'
 import { captureJson, pageText, checkPhones, refCustomers, branchLeak, api, safePath } from './scan.js'
-import { guardBackend } from './alive.js'
+import { guardBackend, keepSignedIn } from './alive.js'
 import { transferSides } from './transfers.js'
 
 const PER_KIND = 3           // reference records tried per kind and branch
@@ -20,6 +20,7 @@ guardBackend()
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure records as ${key}`, () => {
     test.use({ storageState: stateFile(key) })
+    keepSignedIn(key)
 
     test(`${key} other-branch detail records are absent`, async ({ page, baseURL }) => {
       const sides = await transferSides(baseURL)
@@ -54,6 +55,22 @@ for (const key of EXPOSURE_USERS) {
               }
             }
           }
+        }
+      }
+    })
+
+    // Receipt payload (GET /api/reservations/<id>/print/, read-only without ?log=1): own-branch
+    // reservations follow the record rule; another branch's must not answer at all.
+    test(`${key} reservation receipt payload`, async ({ page }) => {
+      await gotoSettled(page, '/reservations/list')
+      for (const b of ['A', 'B']) {
+        for (const id of (reference(b).reservations || []).slice(0, PER_KIND * 2)) {
+          const url = `/api/reservations/${id}/print/`
+          const res = await api(page, 'GET', url)
+          if (res.status() !== 200) continue
+          if (!sees(key, b)) branchLeak(key, '/api/reservations/:id/print/', `absent (${branchRule(key, 'reservations', b).src})`, `branch-${b} reservation #${id} receipt answered 200`)
+          const json = await res.json().catch(() => null)
+          checkPhones({ key, domain: 'reservations', route: '/api/reservations/:id/print/', bodies: [{ url, json }] })
         }
       }
     })

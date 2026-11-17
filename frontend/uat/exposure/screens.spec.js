@@ -5,7 +5,7 @@ import { stateFile } from '../lib/users.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, DOMAINS } from './rules.js'
 import { captureJson, pageText, checkPhones, checkBranchAbsent } from './scan.js'
-import { guardBackend } from './alive.js'
+import { guardBackend, keepSignedIn } from './alive.js'
 import { transferSkips } from './transfers.js'
 
 // Control users only visit the domains they control for: the A viewer for the record rule's
@@ -20,6 +20,7 @@ guardBackend()
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure screens as ${key}`, () => {
     test.use({ storageState: stateFile(key) })
+    keepSignedIn(key)
 
     for (const [domain, d] of Object.entries(DOMAINS)) {
       if (CONTROL_DOMAINS[key] && !CONTROL_DOMAINS[key].includes(domain)) continue

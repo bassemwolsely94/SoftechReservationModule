@@ -102,6 +102,33 @@ export function jsonHits(json, needle) {
   return hits
 }
 
+// Any Egyptian mobile number, after normalise(): 01[0125] + 8 digits, optionally with 20 / 0020.
+export const MOBILE = /(?<!\d)(?:0020|20)?0?1[0125]\d{8}(?!\d)/g
+const PHONE_KEY = /phone|mobile|whats|tel(?!e?gram)|contact_number/i
+// numbers that belong to staff / branches / riders, not customers: not this check's business
+const NOT_CUSTOMER_PATH = /branch|staff|user|employee|assigned|rider|driver|created_by|updated_by|pharmacist|agent|supplier|company/i
+
+/** Mobile numbers in customer-phone fields of a JSON body: [{path, value}] (value stays in memory only). */
+export function phoneFieldNumbers(json) {
+  const out = []
+  const walk = (v, path, phoneCtx) => {
+    if (v == null) return
+    if (typeof v === 'string' || typeof v === 'number') {
+      if (phoneCtx && !NOT_CUSTOMER_PATH.test(path)) for (const m of normalise(v).match(MOBILE) || []) out.push({ path, value: m })
+      return
+    }
+    if (Array.isArray(v)) { v.forEach((x, i) => walk(x, `${path}[${i}]`, phoneCtx)); return }
+    if (typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) {
+        if (ECHO_KEYS.has(k)) continue
+        walk(x, path ? `${path}.${k}` : k, phoneCtx || PHONE_KEY.test(k))
+      }
+    }
+  }
+  walk(json, '', false)
+  return out
+}
+
 /** Does the nearest ancestor that names a record branch belong to the user? true / false / null. */
 export function recordVisibility(key, ancestors) {
   for (let i = ancestors.length - 1; i >= 0; i--) {
@@ -170,6 +197,29 @@ export function checkPhones(o) {
           actual: `full number of branch-${c.branch} customer PIC ${c.pic} (${last3(c.phone)}) in ${safeText(w.at)}`,
         })) decisions++
       }
+    }
+  }
+  // Any customer's number, not just the reference set: when this user may see NO customer number on
+  // this domain (phone-hidden staff everywhere; viewers on records), every full mobile number in a
+  // customer-phone field or an export cell is a leak, whoever the customer is.
+  const noneVisible = ['A', 'B', 'other'].every(b => phoneRule(key, domain, b, true).rule === 'masked')
+  if (noneVisible) {
+    const src = phoneRule(key, domain, 'A', true).src
+    const leaks = []      // [{at, value}]
+    for (const b of o.bodies || []) {
+      if (!b.json) continue
+      for (const h of phoneFieldNumbers(b.json)) leaks.push({ at: `${safePath(b.url)} ${h.path.replace(/\[\d+\]/g, '[]')}`, value: h.value })
+    }
+    for (const f of o.files || []) for (const m of normalise(f.text).match(MOBILE) || []) leaks.push({ at: `file ${f.name}`, value: m })
+    const byAt = new Map()
+    for (const l of leaks) byAt.set(l.at, [...(byAt.get(l.at) || []), l.value])
+    for (const [at, values] of byAt) {
+      const distinct = [...new Set(values)]
+      if (once(`any|${key}|${route}|${at}`, {
+        key, route, kind: 'phone', severity: 'P0',
+        expected: `masked (${src})`,
+        actual: `${distinct.length} full customer number(s) in ${safeText(at)}, e.g. ${distinct.slice(0, 3).map(last3).join(', ')}`,
+      })) p0++
     }
   }
   // Over-masking: a customer this screen is about, whose number this user may see in full, shows only masked.

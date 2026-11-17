@@ -2,7 +2,7 @@
 // means "nothing leaked", not "the detector never looks". Synthetic numbers only.
 import { test, expect } from '@playwright/test'
 import zlib from 'node:zlib'
-import { normalise, needleOf, jsonHits, recordVisibility, xlsxText } from './scan.js'
+import { normalise, needleOf, jsonHits, recordVisibility, xlsxText, phoneFieldNumbers, MOBILE } from './scan.js'
 import { phoneRule, branchRule, sees, BRANCH } from './rules.js'
 
 test('number normalising and needles', () => {
@@ -39,6 +39,16 @@ test('rules follow B-2 / D2 / D3 / D4', () => {
   expect(branchRule('pharmacist@B', 'reservations', 'A').rule).toBe('absent')
   expect(branchRule('pharmacist@B', 'customer360', 'A').rule).toBe('full')         // CANARY GET-DETAIL
   expect(branchRule('pharmacist@B', 'transfers', 'A', ['A', 'B']).rule).toBe('full') // decision 3
+})
+
+test('any-customer number scan: phone fields only, staff / branch numbers ignored', () => {
+  const body = { q: '01001234567', results: [
+    { customer_phone: '0100 123 4567', branch: { phone: '01112345678' }, assigned_to: { phone: '01212345678' } },
+    { contact: { mobile: '+20 155 123 4567' }, notes: '01001234568' },
+  ] }
+  const hits = phoneFieldNumbers(body)
+  expect(hits.map(h => h.path)).toEqual(['results[0].customer_phone', 'results[1].contact.mobile'])
+  expect('x 01001234567 y 0223456789'.match(MOBILE)).toHaveLength(1)
 })
 
 test('xlsx reader sees every stored cell', () => {
