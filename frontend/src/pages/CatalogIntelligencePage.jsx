@@ -367,7 +367,8 @@ function BundlesTab() {
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للباقة</label>
               <ItemSearchWidget
                 selected={null}
-                onSelect={(item) => addItemMutation.mutate({ bundleId: selectedBundle.id, item })}
+                mode="multi"
+                onSelect={(picked) => picked.forEach(item => addItemMutation.mutate({ bundleId: selectedBundle.id, item }))}
                 onClear={() => {}}
                 placeholder="ابحث باسم الصنف أو الكود أو الباركود..."
               />

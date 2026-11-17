@@ -321,6 +321,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
             {/* Pass selected=null always so widget resets after each pick (items go to the list below) */}
             <ItemSearchWidget
               selected={null}
+              mode="list"
               onSelect={addItem}
               onClear={() => {}}
               placeholder="ابحث باسم الصنف أو الكود أو الباركود (قارئ ضوئي متوافق)..."

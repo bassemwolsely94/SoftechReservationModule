@@ -316,8 +316,9 @@ function CreateVoucherModal({ onClose, onCreate }) {
           <Field label="الأصناف المؤهلة (اختياري — تقصُر القسيمة على أصناف محددة)">
             <ItemSearchWidget
               selected={null}
-              onSelect={it => setApplicableItems(prev =>
-                prev.some(p => p.id === it.id) ? prev : [...prev, { id: it.id, name: it.name }])}
+              mode="multi"
+              onSelect={picked => picked.forEach(it => setApplicableItems(prev =>
+                prev.some(p => p.id === it.id) ? prev : [...prev, { id: it.id, name: it.name }]))}
               placeholder="ابحث لإضافة صنف مؤهل..."
             />
             {applicableItems.length > 0 && (

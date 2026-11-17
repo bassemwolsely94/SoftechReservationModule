@@ -680,7 +680,7 @@ SCREENS = [
             T('«📲 نبّه على الموبايل» (يظهر لو الإدارة فعّلته): يصل واتساب لمسؤول صرف تحويلات المخزن الرئيسي، ثم تنبيهات تغيّر الحالة لموبايل الفرع.',
               '"📲 Alert by phone" (shown when management enabled it): a WhatsApp message reaches the HQ dispatch owner, then status-change alerts go to the branch mobile.'),
         ],
-        'tips': [
+        'tips': [T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.'),
             T('لو صنف «لا يوجد مخزون في أي فرع» فالتحويل لن يفيد — سجّله كطلب ضائع أو نقص للمشتريات.',
               'If an item shows "no stock in any branch", a transfer will not help — record it as lost demand or a shortage for purchasing.'),
         ],
@@ -740,8 +740,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('خيار «📲 نبّه على الموبايل» عند تقديم الطلب', 'The "📲 Alert by phone" option when submitting a request'),
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث بتفضى بعد كل صنف وتفضل جاهزة للصنف اللي بعده', 'The search box clears after each item and stays ready for the next one'),
     },
     {
         'key': 'transfers.detail',

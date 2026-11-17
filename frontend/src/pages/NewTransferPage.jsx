@@ -155,6 +155,7 @@ export default function NewTransferPage() {
           {/* Shared ItemSearchWidget — barcode scanner compatible */}
           <ItemSearchWidget
             selected={null}
+            mode="list"
             onSelect={addItem}
             placeholder="ابحث باسم الصنف أو الكود أو الباركود (ماسح ضوئي متوافق)..."
           />
