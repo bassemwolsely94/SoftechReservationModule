@@ -56,6 +56,8 @@ export default function RpaPage() {
   const isAdmin = useAuthStore(s => s.user?.role) === 'admin'
   const tabs = TABS.filter(t => !t.adminOnly || isAdmin)
   const [tab, setTab] = useState('jobs')
+  // the one-time device token lives here (memory only, never storage) so switching tab cannot lose it
+  const [deviceToken, setDeviceToken] = useState('')
   useHelpTab(tab)
 
   return (
@@ -78,9 +80,16 @@ export default function RpaPage() {
         ))}
       </div>
 
+      {deviceToken && tab !== 'devices' && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm flex flex-wrap items-center gap-2">
+          <span>لديك رمز جهاز لم تنسخه بعد، ولن يظهر مرة أخرى.</span>
+          <button type="button" className="btn-secondary text-sm" onClick={() => setTab('devices')}>افتح «أجهزتي» لنسخه</button>
+        </div>
+      )}
+
       {tab === 'jobs' && <JobsTab />}
       {tab === 'upload' && <UploadTab onUploaded={() => setTab('jobs')} />}
-      {tab === 'devices' && <DevicesTab />}
+      {tab === 'devices' && <DevicesTab token={deviceToken} setToken={setDeviceToken} />}
       {tab === 'recipes' && isAdmin && <RecipesTab />}
     </div>
   )

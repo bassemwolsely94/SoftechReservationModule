@@ -40,10 +40,9 @@ function TokenOnce({ token, onDismiss }) {
 const online = d => !d.revoked_at && d.last_seen_at && Date.now() - new Date(d.last_seen_at).getTime() < ONLINE_MS
 const devValue = (d, k) => (k === 'state' ? (d.revoked_at ? 2 : online(d) ? 0 : 1) : d[k])
 
-export default function DevicesTab() {
+export default function DevicesTab({ token, setToken }) {
   const qc = useQueryClient()
   const [label, setLabel] = useState('')
-  const [token, setToken] = useState('')
   const [err, setErr] = useState('')
   const q = useQuery({ queryKey: ['rpa', 'devices'], queryFn: () => rpaApi.devices().then(r => r.data), refetchInterval: 30000 })
   const rows = useMemo(() => asList(q.data), [q.data])

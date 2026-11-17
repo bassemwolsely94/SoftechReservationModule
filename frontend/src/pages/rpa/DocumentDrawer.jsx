@@ -4,7 +4,7 @@
  * form. A side panel (not a modal); the reason field is inline (rule 11). The server decides
  * who may resolve; this only calls the API.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { rpaApi } from '../../api/client'
 import useSortableRows from '../../hooks/useSortableRows'
@@ -65,7 +65,11 @@ function Run({ run }) {
       {steps.length > 0 && (
         <ol className="list-decimal ps-5 text-xs space-y-0.5 text-muted">
           {steps.map((s, i) => (
-            <li key={i}>{typeof s === 'string' ? s : (s.label || s.name || s.step || s.message || JSON.stringify(s))}</li>
+            <li key={i}>
+              {typeof s === 'string' ? s : `${s.i ?? i + 1}. ${s.label || '—'}`}
+              {typeof s === 'object' && s.ok === false && <span className="text-red-600"> — فشلت</span>}
+              {typeof s === 'object' && s.note ? <span> — {s.note}</span> : null}
+            </li>
           ))}
         </ol>
       )}
@@ -91,6 +95,8 @@ export default function DocumentDrawer({ documentId, onClose }) {
   const qc = useQueryClient()
   const [reason, setReason] = useState('')
   const [err, setErr] = useState('')
+  const rootRef = useRef(null)
+  const reasonRef = useRef(null)
   const q = useQuery({
     queryKey: ['rpa', 'document', documentId],
     queryFn: () => rpaApi.document(documentId).then(r => r.data),
@@ -98,6 +104,14 @@ export default function DocumentDrawer({ documentId, onClose }) {
   const doc = q.data
   const lines = useMemo(() => asList(doc?.lines), [doc])
   const runs = useMemo(() => asList(doc?.runs), [doc])
+  const needsPerson = doc?.status === 'needs_person'
+
+  // opening a document: bring the drawer into view; a needs_person one puts the cursor in the reason box
+  useEffect(() => {
+    if (!doc) return
+    if (needsPerson && reasonRef.current) reasonRef.current.focus({ preventScroll: true })
+    rootRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [documentId, !!doc, needsPerson]) // eslint-disable-line react-hooks/exhaustive-deps -- once per opened document
 
   const resolve = useMutation({
     mutationFn: () => rpaApi.resolve(documentId, reason.trim()),
@@ -109,7 +123,7 @@ export default function DocumentDrawer({ documentId, onClose }) {
   })
 
   return (
-    <aside className="card p-4 space-y-4" aria-label="تفاصيل المستند">
+    <aside ref={rootRef} className="card p-4 space-y-4" aria-label="تفاصيل المستند">
       <div className="flex items-center gap-2">
         <h2 className="font-bold">مستند {doc?.reference || `#${documentId}`}</h2>
         {doc && <Badge map={DOC_STATUS} value={doc.status} />}
@@ -125,7 +139,7 @@ export default function DocumentDrawer({ documentId, onClose }) {
           <div className="text-sm font-semibold">يحتاج مراجعة</div>
           {doc.needs_person_reason && <div className="text-sm">{doc.needs_person_reason}</div>}
           <label className="label" htmlFor="rpa-resolve-reason">سبب الحسم (مطلوب)</label>
-          <input id="rpa-resolve-reason" className="input-field w-full" value={reason} maxLength={250}
+          <input id="rpa-resolve-reason" ref={reasonRef} className="input-field w-full" value={reason} maxLength={250}
                  onChange={e => setReason(e.target.value)}
                  placeholder="مثال: راجعت SOFTECH ولا يوجد مستند محفوظ" />
           <div className="flex items-center gap-2">

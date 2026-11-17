@@ -52,17 +52,17 @@ export const DRY_RUN_TEXT = 'تجربة بدون حفظ'
 export const asList = d => (Array.isArray(d) ? d : (d?.results || d?.rows || []))
 
 export function errText(e) {
-  // status first: DRF's own 401 / 403 detail is English — never show it
+  // A server message (Arabic: four-eyes refusals, branch scope…) beats the generic text; DRF's own
+  // English 401/403 default never reaches the user because it is replaced below.
   const status = e?.response?.status
+  const d = e?.response?.data
+  const ENGLISH = /^[ -~\s]+$/
+  const own = (v) => (typeof v === 'string' && v && v.length < 300 && !v.includes('<') && !ENGLISH.test(v)) ? v : ''
+  const fromServer = own(typeof d === 'string' ? d : d?.detail)
+    || (d && typeof d === 'object' ? own(Object.values(d).flat().find(v => own(v))) : '')
+  if (fromServer) return fromServer
   if (status === 401) return 'انتهت الجلسة — سجّل الدخول مرة أخرى.'
   if (status === 403) return 'ليس لديك صلاحية لهذا الإجراء'
-  const d = e?.response?.data
-  if (typeof d === 'string' && d.length < 300 && !d.includes('<')) return d
-  if (d?.detail && typeof d.detail === 'string') return d.detail
-  if (d && typeof d === 'object') {
-    const first = Object.values(d).flat().find(v => typeof v === 'string')
-    if (first) return first
-  }
   return 'تعذّر تنفيذ الطلب — حاول مرة أخرى.'
 }
 

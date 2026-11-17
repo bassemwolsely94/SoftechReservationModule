@@ -14,7 +14,8 @@ import SortTh from '../../components/SortTh'
 import DocumentDrawer from './DocumentDrawer'
 import { Badge, DOC_STATUS, DRY_RUN_TEXT, JOB_STATUS, asList, branchText, errText, fmtTime, screenTitle } from './shared.jsx'
 
-const ALLOWED = ['id', 'created_at', 'status', 'filename']
+// server ordering keys (Task 9 whitelist must accept these)
+const ALLOWED = ['id', 'created_at', 'screen', 'branch', 'target_branch', 'filename', 'status']
 const docValue = (d, k) => (k === 'status' ? (DOC_STATUS[d.status]?.label || d.status) : d[k])
 
 function DryRunBadge() {
@@ -112,9 +113,9 @@ export default function JobsTab() {
             <tr className="text-muted border-b border-line">
               <SortTh {...headerProps('id', 'number')} className="p-2 text-start">#</SortTh>
               <SortTh {...headerProps('created_at', 'date')} className="p-2 text-start">وقت الرفع</SortTh>
-              <th className="p-2 text-start">الشاشة</th>
-              <th className="p-2 text-start">من فرع</th>
-              <th className="p-2 text-start">إلى فرع</th>
+              <SortTh {...headerProps('screen')} className="p-2 text-start">الشاشة</SortTh>
+              <SortTh {...headerProps('branch')} className="p-2 text-start">من فرع</SortTh>
+              <SortTh {...headerProps('target_branch')} className="p-2 text-start">إلى فرع</SortTh>
               <SortTh {...headerProps('filename')} className="p-2 text-start">الملف</SortTh>
               <SortTh {...headerProps('status')} className="p-2 text-start">الحالة</SortTh>
               <th className="p-2" />

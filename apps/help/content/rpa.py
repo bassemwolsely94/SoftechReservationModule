@@ -18,7 +18,7 @@ MODULE = {
         'types and then cancels, so nothing is saved in SOFTECH. A document that stalls shows "needs review" and a person settles '
         'it with a written reason. The robot writes only through the approved recipe, and every step is logged.'),
     'journeys': [
-        {'key': 'upload_and_approve', 'shell': 'desktop', 'roles': ['admin'],
+        {'key': 'upload_and_approve', 'shell': 'desktop', 'roles': ['admin', 'supervisor', 'purchasing', 'quality_manager'],
          'title': T('من الملف إلى التجربة', 'From the file to the dry run'),
          'summary': T('رفع إذن صرف، اعتماده من شخص آخر، ومتابعة المستند.',
                       'Upload an issue order, have someone else approve it, and follow the document.'),
@@ -46,7 +46,7 @@ MODULE = {
             'key': 'overview',
             'title': T('جولة في روبوت الإدخال', 'A tour of the entry robot'),
             'summary': T('من رفع الملف إلى المستند والأجهزة.', 'From the upload to the document and the devices.'),
-            'roles': ['admin'],
+            'roles': ['admin', 'supervisor', 'purchasing', 'quality_manager'],
             'steps': [
                 {'target': 'nav-rpa', 'nav': '/rpa',
                  'text': T('«الإدارة» ← «روبوت الإدخال».', '"Administration" → "Entry robot".'),
