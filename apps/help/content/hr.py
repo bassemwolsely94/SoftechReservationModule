@@ -323,6 +323,8 @@ SCREENS = [
             {'key': 'expenses', 'title': T('🧾 المصروفات', '🧾 Expenses'), 'body': T('مطالبة مصروفات (مواصلات، وجبات، إقامة، قرطاسية، معدات، مأمورية…) ولو مأمورية: الوجهة والغرض والمغادرة والعودة والمسافة والبدل.', 'An expense claim (transport, meals, lodging, stationery, equipment, errand…) and for an errand: destination, purpose, departure, return, distance and allowance.')},
         ],
         'tips': [T('الطلب «المسودة» لا يصل لأحد — قدّمه.', 'A "draft" request reaches nobody — submit it.'),
+                 T('زرار الطلب الجديد بيظهر بس لو عندك صلاحية «إنشاء» في الموارد البشرية؛ اللي عنده «عرض» بس يشوف طلباته من غير ما يقدّم.',
+                   'The new-request button shows only if you hold «create» on HR; with «view» only you see your requests but cannot file one.'),
                  T('لا يمكنك اختيار نفسك (ولا صاحب الطلب) ضمن الموافقين على الطلب.',
                    'You cannot pick yourself (or the employee the request is about) as one of its approvers.')],
         'related': ['hr.approvals', 'hr.attendance'],
@@ -411,9 +413,10 @@ SCREENS = [
                        'Cancelling is instant with no confirmation — the request will not come back; you submit a new one.'),
              'open_hint': T('يظهر بس على الطلبات اللي لسه ما اتقررتش.', 'Shown only on requests not decided yet.')},
         ],
-        'updated': '2026-11-06',
+        'updated': '2026-11-17',
     
-        'change_note': T('«المحاسب» بقى يقدر يفتح الشاشة دي ويقدّم طلباته الشخصية.', 'Accountants can now open this screen and file their own requests.'),
+        'change_note': T('تقديم أي طلب (إجازة، إذن، إضافي، سلفة، مصروفات) بقى محتاج صلاحية «إنشاء» في الموارد البشرية — «المشاهد» و«مدير الجودة» يشوفوا بس.',
+                         'Filing any request (leave, permit, overtime, advance, expense) now needs «create» on HR — viewer and quality manager can only look.'),
     },
     {
         'key': 'hr.approvals',

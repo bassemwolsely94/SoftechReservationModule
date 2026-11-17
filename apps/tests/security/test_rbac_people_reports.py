@@ -79,5 +79,22 @@ class PeopleReportsTests(TestCase):
         self.assertEqual(self._call('pharmacist', 'get', '/api/incentives/targets/').status_code, 200)
         self.assertEqual(self._call('quality_manager', 'get', '/api/analytics/sales/').status_code, 200)
 
+    def test_hr_view_only_roles_cannot_file_leave(self):
+        for role in ('viewer', 'quality_manager'):
+            with self.subTest(role=role):
+                r = self._call(role, 'post', '/api/hr/leave-requests/submit/', _LEAVE)
+                self.assertEqual(r.status_code, 403, r.content)
+
+    def test_hr_view_only_roles_cannot_file_other_requests(self):
+        self.assertEqual(self._call('viewer', 'post', '/api/hr/permits/submit/').status_code, 403)
+        self.assertEqual(self._call('quality_manager', 'post', '/api/hr/overtime/submit/').status_code, 403)
+
+    def test_roles_with_hr_create_still_file_leave(self):
+        _seed_hr()
+        for role in ('salesperson', 'accountant'):
+            with self.subTest(role=role):
+                r = self._call(role, 'post', '/api/hr/leave-requests/submit/', _LEAVE)
+                self.assertEqual(r.status_code, 201, r.content)
+
     def test_supervisor_still_assigns_shifts(self):
         self.assertNotEqual(self._call('supervisor', 'post', '/api/hr/shift-assignments/').status_code, 403)
