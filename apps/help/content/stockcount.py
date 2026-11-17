@@ -436,7 +436,7 @@ SCREENS = [
             {'target': 'stockcount-sessions-new', 'label': T('+ جلسة جديدة', '+ New session'),
              'text': T('نموذج جلسة جرد: الاسم، كود الفرع، النوع، الفترة، المستندات والفلاتر. الأكواد حروف وأرقام فقط (مثل 130 أو IT001).',
                        'Count session form: name, branch code, type, period, documents, filters. Codes are letters and digits only (e.g. 130, IT001).'),
-             'open_hint': T('يظهر لمن عنده صلاحية الإنشاء.', 'Shows for users with create permission.'),
+             'open_hint': T('يظهر لمن عنده صلاحية «إنشاء» في موديول الجرد (مصفوفة الصلاحيات).', 'Shows for users with "create" on the stock-count module (Permissions Matrix).'),
              'more': T(
                  'بيفتح «إنشاء جلسة جرد جديدة»: اسم الجلسة وكود الفرع (إجباريين)، النوع (مبني على الحركات، جرد شامل، جرد مفلتر)، الفترة وأكواد المستندات، وفلاتر كود المستخدم والتصنيف.\n• «بدء سريع» بيملا الإعداد لحالات شائعة زي مبيعات النهارده أو جرد شامل للفرع.\n• «إنشاء الجلسة» بيحفظها «مسودة» ويختارها — لسه مفيش لقطة. الزر بيظهر لمن له الصلاحية.',
                  'Opens "Create a new count session": session name and branch code (required), the type (transaction-based, full count, filtered count), the period and document codes, and user-code and category filters.\n• "Quick start" fills the setup for common cases such as today\'s sales or a full branch count.\n• "Create session" saves it as "Draft" and selects it — no snapshot yet. The button shows to those with permission.')},
@@ -529,8 +529,9 @@ SCREENS = [
              'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
              'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر حالة الجلسات يقبل الآن أكثر من اختيار', 'The session status filter now takes several choices'),
+        'updated': '2026-11-17',
+        'change_note': T('زر «+ جلسة جديدة» بيظهر لكل من عنده صلاحية «إنشاء» في موديول الجرد (زي الصيدلي)، مش للمدير بس',
+                         'The "+ New session" button shows to anyone with "create" on the stock-count module (e.g. a pharmacist), not only admins'),
     },
     {
         'key': 'stockcount.mobile',

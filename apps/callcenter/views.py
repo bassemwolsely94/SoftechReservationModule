@@ -1059,6 +1059,16 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         case = serializer.save(opened_by=profile)
         case._log_event('حالة جديدة مفتوحة', profile)
 
+    def create(self, request, *args, **kwargs):
+        # Answer with the full case (id, case_number, labels, events; phone masked by the
+        # serializer) so the screen can select the new case (UAT W5a: the write serializer
+        # alone returned no id).
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        self.perform_create(ser)
+        data = CustomerCaseDetailSerializer(ser.instance, context=self.get_serializer_context()).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
     # ── State machine actions ─────────────────────────────────────────────────
 
     @action(detail=True, methods=['post'])

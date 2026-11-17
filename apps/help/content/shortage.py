@@ -441,9 +441,9 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والحالة (وفي العرض المجمع) تقبل أكثر من اختيار معاً',
-                         'Branch and status filters (also in the aggregate view) take several choices at once'),
+        'updated': '2026-11-17',
+        'change_note': T('بعد «إنشاء» القائمة الجديدة بتتفتح على طول وبتظهر في القائمة من غير تحديث الصفحة',
+                         'After "Create" the new list opens straight away and shows in the list without reloading the page'),
     },
     {
         'key': 'shortage.market',

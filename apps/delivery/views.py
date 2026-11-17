@@ -33,6 +33,9 @@ Endpoints:
     GET  /api/delivery/summary/
     GET  /api/delivery/dashboard/
 """
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
 from django.db.models import Avg, Count, F, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -113,6 +116,34 @@ def _assert_transition(order, target_status):
             f'الانتقال من "{status_labels.get(order.status, order.status)}" '
             f'إلى "{status_labels.get(target_status, target_status)}" غير مسموح به.'
         )
+
+
+_MAX_COLLECTED = Decimal('9999999999.99')   # collected_amount is DecimalField(12, 2)
+_CENT = Decimal('0.01')
+
+
+def _parse_collected_amount(raw):
+    """Read the rider's collected_amount into a Decimal. Returns (value, error_response).
+
+    The rider screen sends the amount as text. None / '' means "not entered" (the order
+    keeps no collected amount, exactly as before). Anything that is not a plain,
+    non-negative amount with at most 2 decimals is refused with a 400 before any write.
+    """
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None, None
+    if isinstance(raw, bool):
+        raw = 'x'                                  # True/False are not amounts
+    try:
+        value = Decimal(str(raw).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        value = None
+    if (value is None or not value.is_finite() or value < 0 or value > _MAX_COLLECTED
+            or value != value.quantize(_CENT)):
+        return None, Response(
+            {'detail': 'المبلغ المحصَّل غير صالح — اكتب رقماً موجباً بحد أقصى خانتين عشريتين.',
+             'field': 'collected_amount'},
+            status=status.HTTP_400_BAD_REQUEST)
+    return value.quantize(_CENT), None   # same value, two decimals (e.g. 10.500 → 10.50)
 
 
 # ── Geofencing (pickup must be at branch · delivery must be at the address) ─────
@@ -527,7 +558,16 @@ def delivery_complete(request, pk):
         if viol:
             return viol
 
-    collected = request.data.get('collected_amount')
+    collected, bad = _parse_collected_amount(request.data.get('collected_amount'))
+    if bad:
+        return bad
+    with transaction.atomic():
+        return _complete_delivery(request, order, collected)
+
+
+def _complete_delivery(request, order, collected):
+    """The write half of delivery_complete. Runs inside one transaction so the delivered
+    status, its log row and the cash-collection row land together or not at all."""
     prev_status = order.status
     order.status       = DeliveryOrder.STATUS_DELIVERED
     order.delivered_at = timezone.now()
@@ -2104,6 +2144,9 @@ def delivery_backfill(request, pk):
         return Response({'detail': 'لا تملك صلاحية الإدخال اليدوي للتوصيل'},
                         status=status.HTTP_403_FORBIDDEN)
     order = get_object_or_404(_orders(request), pk=pk)
+    col, bad = _parse_collected_amount(request.data.get('collected_amount'))
+    if bad:
+        return bad
     now = timezone.now()
     changed = []
 
@@ -2159,7 +2202,6 @@ def delivery_backfill(request, pk):
         order.status = DeliveryOrder.STATUS_DELIVERED
         order.delivered_at = now
         order.pod_backfilled = True
-        col = request.data.get('collected_amount')
         if col is not None:
             order.collected_amount = col
         changed += ['status', 'delivered_at', 'collected_amount', 'pod_backfilled']

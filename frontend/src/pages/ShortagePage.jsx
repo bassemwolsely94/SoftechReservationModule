@@ -1812,7 +1812,7 @@ export default function ShortagePage() {
         <CreateModal
           branches={branches}
           onClose={() => setShowCreate(false)}
-          onCreated={(id) => { setShowCreate(false); setActiveId(id) }}
+          onCreated={(id) => { setShowCreate(false); loadLists(); if (id) setActiveId(id) }}
         />
       )}
 
