@@ -615,8 +615,7 @@ class SheetApiTests(_BuildMixin, TestCase):
         return c
 
     def post_build(self, client=None):
-        with mock.patch('apps.tax_invoicing.egs_sheet_views.start_thread', side_effect=_sync_thread), \
-                self.captureOnCommitCallbacks(execute=True):
+        with mock.patch('apps.tax_invoicing.egs_sheet_views.start_thread', side_effect=_sync_thread):
             return (client or self.api).post(SHEET_URL + 'build/', {'note': 'n'}, format='json')
 
     def test_list_shows_versions_pending_and_the_idle_build(self):
@@ -648,6 +647,35 @@ class SheetApiTests(_BuildMixin, TestCase):
         self.assertEqual(self.post_build().status_code, 202)
         self.assertEqual(egs_sheet.build_state()['state'], 'unchanged')
         self.assertEqual(TaxEgsSheetVersion.objects.count(), 1)
+
+    def test_a_thread_that_cannot_start_leaves_an_error_not_running(self):
+        with mock.patch('apps.tax_invoicing.egs_sheet_views.start_thread', side_effect=RuntimeError('no thread')), \
+                self.assertLogs('elrezeiky', level='ERROR'):
+            r = self.api.post(SHEET_URL + 'build/', {}, format='json')
+        self.assertEqual(r.status_code, 503)
+        state = egs_sheet.build_state()
+        self.assertEqual((state['state'], state['error']), ('error', egs_sheet.BUILD_NOT_STARTED))
+        self.assertEqual(self.post_build().status_code, 202)        # not blocked
+
+    def test_a_name_starting_with_equals_stays_text_in_both_files(self):
+        import zipfile
+        names = {'code_name': '=1+1', 'code_name_ar': '=HYPERLINK("x")', 'description': '=1+1',
+                 'description_ar': 'وصف'}
+        self.profile('300', brick='10000043', names=names)
+        self.profile('500', brick='10000043', names=names)
+        self.post_build()
+        full = egs_sheet.open_version(egs_sheet.latest())
+        new = b''.join(self.api.get(SHEET_URL + '2/download/', {'kind': 'new'}).streaming_content)
+        for data in (full, new):
+            ws = _wb(data)['DataEntry']
+            rows = [n for n in range(2, ws.max_row + 1) if ws.cell(n, 10).value in (300, 500)]
+            self.assertEqual(len(rows), 2)
+            for n in rows:
+                for col, want in ((3, '=1+1'), (4, '=HYPERLINK("x")'), (5, '=1+1')):
+                    cell = ws.cell(n, col)
+                    self.assertEqual((cell.value, cell.data_type), (want, 's'))
+            xml = zipfile.ZipFile(io.BytesIO(data)).read('xl/worksheets/sheet1.xml').decode()
+            self.assertNotIn('<f>', xml)
 
     def test_no_held_version_is_400_and_starts_nothing(self):
         TaxEgsSheetVersion.objects.all().delete()

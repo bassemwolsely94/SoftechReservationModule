@@ -81,10 +81,11 @@ export default function EgsSheetPanel() {
             <span>صفوف مكوّدة <b>{fmtInt(v.coded_rows)}</b> من {fmtInt(v.total_rows)}</span>
             <span>أُضيف في هذه النسخة <b>{fmtInt(v.added)}</b></span>
             <span>كُوّد في صفه <b>{fmtInt(v.coded)}</b></span>
+            <span>تُرك في هذه النسخة <b>{fmtInt(v.skipped?.length)}</b></span>
             <span>جاهز للبناء الآن <b>{fmtInt(d.pending.ready)}</b></span>
             <button type="button" className="text-primary disabled:text-gray-400" disabled={!skipped.length}
               onClick={() => setShowSkipped(x => !x)}>
-              متروك بسبب <b>{fmtInt(skipped.length)}</b>{skipped.length ? (showSkipped ? ' ▲' : ' ▼') : ''}
+              متروك الآن <b>{fmtInt(skipped.length)}</b>{skipped.length ? (showSkipped ? ' ▲' : ' ▼') : ''}
             </button>
           </div>
           {showSkipped && skipped.length > 0 && (

@@ -234,6 +234,53 @@ decided "code" without reopening; it is locked only while the item has an open (
 uncertain) or approved production code request, so after a rejection the brick can be fixed. Queue rows carry
 `brick_confirmed`; the screen marks a "code" decision without a brick «تحتاج فئة».
 
+## ملف الأكواد للمحصّل (the Invoicer's bulk EGS sheet, batch S3)
+
+The Invoicer (D:\invoicer_mini) reads `ElRezeiky_Bulk_EGS_Items.xlsx` to know which items are coded. Code:
+`egs_sheet.py`, views `egs_sheet_views.py`, panel «ملف أكواد الإيصالات (المحصّل)» on «🧮 طابور الترميز».
+
+**Seed (once).** `manage.py egs_sheet_seed PATH` reads the owner's file read-only and stores it as version 1
+(`source='seed'`), with its counts and coded itemcodes (a coded row = CodeType A and ActiveFrom G filled; itemcode =
+EGSRelatedCode J). It refuses while a version exists unless `--force-new`. Audited `egs_sheet_seed`.
+
+**Build.** `POST codes/sheet/build/` (approve) runs `build()` on a thread (`core.threads.start_thread`) and answers 202
+at once; ≈100 s on the real 15 MB sheet. One build at a time: the state (running / built / unchanged / refused / error,
+who, when) lives in the `SystemSetting` row `tax_egs_sheet_build`, shared by every server process and kept across
+restarts; a second request while one runs gets 409, and a "running" older than 30 min (thread lost in a restart) no
+longer blocks. A clash on the version number or any failure is recorded as the state's Arabic error, never a crash.
+The panel polls `GET codes/sheet/` only while a build runs. Nothing new to write → no new version (idempotent).
+
+**Newly coded item** = no keep-out decision, VAT treatment confirmed (taxable 14 or exempt; another confirmed rate is
+skipped «نسبة الضريبة المعتمدة ليست 14٪ ولا معفاة»), and a code ETA production holds (profile approved with
+`coding_env='production'`, or an approved/active production `EtaCodeUsage` matched to the item). Each one either codes
+its existing uncoded row or gets a new row after the last item row (style of the row above, inside the table and
+autofilter). Skipped items are listed with their reason (unconfirmed VAT, no brick, no tax id, ...).
+
+**Coded rows are never rewritten.** A..K stay as they are. Only L, N, O, P change form: every row's formula is written
+as the value it computes (the Invoicer may read without Excel recalculating). A value the owner typed instead of a
+formula is kept on an untouched row even when it differs from the formula (item 114109: N typed 1). Text written from
+SOFTECH / ETA that starts with '=' is saved as text, never as a formula.
+
+**Checks** (any failure → no version, Arabic reasons shown in the panel): same sheet names and DataEntry header; no
+duplicate J (100 and '100' are the same) and no duplicate coded B; every coded row has A in {EGS, GS1}, B, I ≠ 0, K in
+{0, 0.14}; L–P equal their formulas' values (or the kept typed values); no keep-out item newly coded; coded-row count ≥
+the held version's; the saved file re-opens with the same counts. A held sheet that already has a duplicate itemcode is
+refused this way until the owner fixes it.
+
+**Versions** (`TaxEgsSheetVersion`): files under `TAX_EGS_SHEET_DIR` (default `private/egs_sheets`, outside media and
+git); the newest 10 files are kept, every row stays. The receipts reconciliation reads `latest().coded_itemcodes`.
+Saving with openpyxl keeps defined names (e.g. `CodeTypes`) and the other sheets, but formulas on the other sheets
+lose their cached values until Excel recalculates them.
+
+**Downloads** (`GET codes/sheet/<n>/download/?kind=full|new`, approve, audited `egs_sheet_download`): `full` = the
+stored workbook as `ElRezeiky_Bulk_EGS_Items.xlsx`; `new` = the header and only the rows that version added or coded.
+Not passed through `core/export_safety` (an input workbook, not a report; documented in `unsafe_exports.txt`). The
+export middleware's stamp changes the document properties only, so a downloaded file's hash differs from the stored
+one; the cells do not.
+
+**Replacing the Invoicer's file** is done by a person until S5: download the full file, put it in D:\invoicer_mini,
+then close Excel — an open file stops receipt uploads.
+
 ## Which ETA system
 
 `environment.py`: `TAX_ETA_ENVIRONMENT` = `preprod` or `production` picks ETA's published addresses; explicit

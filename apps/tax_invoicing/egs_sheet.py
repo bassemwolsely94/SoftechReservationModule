@@ -275,7 +275,15 @@ def _write_row(ws, n, c):
               4: c['description'], 5: c['description_ar'], COL_G: dt.datetime.combine(c['active_from'], dt.time()),
               COL_I: _number(c['gpc']), COL_J: _number(c['itemcode']), COL_K: float(c['vat'])}
     for col, value in values.items():
-        ws.cell(n, col + 1).value = value
+        _set(ws.cell(n, col + 1), value)
+
+
+def _set(cell, value):
+    """Writes `value`; a text starting with '=' (an item name from SOFTECH / ETA) stays that exact text, never a
+    formula (openpyxl would save it as one)."""
+    cell.value = value
+    if isinstance(value, str) and value.startswith('='):
+        cell.data_type = 's'
 
 
 def _blank(v):
@@ -551,7 +559,9 @@ def new_rows_xlsx(version):
         for r in src[SHEET].iter_rows(min_row=2, max_col=COLS, values_only=True):
             r = _padded(r)
             if _text(r[COL_J]) in wanted:
-                ws.append(list(r))
+                n = ws.max_row + 1
+                for col, value in enumerate(r, start=1):
+                    _set(ws.cell(n, col), value)
     finally:
         src.close()
     for row in ws.iter_rows(min_row=2, min_col=COL_G + 1, max_col=COL_G + 1):
@@ -568,6 +578,7 @@ BUILD_KEY = 'tax_egs_sheet_build'
 BUILD_STALE = dt.timedelta(minutes=30)
 BUILD_BUSY = 'جارٍ بناء الملف — انتظر'
 BUILD_RACE = 'بُنيت نسخة أخرى في نفس الوقت — أعد المحاولة'
+BUILD_NOT_STARTED = 'تعذّر بدء البناء — أعد المحاولة'
 
 
 def build_state():
@@ -608,6 +619,11 @@ def claim_build(actor):
     return True
 
 
+def fail_start():
+    """The build thread could not start: the claimed "running" state becomes an error at once."""
+    _finish({'state': 'error', 'error': BUILD_NOT_STARTED})
+
+
 def _finish(state):
     from apps.config.models import SystemSetting
     with transaction.atomic():
@@ -623,8 +639,9 @@ def run_build(actor, note=''):
     build stored first) and any other failure become the state's Arabic `error`."""
     from django.db import IntegrityError
     from core.errors import public_error
-    held = latest()
+    held = None
     try:
+        held = latest()
         out = build(actor, note)
     except IntegrityError:
         state = {'state': 'error', 'error': BUILD_RACE}

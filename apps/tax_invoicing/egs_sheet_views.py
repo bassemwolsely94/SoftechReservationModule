@@ -17,6 +17,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.errors import public_error
 from core.permissions import matrix_permission
 from core.threads import start_thread
 
@@ -67,7 +68,11 @@ def sheet_build(request):
         return Response({'detail': egs_sheet.NO_HELD}, status=status.HTTP_400_BAD_REQUEST)
     if not egs_sheet.claim_build(request.user):
         return Response({'detail': egs_sheet.BUILD_BUSY}, status=status.HTTP_409_CONFLICT)
-    start_thread(egs_sheet.build_thread, args=(request.user, note), name='egs-sheet-build')
+    try:
+        start_thread(egs_sheet.build_thread, args=(request.user, note), name='egs-sheet-build')
+    except Exception as exc:    # no thread: the claimed state must not stay "running"
+        egs_sheet.fail_start()
+        return Response({'detail': public_error(request, exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     return Response({'started': True}, status=status.HTTP_202_ACCEPTED)
 
 

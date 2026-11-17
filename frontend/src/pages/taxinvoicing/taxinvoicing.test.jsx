@@ -801,7 +801,7 @@ describe('production coding queue', () => {
 
 describe('Invoicer codes file panel', () => {
   const version = (extra = {}) => ({ number: 2, built_at: '2026-11-17T10:00:00Z', source: 'build', built_by: 'محاسب', note: '',
-    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [], size: 15000000, has_file: true, ...extra })
+    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, ...extra })
   const sheet = (extra = {}) => ({ data: { versions: [version(), version({ number: 1, source: 'seed', added: 0, coded: 0 })],
     build: { state: 'idle' }, pending: { ready: 4, skipped: [{ itemcode: '500', why: 'لا توجد فئة GPC للصنف' }] }, can_build: true, ...extra } })
 
@@ -814,7 +814,9 @@ describe('Invoicer codes file panel', () => {
     expect(REMINDER).toBe('بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات')
     expect(screen.getByText('القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات.')).toBeTruthy()
     expect(screen.queryByText(/لا توجد فئة GPC للصنف/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /متروك بسبب/ }))
+    expect(screen.getByText('تُرك في هذه النسخة').querySelector('b').textContent).toBe('2')
+    expect(screen.getByRole('button', { name: /متروك الآن/ }).textContent).toContain('1')
+    fireEvent.click(screen.getByRole('button', { name: /متروك الآن/ }))
     expect(screen.getByText(/لا توجد فئة GPC للصنف/)).toBeTruthy()
   })
 
