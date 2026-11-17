@@ -7,12 +7,15 @@ import { reference } from '../lib/expected.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, DOMAINS, sees, branchRule, seesBranchValue } from './rules.js'
 import { captureJson, pageText, checkPhones, refCustomers, branchLeak, api, safePath } from './scan.js'
+import { guardBackend } from './alive.js'
 import { transferSides } from './transfers.js'
 
 const PER_KIND = 3           // reference records tried per kind and branch
 const CUSTOMERS = 3          // customer 360 pages per branch
 
 const DETAIL_DOMAINS = ['reservations', 'demand', 'transfers', 'shortage', 'pos']
+
+guardBackend()
 
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure records as ${key}`, () => {

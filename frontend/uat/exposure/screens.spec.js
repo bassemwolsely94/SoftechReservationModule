@@ -5,6 +5,7 @@ import { stateFile } from '../lib/users.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, DOMAINS } from './rules.js'
 import { captureJson, pageText, checkPhones, checkBranchAbsent } from './scan.js'
+import { guardBackend } from './alive.js'
 import { transferSkips } from './transfers.js'
 
 // Control users only visit the domains they control for: the A viewer for the record rule's
@@ -13,6 +14,8 @@ const CONTROL_DOMAINS = {
   viewer: ['reservations', 'demand', 'followups', 'transfers', 'delivery', 'callcenter'],
   phoneVisible: ['customers', 'referral', 'loyalty', 'sales', 'picAnalytics'],
 }
+
+guardBackend()
 
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure screens as ${key}`, () => {

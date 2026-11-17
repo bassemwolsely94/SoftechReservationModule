@@ -7,6 +7,7 @@ import { phoneDigits } from '../lib/expected.js'
 import { gotoSettled } from '../lib/page.js'
 import { EXPOSURE_USERS, sees, DOMAINS } from './rules.js'
 import { captureJson, pageText, checkPhones, refCustomers, branchLeak, api } from './scan.js'
+import { guardBackend } from './alive.js'
 
 const NAME_ENDPOINTS = [
   q => `/api/customers/?search=${encodeURIComponent(q)}`,
@@ -35,6 +36,8 @@ function contains(json, c) {
 
 const distinctive = list => [...list].filter(c => (c.name || '').trim().split(/\s+/).length >= 2)
   .sort((a, b) => b.name.length - a.name.length)
+
+guardBackend()
 
 for (const key of EXPOSURE_USERS) {
   test.describe(`exposure search as ${key}`, () => {
