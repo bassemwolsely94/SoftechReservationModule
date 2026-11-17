@@ -95,7 +95,7 @@ class NoBroadExceptionEchoTests(TestCase):
                     if not node.args or not isinstance(node.args[0], ast.Dict):
                         continue
                     for key, val in zip(node.args[0].keys, node.args[0].values):
-                        if not (isinstance(key, ast.Constant) and key.value in ('detail', 'error')):
+                        if not (isinstance(key, ast.Constant) and key.value in ('detail', 'error', 'note')):
                             continue
                         raw = any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(val)) and \
                             not any(isinstance(n, ast.Call) and getattr(n.func, 'id', '') == 'public_error'
