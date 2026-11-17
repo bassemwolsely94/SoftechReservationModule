@@ -12,7 +12,8 @@ Reads frontend/uat/.uat-users.json (from seed_uat_users) and writes:
   * docs/uat/permission-drift.md - live RoleModuleAccess rows vs the code's seed_permissions.
 
 Nothing is re-derived: perms = effective_permissions() (what /api/users/my-permissions/ returns),
-branches = core.branch_scope.branch_ids(), phones = apps.customers.access rules.
+branches = core.branch_scope.branch_ids(), seesRecordPhones = access.record_phones_visible(),
+seesPhones = the raw can_see_customer_phone flag (other branches are masked on top: phones_visible).
 """
 import json
 from pathlib import Path
@@ -44,6 +45,7 @@ class Command(BaseCommand):
 
         from core import branch_scope
         from apps.users.views import effective_permissions
+        from apps.customers import access
 
         users = {}
         for row in seeded['users']:
@@ -56,7 +58,10 @@ class Command(BaseCommand):
                 'perms': effective_permissions(user)[1],
                 'allBranches': ids is None,
                 'branchIds': sorted(ids) if ids is not None else [],
+                # the raw flag, and the backend's record rule (flag AND not the viewer role, D3/D4);
+                # another branch's customer is masked on top of that (phones_visible: own branch only)
                 'seesPhones': bool(profile.can_see_customer_phone),
+                'seesRecordPhones': access.record_phones_visible(user),
             }
 
         reference = {k: self._reference(seeded[f'branch{k}']['id']) for k in ('A', 'B')}

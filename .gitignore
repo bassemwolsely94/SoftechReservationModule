@@ -71,4 +71,5 @@ agent_state/
 frontend/uat/.uat-*.json
 frontend/uat/.auth/
 frontend/test-results-uat/
+frontend/uat-findings/
 logs/uat.log

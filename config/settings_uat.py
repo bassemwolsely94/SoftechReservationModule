@@ -33,7 +33,9 @@ for _k in ('USER', 'PASSWORD', 'HOST', 'PORT'):
         os.environ[f'PG_{_k}'] = os.environ[f'UAT_PG_{_k}']
 
 os.environ.setdefault('DEBUG', 'True')
-os.environ.setdefault('SECRET_KEY', 'uat-only-not-a-secret-' + 'x' * 32)
+# Never the office keys: with them the restored channel credentials would decrypt (review 2026-11-17).
+os.environ['SECRET_KEY'] = os.environ.get('UAT_SECRET_KEY') or 'uat-only-not-a-secret-' + 'x' * 32
+os.environ.pop('OMNI_CREDENTIALS_KEY', None)
 # Nothing that can reach SOFTECH or switch on a writer may come from the process environment.
 for _k in list(os.environ):
     if _k.endswith(('_WRITE_ENABLED', '_WRITER_ENABLED', '_POSTING_ENABLED', '_SEND_ENABLED',
@@ -41,7 +43,7 @@ for _k in list(os.environ):
         os.environ.pop(_k)
 for _k in ('SYBASE_HOST', 'SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD_HOST',
            'SOFTECH_BRANCH_HOST_OVERRIDE', 'WRITER_INSTANCE', 'SOFTECH_READ_ONLY',
-           'WHATSAPP_TOKEN', 'AMI_HOST', 'RBAC_ENFORCEMENT'):
+           'WHATSAPP_TOKEN', 'AMI_HOST', 'RBAC_ENFORCEMENT', 'MISSED_CALL_CALLBACKS_ENABLED'):
     os.environ.pop(_k, None)
 
 from config.settings import *  # noqa: E402,F401,F403 — this module extends the real settings
@@ -81,6 +83,8 @@ DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
 
 # ── 4. no outbound sends ─────────────────────────────────────────────────────
 WHATSAPP_TOKEN = WHATSAPP_PHONE_NUMBER_ID = WHATSAPP_APP_SECRET = ''
+OMNI_CREDENTIALS_KEY = ''          # stored channel credentials stay unreadable
+MISSED_CALL_CALLBACKS_ENABLED = False
 SMS_PROVIDER = SMS_HTTP_URL = ''
 WEBPUSH_VAPID_PUBLIC_KEY = WEBPUSH_VAPID_PRIVATE_KEY = ''
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
@@ -99,6 +103,9 @@ RBAC_ENFORCEMENT = 'enforce'
 REST_FRAMEWORK = {**REST_FRAMEWORK,  # noqa: F405
                   'DEFAULT_THROTTLE_RATES': {**REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], 'login': '1000/min'}}  # noqa: F405
 
-# ── 6. its own log file ──────────────────────────────────────────────────────
+# ── 6. every response names the copy (frontend/uat/lib/guard.js checks it before any login) ──
+MIDDLEWARE = [*MIDDLEWARE, 'config.uat_marker.UatCopyMarker']  # noqa: F405
+
+# ── 7. its own log file ──────────────────────────────────────────────────────
 os.makedirs(BASE_DIR / 'logs', exist_ok=True)  # noqa: F405
 LOGGING['handlers']['file']['filename'] = BASE_DIR / 'logs' / 'uat.log'  # noqa: F405

@@ -24,6 +24,10 @@ print("UATJSON" + json.dumps({
     "wa": s.WHATSAPP_TOKEN, "ami": s.AMI_HOST, "sched": s.SCHEDULER_AUTOSTART,
     "rbac": s.RBAC_ENFORCEMENT, "db": s.DATABASES["default"]["NAME"],
     "login_rate": s.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["login"],
+    "secret_from_env": s.SECRET_KEY == "office-secret-key-from-env",
+    "omni_key": s.OMNI_CREDENTIALS_KEY,
+    "missed_cb": s.MISSED_CALL_CALLBACKS_ENABLED,
+    "marker": "config.uat_marker.UatCopyMarker" in s.MIDDLEWARE,
 }))
 '''
 
@@ -32,7 +36,10 @@ def _probe(**env):
     full = {**os.environ, 'DJANGO_SETTINGS_MODULE': 'config.settings_uat', 'PYTHONIOENCODING': 'utf-8', **env}
     # A hostile process environment must not switch anything on.
     full.update({'WRITER_INSTANCE': 'True', 'SOFTECH_READ_ONLY': 'False', 'SYBASE_HOST': '10.0.0.1',
-                 'POS_WRITER_ENABLED': 'True', 'WHATSAPP_TOKEN': 'live-token'})
+                 'POS_WRITER_ENABLED': 'True', 'WHATSAPP_TOKEN': 'live-token',
+                 # the office keys would decrypt the restored channel credentials (review, 2026-11-17)
+                 'SECRET_KEY': 'office-secret-key-from-env', 'OMNI_CREDENTIALS_KEY': 'office-omni-key',
+                 'MISSED_CALL_CALLBACKS_ENABLED': 'True'})
     full.update(env)
     return subprocess.run([sys.executable, '-c', PROBE], cwd=ROOT, env=full,
                           capture_output=True, text=True, encoding='utf-8', timeout=180)
@@ -84,3 +91,23 @@ class UatSettingsGuardTest(SimpleTestCase):
         res = _probe(UAT_PG_NAME='elrezeiky_e2e')
         self.assertNotEqual(res.returncode, 0)
         self.assertIn('must not use', res.stderr)
+
+    def test_office_keys_never_reach_the_copy(self):
+        # with the office SECRET_KEY / OMNI_CREDENTIALS_KEY the restored channel credentials decrypt
+        v = self._values()
+        self.assertIs(v['secret_from_env'], False)
+        self.assertEqual(v['omni_key'], '')
+        self.assertIs(v['missed_cb'], False)
+
+    def test_every_response_says_it_is_the_uat_copy(self):
+        self.assertIs(self._values()['marker'], True)
+
+
+class UatCopyMarkerTest(SimpleTestCase):
+    def test_header_names_the_database(self):
+        from django.http import HttpResponse
+        from django.test import RequestFactory, override_settings
+        from config.uat_marker import UatCopyMarker
+        with override_settings(UAT_SETTINGS=True, DATABASES={'default': {'NAME': 'elrezeiky_uat'}}):
+            resp = UatCopyMarker(lambda r: HttpResponse('ok'))(RequestFactory().get('/api/x/'))
+        self.assertEqual(resp['X-UAT-Copy'], 'elrezeiky_uat')

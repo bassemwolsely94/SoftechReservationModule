@@ -70,6 +70,15 @@ class ExportUatExpectationsTest(TestCase):
         self.assertTrue(data['users']['phoneVisible']['seesPhones'])
 
     @override_settings(**UAT)
+    def test_record_phones_follow_the_backend_rule(self):
+        # access.record_phones_visible masks the viewer role too, not only the flag (review 2026-11-17)
+        data = self.run_all()
+        self.assertFalse(data['users']['viewer']['seesRecordPhones'])
+        self.assertFalse(data['users']['phoneHidden']['seesRecordPhones'])
+        self.assertTrue(data['users']['pharmacist']['seesRecordPhones'])
+        self.assertTrue(data['users']['call_center']['seesRecordPhones'])
+
+    @override_settings(**UAT)
     def test_reference_only_from_own_branch(self):
         Reservation.objects.filter(pk=-1)  # model import check
         data = self.run_all()

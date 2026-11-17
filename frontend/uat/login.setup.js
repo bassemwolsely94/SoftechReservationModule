@@ -4,9 +4,11 @@ import path from 'node:path'
 import { test as setup, expect } from '@playwright/test'
 import { UAT_USERS, PASSWORD, stateFile } from './lib/users.js'
 import { finding } from './lib/findings.js'
+import { assertUatCopy } from './lib/guard.js'
 
 for (const u of UAT_USERS) {
-  setup(`login as ${u.key}`, async ({ page }) => {
+  setup(`login as ${u.key}`, async ({ page, baseURL }) => {
+    await assertUatCopy(baseURL)          // never type a password into anything but the copy
     await page.goto('/login')
     await page.getByPlaceholder('أدخل اسم المستخدم').fill(u.username)
     await page.getByPlaceholder('أدخل كلمة المرور').fill(PASSWORD)
