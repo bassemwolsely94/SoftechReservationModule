@@ -187,25 +187,35 @@ def send_other(buylist, supplier_code, *, staff, lang='ar', idempotency_key=None
     if SupplierPortal.objects.filter(supplier_code=supplier_code).exists():
         raise BuyListError('هذا المورد له موقع — يُرسل عبر الروبوت وليس كقائمة واتساب')
     prefix = f'buylist-{buylist.pk}-{supplier_code}-'
-    if idempotency_key:
-        prior = list(SupplyDecision.objects.filter(order_ref=idempotency_key).select_related('item'))
-        if prior:
-            res = commit_order([], idempotency_key=idempotency_key, staff=staff, lang=lang)
-            return {'order_ref': idempotency_key, 'text': res['text'], 'replayed': True,
-                    'lines': len(prior)}
-    lines = list(buylist.lines.select_related('item').filter(
-        chosen_supplier=supplier_code, remaining_qty__gt=0))
-    if not lines:
-        raise BuyListError('لا توجد أسطر مختارة لهذا المورد')
-    vendor = VendorProfile.objects.filter(softech_personcode=supplier_code).first()
-    hq = Branch.objects.get(softech_branch_id=hq_code())
-    key = idempotency_key or f'{prefix}{SupplyDecision.objects.filter(order_ref__startswith=prefix).values("order_ref").distinct().count() + 1}'
-    res = commit_order(
-        [{'item_id': ln.item_id, 'qty': ln.remaining_qty, 'branch_id': hq.pk,
-          'reason': ln.reason or f'قائمة شراء {buylist.pk}'} for ln in lines],
-        idempotency_key=key, supplier=vendor, staff=staff, lang=lang)
-    if not res['replayed']:
-        for ln in lines:
-            apply_result(ln, supplier_code=supplier_code, accepted=ln.remaining_qty, basket_id=None)
+    if idempotency_key and not str(idempotency_key).startswith(prefix):
+        raise BuyListError('مفتاح الإرسال لا يخص هذه القائمة وهذا المورد')
+    # One transaction: the list row is locked first, so two sends serialise; the decisions
+    # and the line updates commit together or not at all.
+    with transaction.atomic():
+        locked = BuyList.objects.select_for_update().get(pk=buylist.pk)
+        if locked.status != 'open':
+            raise BuyListError('القائمة مغلقة')
+        if idempotency_key:
+            prior = list(SupplyDecision.objects.filter(order_ref=idempotency_key))
+            if prior:
+                res = commit_order([], idempotency_key=idempotency_key, staff=staff, lang=lang)
+                return {'order_ref': idempotency_key, 'text': res['text'], 'replayed': True,
+                        'lines': len(prior)}
+        lines = list(locked.lines.select_related('item').filter(
+            chosen_supplier=supplier_code, remaining_qty__gt=0))
+        if not lines:
+            raise BuyListError('لا توجد أسطر مختارة لهذا المورد')
+        vendor = VendorProfile.objects.filter(softech_personcode=supplier_code).first()
+        hq = Branch.objects.get(softech_branch_id=hq_code())
+        n = (SupplyDecision.objects.filter(order_ref__startswith=prefix)
+             .values('order_ref').distinct().count()) + 1
+        key = idempotency_key or f'{prefix}{n}'
+        res = commit_order(
+            [{'item_id': ln.item_id, 'qty': ln.remaining_qty, 'branch_id': hq.pk,
+              'reason': ln.reason or f'قائمة شراء {buylist.pk}'} for ln in lines],
+            idempotency_key=key, supplier=vendor, staff=staff, lang=lang)
+        if not res['replayed']:
+            for ln in lines:
+                apply_result(ln, supplier_code=supplier_code, accepted=ln.remaining_qty, basket_id=None)
     return {'order_ref': res['order_ref'], 'text': res['text'], 'replayed': res['replayed'],
             'lines': len(lines)}

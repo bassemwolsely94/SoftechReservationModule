@@ -115,3 +115,33 @@ class BuyListTests(TestCase):
         bl.pick(ln, '565', staff=self.staff)
         with self.assertRaises(bl.BuyListError):
             bl.send_other(b, '565', staff=self.staff)
+
+    def test_send_other_is_atomic_and_retry_orders_once(self):
+        b, ln = self._line()
+        bl.pick(ln, '30', staff=self.staff)
+        with mock.patch.object(bl, 'apply_result', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                bl.send_other(b, '30', staff=self.staff)
+        self.assertEqual(SupplyDecision.objects.filter(order_ref__startswith=f'buylist-{b.pk}-30-').count(), 0)
+        ln.refresh_from_db()
+        self.assertEqual(ln.remaining_qty, 10)
+        res = bl.send_other(b, '30', staff=self.staff)
+        self.assertEqual(res['order_ref'], f'buylist-{b.pk}-30-1')
+        self.assertEqual(SupplyDecision.objects.filter(order_ref__startswith=f'buylist-{b.pk}-30-').count(), 1)
+
+    def test_send_other_refuses_closed_list(self):
+        b, ln = self._line()
+        bl.pick(ln, '30', staff=self.staff)
+        BuyList.objects.filter(pk=b.pk).update(status='closed')
+        with self.assertRaises(bl.BuyListError):
+            bl.send_other(b, '30', staff=self.staff)
+        self.assertFalse(SupplyDecision.objects.exists())
+
+    def test_send_other_refuses_foreign_key(self):
+        b, ln = self._line()
+        bl.pick(ln, '30', staff=self.staff)
+        bl.send_other(b, '30', staff=self.staff)
+        b2 = bl.create_from_rows([{'item_code': 'BL1', 'qty': 2}], staff=self.staff, file_sha256='e' * 64)
+        bl.pick(b2.lines.get(), '30', staff=self.staff)
+        with self.assertRaises(bl.BuyListError):
+            bl.send_other(b2, '30', staff=self.staff, idempotency_key=f'buylist-{b.pk}-30-1')
