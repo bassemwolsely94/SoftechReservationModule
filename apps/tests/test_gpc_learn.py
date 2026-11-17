@@ -29,10 +29,21 @@ class LearnedTests(Fixture, TestCase):
         item = Item.objects.create(softech_id=code, name=f'Item {code}', family_name=family, medicine_type_name=mtype)
         return TaxItemProfile.objects.create(softech_itemcode=code, item=item, gpc_code=gpc_code)
 
-    def decided(self, brick, family='Fam', decision='code'):
+    def decided(self, brick, family='Fam', decision='code', source='person'):
         p = self.profile(family)
-        TaxCodingDecision.objects.create(profile=p, decision=decision, brick=brick)
+        TaxCodingDecision.objects.create(profile=p, decision=decision, brick=brick, brick_source=source)
         return p
+
+    def test_ai_bricks_on_decisions_do_not_spread(self):
+        """An AI brick accepted (often in bulk) is not people's knowledge: it must not become «من قرارات سابقة»."""
+        for _ in range(3):
+            self.decided(A, source='ai')
+        target = self.profile()
+        self.assertNotIn(target.pk, gpc_learn.learned([target]))
+        for source in ('decisions', 'eta', 'sheet', 'medicine'):    # a learned brick a person confirmed counts
+            self.decided(A, source=source)
+        got = gpc_learn.learned([target])[target.pk]
+        self.assertEqual((got['code'], got['source'], got['n']), (A, 'decisions', 4))
 
     def on_eta(self, brick, family='Fam', status='Approved', system='production'):
         p = self.profile(family)

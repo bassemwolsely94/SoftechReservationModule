@@ -661,6 +661,12 @@ class BrickTests(Fixture, TestCase):
         self.assertEqual((r.status_code, r.data['detail']), (400, 'الفئة غير موجودة في قائمة GPC'))
         self.assertEqual(self.api.post(QUEUE + 'brick/', {'itemcode': '999999', 'brick': BRICK},
                                        format='json').status_code, 404)
+        TaxCodeRequest.objects.create(profile=p, item_code=f'EG-1-{p.softech_itemcode}', parent_code='10002222',
+                                      code_name='x', code_name_ar='x', active_from=date(2026, 1, 1),
+                                      environment='production')
+        r = self.api.post(QUEUE + 'brick/', {'itemcode': p.softech_itemcode, 'brick': BRICK}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (409, 'طُلب كود الصنف من المصلحة بالفعل — لا تتغير الفئة'))
+        self.assertEqual(TaxCodingDecision.objects.get(profile=p).brick, '10002222')
         RoleModuleAccess.objects.update_or_create(role='viewer', module='tax_invoicing', action='view',
                                                   defaults={'is_allowed': True})
         RoleModuleAccess.objects.filter(role='viewer', module='tax_invoicing').exclude(action='view').delete()
@@ -683,10 +689,10 @@ class BrickTests(Fixture, TestCase):
         ask.assert_not_called()
 
     @override_settings(TAX_GPC_AI_ENABLED=True)
-    def test_suggest_asks_each_item_up_to_20(self):
+    def test_suggest_asks_each_item_up_to_5(self):
         p, med = self.profile(), self.profile('Medicine', tax=0)
-        r = self.api.post(QUEUE + 'suggest/', {'itemcodes': [str(i) for i in range(21)]}, format='json')
-        self.assertEqual(r.status_code, 400)
+        r = self.api.post(QUEUE + 'suggest/', {'itemcodes': [str(i) for i in range(6)]}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, '5 صنف على الأكثر في المرة'))
         self.assertEqual(self.api.post(QUEUE + 'suggest/', {'itemcodes': []}, format='json').status_code, 400)
 
         def fake(profile):
@@ -704,6 +710,27 @@ class BrickTests(Fixture, TestCase):
                          {med.softech_itemcode: 'للصنف فئة معروفة أو هو دواء — لا حاجة للسؤال',
                           '999999': 'صنف غير معروف'})
         self.assertFalse(TaxCodingDecision.objects.exists())    # asking never decides
+        self.assertNotIn('stopped', r.data)
+
+    @override_settings(TAX_GPC_AI_ENABLED=True)
+    def test_suggest_stops_at_first_no_answer(self):
+        """A provider outage makes each call wait: one "no answer" ends the request, the rest is not asked."""
+        from apps.tax_invoicing import gpc_ai
+        a, b, c = self.profile(), self.profile(), self.profile()
+
+        def fake(profile):
+            if profile.pk == b.pk:
+                return TaxBrickSuggestion.objects.create(profile=profile, source='none', asked_at=timezone.now(),
+                                                         error=f'{gpc_ai.NO_ANSWER} (Timeout)')
+            return self.ai(profile)
+        with mock.patch('apps.tax_invoicing.gpc_ai.suggest_one', side_effect=fake) as ask:
+            r = self.api.post(QUEUE + 'suggest/', {'itemcodes': [a.softech_itemcode, b.softech_itemcode,
+                                                                 c.softech_itemcode]}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(ask.call_count, 2)
+        self.assertEqual(r.data['stopped'], 'provider')
+        self.assertEqual([x['itemcode'] for x in r.data['asked']], [a.softech_itemcode, b.softech_itemcode])
+        self.assertTrue(r.data['asked'][1]['error'].startswith(gpc_ai.NO_ANSWER))
 
     # ── rows ─────────────────────────────────────────────────────────────────────────────────────────
     def test_rows_show_suggestion_and_confirmed_brick(self):
@@ -729,10 +756,20 @@ class BrickTests(Fixture, TestCase):
         api_row = [x for x in self.api.get(QUEUE).data['rows'] if x['itemcode'] == cos.softech_itemcode][0]
         self.assertEqual(api_row['brick_source'], 'person')
 
+    def test_keep_out_row_shows_no_brick(self):
+        p = self.profile('Medicine', tax=0)
+        self.ai(p)
+        self.assertEqual(self.row(p)['brick'], '10005845')
+        coding_queue.decide(p.pk, self.accountant, decision='keep_out')
+        r = self.row(p)
+        self.assertEqual((r['decision'], r['brick'], r['brick_name'], r['brick_source'], r['brick_confidence'],
+                          r['brick_reason'], r['brick_second'], r['brick_confirmed']),
+                         ('keep_out', '', '', '', '', '', '', False))
+
     def test_own_sheet_brick_shown_beside_family_suggestion(self):
         for _ in range(3):
             q = self.profile(family='Creams')
-            TaxCodingDecision.objects.create(profile=q, decision='code', brick='10000777')
+            TaxCodingDecision.objects.create(profile=q, decision='code', brick='10000777', brick_source='person')
         p = self.profile(family='Creams', gpc_code='10000999')
         r = self.row(p)
         self.assertEqual((r['brick'], r['brick_source'], r['own_brick']), ('10000777', 'decisions', '10000999'))
@@ -746,7 +783,8 @@ class BrickTests(Fixture, TestCase):
         def batch(k):
             for _ in range(k):
                 fam = self.profile(family='Creams')
-                TaxCodingDecision.objects.create(profile=fam, decision='code', brick='10000777', vat_rate=14)
+                TaxCodingDecision.objects.create(profile=fam, decision='code', brick='10000777', vat_rate=14,
+                                                 brick_source='person')
                 self.ai(self.profile(), confidence='low')
                 self.profile('Medicine', tax=0)
                 self.profile(gpc_code='10000999')

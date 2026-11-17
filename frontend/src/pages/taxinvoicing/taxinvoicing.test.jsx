@@ -616,7 +616,7 @@ describe('production coding queue', () => {
     expect(code.disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('نسبة ضريبة 902'), { target: { value: '14' } })
     fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'KeyC', key: 'c' })
-    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['902'], decision: 'code', vat_rate: '14' }))
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['902'], decision: 'code', vat_rate: '14', brick: '10000673' }))
   })
 
   it('Enter accepts each selected row by its own pre-mark', async () => {
@@ -626,7 +626,7 @@ describe('production coding queue', () => {
     fireEvent.mouseDown(screen.getByText('Item 900'))
     fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
     await waitFor(() => expect(api.codingDecide).toHaveBeenCalledTimes(2))
-    expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['900'], decision: 'code', vat_rate: '0' })
+    expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['900'], decision: 'code', vat_rate: '0', brick: '10000673' })
     expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' })
   })
 
@@ -703,6 +703,34 @@ describe('production coding queue', () => {
       const accept = screen.getByRole('button', { name: /قبول المقترح/ })
       expect(accept.disabled).toBe(true)
       expect(accept.title).toBe('في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده')
+    })
+
+    it('a single code sends the brick shown on the row, so the server cannot save a different one', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      fireEvent.click(within(row903).getByRole('button', { name: 'كوّد' }))
+      await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['903'], decision: 'code', vat_rate: '0', brick: '10000777' }))
+    })
+
+    it('keeps the AI brick guard on Enter when only one of the ticked rows is to be coded', async () => {
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 901'))    // pre-marked keep_out
+      fireEvent.click(screen.getByLabelText('اختيار 903'))           // pre-marked code, medium AI brick
+      const accept = screen.getByRole('button', { name: /قبول المقترح/ })
+      expect(accept.disabled).toBe(true)
+      expect(accept.title).toBe('في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده')
+      fireEvent.mouseDown(screen.getByText('Item 903'))
+      fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
+      expect(api.codingDecide).not.toHaveBeenCalled()
+    })
+
+    it('says when asking again stopped because the AI provider does not answer', async () => {
+      api.codingSuggest.mockResolvedValue({ data: { asked: [{ itemcode: '903', brick: '', error: 'لم يرد مزود الذكاء الاصطناعي' }],
+        skipped: [], stopped: 'provider' } })
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 903'))
+      fireEvent.click(screen.getByRole('button', { name: 'اقترح مرة أخرى' }))
+      expect(await screen.findByText(/توقف السؤال: مزود الذكاء الاصطناعي لا يرد/)).toBeTruthy()
     })
 
     it('picks a brick with the keyboard for an undecided row and sends it with the decision', async () => {

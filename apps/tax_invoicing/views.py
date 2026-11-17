@@ -1281,12 +1281,14 @@ def codes_queue_brick(request):
     try:
         row = coding_queue.set_brick(profile.pk, request.user, request.data.get('brick'))
     except services.TaxRuleError as exc:
+        if str(exc) == coding_queue.BRICK_REQUESTED:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
         return _refuse(exc)
     return Response({'itemcode': profile.softech_itemcode, 'brick': row.brick, 'brick_source': row.brick_source,
                      'brick_name': gpc.names([row.brick]).get(row.brick, '')})
 
 
-SUGGEST_MAX = 20
+SUGGEST_MAX = 5     # each AI call can take tens of seconds; an outage must not outlive nginx's 600 s
 SUGGEST_OFF = 'اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً'
 SUGGEST_NOT_ASKED = 'للصنف فئة معروفة أو هو دواء — لا حاجة للسؤال'
 
@@ -1294,8 +1296,9 @@ SUGGEST_NOT_ASKED = 'للصنف فئة معروفة أو هو دواء — لا 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, APPROVER])
 def codes_queue_suggest(request):
-    """{itemcodes: [..≤20]}: asks the AI again for each item's brick (a proposal only; a person confirms it).
-    Refused while TAX_GPC_AI_ENABLED is off."""
+    """{itemcodes: [..≤5]}: asks the AI again for each item's brick (a proposal only; a person confirms it).
+    Refused while TAX_GPC_AI_ENABLED is off. Stops at the first "no answer" (provider down): returns what was done
+    with stopped='provider', the rest not asked."""
     from . import coding_queue, gpc_ai
     if not gpc_ai.enabled():
         return Response({'detail': SUGGEST_OFF}, status=status.HTTP_400_BAD_REQUEST)
@@ -1320,6 +1323,8 @@ def codes_queue_suggest(request):
             continue
         asked.append({'itemcode': code, 'brick': row.brick, 'second': row.second, 'confidence': row.confidence,
                       'reason': row.reason, 'error': row.error})
+        if row.error.startswith(gpc_ai.NO_ANSWER):     # the provider is down: don't wait out the rest
+            return Response({'asked': asked, 'skipped': skipped, 'stopped': 'provider'})
     return Response({'asked': asked, 'skipped': skipped})
 
 

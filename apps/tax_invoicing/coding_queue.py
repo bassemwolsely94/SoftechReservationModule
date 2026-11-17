@@ -300,6 +300,8 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
             brick, brick_source = d.brick, d.brick_source
             if s.get('code') != brick:
                 s = {}
+        elif decision == TaxCodingDecision.DECISION_KEEP_OUT:     # not coded: no brick to show
+            brick, brick_source, s = '', '', {}
         else:
             brick, brick_source = s.get('code', ''), s.get('source', '')
         own = p.gpc_code if gpc.BRICK.match(p.gpc_code or '') and p.gpc_code != brick else ''

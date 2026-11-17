@@ -2,7 +2,7 @@
 apps/tax_invoicing/gpc_learn.py — the GPC brick we can suggest for an item from what is already known, no AI.
 
 Sources, first hit wins:
-1. decisions — bricks people confirmed on coding decisions for items of the same SOFTECH family;
+1. decisions — bricks people confirmed on coding decisions for items of the same SOFTECH family (not AI bricks);
 2. eta — bricks of codes ETA's production system approved for items of the same family;
 3. sheet — the item's own brick from the owner's sheet (TaxItemProfile.gpc_code, see `load_sheet_bricks`);
 4. medicine — a medicine with nothing better gets the medicines brick.
@@ -35,10 +35,16 @@ def _top(counts):
     return (brick, share, n) if share >= MIN_SHARE else None
 
 
+# brick sources of a decision that count as people's knowledge: an AI brick accepted (often in bulk) is not, or one AI
+# answer would spread to the whole family as «من قرارات سابقة»
+DECISION_SOURCES = ('person', 'decisions', 'eta', 'sheet', 'medicine')
+
+
 def _decision_counts(families):
     by = defaultdict(Counter)
     rows = (TaxCodingDecision.objects
-            .filter(decision=TaxCodingDecision.DECISION_CODE, profile__item__family_name__in=families)
+            .filter(decision=TaxCodingDecision.DECISION_CODE, profile__item__family_name__in=families,
+                    brick_source__in=DECISION_SOURCES)
             .exclude(brick='').values_list('profile__item__family_name', 'brick'))
     for family, brick in rows:
         if BRICK.match(brick):

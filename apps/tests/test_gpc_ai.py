@@ -133,7 +133,7 @@ class ShortlistTests(Base):
         p = self.item()
         for i in range(3):
             other = self.item(name=f'OTHER {i}')
-            TaxCodingDecision.objects.create(profile=other, decision='code', brick=FAM)
+            TaxCodingDecision.objects.create(profile=other, decision='code', brick=FAM, brick_source='person')
         codes = [b['code'] for b in gpc_ai.shortlist(p.item)]
         self.assertEqual(codes, [FAM, HAIR, PET])     # VIT shares no word; segment 53 before segment 10
         hair = next(b for b in gpc_ai.shortlist(p.item) if b['code'] == HAIR)
@@ -176,6 +176,12 @@ class RunTests(Base):
         TaxBrickSuggestion.objects.create(profile=old, source='none', asked_at=timezone.now() - dt.timedelta(days=40))
 
         self.assertEqual([p.pk for p in gpc_ai.pending()], [big.pk, mid.pk, old.pk, small.pk])
+        coded = self.item(name='CODED SHAMPOO', value=5000)     # decided "code" with its brick: no pointless re-ask
+        TaxCodingDecision.objects.create(profile=coded, decision='code', brick=HAIR, brick_source='person')
+        s1 = self.item(name='S1 SHAMPOO', value=4000)           # decided "code" before bricks: still worth asking
+        TaxCodingDecision.objects.create(profile=s1, decision='code')
+        self.assertEqual([p.pk for p in gpc_ai.pending()], [s1.pk, big.pk, mid.pk, old.pk, small.pk])
+        TaxCodingDecision.objects.filter(profile=s1).update(decision='keep_out')     # out of the way for the run below
         asked = []
 
         def answer(item, prompt):

@@ -189,14 +189,16 @@ def suggest_one(profile):
 
 
 def pending(limit=200):
-    """Queue items worth asking, biggest uncoded value first: no learned brick, not a medicine, not kept out,
-    and no suggestion asked in the last 30 days. A "no answer" (provider down) is not an answer: asked again next run."""
+    """Queue items worth asking, biggest uncoded value first: no learned brick, not a medicine, not kept out, not
+    decided "code" with a brick already, and no suggestion asked in the last 30 days. A "no answer" (provider down)
+    is not an answer: asked again next run."""
     from apps.catalog.models import Item
 
     sold, profiles, _ = coding_queue.candidates()
-    kept_out = set(TaxCodingDecision.objects.filter(profile__in=[p.pk for p in profiles],
-                                                    decision=TaxCodingDecision.DECISION_KEEP_OUT)
-                   .values_list('profile_id', flat=True))
+    kept_out = set(TaxCodingDecision.objects.filter(profile__in=[p.pk for p in profiles])
+                   .filter(Q(decision=TaxCodingDecision.DECISION_KEEP_OUT)
+                           | Q(decision=TaxCodingDecision.DECISION_CODE) & ~Q(brick=''))
+                   .values_list('profile_id', flat=True))     # kept out, or coded with its brick confirmed
     fresh = set(TaxBrickSuggestion.objects.filter(profile__in=[p.pk for p in profiles],
                                                   asked_at__gte=timezone.now() - dt.timedelta(days=FRESH_DAYS))
                 .exclude(error__startswith=NO_ANSWER).values_list('profile_id', flat=True))

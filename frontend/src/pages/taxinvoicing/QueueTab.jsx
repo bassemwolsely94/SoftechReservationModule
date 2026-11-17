@@ -41,7 +41,7 @@ const BRICK_SOURCE = {
   person: 'اختيار يدوي',
 }
 const CONFIDENCE = { high: 'عالية', medium: 'متوسطة', low: 'منخفضة' }
-const SUGGEST_MAX = 20
+const SUGGEST_MAX = 5      // each AI call can take tens of seconds (server: views.SUGGEST_MAX)
 const needsBrickCheck = r => r.brick_source === 'ai' && r.brick_confidence !== 'high'
 const brickLabel = b => `${b.name_ar || b.name_en || b.name || ''}`.trim()
 const KEYS_HINT = '⌨ ↑↓ تنقل · مسافة تحديد · Enter قبول المقترح · C كوّد · K استبعد · M التفاصيل · Ctrl+A تحديد الكل'
@@ -236,12 +236,13 @@ export default function QueueTab({ me }) {
   const selection = row => (picked.length ? rows.filter(r => picked.includes(r.itemcode)) : row ? [row] : []).filter(r => !r.decision)
   const chosen = selection(null)
   const rateOf = r => (r.vat_flagged ? rates[r.itemcode] : r.vat_rate)
-  // a flagged row, or one whose brick is an AI suggestion that is not high-confidence, is decided on its own
-  const codeBlock = list => {
+  // a flagged row, or one whose brick is an AI suggestion that is not high-confidence, is decided on its own.
+  // `bulk`: the action started from several rows (a one-row group of a multi-row Enter is still bulk)
+  const codeBlock = (list, bulk = list.length > 1) => {
     if (!list.length) return 'اختر صنفاً'
-    if (list.length > 1 && list.some(r => r.vat_flagged)) return 'في المختار صنف نسبته تحتاج تأكيداً — قرره وحده'
-    if (list.length > 1 && list.some(needsBrickCheck)) return 'في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده'
-    if (list.length > 1 && list.some(r => bricks[r.itemcode])) return 'في المختار صنف اخترت فئته بنفسك — قرره وحده'
+    if (bulk && list.some(r => r.vat_flagged)) return 'في المختار صنف نسبته تحتاج تأكيداً — قرره وحده'
+    if (bulk && list.some(needsBrickCheck)) return 'في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده'
+    if (bulk && list.some(r => bricks[r.itemcode])) return 'في المختار صنف اخترت فئته بنفسك — قرره وحده'
     if (list.length === 1 && list[0].vat_flagged && !rateOf(list[0])) return 'اختر نسبة الضريبة أولاً'
     if (list.length === 1 && !bricks[list[0].itemcode] && !list[0].brick) return 'اختر فئة GPC أولاً'
     return ''
@@ -250,7 +251,9 @@ export default function QueueTab({ me }) {
     const body = { itemcodes: list.map(r => r.itemcode), decision }
     if (decision === 'code' && list.length === 1) {
       body.vat_rate = rateOf(list[0])
-      if (bricks[list[0].itemcode]) body.brick = bricks[list[0].itemcode].code
+      // the brick the person sees, so the server never saves a suggestion recomputed after they looked
+      const brick = bricks[list[0].itemcode]?.code || list[0].brick
+      if (brick) body.brick = brick
     }
     return body
   }
@@ -266,7 +269,8 @@ export default function QueueTab({ me }) {
   const ask = list => {
     if (!canDecide || act.pending || askBlock(list)) return
     act.run(() => taxInvoicingApi.codingSuggest({ itemcodes: list.map(r => r.itemcode) }), d => `سُئل عن ${fmtInt(d.asked.length)}${d.skipped.length
-      ? ` — تُرك ${fmtInt(d.skipped.length)}: ${d.skipped.slice(0, 3).map(s => `${s.itemcode} (${s.why})`).join('، ')}` : ''}`)
+      ? ` — تُرك ${fmtInt(d.skipped.length)}: ${d.skipped.slice(0, 3).map(s => `${s.itemcode} (${s.why})`).join('، ')}` : ''}${d.stopped === 'provider'
+      ? ' — توقف السؤال: مزود الذكاء الاصطناعي لا يرد، حاول لاحقاً' : ''}`)
   }
   const summary = d => `قُرر ${fmtInt(d.decided.length)}${d.skipped.length
     ? ` — تُرك ${fmtInt(d.skipped.length)}: ${d.skipped.slice(0, 3).map(s => `${s.itemcode} (${s.why})`).join('، ')}` : ''}`
@@ -285,7 +289,7 @@ export default function QueueTab({ me }) {
     if (!marked.length) return 'لا مقترح في المختار'
     const codes = marked.filter(r => r.premark === 'code')
     if (list.length > 1 && list.some(r => r.vat_flagged)) return codeBlock(list)
-    return codes.length ? codeBlock(codes) : ''
+    return codes.length ? codeBlock(codes, list.length > 1) : ''
   }
   const accept = list => {
     if (!canDecide || act.pending) return

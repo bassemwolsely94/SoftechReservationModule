@@ -201,7 +201,8 @@ Code: `gpc_learn.py` (learned bricks), `gpc_ai.py` (AI proposal), `coding_queue.
 Every brick shown is a suggestion; a person confirms it (CLAUDE.md rule 10).
 
 **Learned sources, in order (first hit wins; `gpc_learn.learned`, constant queries).**
-1. `decisions`: bricks people confirmed on `TaxCodingDecision` (`decision='code'`) for items of the same SOFTECH
+1. `decisions`: bricks people confirmed on `TaxCodingDecision` (`decision='code'`, `brick_source` not `ai`: an
+   accepted AI brick never spreads to the family) for items of the same SOFTECH
    family (`Item.family_name`), counted only with at least 3 items and the top brick on at least 80% of them
    (a 60/40 family gives nothing and falls through).
 2. `eta`: the brick (`parentItemCode`, kept as `EtaCodeUsage.gpc`) of approved/active ETA production codes of items of
@@ -215,8 +216,9 @@ A learned brick that is not on the loaded brick list (`gpc.known`) is dropped; w
 
 **AI proposal** (`gpc_ai`). Switch `TAX_GPC_AI_ENABLED`, default off (forced off under tests); off = the nightly job and
 "ask again" do nothing and say so, the learned sources still work. Nightly job `gpc_ai_suggest` 02:30
-(`SCHEDULER_JOB_GUARDS`), `manage.py suggest_bricks [--limit N] [--itemcode X]`, and «اقترح مرة أخرى» (≤20 items).
-Only items with no learned brick are asked; medicines are never asked. The AI picks from a shortlist of at most 40:
+(`SCHEDULER_JOB_GUARDS`), `manage.py suggest_bricks [--limit N] [--itemcode X]`, and «اقترح مرة أخرى» (≤5 items; stops at the first "no answer" and returns `stopped: 'provider'`).
+Only items with no learned brick are asked; medicines, kept-out items and items decided "code" with a brick are
+never asked. The AI picks from a shortlist of at most 40:
 the family's bricks from decisions and ETA codes (up to 15), then GS1 bricks sharing an English word with the item's
 family / category / name, segments 50/51/53 first. GS1 names are English, so an item with an Arabic-only name gets the
 family bricks only. The answer must be in the shortlist and `gpc.known()`; otherwise, or on malformed JSON, it is
