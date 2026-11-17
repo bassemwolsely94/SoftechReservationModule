@@ -69,7 +69,7 @@ class FakeOverlay:
 def claim(n=200):
     steps = [{"i": i, "label": "s%d" % i, "send": "k%d{TAB}" % i} for i in range(1, n + 1)]
     steps[-1]["final"] = True
-    return {"run_id": 7, "keyplan": {"document": 3, "reference": "RPA-3", "window_title": "SOFTECH",
+    return {"run_id": 7, "mode": "dry_run", "keyplan": {"document": 3, "reference": "RPA-3", "window_title": "SOFTECH",
                                      "cell_delay": 0, "form_delay": 0, "checklist": [], "popups": [],
                                      "steps": steps}}
 
@@ -115,6 +115,58 @@ class RunOneLeaseLostTests(unittest.TestCase):
         self.assertEqual(len(client.reports), 1)
         self.assertEqual(client.reports[0]["outcome"], "lease_lost")
         self.assertEqual(client.reports[0]["run_id"], 7)
+
+
+
+class RunOneModeTests(unittest.TestCase):
+    """The agent types only what its own setting allows, whatever the server's claim says."""
+
+    def run_claim(self, c, **kw):
+        driver = SlowDriver()
+        fakes = {"rpa_agent.driver": types.SimpleNamespace(Win32Driver=lambda: driver),
+                 "rpa_agent.overlay": types.SimpleNamespace(Overlay=FakeOverlay)}
+        client = FakeClient()
+        with mock.patch.dict(sys.modules, fakes):
+            main.run_one(client, c, **kw)
+        return driver, client
+
+    def test_dry_run_is_typed(self):
+        driver, client = self.run_claim(claim(3))
+        self.assertTrue(driver.sent)
+        self.assertEqual(client.reports[0]["outcome"], "dry_run_ok")
+        self.assertEqual(client.reports[0]["mode"], "dry_run")
+
+    def test_live_refused_by_default_and_nothing_typed(self):
+        c = dict(claim(3), mode="live")
+        driver, client = self.run_claim(c)
+        self.assertEqual(driver.sent, [])
+        self.assertEqual(client.reports[0]["outcome"], "error")
+        self.assertIn("live", client.reports[0]["steps"][0]["note"])
+
+    def test_unknown_or_missing_mode_refused(self):
+        for mode in ("LIVE", None, ""):
+            c = dict(claim(3), mode=mode)
+            driver, client = self.run_claim(c, allow_live=True)
+            self.assertEqual(driver.sent, [], mode)
+            self.assertEqual(client.reports[0]["outcome"], "error", mode)
+        c = claim(3)
+        del c["mode"]
+        driver, client = self.run_claim(c)
+        self.assertEqual((driver.sent, client.reports[0]["outcome"]), ([], "error"))
+
+    def test_live_runs_only_when_this_agent_allows_it(self):
+        driver, client = self.run_claim(dict(claim(3), mode="live"), allow_live=True)
+        self.assertTrue(driver.sent)
+        self.assertEqual(client.reports[0]["outcome"], "saved")
+
+    def test_main_passes_the_local_setting(self):
+        calls = []
+        client = mock.Mock()
+        client.claim.side_effect = [dict(claim(1), mode="live"), KeyboardInterrupt()]
+        with mock.patch.object(main, "load_config", return_value={"base_url": "x", "token": "t"}),                 mock.patch.object(main, "AgentClient", return_value=client),                 mock.patch.object(main, "run_one", side_effect=lambda cl, c, **kw: calls.append(kw)),                 mock.patch.object(main.time, "sleep"):
+            with self.assertRaises(KeyboardInterrupt):
+                main.main()
+        self.assertEqual(calls, [{"allow_live": False}])
 
 
 if __name__ == "__main__":

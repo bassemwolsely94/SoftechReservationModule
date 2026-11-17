@@ -48,7 +48,11 @@ def _match_rule(rules, popup):
     title = popup.get("title", "") or ""
     text = popup.get("text", "") or ""
     for r in rules:
-        if r.get("title_contains", "") in title and r.get("text_contains", "") in text:
+        want_title = r.get("title_contains") or ""
+        want_text = r.get("text_contains") or ""
+        if not (want_title.strip() or want_text.strip()):   # an empty rule would answer every popup: never use it
+            continue
+        if want_title in title and want_text in text:
             return r
     return None
 

@@ -49,12 +49,37 @@ def heartbeat_loop(client, doc_id, alive, stop, lost, interval=HEARTBEAT_SECONDS
                 return
 
 
-def run_one(client, claim, mode="dry_run"):
+def _now():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def refused_mode(claim, allow_live=False):
+    """Why this agent will not run the claim's mode ('' = it will). Only a dry run is typed,
+    unless the server says live AND this machine's own setting allows live (default off)."""
+    mode = claim.get("mode")
+    if mode == "dry_run":
+        return ""
+    if mode == "live" and allow_live is True:
+        return ""
+    if mode == "live":
+        return "live mode refused: allow_live is off on this agent"
+    return "unknown mode refused: %r" % (mode,)
+
+
+def run_one(client, claim, allow_live=False):
+    kp, run_id = claim["keyplan"], claim["run_id"]
+    doc_id = kp["document"]
+    refusal = refused_mode(claim, allow_live)
+    if refusal:                       # nothing is typed: the server sends the document to a person
+        report_with_retry(client, doc_id, {"run_id": run_id, "mode": claim.get("mode"), "outcome": "error",
+                                           "steps": [{"i": -1, "label": "mode", "at": _now(), "ok": False,
+                                                      "note": refusal}]})
+        return
+    mode = claim["mode"]
+
     from .driver import Win32Driver
     from .overlay import Overlay
 
-    kp, run_id = claim["keyplan"], claim["run_id"]
-    doc_id = kp["document"]
     stop = threading.Event()
     overlay = Overlay(stop)
     alive = threading.Event()
@@ -83,8 +108,7 @@ def run_one(client, claim, mode="dry_run"):
             result = {**result, "outcome": "lease_lost"}
     except Exception as e:  # noqa: BLE001 - keyplan/tk/driver failure
         result = {"outcome": "error", "steps": [
-            {"i": -1, "label": "agent", "at": datetime.datetime.now(
-                datetime.timezone.utc).isoformat(), "ok": False, "note": str(e)}]}
+            {"i": -1, "label": "agent", "at": _now(), "ok": False, "note": str(e)}]}
     finally:
         alive.set()
         try:
@@ -97,6 +121,7 @@ def run_one(client, claim, mode="dry_run"):
 def main():
     cfg = load_config()
     client = AgentClient(cfg["base_url"], cfg["token"])
+    allow_live = cfg.get("allow_live") is True     # local setting, default off: Stage 1 types dry runs only
     print("ElRezeiky RPA agent started. Ctrl+C to quit.")
     while True:
         try:
@@ -106,7 +131,7 @@ def main():
             claim = None
         if claim:
             try:
-                run_one(client, claim)
+                run_one(client, claim, allow_live=allow_live)
             except Exception as e:  # noqa: BLE001 - the poll loop must survive
                 print("run failed:", e)
                 time.sleep(POLL_SECONDS)
