@@ -164,6 +164,42 @@ class TaxItemProfile(models.Model):
         return f'{self.softech_itemcode} {self.eta_code}'.strip()
 
 
+class TaxCodingDecision(models.Model):
+    """The owner's production-coding decision for one item: give it an ETA code or keep it out for now.
+    Only coding_queue writes it. Reopening keeps the row (decision = '') so the item can be decided again;
+    the full history is in the audit events."""
+    DECISION_CODE, DECISION_KEEP_OUT = 'code', 'keep_out'
+    DECISION_CHOICES = [(DECISION_CODE, 'يُكوَّد'), (DECISION_KEEP_OUT, 'يبقى خارج الترميز')]
+
+    profile = models.OneToOneField(TaxItemProfile, on_delete=models.PROTECT, related_name='coding_decision')
+    decision = models.CharField(max_length=10, choices=DECISION_CHOICES, blank=True, default='')
+    # What the purchase rule suggested when the decision was taken (coding_rule.premark).
+    premark = models.CharField(max_length=10, blank=True, default='')
+    premark_reason = models.CharField(max_length=30, blank=True, default='')
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    vat_flagged = models.BooleanField(default=False)
+    code_name = models.CharField(max_length=200, blank=True, default='')
+    code_name_ar = models.CharField(max_length=200, blank=True, default='')
+    description = models.CharField(max_length=300, blank=True, default='')
+    description_ar = models.CharField(max_length=300, blank=True, default='')
+    brick = models.CharField(max_length=8, blank=True, default='')
+    brick_source = models.CharField(max_length=15, blank=True, default='')
+    note = models.CharField(max_length=300, blank=True, default='')
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    reopened_at = models.DateTimeField(null=True, blank=True)
+    reopen_reason = models.CharField(max_length=300, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'قرار ترميز صنف'
+
+    def __str__(self):
+        return f'{self.profile_id} {self.decision or "-"}'
+
+
 class TaxExclusionBasis(models.Model):
     """A documented legal basis for leaving a line off an official invoice. None is seeded: until
     an authorized person records one, no exclusion can be approved and those drafts stay blocked."""
@@ -480,8 +516,9 @@ class TaxCodeRequest(models.Model):
         verbose_name = 'طلب كود صنف من المصلحة'
         ordering = ['-prepared_at', '-id']
         constraints = [
-            models.UniqueConstraint(fields=['profile'], condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
-                                    name='one_open_code_request_per_item'),
+            models.UniqueConstraint(fields=['profile', 'environment'],
+                                    condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
+                                    name='one_open_code_request_per_item_system'),
         ]
 
     def __str__(self):
@@ -494,6 +531,15 @@ class TaxGpcBrick(models.Model):
     code = models.CharField(max_length=8, unique=True)
     name_en = models.CharField(max_length=300, blank=True)
     name_ar = models.CharField(max_length=300, blank=True)
+    # 'workbook' for the owner's workbook, else the GS1 list version (e.g. 'gs1-20260520')
+    source = models.CharField(max_length=20, default='workbook', db_default='workbook')
+    definition = models.TextField(blank=True, default='', db_default='')
+    segment_code = models.CharField(max_length=8, blank=True, default='', db_default='')
+    family_code = models.CharField(max_length=8, blank=True, default='', db_default='')
+    class_code = models.CharField(max_length=8, blank=True, default='', db_default='')
+    segment_name = models.CharField(max_length=300, blank=True, default='', db_default='')
+    family_name = models.CharField(max_length=300, blank=True, default='', db_default='')
+    class_name = models.CharField(max_length=300, blank=True, default='', db_default='')
     loaded_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -856,3 +902,24 @@ class EtaReconUncodedItem(models.Model):
                                                name='eta_recon_uncoded_once')]
         indexes = [models.Index(fields=['system', 'itemcode'], name='eta_recon_uncoded_item'),
                    models.Index(fields=['system', 'day'], name='eta_recon_uncoded_day')]
+
+
+class EtaCodeUsage(models.Model):
+    """One code-usage request ETA holds for us in one system (the portal's code-usage history), whatever its status
+    (Approved / Rejected / Submitted). A read-only mirror: only eta_codes.fetch writes it. `itemcode` is our SOFTECH
+    code once the EGS/GS1 code is matched to an item."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    code_type = models.CharField(max_length=10)
+    item_code = models.CharField(max_length=100)
+    code_name = models.CharField(max_length=300, blank=True, default='')
+    active_from = models.DateField(null=True, blank=True)
+    active_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=30, blank=True, default='')
+    gpc = models.CharField(max_length=10, blank=True, default='')
+    request_id = models.CharField(max_length=30, blank=True, default='')
+    itemcode = models.CharField(max_length=10, blank=True, default='', db_index=True)
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'كود مسجل لدى المصلحة'
+        constraints = [models.UniqueConstraint(fields=['system', 'code_type', 'item_code'], name='eta_code_usage_once')]

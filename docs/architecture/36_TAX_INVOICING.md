@@ -150,6 +150,52 @@ server that runs the test is the live one, so a status is never trusted across s
   mirror`). Their answers only mark the code found there; they never change the item's real coding. Never in production.
 - Not built: GS1 codes missing in a system ("Request Code Reuse").
 
+## طابور الترميز (Coding queue)
+
+Batch S1 of production item coding. Design: `docs/superpowers/specs/2026-11-16-eta-production-coding-design.md`
+(§4, §6, §8, §14). Code: `coding_rule.py` (suggestions), `coding_queue.py` (decisions), `eta_codes.py` (ETA mirror).
+Nothing here sends a code to ETA; S1 only reads ETA and records the owner's decisions.
+
+**Keep-out rule** (a pre-mark only; a person confirms every item). Sources are purchase lines (doccode 10) read with the
+supplier's live `SupplierSegmentation` category. Official = `OFFICIAL_DISTRIBUTOR`, `DRUG_WAREHOUSE`, `MANUFACTURER`,
+`SMALL_WAREHOUSE`. Ignored (not sourcing evidence) = `PATIENT_REPURCHASE`, `CUSTOMER_REPURCHASE`, `SISTER_COMPANY`,
+`INTERNAL_TRANSFER`, `EXTERNAL_TRANSFER`, `CLEARING`, `SERVICE_VENDOR`, `FIXED_ASSET_SUPPLIER`; any other category,
+including no row (`UNKNOWN`), counts as "other".
+
+| Reason | When | Pre-mark | Note shown |
+|---|---|---|---|
+| `services` | Services type, non-stockable, or gifts (هدايا) | keep out | خدمة / هدية — لا تُكوَّد حالياً |
+| `official` | bought from a distributor, drug warehouse or manufacturer | code | اشتُري من موزع أو مخزن أو مصنع |
+| `small_warehouse_only` | official only via `SMALL_WAREHOUSE` | code | تأكد من تسجيله (هيئة الدواء / سلامة الغذاء) |
+| `unofficial_only` | bought, but only from other sources | keep out | لم يُشترَ من موزع أو مخزن أو مصنع |
+| `no_purchase` | no counted purchase since May 2025 | none | لا مشتريات معتبرة منذ مايو 2025 |
+
+**VAT prefill** (`vat_prefill`). A treatment the accountant already confirmed wins and is never flagged. Otherwise the
+rate is SOFTECH's `itemsalestaxp`, flagged "check this" when it is neither 0 nor 14, is 0 on Cosmetics / Others / Body
+Building, or is 14 on Medicine. An item with no catalog row gets 0, flagged (`no_catalog`), so a person must look.
+
+**Decisions** (`coding_queue.decide`, `reopen`). Needs the module's approve permission; every decision and reopen is audited
+(who, when, before/after; reopen requires a reason). Deciding "code" also confirms the VAT treatment: 14 = taxable,
+0 = exempt with the reference `EXEMPT_REFERENCE` (VAT law 67/2016, exemptions schedule). A decision never overwrites a
+treatment the accountant already confirmed.
+
+**ETA code-usage mirror** (`EtaCodeUsage`, `eta_codes.fetch`). `manage.py eta_code_usages --system production [--probe]`
+reads `codetypes/requests/my` (read only; `--probe` fetches one page, prints its shape, writes nothing). Rows are
+kept as the best per code by status rank (approved/active 3, submitted/pending 2, other 1); a partial fetch never
+downgrades a row. `eta_codes.report()` buckets: on ETA but not in the sheet, in the sheet but not on ETA, and counts
+(usages, active, matched, unmatched, sheet).
+
+**GPC GS1 load.** `manage.py load_gpc_bricks --gs1-json PATH` loads the GS1 brick list (May 2026) with `source` set;
+the workbook's own bricks keep `source='workbook'`. `gpc.known(code, official_only=True)` accepts only a brick from a
+GS1 list, so a workbook-only brick is not treated as official.
+
+**Reconciliation.** "Coded" in the recon (`eta_recon.coded_items`) means coded in the sheet, not merely mapped in our
+records; the usage report above compares against that set.
+
+**Per-system code requests.** Preprod never changes an item's real coding: its answers stay on the request, as `mirror`
+requests already do. `coding.refresh` asks ETA only about requests of this server's own system (plus rows with no
+system yet), because codes are identical across systems and another system's answer concerns a different request.
+
 ## Which ETA system
 
 `environment.py`: `TAX_ETA_ENVIRONMENT` = `preprod` or `production` picks ETA's published addresses; explicit

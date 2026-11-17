@@ -10,6 +10,7 @@ import { procurementIntelApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
+import { usePermissionAny } from '../hooks/usePermission'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 
@@ -185,6 +186,9 @@ function SupplierDetail({ supplierCode, onBack }) {
 
 export default function SupplierPerformancePage() {
   const { user } = useAuthStore()
+  // forced refresh = POST /procurement/trigger/: Django staff (IsAdminUser) and a purchasing
+  // write grant (the matrix the middleware maps /procurement/ to) — UAT D5
+  const purchasingWrite = usePermissionAny('purchasing', ['create', 'edit', 'approve', 'assign', 'finalize'])
   const { supplierCode } = useParams()
   const navigate = useNavigate()
 
@@ -249,7 +253,7 @@ export default function SupplierPerformancePage() {
       </div>
 
       <DataFreshnessBar domains={['purchases']}
-        canEdit={user?.is_staff || ['admin', 'purchasing'].includes(user?.role)}
+        canEdit={!!user?.is_staff && purchasingWrite}
         onRefresh={() => procurementIntelApi.triggerEngine({})} />
 
       {/* Filters */}

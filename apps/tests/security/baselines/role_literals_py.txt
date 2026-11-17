@@ -84,7 +84,7 @@ apps/help/content/followups.py::<module>::admin,call_center,pharmacist,quality_m
 apps/help/content/followups.py::<module>::admin,supervisor x2
 apps/help/content/gamification.py::<module>::admin,quality_manager,supervisor x1
 apps/help/content/general.py::<module>::admin,quality_manager,supervisor x4
-apps/help/content/general.py::<module>::admin,supervisor x3
+apps/help/content/general.py::<module>::admin,supervisor x1
 apps/help/content/hr.py::<module>::admin,pharmacist,purchasing,quality_manager,supervisor x1
 apps/help/content/hr.py::<module>::admin,pharmacist,quality_manager,supervisor x1
 apps/help/content/hr.py::<module>::admin,purchasing,supervisor x1
