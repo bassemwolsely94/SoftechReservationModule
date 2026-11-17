@@ -5,6 +5,7 @@
  */
 import { Badge, BranchStockPill, ActionTile, Icon, tone, meaning, stockMeaning } from '../design'
 import useBranchNames from './useBranchNames'
+import SearchTierChip from '../../components/SearchTierChip'
 
 export const MAX_OTHER_PILLS = 4
 
@@ -63,6 +64,7 @@ export default function PosResultRow({ item, hereBranchId, selected, onAdd, onAc
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-semibold text-sm text-gray-900 leading-snug">{item.name}</span>
+          <SearchTierChip row={item} />
           {item.strength && <span className="text-[11px] font-bold px-1.5 rounded bg-[#022871] text-white">{item.strength}</span>}
           {form && <span className="text-[10px] text-gray-400">{form}</span>}
           <ItemBadges item={item} />

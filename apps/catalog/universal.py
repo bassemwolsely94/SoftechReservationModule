@@ -46,18 +46,20 @@ def universal_search(query, *, branch_id=None, limit=DEFAULT_LIMIT, types=None, 
 def _search_items(raw, *, branch_id, limit):
     # The system-wide search rules (apps/catalog/wildcard.py): * and % = any characters,
     # parts in order, space literal; ranked code/barcode (EXACT only — never a prefix here,
-    # safety rule above) → learned memory → literal text → pattern → any word order →
+    # safety rule above) → learned memory → name starts / word / contains → any word order →
     # Arabic by sound → typo-tolerant «تقريبي» only when nothing else matched.
     from .wildcard import item_search, parse
     tiers = item_search(raw, limit=limit * 3, active_only=False, code_prefix=False)
-    # the normalized haystack still catches punctuation / spacing variants («pan-adol»)
-    if not parse(raw)['wild']:
+    # the normalized haystack still catches punctuation / spacing variants («pan-adol»).
+    # Not for digits: search_name also holds the code and barcode, and a code here must
+    # stay EXACT (safety rule above) — a digit fragment would leak code hits as names.
+    if not parse(raw)['wild'] and not raw.isdigit():
         nq = normalize_search_text(raw)
         have = {i for i, _ in tiers}
         extra = [i for i in Item.objects.filter(search_name__icontains=nq).order_by()
                  .values_list('id', flat=True)[: limit * 3] if i not in have]
         if extra:
-            tiers = [t for t in tiers if t[1] != 'approx'] + [(i, 'literal') for i in extra]
+            tiers = [t for t in tiers if t[1] != 'approx'] + [(i, 'contains') for i in extra]
     tier_of = dict(tiers)
     exact_ids = {i for i, t in tiers if t == 'code'}
     ordered_ids = [i for i, _ in tiers]
