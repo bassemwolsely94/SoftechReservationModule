@@ -560,3 +560,194 @@ class ChecksTests(_BuildMixin, TestCase):
         problems = self.check(code_300)
         self.assertEqual(len(problems), 1)
         self.assertIn('300', problems[0])
+
+
+class SkipReasonTests(_BuildMixin, TestCase):
+    def test_a_confirmed_rate_other_than_14_has_its_own_reason(self):
+        self.profile('300', brick='10000043', rate=5)                   # taxable, confirmed at 5 %
+        self.profile('500', brick='10000043', confirmed=False)          # not confirmed
+        why = {c['itemcode']: c['why'] for c in egs_sheet.candidates()}
+        self.assertEqual(why, {'300': egs_sheet.OTHER_RATE, '500': egs_sheet.NO_TREATMENT})
+
+
+class WorkbookPartsKeptTests(_BuildMixin, TestCase):
+    def test_a_built_file_keeps_the_defined_name_and_the_other_sheets(self):
+        from openpyxl.workbook.defined_name import DefinedName
+        wb = _wb(self.sheet_bytes())
+        wb['GPC Bricks Cleaned']['A1'] = 'brick'
+        wb.defined_names['CodeTypes'] = DefinedName('CodeTypes', attr_text="'GPC Bricks Cleaned'!$A$1:$A$2")
+        TaxEgsSheetVersion.objects.all().delete()
+        self.seed(_save(wb))
+        self.profile('300', brick='10000043')
+        built = _wb(egs_sheet.open_version(self.build()))
+        self.assertIn('CodeTypes', built.defined_names)
+        self.assertEqual(built.defined_names['CodeTypes'].attr_text, "'GPC Bricks Cleaned'!$A$1:$A$2")
+        self.assertEqual(built.sheetnames, ['DataEntry', 'GPC Bricks Cleaned', 'ElRezeiky GPC Applied'])
+        self.assertEqual(built['GPC Bricks Cleaned']['A1'].value, 'brick')
+
+
+# ── S3 Task 3: endpoints ───────────────────────────────────────────────────────────────────────
+
+SHEET_URL = '/api/tax-invoicing/codes/sheet/'
+
+
+def _sync_thread(target, *, args=(), kwargs=None, name=None, **_):
+    """start_thread in tests: the build runs here, on the test's connection (build_thread's close is skipped)."""
+    assert target is egs_sheet.build_thread
+    egs_sheet.run_build(*args, **(kwargs or {}))
+
+
+class SheetApiTests(_BuildMixin, TestCase):
+    def setUp(self):
+        from apps.tests.test_tax_invoicing import Fixture
+        from apps.users.models import RoleModuleAccess
+        super().setUp()
+        Fixture.build(self, 'egs')                   # users; it also rewrites the issuer, so its tax id is put back
+        TaxIssuerProfile.objects.filter(pk=1).update(tax_id='499-336-534')
+        RoleModuleAccess.objects.update_or_create(role='pharmacist', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': False})
+        self.api = self.client_for(self.accountant)
+
+    def client_for(self, user):
+        from rest_framework.test import APIClient
+        c = APIClient()
+        c.force_authenticate(user)
+        return c
+
+    def post_build(self, client=None):
+        with mock.patch('apps.tax_invoicing.egs_sheet_views.start_thread', side_effect=_sync_thread), \
+                self.captureOnCommitCallbacks(execute=True):
+            return (client or self.api).post(SHEET_URL + 'build/', {'note': 'n'}, format='json')
+
+    def test_list_shows_versions_pending_and_the_idle_build(self):
+        self.profile('300', brick='10000043')
+        self.profile('500', brick='10000043', confirmed=False)
+        r = self.api.get(SHEET_URL)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual([v['number'] for v in r.data['versions']], [1])
+        v = r.data['versions'][0]
+        self.assertEqual((v['source'], v['coded_rows'], v['total_rows'], v['has_file']), ('seed', 2, 4, True))
+        self.assertEqual(r.data['pending'], {'ready': 1, 'skipped': [{'itemcode': '500',
+                                                                      'why': egs_sheet.NO_TREATMENT}]})
+        self.assertEqual(r.data['build'], {'state': 'idle'})
+        self.assertTrue(r.data['can_build'])
+
+    def test_build_runs_in_the_background_and_reports_the_new_version(self):
+        self.profile('300', brick='10000043')
+        r = self.post_build()
+        self.assertEqual(r.status_code, 202, r.content)
+        self.assertEqual(egs_sheet.latest().number, 2)
+        b = self.api.get(SHEET_URL).data
+        self.assertEqual((b['build']['state'], b['build']['version'], b['build']['by']),
+                         ('built', 2, self.accountant.username))
+        self.assertTrue(b['build']['finished_at'])
+        self.assertEqual(b['versions'][0]['coded'], 1)
+        self.assertEqual(b['pending']['ready'], 0)
+
+    def test_nothing_new_reports_unchanged(self):
+        self.assertEqual(self.post_build().status_code, 202)
+        self.assertEqual(egs_sheet.build_state()['state'], 'unchanged')
+        self.assertEqual(TaxEgsSheetVersion.objects.count(), 1)
+
+    def test_no_held_version_is_400_and_starts_nothing(self):
+        TaxEgsSheetVersion.objects.all().delete()
+        with mock.patch('apps.tax_invoicing.egs_sheet_views.start_thread') as started:
+            r = self.api.post(SHEET_URL + 'build/', {}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, egs_sheet.NO_HELD))
+        started.assert_not_called()
+        self.assertEqual(egs_sheet.build_state(), {'state': 'idle'})
+
+    def test_a_second_build_while_one_runs_is_409(self):
+        self.assertTrue(egs_sheet.claim_build(self.accountant))
+        r = self.post_build()
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data['detail'], egs_sheet.BUILD_BUSY)
+
+    def test_a_stale_running_build_does_not_block(self):
+        from apps.config.models import SystemSetting
+        self.assertTrue(egs_sheet.claim_build(self.accountant))
+        row = SystemSetting.objects.get(key=egs_sheet.BUILD_KEY)
+        old = (timezone.now() - egs_sheet.BUILD_STALE - dt.timedelta(minutes=1)).isoformat()
+        egs_sheet._save_state(row, {'state': 'running', 'started_at': old})
+        self.assertEqual(self.post_build().status_code, 202)
+
+    def test_a_duplicate_itemcode_in_the_held_sheet_is_reported_as_the_refusal(self):
+        TaxEgsSheetVersion.objects.all().delete()
+        self.seed(self.sheet_bytes(rows=ROWS + [(None, '', 'X', None, 0, 300, 0)]))      # 300 twice in J
+        self.profile('300', brick='10000043')
+        self.assertEqual(self.post_build().status_code, 202)
+        b = self.api.get(SHEET_URL).data['build']
+        self.assertEqual(b['state'], 'refused')
+        self.assertTrue(any('مكرر' in why and '300' in why for why in b['refused']), b['refused'])
+        self.assertEqual(TaxEgsSheetVersion.objects.count(), 1)
+
+    def test_a_failure_in_the_build_is_recorded_not_raised(self):
+        from django.db import IntegrityError
+        with mock.patch.object(egs_sheet, 'build', side_effect=RuntimeError('boom')), \
+                self.assertLogs('elrezeiky', level='ERROR'):
+            self.assertEqual(self.post_build().status_code, 202)
+        state = egs_sheet.build_state()
+        self.assertEqual(state['state'], 'error')
+        self.assertIn('مرجع', state['error'])
+        with mock.patch.object(egs_sheet, 'build', side_effect=IntegrityError('number')):
+            self.assertEqual(self.post_build().status_code, 202)
+        state = egs_sheet.build_state()
+        self.assertEqual((state['state'], state['error']), ('error', egs_sheet.BUILD_RACE))
+
+    def test_full_download_is_the_stored_workbook_and_audited(self):
+        r = self.api.get(SHEET_URL + '1/download/', {'kind': 'full'})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('ElRezeiky_Bulk_EGS_Items.xlsx', r['Content-Disposition'])
+        self.assertEqual(r['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        got = _wb(b''.join(r.streaming_content))
+        held = _wb(self.held_bytes)
+        self.assertEqual(got.sheetnames, held.sheetnames)
+        for n in range(1, 6):
+            self.assertEqual(_row_values(got['DataEntry'], n), _row_values(held['DataEntry'], n))
+        ev = TaxAuditEvent.objects.get(action='egs_sheet_download')
+        self.assertEqual((ev.entity, ev.entity_id, ev.after['kind'], ev.actor),
+                         ('egs_sheet', '1', 'full', self.accountant))
+
+    def test_new_download_holds_only_the_rows_the_version_wrote(self):
+        self.profile('300', brick='10000043')
+        self.profile('500', brick='10000043')
+        self.post_build()
+        r = self.api.get(SHEET_URL + '2/download/', {'kind': 'new'})
+        self.assertEqual(r.status_code, 200)
+        ws = _wb(b''.join(r.streaming_content))['DataEntry']
+        self.assertEqual([ws.cell(1, c).value for c in range(1, 12)], egs_sheet.HEADER[:11])
+        self.assertEqual([ws.cell(n, 10).value for n in range(2, ws.max_row + 1)], [300, 500])
+        self.assertEqual(_row_values(ws, 2)[11:], [0, None, '0', 14, 'v009'])
+        self.assertEqual(TaxAuditEvent.objects.get(action='egs_sheet_download').after['kind'], 'new')
+
+    def test_download_errors(self):
+        self.assertEqual(self.api.get(SHEET_URL + '1/download/', {'kind': 'csv'}).status_code, 400)
+        self.assertEqual(self.api.get(SHEET_URL + '9/download/').status_code, 404)
+        os.remove(os.path.join(self.store_dir, self.held.file_name))
+        self.assertEqual(self.api.get(SHEET_URL + '1/download/').status_code, 404)
+        self.assertFalse(TaxAuditEvent.objects.filter(action='egs_sheet_download').exists())
+
+    def test_pharmacist_403_everywhere(self):
+        c = self.client_for(self.pharmacist)
+        self.assertEqual(c.get(SHEET_URL).status_code, 403)
+        self.assertEqual(self.post_build(c).status_code, 403)
+        self.assertEqual(c.get(SHEET_URL + '1/download/').status_code, 403)
+
+    def test_viewer_lists_but_cannot_build_or_download(self):
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        RoleModuleAccess.objects.update_or_create(role='viewer', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': True})
+        RoleModuleAccess.objects.filter(role='viewer', module='tax_invoicing').exclude(action='view').delete()
+        module_access.clear_cache()
+        viewer, _, _ = make_user('viewer_egs', role='viewer', branch=self.branch)
+        c = self.client_for(viewer)
+        r = c.get(SHEET_URL)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data['can_build'])
+        self.assertEqual(self.post_build(c).status_code, 403)
+        self.assertEqual(c.get(SHEET_URL + '1/download/', {'kind': 'full'}).status_code, 403)
+        self.assertEqual(c.get(SHEET_URL + '1/download/', {'kind': 'new'}).status_code, 403)
+        self.assertEqual(egs_sheet.build_state(), {'state': 'idle'})
+        self.assertFalse(TaxAuditEvent.objects.filter(action='egs_sheet_download').exists())

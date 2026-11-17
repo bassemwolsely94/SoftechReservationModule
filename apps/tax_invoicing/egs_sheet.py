@@ -10,6 +10,8 @@ The owner's original file is only ever read."""
 import datetime as dt
 import hashlib
 import io
+import json
+import logging
 import re
 from copy import copy
 from decimal import Decimal
@@ -19,6 +21,7 @@ import openpyxl
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from apps.tax_invoicing.gpc import _text
@@ -137,11 +140,13 @@ CODE_TYPES = ('EGS', 'GS1')
 VAT_RATES = (Decimal('0'), Decimal('0.14'))
 
 NO_TREATMENT = 'المعاملة الضريبية غير مؤكدة (خاضع 14% أو معفى) — أكدها من شاشة الأصناف'
+OTHER_RATE = 'نسبة الضريبة المعتمدة ليست 14٪ ولا معفاة — راجع المعاملة الضريبية للصنف'
 NO_BRICK = 'لا توجد فئة GPC للصنف'
 NO_TAX_ID = 'رقم التسجيل الضريبي للممول غير مسجل — لا يُكتب كود EGS'
 NO_BARCODE = 'كود GS1 بلا باركود'
 CODE_MISMATCH = 'كود الصنف المعتمد لا يطابق EG-<رقم التسجيل>-<كود الصنف>'
 NO_PROFILE = 'لا يوجد ملف ضريبي للصنف'
+NO_HELD = 'لا توجد نسخة محفوظة من ملف الأكواد — خزّن ملف المالك أولاً (egs_sheet_seed)'
 
 
 def _code_key(code):
@@ -186,8 +191,8 @@ def _candidate(code, profile, usage, tax_id, year):
         return {**out, 'why': NO_PROFILE}
     decision = _decision(profile)
     vat = _vat(profile)
-    if vat is None:
-        return {**out, 'why': NO_TREATMENT}
+    if vat is None:     # confirmed at another rate (e.g. taxable 5 %, zero-rated) is not "unconfirmed"
+        return {**out, 'why': OTHER_RATE if profile.treatment_confirmed_at else NO_TREATMENT}
     if usage is not None:
         code_type, item_code = usage.code_type.upper(), usage.item_code.strip()
     else:
@@ -456,7 +461,7 @@ def build(actor, note=''):
     fails (nothing stored). One load, one save."""
     held = latest()
     if held is None:
-        return {'refused': ['لا توجد نسخة محفوظة من ملف الأكواد — خزّن ملف المالك أولاً (egs_sheet_seed)']}
+        return {'refused': [NO_HELD]}
     try:
         data = open_version(held)
         held_counts = read_counts(data)
@@ -526,3 +531,121 @@ def build(actor, note=''):
             discard_file(version)
         raise
     return version
+
+
+# ── Downloads and the background build (S3 Task 3) ─────────────────────────────────────────────
+
+DOWNLOAD_NAME = 'ElRezeiky_Bulk_EGS_Items.xlsx'      # the name the Invoicer reads in D:\invoicer_mini
+
+
+def new_rows_xlsx(version):
+    """A small workbook: the DataEntry header and only the rows this version added or coded, as values (a seed
+    version has none: the header alone). SheetError when the version's file is gone."""
+    wanted = {_text(c) for c in [*version.added, *version.coded]}
+    src = openpyxl.load_workbook(io.BytesIO(open_version(version)), read_only=True, data_only=True)
+    out = openpyxl.Workbook()
+    ws = out.active
+    ws.title = SHEET
+    ws.append(HEADER)
+    try:
+        for r in src[SHEET].iter_rows(min_row=2, max_col=COLS, values_only=True):
+            r = _padded(r)
+            if _text(r[COL_J]) in wanted:
+                ws.append(list(r))
+    finally:
+        src.close()
+    for row in ws.iter_rows(min_row=2, min_col=COL_G + 1, max_col=COL_G + 1):
+        row[0].number_format = 'yyyy-mm-dd'
+    buf = io.BytesIO()
+    out.save(buf)
+    return buf.getvalue()
+
+
+# The build takes ~100 s on the real 15 MB sheet, so it runs on a thread; one at a time. Its state lives in one
+# SystemSetting row (JSON): durable across restarts and shared by every server process, where the cache is per
+# process (LocMemCache). A "running" state older than BUILD_STALE (a restart killed the thread) no longer blocks.
+BUILD_KEY = 'tax_egs_sheet_build'
+BUILD_STALE = dt.timedelta(minutes=30)
+BUILD_BUSY = 'جارٍ بناء الملف — انتظر'
+BUILD_RACE = 'بُنيت نسخة أخرى في نفس الوقت — أعد المحاولة'
+
+
+def build_state():
+    """{'state': idle|running|built|unchanged|refused|error, ...}: the last build's outcome, or the running one."""
+    from apps.config.models import SystemSetting
+    value = SystemSetting.get(BUILD_KEY)
+    return value if isinstance(value, dict) and value.get('state') else {'state': 'idle'}
+
+
+def _running(state):
+    if state.get('state') != 'running':
+        return False
+    try:
+        started = dt.datetime.fromisoformat(state.get('started_at') or '')
+    except ValueError:
+        return False
+    return timezone.now() - started < BUILD_STALE
+
+
+def _save_state(row, state):
+    row.value = json.dumps(state, ensure_ascii=False, default=str)
+    row.value_type = 'json'
+    row.save(update_fields=['value', 'value_type', 'updated_at'])
+
+
+def claim_build(actor):
+    """Marks a build as running and returns True; False when one is already running (the row is locked, so two
+    requests never both claim)."""
+    from apps.config.models import SystemSetting
+    with transaction.atomic():
+        row, _ = SystemSetting.objects.select_for_update().get_or_create(key=BUILD_KEY, defaults={
+            'label': 'ملف أكواد الإيصالات — آخر بناء', 'value': '{}', 'value_type': 'json',
+            'description': 'حالة بناء ملف ElRezeiky_Bulk_EGS_Items.xlsx (يكتبها النظام)'})
+        if _running(build_state()):
+            return False
+        _save_state(row, {'state': 'running', 'started_at': timezone.now().isoformat(),
+                          'by': getattr(actor, 'username', '') or ''})
+    return True
+
+
+def _finish(state):
+    from apps.config.models import SystemSetting
+    with transaction.atomic():
+        row, _ = SystemSetting.objects.select_for_update().get_or_create(key=BUILD_KEY, defaults={
+            'label': 'ملف أكواد الإيصالات — آخر بناء', 'value': '{}', 'value_type': 'json'})
+        started = build_state()
+        _save_state(row, {**state, 'started_at': started.get('started_at'), 'by': started.get('by', ''),
+                          'finished_at': timezone.now().isoformat()})
+
+
+def run_build(actor, note=''):
+    """build() with its outcome recorded in build_state(), never raised. A clash on the version number (another
+    build stored first) and any other failure become the state's Arabic `error`."""
+    from django.db import IntegrityError
+    from core.errors import public_error
+    held = latest()
+    try:
+        out = build(actor, note)
+    except IntegrityError:
+        state = {'state': 'error', 'error': BUILD_RACE}
+    except Exception as exc:    # recorded for the screen, logged with a reference by public_error
+        state = {'state': 'error', 'error': public_error(None, exc)}
+    else:
+        if isinstance(out, dict):
+            state = {'state': 'refused', 'refused': out.get('refused', []), 'skipped': out.get('skipped', [])}
+        elif held is not None and out.pk == held.pk:
+            state = {'state': 'unchanged', 'version': out.number}
+        else:
+            state = {'state': 'built', 'version': out.number}
+    _finish(state)
+
+
+def build_thread(actor, note=''):
+    """The background thread's target: run_build, then the thread's own DB connection is closed."""
+    from django.db import connection
+    try:
+        run_build(actor, note)
+    except Exception:       # the state could not be saved: it stays "running" until BUILD_STALE passes
+        logging.getLogger('elrezeiky.tax_invoicing').exception('egs sheet build: state not saved')
+    finally:
+        connection.close()
