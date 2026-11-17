@@ -30,7 +30,13 @@ npx playwright test -c playwright.uat.config.js uat/smoke.spec.js       # one sp
 ..\scripts\uat\heavy.ps1 -Name "W2 visibility" -Command { npx playwright test -c playwright.uat.config.js uat/visibility }   # full suite: heavy
 ```
 
-The Django server on **8200** is shared: the first run starts it, later runs reuse it.
+The Django server on **8200** is shared. Start it once, detached, under the watchdog (it restarts runserver if it exits):
+
+```powershell
+Start-Process powershell -ArgumentList '-NoProfile','-File','scripts/uat/serve.ps1' -WindowStyle Hidden
+```
+
+A server started by a Playwright run dies when that run ends, so do not rely on it for other sessions.
 
 ## Rules
 
