@@ -1351,10 +1351,13 @@ export default function CustomerDetailPage() {
   useHelpTab(tab)
   const [chronicValue, setChronicValue] = useState(null)
 
-  const { data: customer, isLoading, isError } = useQuery({
+  const { data: customer, isLoading, isError, error: loadError } = useQuery({
     queryKey: ['customer', id],
     queryFn: () => customersApi.get(id).then(r => r.data),
+    retry: (n, e) => e?.response?.status !== 403 && n < 2,
   })
+  // D1: another branch's customer opens only after a full-phone search — say so instead of "not found"
+  const refused = loadError?.response?.status === 403
 
   const { data: reservations } = useQuery({
     queryKey: ['customer-reservations-all', id],
@@ -1381,8 +1384,11 @@ export default function CustomerDetailPage() {
 
   if (isError || !customer) return (
     <div className="p-8 text-center" dir="rtl">
-      <div className="text-5xl mb-3">😕</div>
-      <div className="text-gray-600">لم يتم العثور على العميل</div>
+      <div className="text-5xl mb-3">{refused ? '🔒' : '😕'}</div>
+      <div className="text-gray-600">
+        {refused ? (loadError.response.data?.detail || 'هذا العميل تابع لفرع آخر — ابحث عنه برقم الهاتف كاملاً لفتحه.')
+                 : 'لم يتم العثور على العميل'}
+      </div>
       <button onClick={() => navigate('/customers')} className="btn-secondary mt-4">
         ← العودة للعملاء
       </button>

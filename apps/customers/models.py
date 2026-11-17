@@ -760,3 +760,19 @@ class ContactConsent(models.Model):
 
     def __str__(self):
         return f'{self.customer_id} {self.purpose}/{self.channel}: {"yes" if self.granted else "no"}'
+
+
+class CustomerFound(models.Model):
+    """Owner decision D1 (UAT 2026-11-17): a customer of ANOTHER branch opens for a branch user only
+    after that user found them by their full phone number. One row per (staff, customer); a later
+    find refreshes `found_at`. Rows older than CUSTOMER_FOUND_HOURS no longer open anything
+    (apps/customers/access.py can_read). Own-branch customers and all-branch users never need a row."""
+    staff = models.ForeignKey('users.StaffProfile', on_delete=models.CASCADE, related_name='+')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='+')
+    found_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['staff', 'customer'], name='customer_found_once')]
+
+    def __str__(self):
+        return f'{self.staff_id} found {self.customer_id} at {self.found_at:%Y-%m-%d %H:%M}'
