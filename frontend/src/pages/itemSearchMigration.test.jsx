@@ -131,4 +131,45 @@ describe('insurance claim line re-code (single, name box)', () => {
     await waitFor(() => expect(insuranceApi.editLine).toHaveBeenCalledTimes(1))
     expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: '102', unit_price: 12 })
   })
+
+  describe('price follows the looked-up item unless typed by hand', () => {
+    const priceOf = (code) => ({ found: true, item_name: 'N' + code, pack_price: code === 'A' ? 20 : 30, current_category: 'local' })
+    const lookup = async (code) => {
+      insuranceApi.itemOverrideLookup.mockImplementationOnce(() => Promise.resolve({ data: priceOf(code) }))
+      fireEvent.change(screen.getByPlaceholderText('كود جديد'), { target: { value: code } })
+      await act(async () => { fireEvent.click(screen.getByText('بحث')) })
+    }
+    const save = async () => {
+      fireEvent.click(screen.getByText('حفظ'))
+      await waitFor(() => expect(insuranceApi.editLine).toHaveBeenCalledTimes(1))
+    }
+
+    it('A then B (no typing) saves the pack price of B', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      openEditor()
+      await lookup('A'); await lookup('B')
+      await save()
+      expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: 'B', unit_price: 30 })
+    })
+
+    it('A, typed price 15, then B keeps 15', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      openEditor()
+      await lookup('A')
+      fireEvent.change(screen.getByDisplayValue('20'), { target: { value: '15' } })
+      await lookup('B')
+      await save()
+      expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: 'B', unit_price: '15' })
+    })
+
+    it('A, typed 15, look up A again keeps 15', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      openEditor()
+      await lookup('A')
+      fireEvent.change(screen.getByDisplayValue('20'), { target: { value: '15' } })
+      await lookup('A')
+      await save()
+      expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: 'A', unit_price: '15' })
+    })
+  })
 })

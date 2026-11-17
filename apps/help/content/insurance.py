@@ -685,7 +685,7 @@ SCREENS = [
              'open_hint': T('يظهر على الروشتات المضافة يدوي (تفصيلي) بس.', 'Shows on detailed manual prescriptions only.')},
             {'target': 'insurance-claim-line-lookup', 'label': T('بحث', 'Look up'),
              'text': T('يدوّر على كود الصنف الجديد ويجيب اسمه وسعره وتصنيفه.', "Looks up the new item code and fetches its name, price and classification."),
-             'when': T('لما تغيّر صنف البند — اتأكد إنه الصنف الصح قبل الحفظ.', 'When you change the line item — confirm it is the right item before saving.'),
+             'when': T('لما تغيّر صنف البند — اتأكد إنه الصنف الصح. الصنف الجديد بيجيب سعره إلا لو كتبت سعر بإيدك.', 'When you change the line item — confirm it is the right one. The new item brings its own price unless you typed one.'),
              'open_hint': T('افتح بنود الروشتة واضغط «🔓 تفعيل تعديل البنود».', 'Open the prescription lines and press "🔓 Unlock lines".')},
             {'target': 'insurance-claim-line-by-name', 'label': T('بالاسم', 'By name'),
              'text': T('يفتح خانة بحث بالاسم للبند ده بس؛ اختيار الصنف بيملى الكود ويعمل «بحث» لوحده.', 'Opens a name search for this line only; picking the item fills the code and runs «Look up» by itself.'),
