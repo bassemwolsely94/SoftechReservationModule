@@ -107,12 +107,15 @@ describe('insurance claim line re-code (single + exactCodeOnly)', () => {
   it('a pick fills the code and runs the same lookup as «بحث»; the save payload is unchanged', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     openEditor()
+    expect(screen.queryByTestId('item-box')).toBeNull()      // closed until «بالاسم» on this line
+    fireEvent.click(screen.getByText('بالاسم'))
     const box = screen.getByTestId('item-box')
     expect(box.dataset.mode).toBe('single')
     expect(box.dataset.exact).toBe('1')
     await act(async () => { lastOnSelect()(B) })
     expect(insuranceApi.itemOverrideLookup).toHaveBeenCalledWith('102')
     expect(screen.getByDisplayValue('102')).toBeTruthy()
+    expect(screen.queryByTestId('item-box')).toBeNull()      // the box closes after the pick
     fireEvent.click(screen.getByText('حفظ'))
     await waitFor(() => expect(insuranceApi.editLine).toHaveBeenCalledTimes(1))
     expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: '102', unit_price: 12 })

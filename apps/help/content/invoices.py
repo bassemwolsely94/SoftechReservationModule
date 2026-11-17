@@ -283,7 +283,6 @@ SCREENS = [
               'Messy files: when a bundle is uploaded the system skips blank pages, auto-rotates sideways pages, and flags incomplete, paper-cut or low-quality (handwriting) invoices so you review them carefully.'),
         ],
         'tips': [T('إعادة ربط البند: اكتب الاسم أو الكود في خانة البحث، أو Ctrl+F1 للبحث المتقدم؛ الاختيار بيأكّد البند زي الأول.', 'Re-match a line: type the name or code in the search box, or Ctrl+F1 for advanced search; the pick confirms the line as before.'),
-                 
             T('لو رفعت نفس ملف الفاتورة تاني، بيظهر تنبيه أصفر في نموذج الرفع: «رفعت هذا الملف من قبل» مع «فتح» للفاتورة القديمة و«رفع على أي حال». مفيش حاجة بتتحفظ إلا لو كملت.',
               'If you upload the same invoice file again, an amber notice appears in the upload form: "You uploaded this file before", with "Open" for the earlier one and "Upload anyway". Nothing is saved unless you continue.'),
             T('صور الفواتير وصفحات الحزم بتتحفظ زي ما هي ومش بتتصغّر. صفحات الحزمة المؤقتة ممكن المالك يفعّل تنضيفها بعد ما الحزمة تخلص على السيرفر لاحقًا، والملف الأصلي للحزمة بيفضل.',

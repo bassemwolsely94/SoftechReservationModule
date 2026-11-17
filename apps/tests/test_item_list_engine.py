@@ -155,6 +155,51 @@ class ItemListEngineTests(TestCase):
         extra = len(ctx.captured_queries) - len(eng.captured_queries)
         self.assertLessEqual(extra, 8, '\n'.join(q['sql'][:160] for q in ctx.captured_queries))
 
+    def _stock(self):
+        """Branch A: 3 + 4 sellable for VOLTAREN 50 + 9 in quarantine store 102 (not sellable);
+        branch B: 50. Returns (branch A, branch B)."""
+        from apps.branches.models import Branch
+        from apps.catalog.models import ItemStock
+        a = Branch.objects.create(code='SA', name='SA', softech_branch_id='SA')
+        b = Branch.objects.create(code='SB', name='SB', softech_branch_id='SB')
+        v = self.it['VOLTAREN 50MG 20TAB']
+        ItemStock.objects.create(item=v, branch=a, softech_store_code='1', quantity_on_hand=3)
+        ItemStock.objects.create(item=v, branch=a, softech_store_code='2', quantity_on_hand=4)
+        ItemStock.objects.create(item=v, branch=a, softech_store_code='102', quantity_on_hand=9)
+        ItemStock.objects.create(item=v, branch=b, softech_store_code='1', quantity_on_hand=50)
+        return a, b
+
+    def test_engine_rows_carry_stock_at_the_branch(self):
+        """S3 T5 fix: `branch=<pk>` → each engine row's sellable stock at THAT branch only."""
+        a, b = self._stock()
+        rows = {x['name']: x for x in self.get(search='voltaren', rank='engine', branch=a.id)['results']}
+        self.assertEqual(rows['VOLTAREN 50MG 20TAB']['qty_at_branch'], 7.0)    # 102 + branch B left out
+        self.assertEqual(rows['VOLTAREN 75MG/3ML 6AMP']['qty_at_branch'], 0.0)
+        rows = {x['name']: x for x in self.get(search='voltaren', rank='engine', branch=b.id)['results']}
+        self.assertEqual(rows['VOLTAREN 50MG 20TAB']['qty_at_branch'], 50.0)
+
+    def test_no_branch_or_bad_branch_adds_no_stock_field(self):
+        self._stock()
+        for params in ({}, {'branch': 'abc'}, {'branch': ''}):
+            rows = self.get(search='voltaren', rank='engine', **params)['results']
+            self.assertTrue(rows)
+            self.assertTrue(all('qty_at_branch' not in x for x in rows), params)
+        # the plain list never carries it (its row shape is unchanged)
+        rows = self.get(search='voltaren', branch=1)['results']
+        self.assertTrue(all('qty_at_branch' not in x for x in rows))
+
+    def test_branch_stock_adds_no_query(self):
+        """qty_at_branch comes from the stock rows the list already prefetches: no N+1."""
+        a, _ = self._stock()
+        with mock.patch('apps.shortage.learning.learned_item_ids', return_value=[]):
+            self.get(search='voltaren', rank='engine', page_size=10)     # warm caches
+            with CaptureQueriesContext(connection) as plain:
+                self.get(search='voltaren', rank='engine', page_size=10)
+            with CaptureQueriesContext(connection) as br:
+                self.get(search='voltaren', rank='engine', page_size=10, branch=a.id)
+        self.assertEqual(len(br.captured_queries), len(plain.captured_queries),
+                         '\n'.join(q['sql'][:160] for q in br.captured_queries))
+
     def test_engine_with_only_wildcards_falls_back_to_plain_list(self):
         rows = self.get(search='**', rank='engine')['results']
         self.assertEqual(len(rows), len(self.it))

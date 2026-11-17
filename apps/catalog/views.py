@@ -481,6 +481,13 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
             if ing:
                 from apps.catalog.wildcard import ingredient_names
                 ctx['ingredient_names'] = ingredient_names(q, ing)
+        # rank=engine + `branch=<pk>`: rows carry qty_at_branch (the item box's «مخزون: n»).
+        # Same access as softech-search's branch_id (any user of the list); a non-integer is ignored.
+        if engine_search_text(self.request) is not None:
+            try:
+                ctx['stock_branch'] = int(self.request.query_params.get('branch', ''))
+            except (TypeError, ValueError):
+                pass
         return ctx
 
     @action(detail=True, methods=['get'])

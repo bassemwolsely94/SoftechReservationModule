@@ -289,7 +289,7 @@ SCREENS = [
             T('شكوى أو طلب يحتاج متابعة؟ «فتح حالة جديدة» (التصنيف، الأولوية، العنوان، الوصف).', 'A complaint or request needing follow-up? "Open new case" (type, priority, title, description).'),
             T('«جدولة متابعة» لتذكير بموعد (تذكير إعادة صرف، متابعة مزمن، متابعة طلب، مهمة مخصصة).', '"Schedule follow-up" for a reminder (refill reminder, chronic follow-up, request follow-up, custom task).'),
         ],
-        'tips': [T('«🔍 بحث» في أصناف المكالمة: كل اختيار بيضيف بند والخانة بتفضى للصنف اللي بعده؛ Ctrl+F1 للبحث المتقدم.', '«🔍 Search» in the call items: each pick adds a line and the box clears for the next item; Ctrl+F1 for advanced search.'),
+        'tips': [T('«🔍 بحث» في أصناف المكالمة: كل نتيجة بتبين «مخزون» الفرع، والاختيار بيضيف بند والخانة بتفضى للي بعده؛ Ctrl+F1 للبحث المتقدم.', '«🔍 Search» in the call items: each row shows the branch stock; a pick adds a line and the box clears for the next; Ctrl+F1 for advanced search.'),
                  T('صور الروشتة والمرفقات الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل). لو مرفق اتمسح أو اتبدّل، القديم بيتحفظ ٣٠ يومًا على السيرفر قبل ما يتمسح نهائيًا.',
                    'New prescription photos and attachments are shrunk automatically (longest side 2000 px). If an attachment is deleted or replaced, the old one is kept 30 days on the server before it is gone for good.'),
                  T('موظف الفرع لازم يكتب رقم الموبايل كامل في البحث؛ موظفو الكول سنتر يقدروا يبحثوا بجزء من الرقم.', 'Branch staff must type the full mobile number to look it up; call-center agents can search by part of it.'),

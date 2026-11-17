@@ -35,6 +35,7 @@
  *
  * POS variant (variant="pos", used by /pos and /m/pos only — default rendering is untouched):
  *  branchId              — current branch (PK); results carry its stock + network branch pills
+ *                          (default variant too: rows show «مخزون: n» at that branch)
  *  onAction(kind, item, extra) — kind 'transfer' | 'reserve' | 'demand' (row next-action buttons)
  *  onAlternatives(item)  — reserved for the alternatives wave
  *  customerId            — current customer, for «آخر شراء لهذا العميل» in the preview
@@ -209,6 +210,9 @@ function ResultRow({ item, onSelect, index, selected, query, multi = false, tick
         {stock === 0 && (
           <span className="text-[11px] text-red-500">📦 نفد</span>
         )}
+        {item.qty_at_branch != null && (
+          <span className="text-xs text-green-600">مخزون: {item.qty_at_branch}</span>
+        )}
       </div>
     </div>
   )
@@ -266,11 +270,13 @@ export default function ItemSearchWidget({
   }, [q])
 
   const { data: found, isFetching, isPlaceholderData } = useQuery({
-    queryKey: isPos ? ['item-search-widget', debouncedQ, branchId, 'pos'] : ['item-search-widget', debouncedQ, 'engine'],
+    queryKey: isPos ? ['item-search-widget', debouncedQ, branchId, 'pos'] : ['item-search-widget', debouncedQ, branchId, 'engine'],
     queryFn: () => isPos
       ? itemsApi.wildcardSearch(debouncedQ, branchId, { network: true, noLive: true })
           .then(r => ({ rows: r.data.results || [], asOf: r.data.stock_as_of ?? null }))
-      : api.get('/items/', { params: { search: debouncedQ, rank: 'engine', page_size: 10 } })
+      // default: `branch` makes the rows carry qty_at_branch (stock at that branch)
+      : api.get('/items/', { params: { search: debouncedQ, rank: 'engine', page_size: 10,
+                                       ...(branchId != null && branchId !== '' ? { branch: branchId } : {}) } })
           .then(r => ({ rows: r.data.results || r.data, asOf: null })),
     enabled: debouncedQ.length >= 2,
     staleTime: 15_000,

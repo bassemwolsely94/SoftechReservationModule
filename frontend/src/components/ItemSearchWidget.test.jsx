@@ -64,6 +64,26 @@ describe('ItemSearchWidget default variant on the engine', () => {
     expect(get).toHaveBeenCalledWith('/items/', { params: { search: 'vol*50', rank: 'engine', page_size: 10 } })
   })
 
+  it('with branchId: asks for that branch and shows «مخزون: n» on each row', async () => {
+    setup({ branchId: 4 }, [
+      { id: 1, softech_id: '101', name: 'ALPHA ONE', pack_price: '10', qty_at_branch: 7, tier: 'exact' },
+      { id: 2, softech_id: '102', name: 'ALPHA TWO', pack_price: '12', qty_at_branch: 0, tier: 'exact' },
+    ])
+    await type('alpha')
+    await screen.findByText(/TWO/)
+    expect(get).toHaveBeenCalledWith('/items/', { params: { search: 'alpha', rank: 'engine', page_size: 10, branch: 4 } })
+    expect(screen.getByText('مخزون: 7')).toBeTruthy()
+    expect(screen.getByText('مخزون: 0')).toBeTruthy()
+  })
+
+  it('without branchId: no branch param and no «مخزون» line', async () => {
+    setup()
+    await type('alpha')
+    await screen.findByText(/THREE/)
+    expect(get).toHaveBeenCalledWith('/items/', { params: { search: 'alpha', rank: 'engine', page_size: 10 } })
+    expect(screen.queryByText(/مخزون:/)).toBeNull()
+  })
+
   it('arrow keys move, clamp, and Enter selects the highlighted row', async () => {
     const { onSelect } = setup()
     const input = await type('alpha')

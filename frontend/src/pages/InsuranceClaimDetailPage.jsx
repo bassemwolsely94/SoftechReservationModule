@@ -160,6 +160,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
   const [editLines, setEditLines]   = useState(false)   // unlock line editing (also unlocks the patient name)
   const [lineEdits, setLineEdits]   = useState({})      // lineId → {item_code, quantity, unit_price, lookup}
   const [savingLine, setSavingLine] = useState(null)
+  const [nameSearchFor, setNameSearchFor] = useState(null)   // the ONE line whose name box is open
   const [nameDraft, setNameDraft]   = useState(null)    // patient-name edit buffer (null = not touched)
   const [savingName, setSavingName] = useState(false)
   const [editingName, setEditingName] = useState(false) // name-only edit, INDEPENDENT of the line lock
@@ -530,14 +531,20 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
                             className="w-20 border border-gray-300 rounded px-1 py-0.5 font-mono" />
                           <button data-tour="insurance-claim-line-lookup" onClick={() => lookupNewItem(l.id, (e.item_code ?? l.softech_itemcode).trim())}
                             className="text-blue-600 hover:underline">بحث</button>
+                          <button type="button" data-tour="insurance-claim-line-by-name"
+                            onClick={() => setNameSearchFor(f => (f === l.id ? null : l.id))}
+                            className="text-blue-600 hover:underline">بالاسم</button>
                         </div>
-                        {/* or find it by name: a pick only fills the code and runs the same lookup as «بحث»
-                            (Enter takes an exact code only); the save stays the «حفظ» button below */}
-                        <div className="mt-1 min-w-[16rem]">
-                          <ItemSearchWidget mode="single" exactCodeOnly placeholder="أو ابحث بالاسم…"
-                            onSelect={(it) => { if (!it?.softech_id) return
-                              setE({ item_code: it.softech_id }); lookupNewItem(l.id, it.softech_id) }} />
-                        </div>
+                        {/* or find it by name (this line only): a pick fills the code and runs the same
+                            lookup as «بحث» (Enter takes an exact code only); the save stays «حفظ» below */}
+                        {nameSearchFor === l.id && (
+                          <div className="mt-1 min-w-[16rem]">
+                            <ItemSearchWidget mode="single" exactCodeOnly autoFocus placeholder="ابحث بالاسم…"
+                              onSelect={(it) => { if (!it?.softech_id) return
+                                setE({ item_code: it.softech_id }); lookupNewItem(l.id, it.softech_id)
+                                setNameSearchFor(null) }} />
+                          </div>
+                        )}
                         {e.lookup && (e.lookup.found
                           ? <div className="text-[10px] text-gray-500">{e.lookup.item_name} · {fmt(e.lookup.pack_price)}</div>
                           : <div className="text-[10px] text-amber-600">غير موجود</div>)}
