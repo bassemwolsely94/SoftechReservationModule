@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
+import usePermissionStore from '../store/permissionStore'
 
 // Route guards. They only steer the browser: every API checks the role itself (server-side
 // permissions), so a guard bypassed in the browser still meets a 403.
@@ -16,9 +17,18 @@ export function RequireAuth({ children }) {
   return isAuthenticated ? children : <Navigate to="/login" replace />
 }
 
-export function RequireRole({ roles, children }) {
+// `module` (optional, with `action`, default 'view') also asks the role matrix — the same
+// grant the screen's API checks. Both must allow: the role list still decides who the screen
+// is for, the matrix takes it away when an admin removes the grant (UAT D5). Admin passes;
+// while the matrix is still loading nothing renders (no redirect, no flash of the page).
+export function RequireRole({ roles, module, action = 'view', children }) {
   const { user } = useAuthStore()
+  const perms = usePermissionStore(s => s.permissions)
   const userRole = user?.role || 'viewer'
   if (!roles.includes(userRole)) return <Navigate to="/dashboard" replace />
+  if (module && userRole !== 'admin') {
+    if (perms === null) return null
+    if (!perms[module]?.[action]) return <Navigate to="/dashboard" replace />
+  }
   return children
 }

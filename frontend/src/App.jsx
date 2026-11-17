@@ -449,15 +449,15 @@ export default function App() {
             <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
             <Route path="usage-print"           element={<UsagePrintPage />} />
-            <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']}><ExceptionCenterPage /></RequireRole>} />
+            <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']} module="pos"><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />
             <Route path="stock-count"        element={<StockCountPage />} />
             <Route path="shortage"           element={<ShortagePage />} />
             <Route path="purchasing"         element={<PurchasingDashboard />} />
             <Route path="market-shortage"    element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><MarketShortagePage /></RequireRole>} />
-            <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><PhantomSalesPage /></RequireRole>} />
-            <Route path="cash-optimization"  element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><CashOptimizationPage /></RequireRole>} />
+            <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><PhantomSalesPage /></RequireRole>} />
+            <Route path="cash-optimization"  element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><CashOptimizationPage /></RequireRole>} />
 
             {/* ── Procurement hub (4 tabs) ──────────────────────────────
                 /procurement              → redirects to /procurement/overview
@@ -552,9 +552,9 @@ export default function App() {
               element={<RequireRole roles={['admin','supervisor']}><UserManagementPage /></RequireRole>} />
             {/* pick zones: picking-sheet classification (read: all staff) */}
             <Route path="pick-zones" element={<PickZonesPage />} />
-            {/* phone alerts (WhatsApp): admin + supervisor */}
+            {/* phone alerts (WhatsApp): admin + supervisor, and the matrix's settings view (UAT D5) */}
             <Route path="phone-alerts"
-              element={<RequireRole roles={['admin','supervisor']}><PhoneAlertsPage /></RequireRole>} />
+              element={<RequireRole roles={['admin','supervisor']} module="settings"><PhoneAlertsPage /></RequireRole>} />
             {/* permissions matrix: admin only */}
             <Route path="permissions"
               element={<RequireRole roles={['admin']}><PermissionsMatrixPage /></RequireRole>} />
