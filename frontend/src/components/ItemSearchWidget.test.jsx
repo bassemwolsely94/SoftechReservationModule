@@ -7,7 +7,17 @@ vi.mock('../api/client', () => ({
   default: { get: (...a) => get(...a) },
   itemsApi: { wildcardSearch: vi.fn() },
 }))
-vi.mock('./AdvancedItemSearchModal', () => ({ default: () => <div>ADV-MODAL</div> }))
+vi.mock('./AdvancedItemSearchModal', () => ({
+  default: ({ multi, onSelect }) => (
+    <div>
+      <span>ADV-MODAL</span>
+      {multi && <span>MODAL-MULTI</span>}
+      <button onClick={() => onSelect(multi ? [{ id: 7, name: 'M7' }, { id: 8, name: 'M8' }] : { id: 7, name: 'M7' })}>
+        MODAL-PICK
+      </button>
+    </div>
+  ),
+}))
 const cam = vi.hoisted(() => ({ on: false, code: '555' }))
 vi.mock('./BarcodeScanner', () => ({
   default: ({ onScan }) => <button onClick={() => onScan(cam.code)}>FAKE-SCAN</button>,
@@ -23,6 +33,8 @@ const rows = [
   { id: 2, softech_id: '102', name: 'ALPHA TWO', pack_price: '12', total_stock: 0, tier: 'exact' },
   { id: 3, softech_id: '103', name: 'ALPHA THREE', pack_price: '14', total_stock: 3, tier: 'exact' },
 ]
+
+const withId = r => ({ ...r, item_id: r.id })
 
 function setup(props = {}, data = rows) {
   get.mockResolvedValue({ data: { results: data } })
@@ -62,7 +74,7 @@ describe('ItemSearchWidget default variant on the engine', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })   // clamped at the last row
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(onSelect.mock.calls[0][0]).toBe(rows[2])
+    expect(onSelect.mock.calls[0][0]).toEqual(withId(rows[2]))
   })
 
   it('Up at the top stays on the first row', async () => {
@@ -71,7 +83,7 @@ describe('ItemSearchWidget default variant on the engine', () => {
     await screen.findByText(/THREE/)
     fireEvent.keyDown(input, { key: 'ArrowUp' })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(onSelect.mock.calls[0][0]).toBe(rows[0])
+    expect(onSelect.mock.calls[0][0]).toEqual(withId(rows[0]))
   })
 
   it('Enter with no results selects nothing and does not submit the form', async () => {
@@ -111,12 +123,13 @@ describe('ItemSearchWidget default variant on the engine', () => {
     expect(screen.getByText('ADV-MODAL')).toBeTruthy()
   })
 
-  it('onSelect gets the row exactly as the API returned it', async () => {
+  it('onSelect gets the row as the API returned it, plus item_id equal to id', async () => {
     const { onSelect } = setup()
     await type('alpha')
     const el = await screen.findByText(/TWO/)
     fireEvent.mouseDown(el)
-    expect(onSelect.mock.calls[0][0]).toBe(rows[1])
+    expect(onSelect.mock.calls[0][0]).toEqual(withId(rows[1]))
+    expect(onSelect.mock.calls[0][0].item_id).toBe(2)
   })
 
   it('Enter on stale rows (new query not answered yet) selects nothing', async () => {
@@ -152,7 +165,7 @@ describe('ItemSearchWidget default variant on the engine', () => {
     const { onSelect } = setup({}, [row])
     fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
     fireEvent.click(screen.getByText('FAKE-SCAN'))
-    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(row))
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(withId(row)))
   })
 
   it("a scan equal to the row's barcode in another case is auto-selected", async () => {
@@ -162,7 +175,7 @@ describe('ItemSearchWidget default variant on the engine', () => {
     const { onSelect } = setup({}, [row])
     fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
     fireEvent.click(screen.getByText('FAKE-SCAN'))
-    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(row))
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(withId(row)))
   })
 
   it("a scan whose digits only start one row's code (code_prefix) is not auto-selected", async () => {
@@ -170,5 +183,140 @@ describe('ItemSearchWidget default variant on the engine', () => {
     expect(screen.getByText('بداية الكود')).toBeTruthy()
     await new Promise(r => setTimeout(r, 50))
     expect(onSelect).not.toHaveBeenCalled()
+  })
+})
+
+describe('ItemSearchWidget modes', () => {
+  beforeEach(() => { get.mockReset(); cam.on = false; cam.code = '555' })
+  afterEach(cleanup)
+
+  async function pickByEnter(input, text) {
+    fireEvent.change(input, { target: { value: text } })
+    await screen.findByText(/THREE/)
+    fireEvent.keyDown(input, { key: 'Enter' })
+  }
+
+  it('single (default) still shows the selected card', () => {
+    setup({ selected: { id: 9, name: 'CHOSEN', softech_id: '9' } })
+    expect(screen.getByText('CHOSEN')).toBeTruthy()
+  })
+
+  it('list: two picks in a row, box empty and focused after each, stale Enter adds nothing', async () => {
+    const { onSelect } = setup({ mode: 'list' })
+    const input = screen.getByRole('textbox')
+    input.focus()
+    await pickByEnter(input, 'alpha')
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(input.value).toBe('')
+    expect(document.activeElement).toBe(input)
+    expect(screen.queryByText(/THREE/)).toBeNull()
+    fireEvent.keyDown(input, { key: 'Enter' })        // right after the pick
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    await pickByEnter(input, 'alph')
+    expect(onSelect).toHaveBeenCalledTimes(2)
+    expect(input.value).toBe('')
+    expect(document.activeElement).toBe(input)
+    for (const [it] of onSelect.mock.calls) expect(it.item_id).toBe(it.id)
+  })
+
+  it('list: a modal pick also goes to onSelect as one item', () => {
+    const { onSelect } = setup({ mode: 'list' })
+    fireEvent.keyDown(window, { key: 'F1', ctrlKey: true })
+    expect(screen.queryByText('MODAL-MULTI')).toBeNull()
+    fireEvent.click(screen.getByText('MODAL-PICK'))
+    expect(onSelect).toHaveBeenCalledWith({ id: 7, name: 'M7', item_id: 7 })
+  })
+
+  it('multi: a typed space stays in the box and ticks nothing', async () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'vol' } })
+    const notPrevented = fireEvent.keyDown(input, { key: ' ', code: 'Space' })
+    expect(notPrevented).toBe(true)
+    fireEvent.change(input, { target: { value: 'vol ren' } })
+    expect(input.value).toBe('vol ren')
+    await screen.findByText(/THREE/)
+    expect(screen.getAllByRole('checkbox').every(c => !c.checked)).toBe(true)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('multi: Ctrl+Space ticks two rows, Enter adds them as one array, then clears', async () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    await screen.findByText(/THREE/)
+    expect(fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })).toBe(false)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })
+    expect(screen.getAllByRole('checkbox').map(c => c.checked)).toEqual([true, false, true])
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    const items = onSelect.mock.calls[0][0]
+    expect(items.map(i => i.id)).toEqual([1, 3])
+    for (const it of items) expect(it.item_id).toBe(it.id)
+    expect(input.value).toBe('')
+    expect(screen.queryByText(/THREE/)).toBeNull()
+  })
+
+  it('multi: Enter with nothing ticked adds the highlighted row as a one-item array', async () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    await screen.findByText(/THREE/)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith([withId(rows[1])])
+  })
+
+  it('multi: clicking a row ticks it and the add button sends the ticked rows', async () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    fireEvent.mouseDown(await screen.findByText(/TWO/))
+    expect(onSelect).not.toHaveBeenCalled()
+    fireEvent.mouseDown(screen.getByText('إضافة المحدد (1)'))
+    expect(onSelect).toHaveBeenCalledWith([withId(rows[1])])
+  })
+
+  it('multi: Ctrl+F1 opens the modal with multi and its array goes to onSelect once', () => {
+    const { onSelect } = setup({ mode: 'multi' })
+    fireEvent.keyDown(window, { key: 'F1', ctrlKey: true })
+    expect(screen.getByText('MODAL-MULTI')).toBeTruthy()
+    fireEvent.click(screen.getByText('MODAL-PICK'))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect.mock.calls[0][0]).toEqual([
+      { id: 7, name: 'M7', item_id: 7 }, { id: 8, name: 'M8', item_id: 8 },
+    ])
+  })
+
+  it('exactCodeOnly: Enter on a code_prefix row picks nothing', async () => {
+    const { onSelect } = setup({ exactCodeOnly: true },
+      [{ ...rows[0], softech_id: '5551', tier: 'code_prefix', code_prefix: true }])
+    const input = await type('555')
+    await screen.findByText(/ALPHA ONE/)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(screen.getByText(/ALPHA ONE/)).toBeTruthy()   // still listed for a click
+  })
+
+  it('exactCodeOnly: Enter on an exact code row picks it', async () => {
+    const row = { ...rows[0], softech_id: '555', tier: 'code' }
+    const { onSelect } = setup({ exactCodeOnly: true }, [row])
+    const input = await type('555')
+    await screen.findByText(/ALPHA ONE/)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith(withId(row))
+  })
+
+  it('exactCodeOnly: a name row is picked only after the highlight is moved', async () => {
+    const { onSelect } = setup({ exactCodeOnly: true })
+    const input = await type('alpha')
+    await screen.findByText(/THREE/)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).not.toHaveBeenCalled()
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith(withId(rows[1]))
   })
 })
