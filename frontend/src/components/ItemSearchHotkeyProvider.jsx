@@ -35,18 +35,17 @@ export default function ItemSearchHotkeyProvider({ children }) {
     }
     function onKey(e) {
       if (!(e.ctrlKey && !e.shiftKey && !e.altKey && e.key === 'F1')) return
-      const enabled = [...entries.current.entries()].filter(([, en]) => !en.disabled)
       if (!entries.current.size) return
+      const enabled = [...entries.current.entries()].filter(([, en]) => !en.disabled)
+      if (!enabled.length) return            // all disabled: swallow nothing
       e.preventDefault()
-      if (!enabled.length) return
       let pick = enabled.find(([id]) => id === lastFocused.current)
       if (!pick) {
-        const pos = (en) => en.inputRef?.current
-        pick = [...enabled].sort(([, a], [, b]) => {
-          const x = pos(a), y = pos(b)
-          if (!x || !y) return 0
-          return x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
-        })[0]
+        // Prefer widgets with a mounted input, in DOM order; else first enabled.
+        const withInput = enabled.filter(([, en]) => en.inputRef?.current)
+        withInput.sort(([, a], [, b]) =>
+          a.inputRef.current.compareDocumentPosition(b.inputRef.current) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+        pick = withInput[0] || enabled[0]
       }
       pick[1].open()
     }
