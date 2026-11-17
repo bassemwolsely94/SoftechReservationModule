@@ -539,7 +539,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
                             lookup as «بحث» (Enter takes an exact code only); the save stays «حفظ» below */}
                         {nameSearchFor === l.id && (
                           <div className="mt-1 min-w-[16rem]">
-                            <ItemSearchWidget mode="single" exactCodeOnly autoFocus placeholder="ابحث بالاسم…"
+                            <ItemSearchWidget mode="single" autoFocus placeholder="ابحث بالاسم…"
                               onSelect={(it) => { if (!it?.softech_id) return
                                 setE({ item_code: it.softech_id }); lookupNewItem(l.id, it.softech_id)
                                 setNameSearchFor(null) }} />

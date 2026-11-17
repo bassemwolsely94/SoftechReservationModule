@@ -606,6 +606,7 @@ function OcrReviewModal({ lines, onImport, onClose, title = 'OCR', candidates = 
                 <div className="mt-2 pr-7" onClick={e => e.stopPropagation()}>
                   <ItemSearchWidget
                     mode="single"
+                    autoFocus
                     onSelect={item => setOverride(i, item)}
                     placeholder="ابحث واختر الصنف الصحيح..."
                   />

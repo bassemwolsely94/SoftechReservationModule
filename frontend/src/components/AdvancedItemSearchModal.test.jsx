@@ -159,6 +159,22 @@ describe('AdvancedItemSearchModal pick modes', () => {
     expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([1, 2])
   })
 
+  it('with multi: Space and Enter on a focused button keep their native behaviour', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const grid = screen.getByTestId('adv-results')
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowDown', code: 'ArrowDown' })
+    const btn = screen.getByRole('button', { name: /إعادة تعيين/ })
+    const spacePrevented = !fireEvent.keyDown(btn, { key: ' ', code: 'Space' })
+    const enterPrevented = !fireEvent.keyDown(btn, { key: 'Enter', code: 'Enter' })
+    expect(spacePrevented).toBe(false)
+    expect(enterPrevented).toBe(false)
+    expect(screen.getByText("إضافة المحدد (0)")).toBeTruthy()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
   it('with multi: Space typed in the search box types and ticks nothing', async () => {
     mount({ multi: true })
     await search('alpha')

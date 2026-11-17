@@ -248,7 +248,7 @@ export default function InsuranceItemOverridesPage() {
                 {!editId && (
                   <div className="mt-2">
                     {/* or find it by name: a pick fills the code and runs the same catalog lookup */}
-                    <ItemSearchWidget mode="single" exactCodeOnly placeholder="أو ابحث بالاسم…"
+                    <ItemSearchWidget mode="single" placeholder="أو ابحث بالاسم…"
                       onSelect={(it) => { if (!it?.softech_id) return
                         setForm(f => ({ ...f, item_code: it.softech_id })); doLookup(it.softech_id) }} />
                   </div>

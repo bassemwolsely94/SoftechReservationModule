@@ -322,9 +322,19 @@ export default function ItemSearchWidget({
   const handleSelect = useCallback((item) => {
     resetBox()
     if (isPos) { onSelect(item); return }               // POS: its own add path, row untouched
-    if (isMulti) onSelect([withItemId(item)])
-    else onSelect(withItemId(item))
-  }, [onSelect, resetBox, isPos, isMulti])
+    if (isMulti) {
+      // a scan / exact-code auto-pick joins the inline ticks (ticks first, deduped by id) in ONE onSelect
+      const merged = []
+      const seen = new Set()
+      for (const it of [...ticked, item].map(withItemId)) {
+        if (seen.has(it.id)) continue
+        seen.add(it.id)
+        merged.push(it)
+      }
+      clearTicks()
+      onSelect(merged)
+    } else onSelect(withItemId(item))
+  }, [onSelect, resetBox, isPos, isMulti, ticked, clearTicks])
 
   // multi: one onSelect(items[]) with the ticked rows, then a clean box
   const addItems = useCallback((items) => {

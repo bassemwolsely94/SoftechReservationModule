@@ -358,6 +358,23 @@ describe('ItemSearchWidget modes', () => {
     expect(screen.queryByText(/إضافة المحدد/)).toBeNull()                   // inline ticks cleared
   })
 
+  it('multi: a scan exact match merges the inline ticks, one onSelect, then clears', async () => {
+    cam.on = true; cam.code = '555'
+    const hit = { id: 9, softech_id: '555', name: 'ALPHA NINE', tier: 'code' }
+    const { onSelect } = setup({ mode: 'multi' }, [rows[0], hit])
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'alpha' } })
+    await screen.findByText(/NINE/)
+    fireEvent.keyDown(input, { key: ' ', code: 'Space', ctrlKey: true })   // tick id 1
+    expect(screen.getByText(/إضافة المحدد/)).toBeTruthy()
+    fireEvent.click(screen.getByTitle('مسح الباركود بالكاميرا'))
+    fireEvent.click(screen.getByText('FAKE-SCAN'))
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1))
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([1, 9])
+    expect(input.value).toBe('')
+    expect(screen.queryByText(/إضافة المحدد/)).toBeNull()
+  })
+
   it('multi: Ctrl+Space with the list closed ticks nothing and does not crash', async () => {
     const { onSelect } = setup({ mode: 'multi' })
     const input = screen.getByRole('textbox')

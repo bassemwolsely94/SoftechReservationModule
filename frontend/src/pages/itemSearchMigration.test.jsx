@@ -86,7 +86,7 @@ describe('replacement new case — extra items (multi)', () => {
   })
 })
 
-describe('insurance claim line re-code (single + exactCodeOnly)', () => {
+describe('insurance claim line re-code (single, name box)', () => {
   afterEach(() => {
     cleanup(); widget.props = []
     insuranceApi.itemOverrideLookup.mockClear(); insuranceApi.editLine.mockClear()
@@ -111,7 +111,7 @@ describe('insurance claim line re-code (single + exactCodeOnly)', () => {
     fireEvent.click(screen.getByText('بالاسم'))
     const box = screen.getByTestId('item-box')
     expect(box.dataset.mode).toBe('single')
-    expect(box.dataset.exact).toBe('1')
+    expect(box.dataset.exact).toBe('0')       // Enter picks the highlighted row like every name box
     await act(async () => { lastOnSelect()(B) })
     expect(insuranceApi.itemOverrideLookup).toHaveBeenCalledWith('102')
     expect(screen.getByDisplayValue('102')).toBeTruthy()

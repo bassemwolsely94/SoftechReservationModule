@@ -3,8 +3,9 @@
  *
  * Every ItemSearchWidget registers here (useItemSearchRegistration). One
  * window keydown listener opens the advanced-search modal of the widget that
- * was focused last, else the first enabled widget in DOM order. With no
- * widget registered it does nothing and does not preventDefault.
+ * was focused last; else the first enabled widget with a mounted input, in DOM
+ * order; else the first enabled widget. With no enabled widget it does nothing
+ * and does not preventDefault.
  * Plain F1 / Shift+F1 / Alt+F1 belong to HelpPanel and are ignored here.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react'

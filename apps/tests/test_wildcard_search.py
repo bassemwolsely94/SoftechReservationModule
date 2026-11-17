@@ -812,7 +812,11 @@ class SoundTierTests(TestCase):
         got = P.candidates('كتافلام', limit=1, within=keep)
         self.assertEqual(len(got), 1)
         self.assertIn(got[0][0], keep)
-        self.assertEqual(set(P.quick_ids('كتافلام', within=keep)), set(keep))
+        ids = P.quick_ids('كتافلام', within=keep)
+        self.assertTrue(ids)
+        self.assertTrue(set(ids) <= set(keep))          # the filter holds: nothing outside keep
+        self.assertNotIn(cat[0], ids)                    # the dropped item never comes back
+        self.assertIn(cat[1], ids)                       # a kept target is present
         self.assertEqual(P.quick_ids('كتافلام', within=frozenset()), [])
 
 

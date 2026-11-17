@@ -301,6 +301,8 @@ export default function AdvancedItemSearchModal({ onSelect, onClose, multi = fal
       if (multi) {
         // the grid keys (useGridKeyboard): Space ticks, Enter adds — never while typing in a field
         if (isTyping(e.target)) return
+        // a focused button (sort header, «بحث», paging, ✕) keeps its native Space / Enter
+        if (e.target?.tagName === 'BUTTON') return
         const row = highlighted >= 0 ? results[highlighted] : null
         const space = e.code === 'Space' || e.key === ' '
         // a focused checkbox (a row's or a criteria one) toggles natively via its own onChange
