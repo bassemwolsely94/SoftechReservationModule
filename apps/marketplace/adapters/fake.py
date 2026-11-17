@@ -1,4 +1,6 @@
 """Fake adapter for tests only (never offered in any UI). Records every call in CALLS."""
+import hmac
+
 from apps.marketplace.adapters.manual import ManualAdapter
 
 CALLS: list = []
@@ -25,7 +27,8 @@ class FakeAdapter(ManualAdapter):
 
     def verify_webhook(self, request) -> bool:
         secret = (self.channel.credentials or {}).get('secret') if self.channel else None
-        return bool(secret) and request.headers.get('X-Fake-Signature') == secret
+        sig = request.headers.get('X-Fake-Signature') or ''
+        return bool(secret) and hmac.compare_digest(str(sig).encode(), str(secret).encode())
 
     def push_stock(self, store, rows):
         return _record('push_stock', store, rows)

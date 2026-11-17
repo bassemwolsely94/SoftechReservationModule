@@ -223,90 +223,11 @@ class MarketplacePushTests(TestCase):
         self.item = make_item('صنف', 'PU001')
         ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True)
 
-    def test_push_is_dry_run_when_switch_off(self):
-        from apps.marketplace.push import push_stock
-        self.channel.is_active = True
-        self.channel.save()
-        logs = push_stock(self.channel)
-        self.assertEqual(self.fake.CALLS, [])
-        self.assertEqual(len(logs), 1)
-        self.assertTrue(logs[0].dry_run and logs[0].ok)
-        self.assertEqual(logs[0].kind, 'stock')
-        self.assertEqual(len(logs[0].payload), 1)
-
-    @override_settings(MARKETPLACE_PUSH_ENABLED=True)
-    def test_push_dry_run_when_channel_inactive(self):
-        from apps.marketplace.push import push_stock
-        logs = push_stock(self.channel)
-        self.assertEqual(self.fake.CALLS, [])
-        self.assertTrue(logs[0].dry_run)
-
-    @override_settings(MARKETPLACE_PUSH_ENABLED=True)
-    def test_push_calls_adapter_when_on_and_active(self):
-        from apps.marketplace.push import push_stock
-        self.channel.is_active = True
-        self.channel.save()
-        logs = push_stock(self.channel)
-        self.assertEqual([c[0] for c in self.fake.CALLS], ['push_stock'])
-        self.assertFalse(logs[0].dry_run)
-        self.assertTrue(logs[0].ok)
-
-    @override_settings(MARKETPLACE_PUSH_ENABLED=True)
-    def test_adapter_error_logged_not_raised(self):
-        from apps.marketplace.push import push_stock
-        self.channel.is_active = True
-        self.channel.save()
-        self.fake.FAIL_NEXT = True
-        logs = push_stock(self.channel)
-        self.assertFalse(logs[0].ok)
-        self.assertEqual(logs[0].response['error'], 'RuntimeError')
-
-    def test_inactive_store_skipped_when_store_none(self):
-        from apps.marketplace.push import push_stock
-        self.store.is_active = False
-        self.store.save()
-        self.assertEqual(push_stock(self.channel), [])
-
-    def test_push_status_dry_run(self):
-        from apps.marketplace.push import push_status
-        order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
-                                             external_id='P1', status=ExternalOrder.STATUS_ACCEPTED)
-        log = push_status(order)
-        self.assertEqual(log.kind, 'status')
-        self.assertTrue(log.dry_run)
-        self.assertEqual(self.fake.CALLS, [])
-
-    def test_fake_webhook_signature_and_registry(self):
-        from apps.marketplace.adapters import get_adapter
-
-        class Req:
-            headers = {'X-Fake-Signature': 's3'}
-        a = get_adapter('fake')
-        self.assertTrue(a.verify_webhook(Req, self.channel))
-        Req.headers = {'X-Fake-Signature': 'bad'}
-        self.assertFalse(a.verify_webhook(Req, self.channel))
-        self.assertFalse(get_adapter('manual').verify_webhook(Req, self.channel))
-        with self.assertRaises(KeyError):
-            get_adapter('nope')
-
-
-class MarketplacePushTests(TestCase):
-    def setUp(self):
-        from apps.marketplace.adapters import fake
-        self.fake = fake
-        fake.reset()
-        self.addCleanup(fake.reset)
-        self.branch = make_branch()
-        self.channel = MarketplaceChannel.objects.create(code='push_test', name='تجربة', adapter='fake',
-                                                         credentials={'secret': 's3'})
-        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch, is_active=True)
-        self.item = make_item('صنف', 'PU001')
-        ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True)
-
     def _activate(self):
         self.channel.is_active = True
         self.channel.save()
 
+    @override_settings(MARKETPLACE_PUSH_ENABLED=False)
     def test_push_is_dry_run_when_switch_off(self):
         from apps.marketplace.push import push_stock
         self._activate()
@@ -348,8 +269,10 @@ class MarketplacePushTests(TestCase):
         self.store.save()
         self.assertEqual(push_stock(self.channel), [])
 
+    @override_settings(MARKETPLACE_PUSH_ENABLED=False)
     def test_push_status_dry_run(self):
         from apps.marketplace.push import push_status
+        self._activate()
         order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
                                              external_id='P1', status=ExternalOrder.STATUS_ACCEPTED)
         log = push_status(order)
@@ -368,3 +291,17 @@ class MarketplacePushTests(TestCase):
         self.assertFalse(get_adapter('manual', self.channel).verify_webhook(Req))
         with self.assertRaises(KeyError):
             get_adapter('nope')
+
+    def test_fake_webhook_rejects_empty_or_missing(self):
+        from apps.marketplace.adapters import get_adapter
+
+        class Req:
+            headers = {'X-Fake-Signature': ''}
+        self.channel.credentials = {'secret': ''}
+        self.assertFalse(get_adapter('fake', self.channel).verify_webhook(Req))   # empty secret, empty sig
+        self.channel.credentials = {}
+        Req.headers = {'X-Fake-Signature': 'x'}
+        self.assertFalse(get_adapter('fake', self.channel).verify_webhook(Req))   # missing secret
+        self.channel.credentials = {'secret': 's3'}
+        Req.headers = {}
+        self.assertFalse(get_adapter('fake', self.channel).verify_webhook(Req))   # missing header
