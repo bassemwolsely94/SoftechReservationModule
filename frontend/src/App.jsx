@@ -85,6 +85,7 @@ import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
 import PageSuspense from './components/PageSuspense'
+import ItemSearchHotkeyProvider from './components/ItemSearchHotkeyProvider'
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'))
 const HelpManualPage = lazy(() => import('./pages/HelpManualPage'))
 const MobilePOSOrderPage = lazy(() => import('./pages/mobile/MobilePOSOrderPage'))
@@ -286,6 +287,7 @@ export default function App() {
       <BrowserRouter>
         {/* pages load on demand; routes outside a layout suspend here */}
         <PageSuspense>
+        <ItemSearchHotkeyProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/notify" element={<NotifyPage />} />
@@ -605,6 +607,7 @@ export default function App() {
 
           </Route>
         </Routes>
+        </ItemSearchHotkeyProvider>
         </PageSuspense>
       </BrowserRouter>
     </QueryClientProvider>

@@ -41,6 +41,7 @@ import BarcodeScanner, { cameraAvailable } from './BarcodeScanner'
 import useFeatures from '../hooks/useFeatures'
 import SearchTierChip from './SearchTierChip'
 import Highlight from './Highlight'
+import { useItemSearchRegistration } from './ItemSearchHotkeyProvider'
 
 // A scanned code matches an item when it is the item's code, its primary barcode or one of its
 // extra barcodes (shape differs between the default and the POS search results). Case does not
@@ -222,17 +223,12 @@ export default function ItemSearchWidget({
   const inputRef                = useRef(null)
   const dropdownRef             = useRef(null)
 
-  // Global Ctrl+F1 shortcut → open advanced search modal
-  useEffect(() => {
-    function onKey(e) {
-      if (e.ctrlKey && e.key === 'F1') {
-        e.preventDefault()
-        if (!disabled) setShowAdvanced(true)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [disabled])
+  // Ctrl+F1 is owned by ItemSearchHotkeyProvider (one listener per page).
+  useItemSearchRegistration({
+    open: () => setShowAdvanced(true),
+    disabled,
+    inputRef,
+  })
 
   // Debounced search via React Query.
   // `*` / `%` are kept (system wildcard rules, applied by the server's engine ranking).

@@ -16,6 +16,7 @@ vi.mock('./BarcodeScanner', () => ({
 vi.mock('../hooks/useFeatures', () => ({ default: () => ({ cameraScan: cam.on }) }))
 
 import ItemSearchWidget from './ItemSearchWidget'
+import ItemSearchHotkeyProvider from './ItemSearchHotkeyProvider'
 
 const rows = [
   { id: 1, softech_id: '101', name: 'ALPHA ONE', pack_price: '10', total_stock: 5, tier: 'exact' },
@@ -28,7 +29,7 @@ function setup(props = {}, data = rows) {
   const onSelect = props.onSelect || vi.fn()
   const utils = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ItemSearchWidget onSelect={onSelect} {...props} />
+      <ItemSearchHotkeyProvider><ItemSearchWidget onSelect={onSelect} {...props} /></ItemSearchHotkeyProvider>
     </QueryClientProvider>,
   )
   return { onSelect, ...utils }
