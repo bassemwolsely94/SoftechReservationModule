@@ -924,6 +924,9 @@ TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=i
 # Versions of the owner's bulk EGS sheet (the Invoicer's item-code workbook, S3). Outside MEDIA_ROOT, never served
 # by URL, git-ignored; the newest 10 versions' files are kept.
 TAX_EGS_SHEET_DIR = config('TAX_EGS_SHEET_DIR', default=BASE_DIR / 'private' / 'egs_sheets', cast=Path)
+# The seal PC's agent replaces the Invoicer's live sheet only with this on (S5); off = preview: it downloads and
+# checks the version and reports what it would do, writing nothing on the seal PC. Writer flag (config/writers.py).
+TAX_EGS_SHEET_AGENT_WRITE_ENABLED = config('TAX_EGS_SHEET_AGENT_WRITE_ENABLED', default=False, cast=bool)
 # A test run must NEVER reach ETA, whatever .env says: no address, no login, every send switch off. Tests that
 # exercise the ETA path set what they need with override_settings and mocked HTTP.
 if _RUNNING_TESTS:
@@ -932,6 +935,7 @@ if _RUNNING_TESTS:
     TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
     TAX_SIGNER_CLASS, TAX_ALLOW_MOCK_SIGNER = 'apps.tax_invoicing.signing.NotConfiguredSigner', False
     TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = TAX_GPC_AI_ENABLED = False
+    TAX_EGS_SHEET_AGENT_WRITE_ENABLED = False
     TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
     TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
     TAX_EGS_SHEET_DIR = Path(tempfile.mkdtemp(prefix='elrezeiky_test_egs_sheets_'))   # never the real folder

@@ -2690,6 +2690,17 @@ def _run_gpc_ai_suggest():
         logger.warning('[APScheduler] GPC AI suggestions: %s', type(exc).__name__)
 
 
+def _run_egs_sheet_agent_nightly():
+    """S5: ask the seal PC's agent for the live Invoicer sheet; with TAX_EGS_SHEET_AGENT_WRITE_ENABLED on, its
+    result asks for a write of the latest version (held on hand edits, nothing when it already is the latest)."""
+    from apps.tax_invoicing import egs_agent
+    try:
+        job = egs_agent.nightly()
+        logger.info('[APScheduler] EGS sheet agent nightly: %s', job)
+    except Exception as exc:
+        logger.warning('[APScheduler] EGS sheet agent nightly: %s', type(exc).__name__)
+
+
 def _run_eta_recon_daily():
     """SOFTECH ↔ ETA receipts reconciliation (doc 36 §history, phase 3): learn device→branch, recompute the last
     35 days, for each system whose ETA history is on. Reads SOFTECH (HQ) and the local ETA copy only."""
@@ -4014,6 +4025,11 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_eta_recon_daily, 'cron', hour=5, minute=15, id='eta_recon_daily',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # S5: the seal PC agent reads (and, switch on, replaces) the Invoicer's bulk EGS sheet at 03:00.
+    _scheduler.add_job(
+        _run_egs_sheet_agent_nightly, 'cron', hour=3, minute=0, id='egs_sheet_agent_nightly',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # AI GPC brick proposals for the ETA coding queue (switch TAX_GPC_AI_ENABLED, default off).

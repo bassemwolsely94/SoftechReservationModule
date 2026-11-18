@@ -31,6 +31,7 @@ WRITER_FLAGS = {
     'TAX_ERECEIPT_SUBMIT_ENABLED':         {'protects': 'إرسال الإيصالات الإلكترونية إلى مصلحة الضرائب'},
     'TAX_ETA_CODING_ENABLED':              {'protects': 'طلب أكواد الأصناف EGS من مصلحة الضرائب'},
     'TAX_ETA_PRODUCTION_ALLOWED':          {'protects': 'أي إرسال لمنظومة المصلحة الفعلية (غير التجريبية)'},
+    'TAX_EGS_SHEET_AGENT_WRITE_ENABLED':   {'protects': 'استبدال ملف أكواد المحصّل على جهاز الختم (D:\\invoicer_mini)'},
     'ISR_WRITER_ENABLED':                  {'protects': 'طلبات التوريد ISR (stockisrm / stockisr)'},
     'SALES_RATE_WRITER_ENABLED':           {'protects': 'معدل البيع stkbal.monthlyqty'},
     'COVERAGE_WRITER_ENABLED':             {'protects': 'التغطية stkbal.maxnowqtymonths'},

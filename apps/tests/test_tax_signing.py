@@ -344,7 +344,7 @@ def agent_account():
     user = User.objects.filter(username=AGENT_USERNAME).first()
     if user is None:
         user, _, _ = make_user(AGENT_USERNAME, role=AGENT_ROLE, password=AGENT_PASSWORD)
-    RoleModuleAccess.objects.get_or_create(role=AGENT_ROLE, module='tax_invoicing', action='finalize',
+    RoleModuleAccess.objects.update_or_create(role=AGENT_ROLE, module='tax_invoicing', action='finalize',
                                            defaults={'is_allowed': True})
     return user
 
