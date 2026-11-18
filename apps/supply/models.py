@@ -139,6 +139,7 @@ class AvailabilityBatch(models.Model):
     SOURCE_TEXT     = 'text'
     SOURCE_EMAIL    = 'email'
     SOURCE_MANUAL   = 'manual'
+    SOURCE_PORTAL   = 'portal'
     SOURCE_CHOICES = [
         (SOURCE_WHATSAPP, 'واتساب'),
         (SOURCE_IMAGE,    'صورة / لقطة'),
@@ -147,6 +148,7 @@ class AvailabilityBatch(models.Model):
         (SOURCE_TEXT,     'نص'),
         (SOURCE_EMAIL,    'بريد'),
         (SOURCE_MANUAL,   'يدوي'),
+        (SOURCE_PORTAL,   'روبوت موقع المورد'),
     ]
 
     STATUS_OPEN     = 'open'        # imported, under review

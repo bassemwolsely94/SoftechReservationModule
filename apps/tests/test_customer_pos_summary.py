@@ -45,7 +45,8 @@ class PosSummaryTests(TestCase):
         self.assertEqual(s['reservations']['open_count'], 1)
 
     def test_api_endpoint(self):
-        _, _, client = make_user('sum_user', role='pharmacist')
+        _, prof, client = make_user('sum_user', role='pharmacist')
+        Customer.objects.filter(pk=self.c.pk).update(created_by=prof)  # the pharmacist's own customer (D1: another branch's opens only after a full-phone find)
         r = client.get(f'/api/customers/{self.c.id}/pos-summary/')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['crm']['id'], self.c.id)

@@ -57,9 +57,18 @@ class Planter:
         self._depth = 0
 
     # ── values ────────────────────────────────────────────────────────────────
+    @staticmethod
+    def _choice(f):
+        """First choice; for a unique field, the first one not already taken (seeded rows), else None."""
+        values = [c[0] for c in f.choices]
+        if not f.unique:
+            return values[0]
+        taken = set(f.model._default_manager.values_list(f.name, flat=True))
+        return next((v for v in values if v not in taken), None)
+
     def _text(self, f, marked):
         if f.choices:
-            return f.choices[0][0]
+            return self._choice(f)
         max_len = getattr(f, 'max_length', None) or 200
         if self.phone and any(k in f.name for k in PHONE_KEYS):
             return self.phone[:max_len]
@@ -79,7 +88,7 @@ class Planter:
                 return '127.0.0.1'
             return self._text(f, marked)
         if f.choices:
-            return f.choices[0][0]
+            return self._choice(f)
         if isinstance(f, models.BooleanField):
             return False
         if isinstance(f, (models.DecimalField,)):
@@ -131,6 +140,12 @@ class Planter:
         self._depth += 1
         try:
             kwargs = {}
+            # A unique field limited to `choices` whose every value is already seeded: reuse that row.
+            for f in model._meta.concrete_fields:
+                if f.unique and f.choices and self._choice(f) is None:
+                    existing = model._default_manager.first()
+                    if existing is not None:
+                        return existing
             for f in model._meta.concrete_fields:
                 if f.primary_key or getattr(f, 'auto_now', False) or getattr(f, 'auto_now_add', False):
                     continue

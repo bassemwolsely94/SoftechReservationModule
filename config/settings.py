@@ -67,10 +67,12 @@ _RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
 # the tests are written against. Without this a production .env (writers ON) made every
 # "gate off by default" test fail. Tests that need a gate open use override_settings.
 # SOFTECH_TESTS_ALLOW_LIVE=True keeps .env for a deliberate run against a TEST server.
+# Every TAX_ETA_* value (system, addresses, logins) also takes its code default (empty), so a server
+# whose .env points at ETA's pre-production never logs in to ETA from a test (role sweep check-login).
 if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast=bool):
     import re as _re
     _GATE_KEY = _re.compile(r'(_ENABLED|_WRITE|_WRITER|_AUTO_APPROVE|_AUTO_TOPUP|_UPDATE_PATIENTDATA|_NOTIFY)$'
-                            r'|^COUPON_GUARD_')
+                            r'|^COUPON_GUARD_|^TAX_ETA_')
     _env_config = config
 
     def config(key, *args, **kwargs):          # noqa: F811 — test-run wrapper
@@ -471,6 +473,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+# A test run hashes thousands of throw-away passwords; the production-strength PBKDF2 hash costs
+# ~0.3 s each. Tests only ever compare a password with check_password, which works with any
+# hasher, so a test run uses the cheap one. Real logins never run with argv[1] == 'test'.
+if _RUNNING_TESTS:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -607,6 +614,12 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # SOFTECH; /push returns a dry-run plan only. Flip to True ONLY after the live
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
+# Returns (doc_kind 'return', SOFTECH doccode 30) on the POS screen. Owner decision D3 (UAT 2026-11-17):
+# OFF = a NEW return order is refused and the screen does not offer «مرتجع»; returns already created
+# keep their posting path. Not a SOFTECH writer switch.
+POS_RETURNS_ENABLED = config('POS_RETURNS_ENABLED', default=False, cast=bool)
+# D1 (UAT 2026-11-17): hours another branch's customer stays openable by id after a full-phone find.
+CUSTOMER_FOUND_HOURS = config('CUSTOMER_FOUND_HOURS', default=12, cast=int)
 # Maker-checker on ISR / GL / price-change approvals (core/maker_checker.py, UAT W5b 2026-11-17): the
 # creator never approves their own document, except the admin role while this is True (the owner
 # prepares and approves today). Set False once real roles are assigned (owner decision D4).
@@ -988,6 +1001,7 @@ CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=Fa
 CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
 # SOFTECH screen RPA: the Windows agent may type documents into SOFTECH. Off by default.
 RPA_SOFTECH_ENTRY_ENABLED   = config('RPA_SOFTECH_ENTRY_ENABLED', default=False, cast=bool)
+RPA_SUPPLIER_PORTAL_ENABLED = config('RPA_SUPPLIER_PORTAL_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

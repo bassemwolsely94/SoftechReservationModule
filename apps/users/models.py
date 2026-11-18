@@ -60,6 +60,7 @@ MODULE_CHOICES = [
     ('data_health',  'صحة البيانات'),
     ('crews',        'الأطقم'),
     ('rpa',          'روبوت الإدخال'),
+    ('alerts',       'التنبيهات والإعلانات'),
 ]
 
 ACTION_CHOICES = [

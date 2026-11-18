@@ -18,6 +18,12 @@ class Overlay:
         self.stop = stop_event
         self._listener = None
         self._closing = False
+        self._message = None
+
+    def say(self, text):
+        """Show `text` on the running strip in place of the hands-off line (supplier-portal robot:
+        «سجّل الدخول ثم اضغط متابعة», «راجع ثم اضغط Submit Order بنفسك»)."""
+        self._message = text
 
     def confirm_checklist(self, reference, items):
         """Blocks until the operator ticks every item and presses start. False if declined."""
@@ -58,8 +64,9 @@ class Overlay:
             root.attributes("-topmost", True)
             root.overrideredirect(True)
             root.geometry("+0+0")
-            tk.Label(root, text="%s  %s" % (HANDS_OFF, reference), bg="#b00020", fg="white",
-                     font=("Segoe UI", 16, "bold")).pack(side="left", padx=10)
+            label = tk.Label(root, text="%s  %s" % (HANDS_OFF, reference), bg="#b00020", fg="white",
+                             font=("Segoe UI", 16, "bold"))
+            label.pack(side="left", padx=10)
             tk.Button(root, text=STOP, font=("Segoe UI", 18, "bold"), bg="black", fg="white",
                       command=self.stop.set).pack(side="right")
 
@@ -67,6 +74,9 @@ class Overlay:
                 if self._closing:
                     root.destroy()
                 else:
+                    if self._message is not None:
+                        label.config(text="%s  %s" % (self._message, reference), bg="#022871")
+                        self._message = None
                     root.after(200, poll)
             poll()
             root.mainloop()

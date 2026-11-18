@@ -82,6 +82,51 @@ def can_edit(user, customer):
     return is_own(user, customer)
 
 
+def _found_hours():
+    from django.conf import settings
+    return getattr(settings, 'CUSTOMER_FOUND_HOURS', 12)
+
+
+def remember_found(user, raw, customers):
+    """D1: record the other-branch customers a FULL-phone lookup (`raw`) returned to this user, so
+    they open by id for CUSTOMER_FOUND_HOURS. A partial phone, a name, or an all-branch user records
+    nothing. Call it from every lookup that applies findable_q."""
+    if full_phone_q(raw) is None:
+        return
+    profile = _profile(user)
+    if profile is None or branch_scope.branch_ids(user) is None:
+        return
+    own = phones_checker_own(user)
+    others = {c.pk for c in customers if not own(c)}
+    if not others:
+        return
+    from datetime import timedelta
+    from django.utils import timezone
+    from .models import CustomerFound
+    now = timezone.now()
+    CustomerFound.objects.filter(staff=profile, found_at__lt=now - timedelta(hours=_found_hours())).delete()
+    CustomerFound.objects.bulk_create(
+        [CustomerFound(staff=profile, customer_id=pk, found_at=now) for pk in others],
+        update_conflicts=True, unique_fields=['staff', 'customer'], update_fields=['found_at'])
+
+
+def can_read(user, customer):
+    """D1: own-branch customers, every customer for all-branch users and `can_see_all_customers`,
+    and another branch's customer only within CUSTOMER_FOUND_HOURS of a full-phone find."""
+    if is_own(user, customer):
+        return True
+    profile = _profile(user)
+    if profile is None:
+        return False
+    if profile.can_see_all_customers:
+        return True
+    from datetime import timedelta
+    from django.utils import timezone
+    from .models import CustomerFound
+    since = timezone.now() - timedelta(hours=_found_hours())
+    return CustomerFound.objects.filter(staff=profile, customer=customer, found_at__gte=since).exists()
+
+
 EXTERNAL_PHONE_ROLES = ('delivery', 'call_center')   # records already scoped: own orders / the active customer
 
 
@@ -114,9 +159,15 @@ def phones_checker(user):
     profile = _profile(user)
     if profile is not None and not profile.can_see_customer_phone:
         return lambda customer: False
+    return phones_checker_own(user)
+
+
+def phones_checker_own(user):
+    """-> fn(customer): is this customer one of the user's own (branch scope resolved once)."""
     ids = branch_scope.branch_ids(user)
     if ids is None:
         return lambda customer: True
+    profile = _profile(user)
 
     def own(customer):
         if customer.preferred_branch_id is not None:

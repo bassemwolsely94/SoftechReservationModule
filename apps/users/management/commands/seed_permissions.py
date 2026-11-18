@@ -46,6 +46,7 @@ ALL_MODULES = [
     'data_health',   # صحة البيانات: 'view' = Growth + Problems + forced refresh; rules / held files / restore = admin only
     'crews',         # الأطقم: 'view' = list/members/history/unattributed sales, 'edit' = create/change/end rows/archive; admin only by default
     'rpa',           # روبوت الإدخال (SOFTECH screen RPA): view = see jobs, create = upload / run on my PC, approve = approve jobs + recipes, edit = resolve a needs_person document
+    'alerts',        # التنبيهات والإعلانات: 'view' = phone-alert log + policies, 'edit' = change policies/channel, 'create' = publish an announcement (admin + supervisor, owner 2026-11-17)
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -236,6 +237,7 @@ PERMISSIONS = {
     'supervisor': {
         'marketplace':  {'view', 'create', 'approve', 'edit', 'export'},
         'dashboard':    RO,
+        'alerts':       {'view', 'create', 'edit'},   # phone alerts + announcements (owner 2026-11-17)
         'pos':          {'view', 'create', 'edit'},
         'usage_print':  {'view', 'create', 'edit'},   # + presets and slip settings
         'reservations': {'view', 'create', 'edit', 'approve', 'export', 'assign'},
