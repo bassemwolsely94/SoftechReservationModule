@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from apps.branches.models import Branch
 from apps.config.models import SystemSetting
+from apps.finance import recon_labels
 from apps.finance.gl import softech_stock as ss
 from apps.finance.queries import sybase_gl
 from apps.tests.factories import make_hq
@@ -82,6 +83,9 @@ class StoreMapTests(TestCase):
     def setUp(self):
         super().setUp()
         make_hq('100', self)   # HQ is read through hq_code()
+        # Labels come from a process-wide map cached for 10 minutes: read our branches, leave none behind.
+        recon_labels._cache['at'] = 0
+        self.addCleanup(recon_labels._cache.__setitem__, 'at', 0)
 
     @classmethod
     def setUpTestData(cls):

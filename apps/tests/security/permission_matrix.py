@@ -73,6 +73,7 @@ BRANCH_SCOPE = {
     'rpa':          'branch — jobs scoped by RpaJob.branch via core.branch_scope; recipes/devices company-level (admin)'
            '; portal jobs (/rpa/portals) are company-level — ordered for HQ, seen by rpa.view holders',
     'crews':        'all — company-level by design (spec 2026-11-13 §10): crews group people across branches; admin only by default',
+    'alerts':       'all — company-level: phone-alert policies and announcements (audience picks roles/branches); admin + supervisor by default',
     'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
     'marketplace':  'own — orders, platform stores and push logs carry their branch (branch_scope; per-branch qty on listings); channels, listings, settlement are company-level (edit/approve = supervisor); webhooks = own gate',
 }

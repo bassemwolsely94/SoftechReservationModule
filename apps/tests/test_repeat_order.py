@@ -68,13 +68,15 @@ class RepeatOrderTests(TestCase):
         self.assertEqual(last_sale_for(self.cust).id, self.ph.id)
 
     def test_api(self):
-        _, _, client = make_user('ro_user', role='pharmacist')
+        _, prof, client = make_user('ro_user', role='pharmacist')
+        Customer.objects.filter(pk=self.cust.pk).update(created_by=prof)  # the pharmacist's own customer (D1: another branch's opens only after a full-phone find)
         r = client.get(f'/api/customers/{self.cust.id}/repeat-order/', {'branch': self.branch.id})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['source_invoice']['id'], self.ph.id)
 
     def test_api_404_when_no_history(self):
         empty = Customer.objects.create(name='E', phone='0200')
-        _, _, client = make_user('ro_user2', role='pharmacist')
+        _, prof, client = make_user('ro_user2', role='pharmacist')
+        Customer.objects.filter(pk=empty.pk).update(created_by=prof)  # the pharmacist's own customer (D1: another branch's opens only after a full-phone find)
         r = client.get(f'/api/customers/{empty.id}/repeat-order/')
         self.assertEqual(r.status_code, 404)

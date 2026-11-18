@@ -190,7 +190,7 @@ const rebalanceToNet = (ts, net) => {
 }
 
 export default function usePosOrder() {
-  const [branches, setBranches] = useState([])
+  const [allBranches, setAllBranches] = useState([])
   const [ref, setRef] = useState(null)
   // header band
   const [branch, setBranch] = useState(() => localStorage.getItem('pos_branch') || '')
@@ -281,11 +281,11 @@ export default function usePosOrder() {
   const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('pos_favorites') || '[]') } catch { return [] } })
 
   useEffect(() => {
+    // POS lists branches you can transact on (active + operational) AND may sell for: the server
+    // sends `pos_branch_ids` (null = every branch, owner decision D2). HQ stays in for all-branch
+    // users (used for testing); cancelled/suspended/CC nodes drop out (can_transact=False).
     api.get('/branches/').then(({ data }) => {
-      // POS lists branches you can transact on (active + operational). HQ is kept in the list
-      // (used for testing); only cancelled/suspended/CC nodes drop out (can_transact=False).
-      const list = (data.results || data).filter(b => b.can_transact)
-      setBranches(list)
+      setAllBranches((data.results || data).filter(b => b.can_transact))
     }).catch(() => {})
     api.get('/pos-orders/reference/').then(({ data }) => {
       setRef(data)
@@ -294,6 +294,14 @@ export default function usePosOrder() {
       if (data.default_branch) setBranch(prev => prev || String(data.default_branch))  // the seller's own branch
     }).catch(() => {})
   }, [])
+
+  const branches = useMemo(() => {
+    const mine = ref?.pos_branch_ids
+    if (!ref) return []                       // wait for the server's list before offering any branch
+    if (!Array.isArray(mine)) return allBranches
+    const allowed = new Set(mine.map(String))
+    return allBranches.filter(b => allowed.has(String(b.id)))
+  }, [allBranches, ref])
 
   // clamp the selected branch to the POS-eligible list: a stale/HQ value from localStorage or
   // reference.default_branch is dropped; a lone eligible branch auto-selects.
@@ -1623,8 +1631,11 @@ export default function usePosOrder() {
     } finally { setBusy(false); refreshQueue() }
   }
 
+  // D3: «مرتجع» only when the server switches POS returns on (POS_RETURNS_ENABLED, default off)
+  const docKinds = ref?.returns_enabled ? DOC_KINDS : DOC_KINDS.filter(d => d.value === 'sale')
+
   return {
-    branches, ref,
+    branches, ref, docKinds,
     branch, setBranch, storeCode, setStoreCode, docKind, setDocKind, channel, setChannel,
     isClaim, discountLocked, customerType, customer, setCustomer, docDate, setDocDate, dispenseSerial,
     picCustomer, setPicCustomer, needsPicCustomer, picHistory,

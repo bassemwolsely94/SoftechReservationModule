@@ -20,7 +20,7 @@ import POSCustomerModal from '../components/POSCustomerModal'
 import CustomerTypePicker from '../components/CustomerTypePicker'
 import SalespersonPicker from '../components/SalespersonPicker'
 import UnitsQtyModal from '../components/UnitsQtyModal'
-import usePosOrder, { CHANNELS, DOC_KINDS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../hooks/usePosOrder'
+import usePosOrder, { CHANNELS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../hooks/usePosOrder'
 import useGuidedFlow, { STAGE_TAB } from '../hooks/useGuidedFlow'
 import { Badge, BatchBadge, Icon, WorkflowStep, ErrorState } from '../pos/design'
 import FefoGroupChip from '../pos/batch/FefoGroupChip'
@@ -552,7 +552,7 @@ function HeaderBand({ P, onOpenCust, onOpenPic }) {
         <span className="w-px h-5 bg-gray-200 mx-0.5" />
         <span title="نوع المستند" className="text-sm">🧾</span>
         <select value={P.docKind} onChange={e => P.setDocKind(e.target.value)} className={sel} title="نوع المستند">
-          {DOC_KINDS.map(d => <option key={d.value} value={d.value}>{d.label} ({d.code})</option>)}
+          {P.docKinds.map(d => <option key={d.value} value={d.value}>{d.label} ({d.code})</option>)}
         </select>
         {P.docKind === 'return' && (
           <span className="flex items-center gap-1 rounded bg-red-50 border border-red-200 px-1.5 py-0.5">

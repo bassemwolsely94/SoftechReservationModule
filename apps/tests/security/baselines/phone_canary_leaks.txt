@@ -3,8 +3,11 @@
 # Each block needs a '# reason:' tied to an owner decision (docs/security/PHONE_MASKING_PLAN.md D1–D8).
 
 # reason: not customer numbers — the sweep fills every phone-like field of every model, so it also
-#   hits the delivery riders' own mobiles and the channel accounts' business numbers.
+#   hits the delivery riders' own mobiles and the channel accounts' business numbers (also listed on
+#   the phone-alerts channel picker, open to the «التنبيهات والإعلانات» module since 2026-11-17).
 no_phone_flag GET /api/delivery/drivers/
+no_phone_flag GET /api/notifications/phone-alerts/channel/
 no_phone_flag GET /api/omni/accounts/
 other_branch GET /api/delivery/drivers/
+other_branch GET /api/notifications/phone-alerts/channel/
 other_branch GET /api/omni/accounts/

@@ -13,6 +13,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
+import { usePermissionAny } from '../hooks/usePermission'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -77,6 +78,9 @@ function SimpleBarChart({ data, labelKey, valueKey, colorClass, maxValue }) {
 
 export default function FocAnalysisPage() {
   const { user } = useAuthStore()
+  // forced refresh = POST /procurement/trigger/: Django staff (IsAdminUser) and a purchasing
+  // write grant (the matrix the middleware maps /procurement/ to) — UAT D5
+  const purchasingWrite = usePermissionAny('purchasing', ['create', 'edit', 'approve', 'assign', 'finalize'])
   const { params } = useProcurementFilters()
   const [activeTab, setActiveTab] = useState('foc')
   useHelpTab(activeTab)
@@ -124,7 +128,7 @@ export default function FocAnalysisPage() {
       </div>
 
       <DataFreshnessBar domains={['purchases']}
-        canEdit={user?.is_staff || ['admin', 'purchasing'].includes(user?.role)}
+        canEdit={!!user?.is_staff && purchasingWrite}
         onRefresh={() => procurementIntelApi.triggerEngine({})} />
 
       {/* Quick KPIs row */}

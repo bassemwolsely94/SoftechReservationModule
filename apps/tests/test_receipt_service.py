@@ -51,7 +51,8 @@ class ReceiptServiceTests(TestCase):
         self.assertEqual(send_receipt(self.ph, 'email')['status'], 'stub')
 
     def test_api_get_and_post(self):
-        _, _, client = make_user('rcpt_user', role='pharmacist')
+        _, prof, client = make_user('rcpt_user', role='pharmacist')
+        Customer.objects.filter(pk=self.cust.pk).update(created_by=prof)  # the pharmacist's own customer (D1: another branch's opens only after a full-phone find)
         g = client.get(f'/api/customers/{self.cust.id}/receipt/', {'invoice': self.ph.id})
         self.assertEqual(g.status_code, 200)
         self.assertEqual(g.data['invoice']['id'], self.ph.id)
