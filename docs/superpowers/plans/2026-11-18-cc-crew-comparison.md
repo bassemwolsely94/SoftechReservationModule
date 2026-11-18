@@ -92,3 +92,45 @@ The full workbook (6 sheets incl. per person) is attached to the PR conversation
 1. داخليات PBX من نوع «agent» غير مدرجة في إعداد الكول سنتر: 11, 13, 14, 16, 17, 18, 201 — هل تُضم للطاقم؟ ضمّها يغيّر عدد المكالمات التاريخي.
 2. الأرقام التاريخية للكول سنتر: تُنقل قيمةً بقيمة كما هي مخزنة (value-for-value، كما في المواصفات) أم يُعاد بناؤها من أرقام الطاقم؟
 3. ملاحظة: SalesTarget.actual_value() يقرأ صفراً لمستهدفات الكول سنتر المحسوبة بمحرك المؤشرات (4 في هذا التقرير) لأنه يبحث عن فواتير الفرع الوهمي «CC»، بينما تعرض لوحة المؤشرات رقم الـ rollup. أي رقم يُعتمد للحافز بعد النقل للطاقم؟
+
+---
+
+## With the owner's rules (2026-11-18): A rebuild from crew, B old returns rule, C extensions added
+
+Owner rulings A–D (relayed by the parent session) plus the user's returns refinement in this session:
+returns = the old rule (agent's original sale with that document number, any age) **and** the
+original-sale date the return records. SOFTECH check: all **2,510** call-center return lines
+2024-08 → 2026-11 (966,830.64) carry an original date equal to the matched sale's date — so on history
+the crew's returns equal the old rule exactly, and the six `return_before_membership` cells above
+(incl. December 2025's 5,966) disappear.
+
+Extensions 11, 13, 14, 16, 17, 18, 201 added: only **18** ever placed qualifying calls —
+2024-08 +41, 2024-09 +6, 2024-11 +5, 2024-12 +43 (**+95**); none since January 2025.
+October 2024 has no CDR calls at all (stored 0 as well).
+
+| KPI | Stored today (board) | Rebuilt from crew | Change |
+|---|---:|---:|---:|
+| Net sales | 18,599,689.46 | 19,585,373.06 | +985,683.60 |
+| Profit | 3,502,336.72 | 3,730,593.08 | +228,256.36 |
+| Beauty | 1,051,184.04 | 1,090,796.76 | +39,612.72 |
+| Orders (sum of months) | 19,658 | 20,737 | +1,079 |
+| Customers / PIC (sum of months) | 13,350 | 14,496 | +1,146 (3 months had no stored row) |
+| Calls (sum of months) | 31,292 | 32,105 | +813 (2 months had no stored row; +95 from ext. 18) |
+
+Most of the sales/profit change is August–September 2024 (stored 0) and October 2026 (stale).
+
+**October 2026 attainment (targets 505–529):**
+
+| Target | Target value | Board today | % | Rebuilt | % |
+|---|---:|---:|---:|---:|---:|
+| Net sales | 1,060,000 | 661,042.24 | 62.4 | 813,175.54 | **76.7** |
+| Profit | 250,000 | 131,507.26 | 52.6 | 136,746.03 | **54.7** |
+| Beauty | 52,500 | 67,795.98 | 129.1 | 68,408.37 | 130.3 |
+| Orders | 850 | 697 | 82.0 | 718 | 84.5 |
+| Calls | 2,200 | 1,973 | 89.7 | 1,976 | 89.8 |
+
+How these were computed: sales-side figures are the "old rule recomputed today" column of the
+full run above (equal to the crew under the owner's rules, since membership and returns now match);
+calls recomputed per month from the Issabel CDR with and without the added extensions. The shipped
+code path is checked again by `migrate_call_center_to_crew` (dry run) on the office DB after merge,
+and nothing is applied before that output is reviewed.
