@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         ('branches', '0014_close_test_branch_b01'),
         ('catalog', '0046_code_part_trgm'),
         ('pos_orders', '0017_missed_sales_and_calls'),
-        ('users', '0058_alter_rolemoduleaccess_module'),
+        ('users', '0058_rpa_module'),
     ]
 
     operations = [

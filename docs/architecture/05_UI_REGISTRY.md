@@ -11,6 +11,7 @@ Framework: React 18 + React Router 6 + TanStack Query 5 + Zustand + Tailwind CSS
 /login                    → LoginPage (public; 2-step when 2FA applies — see Auth note)
 / (protected + Layout)
   /dashboard              → DashboardPage
+  /rpa                    → RpaPage (tabs: jobs, upload, devices, recipes[admin])
   /security               → SecurityPage (2FA self-service; all roles)
   /reservations           → ReservationsPage
   /reservations/kanban    → ReservationsKanban
@@ -485,6 +486,7 @@ routing note above. Reuse `CustomerSearchWidget`, `ItemSearchWidget`, `StatusBad
 | PickZonesPage | `/pick-zones` | Picking/stocking zone classification config | `/api/transits/pick-zones/` | COMPLETE | admin/supervisor |
 | AuditPage | `/audit` | Audit event log | `/api/audit/` | PARTIAL | admin |
 | SyncPage | `/sync` | ERP sync trigger + logs | `/api/sync/` | COMPLETE | admin |
+| RpaPage | `/rpa` | SOFTECH screen robot: tabs الأوامر (jobs), رفع ملف (upload), أجهزتي (devices), الوصفات (recipes, admin only); `useHelpTab` per tab | `/api/rpa/` | COMPLETE (Stage 1, dry-run) | rpa module (four-eyes approve) |
 
 ---
 

@@ -21,7 +21,8 @@ from apps.sync.maintenance import (
 from .rules_files import (
     bundle_pages_candidates, conversations_candidates, delivery_proof_candidates, financial_docs_candidates,
     images_obsolete_candidates, images_rejected_candidates, images_unreviewed_candidates, ocr_pos_rx_candidates,
-    prescriptions_candidates, refresh_obsolete_seen, refresh_unreferenced_seen, staff_messages_candidates,
+    prescriptions_candidates, refresh_obsolete_seen, refresh_unreferenced_seen, rpa_screenshots_candidates,
+    staff_messages_candidates,
     unreferenced_candidates,
 )
 from .rules_rows import (
@@ -201,6 +202,14 @@ _ROW_AND_FILE_RULES = (
         margin=200, ceiling=5_000, candidates=delivery_proof_candidates,
         targets=('delivery.DeliveryOrder.pod_photo',),
         age_field={'delivery.DeliveryOrder': 'created_at'},
+    ),
+    Rule(
+        key='rpa_screenshots', label_ar='لقطات شاشة روبوت الإدخال', label_en='RPA run screenshots',
+        kind=KIND_FILE, floor_days=None, default_days=180,
+        reason='لقطات تشغيل روبوت SOFTECH للمراجعة فقط، بعد 180 يومًا. يُحذف الملف ويبقى سجل التشغيل.',
+        margin=200, ceiling=5_000, candidates=rpa_screenshots_candidates,
+        targets=('rpa.RpaScreenshot.image',),
+        age_field={'rpa.RpaScreenshot': 'created_at'},
     ),
     Rule(
         key='staff_messages', label_ar='مرفقات رسائل الموظفين', label_en='Staff messages and attachments',
