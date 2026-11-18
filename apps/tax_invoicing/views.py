@@ -1021,6 +1021,8 @@ def codes(request):
     qs = TaxCodeRequest.objects.select_related('profile', 'prepared_by', 'sent_by')
     if request.query_params.get('status'):
         qs = qs.filter(status=request.query_params['status'])
+    if request.query_params.get('environment'):
+        qs = qs.filter(environment=request.query_params['environment'])
     q = (request.query_params.get('q') or '').strip()
     if q:
         qs = qs.filter(Q(item_code__icontains=q) | Q(code_name__icontains=q) | Q(code_name_ar__icontains=q)
@@ -1301,6 +1303,23 @@ def codes_queue_prepare(request):
         return Response(coding.prepare_from_decisions(itemcodes, request.user))
     except services.TaxRuleError as exc:
         return _refuse(exc)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def codes_production(request):
+    """The «طلبات الإنتاج» panel's state: the production coding switches, whether the first-request rule applies,
+    whether a production request is with ETA now, the decided items a request can be prepared for (≤200 itemcodes)
+    and the «جرّب GS1» offers {itemcode: gtin}. Reads only; the send itself re-checks every gate."""
+    from . import coding_queue
+    decided = coding_queue.rows(decided='yes')
+    ready = sorted((r for r in decided if r['request_ready']), key=lambda r: (-r['value'], r['itemcode']))
+    return Response({'enabled': writer_allowed(coding.PRODUCTION_FLAG), 'batch_ok': writer_allowed(coding.BATCH_FLAG),
+                     'first_request_pending': coding.first_request_pending(),
+                     'in_flight': TaxCodeRequest.objects.filter(environment=coding.PRODUCTION,
+                                                                status__in=coding.IN_FLIGHT).count(),
+                     'ready': {'count': len(ready), 'itemcodes': [r['itemcode'] for r in ready][:coding.MAX_PER_ACTION]},
+                     'gs1_offers': {r['itemcode']: r['gs1_offer']['gtin'] for r in decided if r['gs1_offer']['available']}})
 
 
 @api_view(['POST'])

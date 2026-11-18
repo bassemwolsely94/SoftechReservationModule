@@ -154,7 +154,7 @@ server that runs the test is the live one, so a status is never trusted across s
 
 Batch S1 of production item coding. Design: `docs/superpowers/specs/2026-11-16-eta-production-coding-design.md`
 (§4, §6, §8, §14). Code: `coding_rule.py` (suggestions), `coding_queue.py` (decisions), `eta_codes.py` (ETA mirror).
-Nothing here sends a code to ETA; S1 only reads ETA and records the owner's decisions.
+S1 only reads ETA and records the owner's decisions; requests to ETA production come from them in S4 (below).
 
 **Keep-out rule** (a pre-mark only; a person confirms every item). Sources are purchase lines (doccode 10) read with the
 supplier's live `SupplierSegmentation` category. Official = `OFFICIAL_DISTRIBUTOR`, `DRUG_WAREHOUSE`, `MANUFACTURER`,
@@ -193,8 +193,10 @@ GS1 list, so a workbook-only brick is not treated as official.
 records; the usage report above compares against that set.
 
 **Per-system code requests.** Preprod never changes an item's real coding: its answers stay on the request, as `mirror`
-requests already do. `coding.refresh` asks ETA only about requests of this server's own system (plus rows with no
-system yet), because codes are identical across systems and another system's answer concerns a different request.
+requests already do. `coding.refresh` asks each request of its own system, because codes are identical across systems
+and another system's answer concerns a different request: production rows on any server (through the production
+coding client, batch S4), this server's own system and rows with no system yet through `eta_client`; any other
+system is not asked from here.
 
 ### GPC brick per item (batch S2)
 Code: `gpc_learn.py` (learned bricks), `gpc_ai.py` (AI proposal), `coding_queue.py` (decide / `set_brick`).
@@ -280,6 +282,56 @@ one; the cells do not.
 
 **Replacing the Invoicer's file** is done by a person until S5: download the full file, put it in D:\invoicer_mini,
 then close Excel — an open file stops receipt uploads.
+
+## طلبات الإنتاج (production code requests, batch S4)
+
+Plan: `docs/superpowers/plans/2026-11-17-eta-coding-s4.md`. Code: `eta_coding_client.py` (`CodingClient(system)`),
+`coding.py` (`production_gate`, `client_for`, `prepare_from_decisions`, `prepare_gs1_offer`, `first_request_pending`),
+panel `ProductionRequestsPanel.jsx` («طلبات الإنتاج») on «🧮 طابور الترميز». Outward channel: ETA production
+`codetypes/requests/codes` (EGS create) and `codetypes/requests/codeusages` (GS1 reuse), writer flag
+`TAX_ETA_CODING_PRODUCTION_ENABLED` in `config/writers.py`.
+
+**Login.** Item codes go to ETA production whatever system the server sends invoices to (the office sends invoices to
+preprod). `CodingClient('production')` takes its addresses from `environment.ENVIRONMENTS['production']`, never from
+`TAX_ETA_API_BASE_URL` / `TAX_ETA_ID_BASE_URL`. Login: `TAX_ETA_PRODUCTION_CLIENT_ID` / `_SECRET`, else
+`TAX_ETA_READ_PRODUCTION_CLIENT_ID` / `_SECRET` (the owner chose one ERP registration for both). Client-credentials
+login with a form body; its own token cache and pace (2 calls per second), shared with neither `eta_client` nor
+`EtaReader`; production verifies TLS against the public roots (the preprod CA bundle setting is not used). No
+retries. Secrets never appear in logs or error text.
+
+**Preparing** (`POST codes/queue/prepare/` {itemcodes ≤200}, `edit`). One production EGS request per item decided
+«يُكوَّد» with a brick (`gpc.known`), a confirmed treatment, no open production request and not already approved:
+brick = the decision's, names from the decision, `active_from` = 1 January of this year, reason «صنف صيدلي يُباع
+للعملاء». Sends nothing; `{created, skipped: [{itemcode, why}]}`. Queue rows carry the item's latest production
+request, `request_ready` / `request_blocker` and `gs1_offer`; `GET codes/production/` (view) gives the panel
+`{enabled, batch_ok, first_request_pending, in_flight, ready: {count, itemcodes}, gs1_offers}`, and `GET codes/`
+takes `environment=production`. A submitted item leaves the queue, so the panel lists requests from `codes/`.
+
+**Gates** (`production_gate`, all required, checked in this order, nothing claimed when one fails):
+`TAX_ETA_CODING_PRODUCTION_ENABLED` (default off, forced off under tests; `TAX_ETA_PRODUCTION_ALLOWED` is not
+reused: it also unlocks invoices) · matrix `finalize` · the typed count equal to the number of requests · the
+first-request rule. Production and preprod requests are never sent together.
+
+**First-request rule.** While no production request has reached `approved` (`first_request_pending`), a send of more
+than one production request is refused «أرسل طلباً واحداً أولاً حتى تعتمده المصلحة», and a second one is refused
+while the first is with ETA (sending / submitted / uncertain). The check and the claim run under one advisory lock
+(`eta-coding-production`), so two senders can never both put a first request in front of ETA.
+`TAX_ETA_CODING_PRODUCTION_BATCH_OK` (writer flag, default off) lifts the rule. A timeout or 5xx makes the request
+`uncertain` and stops the batch; nothing is resent until "refresh" settles it. A row the client cannot reach is
+returned in `refused: [{id, why}]` and shown on the panel.
+
+**ETA's answer.** `coding.refresh` asks production rows through the production client on any server. An approved
+production request whose item has a `code` decision makes the profile `coding_status='approved'`,
+`list_status='white'`, `disposition='include'`, `coding_env='production'` (audited `item_coding_from_eta`, before and
+after); this overrides an earlier black/review state, because a person decided «كوّد». Without a `code` decision (e.g. a
+request from the old codes tab) the item is approved but its list status is left as it is. When the answer changes an
+item's coding, the held receipts and draft documents carrying it are re-checked once, after the loop.
+
+**GS1 offer.** When the item's latest production request is an EGS one ETA rejected and `coding.gtin_for(item)` gives
+a valid GTIN, the row offers «جرّب GS1» (`POST codes/queue/gs1/` {itemcode}, `edit`) → one prepared production GS1
+request. Never automatic; an offer that would create nothing is refused with its reason (400). The offer belongs to
+the latest request: once a GS1 request exists it is gone, and if a later request is cancelled the offer disappears
+too (the latest request is then the cancelled one).
 
 ## Which ETA system
 

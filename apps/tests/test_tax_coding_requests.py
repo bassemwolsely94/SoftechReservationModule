@@ -234,6 +234,40 @@ class ProductionRequestTests(Fixture, TestCase):
         self.assertEqual((r.status_code, r.data['detail']), (400, 'للصنف كود معتمد أو قيد الاعتماد'))
         self.assertFalse(TaxCodeRequest.objects.filter(purpose='gs1').exists())
 
+    # ── the «طلبات الإنتاج» panel ────────────────────────────────────────────────────────────────────
+    def test_production_state_endpoint(self):
+        url = '/api/tax-invoicing/codes/production/'
+        ready, offered, opened = self.profile(), self.profile(barcode=GTIN), self.profile()
+        self.profile(decide=False)
+        self.rejected(offered)
+        self.prepare(opened)
+        ph = APIClient()
+        ph.force_authenticate(self.pharmacist)
+        self.assertEqual(ph.get(url).status_code, 403)
+        r = self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.data['enabled'], r.data['batch_ok'], r.data['first_request_pending'], r.data['in_flight']),
+                         (False, False, True, 0))
+        # the rejected item can be prepared again; the undecided one and the one with an open request cannot
+        self.assertEqual(r.data['ready']['count'], 2)
+        self.assertEqual(set(r.data['ready']['itemcodes']), {ready.softech_itemcode, offered.softech_itemcode})
+        self.assertEqual(r.data['gs1_offers'], {offered.softech_itemcode: GTIN})
+        TaxCodeRequest.objects.filter(profile=opened).update(status=TaxCodeRequest.SUBMITTED)
+        self.assertEqual(self.api.get(url).data['in_flight'], 1)
+        TaxCodeRequest.objects.filter(profile=opened).update(status=TaxCodeRequest.APPROVED)
+        self.assertFalse(self.api.get(url).data['first_request_pending'])
+        with mock.patch('apps.tax_invoicing.views.writer_allowed', return_value=True):
+            r = self.api.get(url)
+        self.assertEqual((r.data['enabled'], r.data['batch_ok']), (True, True))
+
+    def test_codes_list_filters_by_system(self):
+        p, q = self.profile(), self.profile()
+        self.prepare(p)
+        coding.prepare([q.pk], self.accountant, parent_code=BRICK, system='preprod')
+        r = self.api.get('/api/tax-invoicing/codes/', {'environment': 'production'})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual([x['itemcode'] for x in r.data['rows']], [p.softech_itemcode])
+
 
 @override_settings(**PREPROD_SERVER)
 class ApprovalRecheckTests(_Clean, Fixture, TestCase):
