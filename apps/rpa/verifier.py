@@ -20,12 +20,15 @@ logger = logging.getLogger(__name__)
 DOCCODE = '125'
 _Q5 = Decimal('0.00001')
 
-_HEADER_COLS = 'docnumber, usercode, cust_branch_code, docdate, comments'
+# Header columns read: docnumber, usercode, cust_branch_code, docdate, comments (fixed text, all
+# values bound as ? parameters).
 # LIKE '%RPA-12%' also hits RPA-120.., RPA-1200..: the cap is wide and newest-first so our own
 # document is not crowded out, and Python keeps only an exact RPA-<id> (no digit after it).
-_REF_SQL = (f'SET ROWCOUNT 50 SELECT {_HEADER_COLS} FROM SOFTECHDB9.dbo.stktransm '
+_REF_SQL = ('SET ROWCOUNT 50 SELECT docnumber, usercode, cust_branch_code, docdate, comments '
+            'FROM SOFTECHDB9.dbo.stktransm '
             "WHERE branchcode=? AND doccode='125' AND comments LIKE ? ORDER BY docnumber DESC")
-_FINGERPRINT_SQL = (f'SET ROWCOUNT 50 SELECT {_HEADER_COLS} FROM SOFTECHDB9.dbo.stktransm '
+_FINGERPRINT_SQL = ('SET ROWCOUNT 50 SELECT docnumber, usercode, cust_branch_code, docdate, comments '
+                    'FROM SOFTECHDB9.dbo.stktransm '
                     "WHERE branchcode=? AND doccode='125' AND usercode=? AND cust_branch_code=? "
                     'AND docdate>=? AND docdate<=? ORDER BY docnumber DESC')
 _LINES_SQL = ('SELECT itemcode, transqty, itemexpirydate FROM SOFTECHDB9.dbo.stktrans '
