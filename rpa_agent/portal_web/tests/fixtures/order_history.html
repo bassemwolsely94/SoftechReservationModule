@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Order History</title><script src="portal.js"></script></head>
+<body data-page="history">
+<header><span>Welcome</span> <span id="account" aria-label="Account name"></span>
+<a href="login.html">Sign Out</a>
+<dl><dt>Consumption</dt><dd id="credit-consumption" aria-label="Consumption"></dd>
+<dt>Credit</dt><dd id="credit-credit" aria-label="Credit"></dd>
+<dt>Credit Limit</dt><dd id="credit-limit" aria-label="Credit Limit"></dd></dl></header>
+<div id="messages"></div>
+<h1>Order History</h1>
+<div id="history-box"><table aria-label="Order History"><thead><tr><th>Order Number</th><th>Date Placed</th><th>Status</th><th>Total</th></tr></thead><tbody id="history-body"></tbody></table></div>
+<button type="button">Recurring order</button>
+<section id="details" hidden><table aria-label="Order details"><thead><tr><th>ID</th><th>Product</th><th>Qty</th></tr></thead><tbody id="details-body"></tbody></table></section>
+</body></html>

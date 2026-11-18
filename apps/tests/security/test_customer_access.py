@@ -96,11 +96,51 @@ class CustomerAccessTests(TestCase):
         self.assertEqual({r['id'] for r in rows}, {self.cust_a.pk, self.cust_b.pk})
         self.assertNotIn(PHONE_A, str(rows))
 
-    # ── serving at POS: the detail opens, masked ──────────────────────────────────
+    # ── serving at POS: found by full phone first, then the detail opens, masked (D1) ──
     def test_other_branch_customer_opens_masked_for_pos(self):
-        r = self.client_for(self.pharm_b).get(f'/api/customers/{self.cust_a.pk}/')
+        c = self.client_for(self.pharm_b)
+        c.get('/api/customers/', {'search': PHONE_A})                     # the full-phone find
+        r = c.get(f'/api/customers/{self.cust_a.pk}/')
         self.assertEqual(r.status_code, 200)
         self.assertNotIn(PHONE_A, r.content.decode())
+
+    def test_other_branch_customer_by_id_refused_without_full_phone_find(self):
+        # Owner decision D1 (UAT 2026-11-17): ids are sequential — walking them must not list people
+        c = self.client_for(self.pharm_b)
+        for url in (f'/api/customers/{self.cust_a.pk}/', f'/api/customers/{self.cust_a.pk}/pos-summary/',
+                    f'/api/customers/{self.cust_a.pk}/timeline/'):
+            with self.subTest(url=url):
+                r = c.get(url)
+                self.assertEqual(r.status_code, 403, r.content[:200])
+                self.assertNotIn('Canary Ahmed', r.content.decode())
+
+    def test_partial_phone_search_does_not_open_the_detail(self):
+        c = self.client_for(self.pharm_b)
+        c.get('/api/customers/', {'search': '0101111'})
+        self.assertEqual(c.get(f'/api/customers/{self.cust_a.pk}/').status_code, 403)
+
+    def test_recognize_and_universal_full_phone_open_the_detail(self):
+        for path, key in (('/api/customers/recognize/', 'q'), ('/api/search/universal', 'q')):
+            with self.subTest(path=path):
+                from apps.customers.models import CustomerFound
+                CustomerFound.objects.all().delete()
+                c = self.client_for(self.pharm_b)
+                params = {key: PHONE_A, **({'types': 'customers'} if 'universal' in path else {})}
+                c.get(path, params)
+                self.assertEqual(c.get(f'/api/customers/{self.cust_a.pk}/').status_code, 200)
+
+    def test_found_customer_closes_again_after_the_window(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.customers.models import CustomerFound
+        c = self.client_for(self.pharm_b)
+        c.get('/api/customers/', {'search': PHONE_A})
+        CustomerFound.objects.update(found_at=timezone.now() - timedelta(hours=13))
+        self.assertEqual(c.get(f'/api/customers/{self.cust_a.pk}/').status_code, 403)
+
+    def test_own_branch_and_all_branch_roles_open_by_id(self):
+        self.assertEqual(self.client_for(self.pharm_b).get(f'/api/customers/{self.cust_b.pk}/').status_code, 200)
+        self.assertEqual(self.client_for(self.cc).get(f'/api/customers/{self.cust_a.pk}/').status_code, 200)
 
     # ── editing ──────────────────────────────────────────────────────────────────
     def test_branch_user_cannot_edit_other_branch_customer(self):

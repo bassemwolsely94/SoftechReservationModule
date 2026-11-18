@@ -13,6 +13,7 @@ from django.db.models import Count, Q, Sum, Avg, F
 from datetime import date, timedelta
 
 from apps.notifications.phone_alerts import hooks as phone_alert_hooks
+from apps.customers import access as _ca   # UAT W4: the phone rule for export / print / share
 from core import branch_scope
 from core.export_safety import neutralise_formulas
 from core.multi_filter import filter_in, multi_ids, multi_values
@@ -779,7 +780,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         """
         reservation = self.get_object()
         profile     = get_profile(request)
-        can_see_pii = (profile and profile.role in _PII_ROLES)
+        # UAT W4 P0: the role list AND the phone rule (can_see_customer_phone, viewer — D3/D4)
+        can_see_pii = bool(profile and profile.role in _PII_ROLES and _ca.record_phones_visible(request.user))
 
         # Audit log — only when ?log=1 is passed so that merely previewing the
         # receipt doesn't flood the chatter with "printed" entries.
@@ -911,7 +913,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
         """
         reservation = self.get_object()
         profile     = get_profile(request)
-        can_see_pii = (profile and profile.role in _PII_ROLES)
+        # UAT W4 P0: the role list AND the phone rule (can_see_customer_phone, viewer — D3/D4)
+        can_see_pii = bool(profile and profile.role in _PII_ROLES and _ca.record_phones_visible(request.user))
 
         customer_name = (
             (reservation.customer.name if reservation.customer_id else reservation.contact_name)
@@ -1331,7 +1334,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
             )
 
         profile     = get_profile(self.request)
-        can_see_pii = profile and profile.role in _PII_ROLES
+        # UAT W4 P0: the role list AND the phone rule (can_see_customer_phone, viewer — D3/D4)
+        can_see_pii = bool(profile and profile.role in _PII_ROLES and _ca.record_phones_visible(self.request.user))
 
         STATUS_LABELS   = dict(Reservation.STATUS_CHOICES)
         PRIORITY_LABELS = dict(Reservation.PRIORITY_CHOICES)

@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi, syncApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
+import { usePermission } from '../hooks/usePermission'
 import GamificationCard from '../components/GamificationCard'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import ExpiryBucketsTile from '../components/ExpiryBucketsTile'
@@ -667,6 +668,7 @@ function SupplyKpiSection({ navigate }) {
 export default function DashboardPage() {
   const navigate  = useNavigate()
   const { user }  = useAuthStore()
+  const supplyView = usePermission('purchasing', 'view')   // GET /dashboard/supply/ asks purchasing view
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboardSummary'],
@@ -842,7 +844,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── 7. Demand & supply control tower (server-gated) ──────── */}
-        {['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && (
+        {['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && supplyView && (
           <SupplyKpiSection navigate={navigate} />
         )}
 

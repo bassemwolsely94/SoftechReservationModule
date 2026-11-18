@@ -96,6 +96,13 @@ class OrderSerializer(RetentionNoteMixin, serializers.ModelSerializer):
                 raise serializers.ValidationError({'examdate': 'تاريخ الكشف يجب أن يكون تاريخاً (YYYY-MM-DD)'})
         return claim
 
+    def validate_doc_kind(self, value):
+        # D3: no new returns from the POS screen unless POS_RETURNS_ENABLED (existing orders keep theirs)
+        from django.conf import settings
+        if value == 'return' and self.instance is None and not getattr(settings, 'POS_RETURNS_ENABLED', False):
+            raise serializers.ValidationError('المرتجع غير متاح على شاشة نقطة البيع.')
+        return value
+
     def create(self, validated):
         lines = validated.pop('lines', [])
         payments = validated.pop('payments', [])
