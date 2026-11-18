@@ -28,9 +28,9 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from apps.users.roles import ROLE_KEYS
+from apps.users.roles import ROLE_KEYS, ROLES
 
-TWIN_ROLES = ['pharmacist', 'salesperson', 'viewer', 'delivery']   # branch-scoped roles
+TWIN_ROLES = [r.key for r in ROLES if not r.all_branches]   # branch-scoped roles (role registry)
 DEFAULT_OUT = Path(settings.BASE_DIR) / 'frontend' / 'uat' / '.uat-users.json'
 
 
