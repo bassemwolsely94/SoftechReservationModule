@@ -23,7 +23,7 @@ from config.writers import writer_allowed
 
 from . import environment, eta_client, eta_coding_client, gpc
 from .models import TaxCodeRequest, TaxCodingDecision, TaxIssuerProfile, TaxItemProfile
-from .services import TaxRuleError, audit
+from .services import TaxRuleError, audit, revalidate_drafts_for_items
 
 FLAG = 'TAX_ETA_CODING_ENABLED'
 PRODUCTION = 'production'
@@ -247,7 +247,10 @@ def prepare_gs1_offer(itemcode, actor):
     latest = production_requests([profile.pk]).get(profile.pk, {}).get('latest')
     if not gs1_offer(latest, profile.item)['available']:
         raise TaxRuleError(NO_GS1_OFFER)
-    return prepare_gs1([profile.pk], actor, system=PRODUCTION)
+    result = prepare_gs1([profile.pk], actor, system=PRODUCTION)
+    if not result['created']:
+        raise TaxRuleError(result['skipped'][0]['why'] if result['skipped'] else NO_GS1_OFFER)
+    return result
 
 
 def edit(request_id, actor, fields):
@@ -460,13 +463,15 @@ def send(request_ids, actor, confirm, *, actor_can_finalize=False):
 
 
 def _apply_eta_answer(row, eta_row, actor):
+    """Applies ETA's answer to the request (and, for a real-system request, to the item). True when the item's
+    coding changed, so its held documents and receipts are re-checked (refresh does it once, after the loop)."""
     status = _ETA_STATUS.get(str(eta_row.get('status') or '').strip().lower())
     row.eta_status = str(eta_row.get('status') or '')[:20]
     row.eta_request_id = str(eta_row.get('codeUsageRequestID') or row.eta_request_id or '')[:30]
     row.checked_at = timezone.now()
     if status is None:
         row.save()
-        return
+        return False
     old = row.status
     row.status = status
     if status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED):
@@ -509,6 +514,8 @@ def _apply_eta_answer(row, eta_row, actor):
     if old != row.status:
         audit('code_request_status', actor=actor, entity='code_request', entity_id=row.pk,
               before={'status': old}, after={'status': row.status, 'eta_status': row.eta_status})
+    return _touches_profile(row) and (status in (TaxCodeRequest.APPROVED, TaxCodeRequest.REJECTED)
+                                      or (status == TaxCodeRequest.SUBMITTED and old == TaxCodeRequest.UNCERTAIN))
 
 
 def refresh(actor=None, request_ids=None, limit=100):
@@ -527,6 +534,7 @@ def refresh(actor=None, request_ids=None, limit=100):
         qs = qs.filter(pk__in=request_ids)
     done = {'checked': 0, 'approved': 0, 'rejected': 0, 'error': ''}
     could_not_ask = set()       # "could not ask" stops that system only
+    changed = set()             # items whose coding ETA's answer changed
     for row in qs.order_by('checked_at', 'id')[:limit]:
         system = system_of(row)
         if system in could_not_ask:
@@ -539,8 +547,8 @@ def refresh(actor=None, request_ids=None, limit=100):
             continue
         with transaction.atomic():
             row = TaxCodeRequest.objects.select_for_update().select_related('profile').get(pk=row.pk)
-            if found:
-                _apply_eta_answer(row, found[0], actor)
+            if found and _apply_eta_answer(row, found[0], actor):
+                changed.add(row.profile.softech_itemcode)
             elif row.status == TaxCodeRequest.UNCERTAIN:
                 row.status, row.checked_at = TaxCodeRequest.FAILED, timezone.now()
                 row.error = 'المصلحة لا تعرض هذا الطلب؛ يمكن إرساله مرة أخرى'
@@ -555,6 +563,8 @@ def refresh(actor=None, request_ids=None, limit=100):
             done['approved'] += 1
         elif row.status == TaxCodeRequest.REJECTED:
             done['rejected'] += 1
+    if changed:     # held drafts and held/ready receipts carrying these items pick up their new coding
+        revalidate_drafts_for_items(changed)
     return done
 
 

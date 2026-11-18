@@ -1,17 +1,19 @@
 """ETA production coding, batch S4 task 2: production code requests prepared from the coding queue's decisions,
 ETA's approval making a decided item white, and the «جرّب GS1» offer after an EGS rejection. No HTTP."""
 from datetime import date
+from unittest import mock
 
 from django.db import connection, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.catalog.models import Item, ItemBarcode
-from apps.tax_invoicing import coding, coding_queue
+from apps.tax_invoicing import coding, coding_queue, eta_coding_client
 from apps.tax_invoicing.models import (EtaCodeUsage, TaxAuditEvent, TaxCodeRequest, TaxCodingDecision, TaxGpcBrick,
-                                       TaxItemProfile)
+                                       TaxItemProfile, TaxReceipt, TaxReceiptLine)
+from apps.tests.test_eta_coding_client import PREPROD_SERVER, TOKEN, _Clean, _response
 from apps.tests.test_tax_coding_queue import BRICK, QUEUE, bought, sold
 from apps.tests.test_tax_invoicing import Fixture
 
@@ -223,3 +225,63 @@ class ProductionRequestTests(Fixture, TestCase):
         with CaptureQueriesContext(connection) as big:
             self.assertEqual(sum(r['gs1_offer']['available'] for r in coding_queue.rows()), 6)
         self.assertEqual(len(small), len(big))
+
+    def test_gs1_offer_that_creates_nothing_is_refused(self):
+        p = self.profile(barcode=GTIN)
+        self.rejected(p)
+        TaxItemProfile.objects.filter(pk=p.pk).update(coding_status=TaxItemProfile.CODE_PENDING)
+        r = self.api.post(QUEUE + 'gs1/', {'itemcode': p.softech_itemcode}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, 'للصنف كود معتمد أو قيد الاعتماد'))
+        self.assertFalse(TaxCodeRequest.objects.filter(purpose='gs1').exists())
+
+
+@override_settings(**PREPROD_SERVER)
+class ApprovalRecheckTests(_Clean, Fixture, TestCase):
+    """An ETA answer that changes an item's coding re-checks the held receipts and draft documents carrying it."""
+
+    def setUp(self):
+        super().setUp()
+        self.build('rv')
+        self.p = TaxItemProfile.objects.create(softech_itemcode='95001', item_name='Cream', item_name_ar='كريم',
+                                               tax_treatment='taxable', vat_rate=14,
+                                               treatment_confirmed_at=timezone.now())
+        TaxCodingDecision.objects.create(profile=self.p, decision='code', brick=BRICK, vat_rate=14,
+                                         code_name='Cream', code_name_ar='كريم')
+        self.req = TaxCodeRequest.objects.get(pk=coding.prepare_from_decisions(['95001'], self.admin)['created'][0])
+        TaxCodeRequest.objects.filter(pk=self.req.pk).update(status=TaxCodeRequest.SUBMITTED)
+
+    def _refresh(self, status):
+        answer = _response(200, [{'itemCode': self.req.item_code, 'status': status}])
+        with mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN), \
+                mock.patch.object(eta_coding_client.requests, 'get', return_value=answer):
+            return coding.refresh(self.admin)
+
+    def _held_line(self):
+        receipt = TaxReceipt.objects.create(softech_branchcode='150', doccode='10', docnumber='1',
+                                            docdate=timezone.localdate(), sold_at=timezone.now(),
+                                            status=TaxReceipt.HELD)
+        return TaxReceiptLine.objects.create(receipt=receipt, itemcode='95001', quantity=1, unit_price=114,
+                                             total=114, source_vat_rate=14)
+
+    def test_held_receipt_picks_up_the_code_after_a_production_approval(self):
+        line = self._held_line()
+        self.assertEqual(self._refresh('Approved')['approved'], 1)
+        line.refresh_from_db()
+        self.assertEqual((line.eta_code, line.code_type), (self.req.item_code, 'EGS'))
+        # this server sends to preprod: a production code is not this system's code
+        self.assertEqual(line.status, 'uncoded')
+        self.assertIn('production', line.status_reason)
+
+    @override_settings(TAX_ETA_ENVIRONMENT='production')
+    def test_on_a_production_server_the_held_line_becomes_approved(self):
+        line = self._held_line()
+        self.assertEqual(self._refresh('Approved')['approved'], 1)
+        line.refresh_from_db()
+        self.assertEqual((line.status, line.eta_code), ('approved', self.req.item_code))
+
+    def test_recheck_once_for_changed_items_only(self):
+        with mock.patch.object(coding, 'revalidate_drafts_for_items') as recheck:
+            self._refresh('Submitted')          # no change to the item
+            recheck.assert_not_called()
+            self._refresh('Rejected')
+        recheck.assert_called_once_with({'95001'})
