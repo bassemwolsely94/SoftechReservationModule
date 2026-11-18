@@ -128,9 +128,7 @@ class SupplierPerformanceListView(generics.ListAPIView):
         qs = SupplierProfile.objects.all()
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'supplier_name', 'supplier_code'))
         classif = self.request.query_params.get('classif', '').strip()
         if classif:
             qs = qs.filter(classif_code=classif)
@@ -251,10 +249,7 @@ class SupplierItemMappingListView(generics.ListAPIView):
         qs = SupplierItemMapping.objects.all()
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'item_name') | Q(item_code__icontains=q)
-                | wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'item_name', 'item_code', 'supplier_name', 'supplier_code'))
         supplier_code = self.request.query_params.get('supplier_code', '').strip()
         if supplier_code:
             qs = qs.filter(supplier_code=supplier_code)
@@ -837,13 +832,7 @@ def apply_history_filters(qs, p):
     if buyer:
         qs = qs.filter(buyer_code=buyer)
     if q:
-        qs = qs.filter(
-            Q(item_code__icontains=q)
-            | Q(supplier_code__icontains=q)
-            | Q(doc_number__icontains=q)
-            | Q(buyer_code__icontains=q)
-            | wq(q, 'item__name')
-        )
+        qs = qs.filter(wq(q, 'item_code', 'supplier_code', 'doc_number', 'buyer_code', 'item__name'))
 
     is_return_p = p.get('is_return', '').strip().lower()
     if is_return_p in ('true', '1'):
@@ -1073,9 +1062,7 @@ class SupplierSegmentationListView(generics.ListAPIView):
         if category:
             qs = qs.filter(supplier_category=category)
         if q:
-            qs = qs.filter(
-                wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'supplier_name', 'supplier_code'))
         if min_val:
             qs = qs.filter(purchase_value_365d__gte=min_val)
 
@@ -1496,9 +1483,7 @@ class SupplierPerformanceEnhancedListView(generics.ListAPIView):
         qs = SupplierProfile.objects.all()
         q  = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'supplier_name', 'supplier_code'))
         category = self.request.query_params.get('category', '').strip()
         if category:
             qs = qs.filter(supplier_category=category)

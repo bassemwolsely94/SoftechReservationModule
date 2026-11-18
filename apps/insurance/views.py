@@ -2413,7 +2413,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             return Response({'prescription_ids': [], 'matched_items': []})
         lines = (InsuranceClaimLine.objects
                  .filter(prescription__claim=claim)
-                 .filter(wq(q, 'item_name') | Q(softech_itemcode__icontains=q)))
+                 .filter(wq(q, 'item_name', 'softech_itemcode')))
         rx_ids = sorted(set(lines.values_list('prescription_id', flat=True)))
         matched = sorted({(ln.softech_itemcode, ln.item_name) for ln in lines})[:20]
         return Response({
@@ -2820,7 +2820,7 @@ class InsuranceItemClassificationOverrideViewSet(viewsets.ModelViewSet):
         qs = InsuranceItemClassificationOverride.objects.select_related('created_by').all()
         q = self.request.query_params.get('search')
         if q:
-            qs = qs.filter(Q(item_code__icontains=q) | wq(q, 'item_name'))
+            qs = qs.filter(wq(q, 'item_code', 'item_name'))
         active = self.request.query_params.get('active')
         if active in ('true', '1'):
             qs = qs.filter(is_active=True)

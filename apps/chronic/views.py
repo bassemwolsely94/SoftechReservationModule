@@ -1,4 +1,4 @@
-from django.db.models import Case, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, Exists, F, IntegerField, OuterRef, Subquery, Value, When
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, status
@@ -8,6 +8,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.catalog.models import Item
 from apps.users.models import StaffProfile
 from .models import (
@@ -68,7 +69,7 @@ class MedicationTagViewSet(viewsets.ModelViewSet):
             qs = qs.filter(tag_type=tag_type)
         q = self.request.query_params.get('q')
         if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(name_ar__icontains=q))
+            qs = qs.filter(wq(q, 'name', 'name_ar'))
         return qs
 
     def perform_create(self, serializer):
@@ -96,10 +97,7 @@ class ActiveIngredientViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         q = self.request.query_params.get('q')
         if q:
-            qs = qs.filter(
-                Q(name__icontains=q) | Q(name_ar__icontains=q) |
-                Q(atc_code__icontains=q) | Q(atc_level4_name__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'name', 'name_ar', 'atc_code', 'atc_level4_name'))
         if self.request.query_params.get('chronic_only'):
             qs = qs.filter(is_chronic=True)
         chronic_class = self.request.query_params.get('chronic_class')
@@ -279,12 +277,7 @@ class ItemClassifierViewSet(viewsets.ViewSet):
         # ── Filters ──
         q = request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                Q(name__icontains=q) |
-                Q(name_scientific__icontains=q) |
-                Q(softech_id__icontains=q) |
-                Q(barcode__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'name', 'name_scientific', 'softech_id', 'barcode'))
 
         status_filter = request.query_params.get('status')
         if status_filter == 'classified':

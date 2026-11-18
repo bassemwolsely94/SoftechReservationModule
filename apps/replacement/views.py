@@ -44,10 +44,11 @@ def _filter_cases(request, qs):
     p = request.query_params
     q = (p.get('q') or '').strip()
     if q:
-        cond = (Q(number__icontains=q) | Q(softech_pic__iexact=q) | wq(q, 'patient_name')
-                | Q(customer__phone__icontains=q) | Q(documents__document__docnumber=q)
-                | Q(items__itemcode=q) | wq(q, 'items__item_name')
-                | Q(supplier_personcode=q) | Q(contract_personcode=q))
+        # exact ids stay exact (a PIC, document number, item code or account code is typed whole);
+        # the name / number / phone fields follow the wildcard rules
+        cond = (wq(q, 'number', 'patient_name', 'customer__phone', 'items__item_name')
+                | Q(softech_pic__iexact=q) | Q(documents__document__docnumber=q)
+                | Q(items__itemcode=q) | Q(supplier_personcode=q) | Q(contract_personcode=q))
         qs = qs.filter(cond).distinct()
     for key, field in (('branch', 'branchcode'), ('status', 'status'), ('source_type', 'source_type'),
                        ('supplier', 'supplier_personcode'), ('mode', 'settlement_mode'),

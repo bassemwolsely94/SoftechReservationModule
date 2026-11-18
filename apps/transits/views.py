@@ -973,10 +973,7 @@ class PickZoneViewSet(viewsets.ModelViewSet):
 
         items = Item.objects.filter(is_active=True)
         if q:
-            items = items.filter(
-                wq(q, 'name') |
-                db_models.Q(softech_id__icontains=q)
-            )
+            items = items.filter(wq(q, 'name', 'softech_id'))
 
         order_map = {'name': 'name', 'item_code': 'softech_id', 'price': 'pack_price'}
         raw_order = str(request.query_params.get('ordering') or '').strip()
@@ -1220,11 +1217,7 @@ class ItemPickOverrideViewSet(viewsets.ModelViewSet):
                   else qs.filter(branch__isnull=True))
         q = str(self.request.query_params.get('q') or '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'item__name') |
-                db_models.Q(item__softech_id__icontains=q) |
-                db_models.Q(tag__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'item__name', 'item__softech_id', 'tag'))
         zone_id = self.request.query_params.get('zone')
         if zone_id:
             qs = qs.filter(zone_id=zone_id)

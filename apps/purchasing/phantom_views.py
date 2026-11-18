@@ -65,8 +65,7 @@ def _apply_filters(qs, request):
     # ?med=10 or ?med=10,50 — one general classification or several (none = all)
     qs = filter_in(qs, 'medicine_type', multi_values(request.GET, 'med'))
     if q:
-        from django.db.models import Q
-        qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))
+        qs = qs.filter(wq(q, 'name', 'softech_id'))
     return qs
 
 

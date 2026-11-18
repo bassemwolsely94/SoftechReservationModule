@@ -59,11 +59,7 @@ class ItemEnrichmentViewSet(viewsets.ModelViewSet):
         # ── Text search (param: search) ───────────────────────────────────────
         search = p.get('search', '').strip()
         if search:
-            qs = qs.filter(
-                wq(search, 'item__name') |
-                Q(item__softech_id__icontains=search) |
-                Q(item__barcode__icontains=search)
-            )
+            qs = qs.filter(wq(search, 'item__name', 'item__softech_id', 'item__barcode'))
 
         # ── Score range (params: score_min / score_max) ───────────────────────
         score_min = p.get('score_min')

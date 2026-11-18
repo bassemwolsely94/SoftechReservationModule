@@ -6,7 +6,7 @@ NO stock mutations. NO ERP calls. Communication + approval only.
 """
 from django.db.models import Count, Q
 from django.utils import timezone
-from rest_framework import viewsets, filters, status
+from rest_framework import viewsets, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser

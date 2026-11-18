@@ -21,7 +21,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-from django.db.models import Q
 
 from apps.catalog.models import Item
 from apps.purchasing.models import DemandCalculationRun, ItemDemandAggregated
@@ -91,7 +90,7 @@ def spike_candidates(request):
     qs = filter_in(qs, 'medicine_type', multi_values(request.GET, 'med'))   # one class or several (?med=a,b)
     q = (request.GET.get('q') or '').strip()
     if q:
-        qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))
+        qs = qs.filter(wq(q, 'name', 'softech_id'))
     items = list(qs.only(*_FIELDS))
     agg = _latest_agg([it.id for it in items])
     rows = [_row(it, agg) for it in items]

@@ -7,6 +7,7 @@ Handles: search, product card assembly, recommendations.
 from django.db.models import Q, Prefetch
 from django.utils import timezone
 
+from apps.catalog.wildcard import wq
 from apps.catalog.models import Item
 from core.multi_filter import filter_in
 
@@ -41,23 +42,12 @@ def search_products(query: str, filters: dict = None, limit: int = None, orderin
 
     if query:
         q = query.strip()
-        qs = qs.filter(
-            Q(name__icontains=q)
-            | Q(name_scientific__icontains=q)
-            | Q(barcode__icontains=q)
-            | Q(active_ingredients__icontains=q)
-            | Q(family_name_ar__icontains=q)
-            | Q(family_name__icontains=q)
-            | Q(effect_name_ar__icontains=q)
-            | Q(effect_name__icontains=q)
-            | Q(effect_name2_ar__icontains=q)
-            | Q(content__display_name_ar__icontains=q)
-            | Q(content__display_name_en__icontains=q)
-            | Q(content__keywords__icontains=q)
-            | Q(attributes__strength__icontains=q)
-            | Q(attributes__flavor__icontains=q)
-            | Q(softech_id__icontains=q)
-        ).distinct()
+        qs = qs.filter(wq(
+            q, 'name', 'name_scientific', 'barcode', 'active_ingredients', 'family_name_ar',
+            'family_name', 'effect_name_ar', 'effect_name', 'effect_name2_ar',
+            'content__display_name_ar', 'content__display_name_en', 'content__keywords',
+            'attributes__strength', 'attributes__flavor', 'softech_id',
+        )).distinct()
 
     if filters:
         if filters.get('category'):
@@ -137,11 +127,8 @@ def autocomplete_products(query: str, limit: int = 8):
 
     return list(
         Item.objects.filter(is_active=True).filter(
-            Q(name__icontains=query)
-            | Q(name_scientific__icontains=query)
-            | Q(barcode__icontains=query)
-            | Q(active_ingredients__icontains=query)
-            | Q(content__display_name_ar__icontains=query)
+            wq(query, 'name', 'name_scientific', 'barcode', 'active_ingredients',
+               'content__display_name_ar')
         )
         .distinct()
         .values('softech_id', 'name', 'name_scientific', 'barcode')

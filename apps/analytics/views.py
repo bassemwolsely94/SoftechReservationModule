@@ -1665,11 +1665,7 @@ def customer_search(request):
     qs = (
         base
         .filter(
-            wq(q, 'name')
-            | Q(phone__icontains=q)
-            | Q(phone_alt__icontains=q)
-            | Q(softech_pic__icontains=q)
-            | Q(softech_id__icontains=q)
+            wq(q, 'name', 'phone', 'phone_alt', 'softech_pic', 'softech_id')
         )
         .only(
             'id', 'name', 'phone', 'softech_pic',

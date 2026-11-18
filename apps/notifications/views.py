@@ -204,8 +204,8 @@ def notification_list(request):
 
     search = request.query_params.get('search', '').strip()
     if search:
-        from django.db.models import Q
-        qs = qs.filter(Q(title__icontains=search) | Q(body__icontains=search))
+        from apps.catalog.wildcard import wq
+        qs = qs.filter(wq(search, 'title', 'body'))
 
     try:
         limit = min(int(request.query_params.get('limit', 50)), 200)

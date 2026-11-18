@@ -16,6 +16,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.customers.models import Customer, PurchaseHistory
 from apps.users.models import StaffProfile
 
@@ -300,7 +301,7 @@ class CampaignListCreateView(generics.ListCreateAPIView):
             qs = qs.filter(status=status_param)
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(name__icontains=q)
+            qs = qs.filter(wq(q, 'name'))
         return qs
 
     def perform_create(self, serializer):

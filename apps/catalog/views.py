@@ -747,8 +747,8 @@ class VariantGroupListCreateView(generics.ListCreateAPIView):
         qs = CatalogVariantGroup.objects.prefetch_related('members__item')
         q = self.request.query_params.get('q', '').strip()
         if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(name_ar__icontains=q))
+            from .wildcard import wq
+            qs = qs.filter(wq(q, 'name', 'name_ar'))
         return qs
 
     def perform_create(self, serializer):
@@ -798,8 +798,8 @@ class ProductBundleListCreateView(generics.ListCreateAPIView):
         qs = ProductBundle.objects.prefetch_related('items__item')
         q = self.request.query_params.get('q', '').strip()
         if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(name_ar__icontains=q))
+            from .wildcard import wq
+            qs = qs.filter(wq(q, 'name', 'name_ar'))
         active = self.request.query_params.get('active')
         if active is not None:
             qs = qs.filter(is_active=active.lower() == 'true')

@@ -4,6 +4,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.catalog.models import Item
 from .models import ItemPriceChangeRequest, USER_EDITABLE_FIELDS, FIELD_LABELS
 from .serializers import ItemPriceChangeRequestSerializer, ReviewSerializer
@@ -965,7 +966,7 @@ def alignment_scan(request):
         qs = qs.filter(origin_code__in=origin)
     search = request.query_params.get('search')
     if search:
-        qs = qs.filter(name__icontains=search)
+        qs = qs.filter(wq(search, 'name'))
 
     only_mis = request.query_params.get('only_misaligned', '1') != '0'
     try:

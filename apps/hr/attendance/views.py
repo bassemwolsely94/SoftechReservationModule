@@ -16,7 +16,6 @@ from io import BytesIO
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -25,6 +24,7 @@ from rest_framework.decorators import api_view
 from rest_framework.exceptions import ParseError, ValidationError
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.audit.models import AuditLog
 from apps.hr.assignments import record_assignment, validate_extensions
 from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, CollectionRun,
@@ -306,7 +306,7 @@ def employees(request, acc):
     p = request.query_params
     q = (p.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(name_ar__icontains=q) | Q(hr_number__icontains=q))
+        qs = qs.filter(wq(q, 'name_ar', 'hr_number'))
     if p.get('status') in ('active', 'left'):
         qs = qs.filter(status=p['status'])
     if p.get('type') in ('payroll', 'non_payroll'):
@@ -682,8 +682,8 @@ def grants(request, acc):
         q = (request.query_params.get('q') or '').strip()
         if q:    # who can be picked: active logins matching the text
             found = (StaffProfile.objects.filter(is_active=True).select_related('user')
-                     .filter(Q(user__first_name__icontains=q) | Q(user__last_name__icontains=q)
-                             | Q(user__username__icontains=q) | Q(softech_username__icontains=q))[:30])
+                     .filter(wq(q, 'user__first_name', 'user__last_name', 'user__username',
+                                'softech_username'))[:30])
             out['candidates'] = [_staff_json(s) for s in found]
         return Response(out)
     body = _body(request)

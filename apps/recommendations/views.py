@@ -8,7 +8,7 @@ Endpoints:
   GET  /api/recommendations/fbt/for-item/ — ?item_id=X → top recs for item
   GET  /api/recommendations/customer/     — ?customer_id=X → customer recs
 """
-from rest_framework import filters, generics, status
+from rest_framework import generics, status
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated

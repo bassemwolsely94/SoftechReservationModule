@@ -436,7 +436,7 @@ def product_image_search(request):
     # ── text search ───────────────────────────────────────────────────────────
     q = (p.get('q') or '').strip()
     if q:
-        qs = qs.filter(wq(q, 'name') | Q(softech_id__icontains=q))
+        qs = qs.filter(wq(q, 'name', 'softech_id'))
 
     # ── category filter (multi-select: ?category_id=1,2 or repeated) ─────────
     qs = filter_in(qs, 'category_id', multi_ids(p, 'category_id'))
