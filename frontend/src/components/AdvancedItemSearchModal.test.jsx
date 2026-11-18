@@ -85,3 +85,146 @@ describe('AdvancedItemSearchModal on the engine', () => {
     expect(document.body.textContent).toContain('أقرب نتيجة أولاً')
   })
 })
+
+describe('AdvancedItemSearchModal pick modes', () => {
+  beforeEach(() => get.mockReset())
+  afterEach(cleanup)
+
+  function mount(props) {
+    get.mockImplementation((url = '') => Promise.resolve({
+      data: url.includes('filter-options') ? {} : { count: rows.length, results: rows },
+    }))
+    const onSelect = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AdvancedItemSearchModal onSelect={onSelect} onClose={onClose} {...props} />
+      </QueryClientProvider>,
+    )
+    return { onSelect, onClose }
+  }
+
+  it('without multi: a row click picks one item and closes, no checkboxes', async () => {
+    const { onSelect, onClose } = mount()
+    await search('alpha')
+    fireEvent.click(await screen.findByText(/TWO/))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect.mock.calls[0][0]).toMatchObject({ id: 2, item_id: 2 })
+    expect(onClose).toHaveBeenCalled()
+    cleanup()
+    mount()
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    expect(screen.queryByText(/إضافة المحدد/)).toBeNull()
+    expect(screen.queryAllByLabelText(/تحديد/)).toHaveLength(0)
+  })
+
+  it('with multi: tick 2, the add button sends one array of 2', async () => {
+    const { onSelect, onClose } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const boxes = screen.getAllByLabelText(/تحديد/)
+    fireEvent.click(boxes[0])
+    fireEvent.click(boxes[1])
+    expect(onSelect).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('إضافة المحدد (2)'))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    const items = onSelect.mock.calls[0][0]
+    expect(items.map(i => i.id)).toEqual([1, 2])
+    for (const it of items) expect(it.item_id).toBe(it.id)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('with multi: a row click ticks instead of picking', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    fireEvent.click(await screen.findByText(/ONE/))
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(screen.getByText('إضافة المحدد (1)')).toBeTruthy()
+  })
+
+  it('with multi: Space ticks the focused row in the grid, Enter adds', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const grid = screen.getByTestId('adv-results')
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.keyDown(grid, { key: ' ', code: 'Space' })
+    fireEvent.keyDown(grid, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.keyDown(grid, { key: ' ', code: 'Space' })
+    expect(screen.getByText('إضافة المحدد (2)')).toBeTruthy()
+    fireEvent.keyDown(grid, { key: 'Enter', code: 'Enter' })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([1, 2])
+  })
+
+  it('with multi: Space and Enter on a focused button keep their native behaviour', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const grid = screen.getByTestId('adv-results')
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowDown', code: 'ArrowDown' })
+    const btn = screen.getByRole('button', { name: /إعادة تعيين/ })
+    const spacePrevented = !fireEvent.keyDown(btn, { key: ' ', code: 'Space' })
+    const enterPrevented = !fireEvent.keyDown(btn, { key: 'Enter', code: 'Enter' })
+    expect(spacePrevented).toBe(false)
+    expect(enterPrevented).toBe(false)
+    expect(screen.getByText("إضافة المحدد (0)")).toBeTruthy()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('with multi: Space typed in the search box types and ticks nothing', async () => {
+    mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const box = screen.getByPlaceholderText(/urosolv/)
+    fireEvent.keyDown(box, { key: 'ArrowDown', code: 'ArrowDown' })
+    const notPrevented = fireEvent.keyDown(box, { key: ' ', code: 'Space' })
+    expect(notPrevented).toBe(true)
+    expect(screen.getByText('إضافة المحدد (0)')).toBeTruthy()
+  })
+
+  it('with multi: ↓ from the search box moves focus to the grid, then Space ticks and Enter adds', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const box = screen.getByPlaceholderText(/urosolv/)
+    box.focus()
+    fireEvent.keyDown(document.activeElement, { key: 'ArrowDown', code: 'ArrowDown' })
+    const grid = screen.getByTestId('adv-results')
+    expect(document.activeElement).toBe(grid)
+    fireEvent.keyDown(document.activeElement, { key: ' ', code: 'Space' })
+    expect(screen.getByText('إضافة المحدد (1)')).toBeTruthy()
+    fireEvent.keyDown(document.activeElement, { key: 'Enter', code: 'Enter' })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([1])
+  })
+
+  it('with multi: Space on a focused row checkbox toggles that row exactly once', async () => {
+    const { onSelect } = mount({ multi: true })
+    await search('alpha')
+    await screen.findByText(/TWO/)
+    const grid = screen.getByTestId('adv-results')
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowDown', code: 'ArrowDown' })   // highlight row 1
+    const box2 = screen.getAllByLabelText(/تحديد/)[1]
+    box2.focus()
+    // the window handler leaves a checkbox's Space alone (not prevented) …
+    expect(fireEvent.keyDown(box2, { key: ' ', code: 'Space' })).toBe(true)
+    expect(screen.getByText('إضافة المحدد (0)')).toBeTruthy()
+    // … and the browser's native Space → click ticks it through onChange
+    fireEvent.click(box2)
+    expect(screen.getByText('إضافة المحدد (1)')).toBeTruthy()
+    const boxes = screen.getAllByLabelText(/تحديد/)
+    expect(boxes.map(b => b.checked)).toEqual([false, true])
+    fireEvent.click(screen.getByText('إضافة المحدد (1)'))
+    expect(onSelect.mock.calls[0][0].map(i => i.id)).toEqual([2])
+  })
+
+  it('with multi: the results grid has a visible focus ring', async () => {
+    mount({ multi: true })
+    expect(screen.getByTestId('adv-results').className).toMatch(/focus-visible:ring/)
+  })
+})

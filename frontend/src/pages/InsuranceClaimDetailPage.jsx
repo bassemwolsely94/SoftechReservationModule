@@ -22,6 +22,7 @@ import { fa } from '../utils/flowArrow'
 import useSortableRows from '../hooks/useSortableRows'
 import { nextSort, sortRows, ariaSortOf } from '../hooks/sortCompare'
 import SortTh from '../components/SortTh'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -151,7 +152,7 @@ function PatientNameAutocomplete({ claimId, value, onChange, onCommit, className
   )
 }
 
-function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect }) {
+export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect }) {
   const [showAdjust, setShowAdjust] = useState(false)
   const [showLines, setShowLines]   = useState(false)
   const [lines, setLines]           = useState(rx.lines || null)
@@ -159,6 +160,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
   const [editLines, setEditLines]   = useState(false)   // unlock line editing (also unlocks the patient name)
   const [lineEdits, setLineEdits]   = useState({})      // lineId → {item_code, quantity, unit_price, lookup}
   const [savingLine, setSavingLine] = useState(null)
+  const [nameSearchFor, setNameSearchFor] = useState(null)   // the ONE line whose name box is open
   const [nameDraft, setNameDraft]   = useState(null)    // patient-name edit buffer (null = not touched)
   const [savingName, setSavingName] = useState(false)
   const [editingName, setEditingName] = useState(false) // name-only edit, INDEPENDENT of the line lock
@@ -192,8 +194,15 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
     if (!code) return
     try {
       const { data } = await insuranceApi.itemOverrideLookup(code)
-      setLineEdits(s => ({ ...s, [lineId]: { ...s[lineId], lookup: data,
-        unit_price: (s[lineId]?.unit_price ?? (data.found ? data.pack_price : '')) } }))
+      // the price follows the looked-up item (a different pick brings its own price) UNLESS the
+      // user typed one by hand (price_typed, cleared when the line editor resets after a save)
+      setLineEdits(s => {
+        const cur = s[lineId] || {}
+        const price = cur.price_typed
+          ? cur.unit_price
+          : (data.found ? data.pack_price : (cur.unit_price ?? ''))
+        return { ...s, [lineId]: { ...cur, lookup: data, unit_price: price } }
+      })
     } catch { setLineEdits(s => ({ ...s, [lineId]: { ...s[lineId], lookup: { found: false } } })) }
   }
   const saveLine = async (lineId) => {
@@ -529,7 +538,20 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                             className="w-20 border border-gray-300 rounded px-1 py-0.5 font-mono" />
                           <button data-tour="insurance-claim-line-lookup" onClick={() => lookupNewItem(l.id, (e.item_code ?? l.softech_itemcode).trim())}
                             className="text-blue-600 hover:underline">بحث</button>
+                          <button type="button" data-tour="insurance-claim-line-by-name"
+                            onClick={() => setNameSearchFor(f => (f === l.id ? null : l.id))}
+                            className="text-blue-600 hover:underline">بالاسم</button>
                         </div>
+                        {/* or find it by name (this line only): a pick fills the code and runs the same
+                            lookup as «بحث»; the save stays «حفظ» below */}
+                        {nameSearchFor === l.id && (
+                          <div className="mt-1 min-w-[16rem]">
+                            <ItemSearchWidget mode="single" autoFocus placeholder="ابحث بالاسم…"
+                              onSelect={(it) => { if (!it?.softech_id) return
+                                setE({ item_code: it.softech_id }); lookupNewItem(l.id, it.softech_id)
+                                setNameSearchFor(null) }} />
+                          </div>
+                        )}
                         {e.lookup && (e.lookup.found
                           ? <div className="text-[10px] text-gray-500">{e.lookup.item_name} · {fmt(e.lookup.pack_price)}</div>
                           : <div className="text-[10px] text-amber-600">غير موجود</div>)}
@@ -543,7 +565,7 @@ function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect
                       </td>
                       <td className="py-1 text-left">
                         <input type="number" step="0.001" value={e.unit_price ?? l.unit_price}
-                          onChange={ev => setE({ unit_price: ev.target.value })}
+                          onChange={ev => setE({ unit_price: ev.target.value, price_typed: true })}
                           className="w-20 border border-gray-300 rounded px-1 py-0.5 text-left" />
                       </td>
                       <td className="py-1 text-left font-mono">{fmt(l.line_total)}</td>
