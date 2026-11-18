@@ -140,14 +140,36 @@ class MarketplaceAvailabilityTests(TestCase):
         self.channel.save()
         self.assertEqual(sellable_qty(ChannelListing.objects.get(item=self.item), self.branch), 9)
 
-    def test_price_shelf_is_pack_price_tax(self):
-        self.item.pack_price_tax = Decimal('10.00')
+    def _shelf(self, pack_price, tax, pack_price_tax=None):
+        self.item.pack_price = Decimal(pack_price)
+        self.item.sale_tax_pct = Decimal(tax or 0)
+        self.item.pack_price_tax = Decimal(pack_price_tax or 0)
         self.item.save()
-        self.assertEqual(platform_price(self._listing()), Decimal('10.00'))
+
+    def test_price_shelf_taxed_item(self):
+        # 10.00 × 1.14 = 11.40; pack_price_tax (stale 11.00) is ignored
+        self._shelf('10.00', '14', pack_price_tax='11.00')
+        self.assertEqual(platform_price(self._listing()), Decimal('11.40'))
+
+    def test_price_shelf_zero_tax_ignores_lower_pack_price_tax(self):
+        self._shelf('25.50', '0', pack_price_tax='22.37')
+        self.assertEqual(platform_price(self._listing()), Decimal('25.50'))
+
+    def test_price_shelf_missing_tax_is_pack_price(self):
+        self._shelf('7.25', '0')
+        listing = self._listing()
+        self.assertEqual(platform_price(listing), Decimal('7.25'))
+        listing.item.sale_tax_pct = None   # never synced: treated as 0%
+        self.assertEqual(platform_price(listing), Decimal('7.25'))
+
+    def test_price_shelf_half_up_to_cent(self):
+        self._shelf('10.83', '14')   # 12.3462 → 12.35
+        self.assertEqual(platform_price(self._listing()), Decimal('12.35'))
+        self._shelf('0.10', '25')    # 0.125 tie → half-up 0.13 (half-even would give 0.12)
+        self.assertEqual(platform_price(ChannelListing.objects.get(item=self.item)), Decimal('0.13'))
 
     def test_price_plus_pct_rounds_to_quarter(self):
-        self.item.pack_price_tax = Decimal('10.00')
-        self.item.save()
+        self._shelf('10.00', '0')
         self.channel.price_rule = 'shelf_plus_pct'
         self.channel.price_pct = Decimal('12')
         self.channel.save()
@@ -161,8 +183,7 @@ class MarketplaceAvailabilityTests(TestCase):
                                  'qty': 9, 'price': platform_price(l), 'problem': ''}])
 
     def _price(self, shelf, pct):
-        self.item.pack_price_tax = Decimal(shelf)
-        self.item.save()
+        self._shelf(shelf, '0')
         self.channel.price_rule = 'shelf_plus_pct'
         self.channel.price_pct = Decimal(pct)
         self.channel.save()
@@ -175,9 +196,16 @@ class MarketplaceAvailabilityTests(TestCase):
     def test_price_rounds_down(self):
         self.assertEqual(self._price('10.00', '11.00'), Decimal('11.00'))  # raw 11.10
 
+    def test_price_plus_pct_on_taxed_shelf(self):
+        # shelf 10 × 1.14 = 11.40; × 1.10 = 12.54 → 50.16 quarters → 50 → 12.50
+        self._shelf('10', '14')
+        self.channel.price_rule = 'shelf_plus_pct'
+        self.channel.price_pct = Decimal('10')
+        self.channel.save()
+        self.assertEqual(platform_price(self._listing()), Decimal('12.50'))
+
     def test_shelf_price_two_dp(self):
-        self.item.pack_price_tax = Decimal('10')
-        self.item.save()
+        self._shelf('10', None)
         self.assertEqual(str(platform_price(self._listing())), '10.00')
 
     def test_settled_pos_order_does_not_reserve(self):
@@ -901,3 +929,423 @@ class MarketplaceSettlementTests(TestCase):
         from core.middleware.module_access import required
         self.assertEqual(required('/api/marketplace/settlements/', 'POST'), ('marketplace', ('edit',)))
         self.assertEqual(required('/api/marketplace/settlements/', 'GET'), ('marketplace', ('view',)))
+
+
+# ── final-review fix wave (2026-11-18) ───────────────────────────────────────────────────────────
+
+class MarketplaceReservationTests(TestCase):
+    """Fix 4: lines reserve stock in every status except received/rejected/cancelled until the POS sale
+    is settled or cancelled."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.channel = MarketplaceChannel.objects.create(code='rs_test', name='تجربة', stock_buffer=Decimal('0'))
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch)
+        self.item = make_item('صنف', 'RS001')
+        ItemStock.objects.create(item=self.item, branch=self.branch, softech_store_code='100',
+                                 quantity_on_hand=Decimal('10'))
+        self.listing = ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True)
+        self.n = 0
+
+    def _order(self, status, pos_status=None, qty='3'):
+        self.n += 1
+        pos = None
+        if pos_status:
+            pos = SoftechSalesOrder.objects.create(branch=self.branch, status=pos_status, channel='contract',
+                                                   softech_branchcode='1', store_code='100')
+        o = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                         external_id=f'RS{self.n}', status=status, pos_order=pos)
+        ExternalOrderLine.objects.create(order=o, listing=self.listing, item=self.item, qty=Decimal(qty))
+        return o
+
+    def _qty(self):
+        return (sellable_qty(self.listing, self.branch), snapshot(self.channel, self.store)[0]['qty'])
+
+    def test_handed_over_and_delivered_with_unsettled_draft_still_reserve(self):
+        self._order(ExternalOrder.STATUS_HANDED_OVER, SoftechSalesOrder.STATUS_DRAFT)
+        self._order(ExternalOrder.STATUS_DELIVERED, SoftechSalesOrder.STATUS_PUSHED, qty='2')
+        self.assertEqual(self._qty(), (5, 5))
+
+    def test_delivered_without_draft_reserves(self):
+        self._order(ExternalOrder.STATUS_DELIVERED)
+        self.assertEqual(self._qty(), (7, 7))
+
+    def test_settled_releases(self):
+        self._order(ExternalOrder.STATUS_DELIVERED, SoftechSalesOrder.STATUS_SETTLED)
+        self.assertEqual(self._qty(), (10, 10))
+
+    def test_cancelled_order_or_cancelled_draft_releases(self):
+        self._order(ExternalOrder.STATUS_CANCELLED, SoftechSalesOrder.STATUS_DRAFT)
+        self._order(ExternalOrder.STATUS_READY, SoftechSalesOrder.STATUS_CANCELLED)
+        self._order(ExternalOrder.STATUS_RECEIVED)
+        self._order(ExternalOrder.STATUS_REJECTED)
+        self.assertEqual(self._qty(), (10, 10))
+
+    def test_non_settled_pos_order_reserves_control(self):
+        self._order(ExternalOrder.STATUS_READY, SoftechSalesOrder.STATUS_PUSH_FAILED)
+        self.assertEqual(self._qty(), (7, 7))
+
+
+class MarketplaceToPosLinkTests(TestCase):
+    """Fix 5: an existing POS order with the same token is linked only when it is plainly this order's draft."""
+
+    def setUp(self):
+        import uuid
+        self.branch = make_branch()
+        _, self.staff, _ = make_admin('link_admin')
+        self.channel = MarketplaceChannel.objects.create(code='lk_test', name='منصة', softech_personcode='PL01')
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch, is_active=True)
+        self.item = make_item('صنف', 'LK001')
+        self.order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                                  external_id='L1', status=ExternalOrder.STATUS_ACCEPTED)
+        ExternalOrderLine.objects.create(order=self.order, item=self.item, qty=Decimal('1'))
+        self.token = uuid.uuid5(uuid.NAMESPACE_URL, 'marketplace:lk_test:L1')
+
+    def _existing(self, **kw):
+        data = dict(branch=self.branch, status=SoftechSalesOrder.STATUS_DRAFT, channel='contract',
+                    cust_branch_code='PL01', softech_branchcode='B01', store_code='B01', client_token=self.token)
+        data.update(kw)
+        return SoftechSalesOrder.objects.create(**data)
+
+    def test_matching_draft_linked_and_audited(self):
+        from apps.audit.models import AuditLog
+        from apps.marketplace import to_pos
+        pos = self._existing()
+        self.assertEqual(to_pos.convert(self.order, self.staff).pk, pos.pk)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.pos_order_id, pos.pk)
+        self.assertTrue(AuditLog.objects.filter(action='marketplace_pos_draft_linked').exists())
+
+    def test_mismatching_existing_refused(self):
+        from apps.marketplace import to_pos
+        other_order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                                   external_id='L2')
+        cases = [{'branch': make_branch2()}, {'channel': 'cash'}, {'cust_branch_code': 'XX99'},
+                 {'status': SoftechSalesOrder.STATUS_CANCELLED}, {'linked': True}]
+        for case in cases:
+            with self.subTest(case=case):
+                ExternalOrder.objects.filter(pk=other_order.pk).update(pos_order=None)
+                SoftechSalesOrder.objects.filter(client_token=self.token).delete()
+                linked = case.pop('linked', False)
+                pos = self._existing(**case)
+                if linked:
+                    ExternalOrder.objects.filter(pk=other_order.pk).update(pos_order=pos)
+                with self.assertRaisesMessage(ValueError, 'لا يطابق هذا الطلب'):
+                    to_pos.convert(self.order, self.staff)
+                self.order.refresh_from_db()
+                self.assertIsNone(self.order.pos_order_id)
+
+    def test_line_without_item_refused_before_anything_created(self):
+        from apps.marketplace import to_pos
+        ExternalOrderLine.objects.create(order=self.order, item=None, name='مجهول', qty=Decimal('1'))
+        with self.assertRaisesMessage(ValueError, 'غير مربوط بصنف'):
+            to_pos.convert(self.order, self.staff)
+        self.assertEqual(SoftechSalesOrder.objects.count(), 0)
+
+
+@override_settings(MARKETPLACE_ENABLED=True, MARKETPLACE_PUSH_ENABLED=False)
+class MarketplaceFixWaveApiTests(TestCase):
+    """Fixes 1, 3, 5 (code), 7, 9, 10, 12, 13 and the extra permission checks, through the API."""
+
+    def setUp(self):
+        from django.core.management import call_command
+        call_command('seed_permissions', verbosity=0)
+        self.branch = make_branch()
+        self.admin_user, self.admin, self.client_admin = make_admin('fw_admin')
+        self.channel = MarketplaceChannel.objects.create(code='fw_test', name='منصة', softech_personcode='PL01',
+                                                         stock_buffer=Decimal('0'), is_active=True)
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch,
+                                                 external_store_id='S1', is_active=True)
+        self.item = make_item('صنف', 'FW001')
+        self.item.pack_price = Decimal('10')
+        self.item.sale_tax_pct = Decimal('14')
+        self.item.save()
+        ItemStock.objects.create(item=self.item, branch=self.branch, softech_store_code='100',
+                                 quantity_on_hand=Decimal('10'))
+        self.listing = ChannelListing.objects.create(channel=self.channel, item=self.item, approved=True)
+
+    def _order(self, ext='FW1', status=ExternalOrder.STATUS_RECEIVED, item=True):
+        o = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                         external_id=ext, status=status)
+        ExternalOrderLine.objects.create(order=o, listing=self.listing if item else None,
+                                         item=self.item if item else None, name='صنف', qty=Decimal('1'))
+        return o
+
+    def _status(self, order, to, note=''):
+        return self.client_admin.post(f'/api/marketplace/orders/{order.id}/status/',
+                                      {'to_status': to, 'note': note}, format='json')
+
+    def _accept(self, order):
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client_admin.post(f'/api/marketplace/orders/{order.id}/accept/')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        order.refresh_from_db()
+        return order
+
+    # fix 1
+    def test_status_endpoint_refuses_accept_and_reject(self):
+        order = self._order()
+        r = self._status(order, 'accepted')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('قبول', r.json()['detail'])
+        r = self._status(order, 'rejected', note='x')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('رفض', r.json()['detail'])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'received')
+        self.assertIsNone(order.pos_order_id)
+        self.assertEqual(order.events.count(), 0)
+
+    # fix 3
+    def test_cancel_needs_reason(self):
+        order = self._order(status=ExternalOrder.STATUS_ACCEPTED)
+        r = self._status(order, 'cancelled', note='   ')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['detail'], 'اكتب سبب الإلغاء.')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'accepted')
+
+    def test_cancel_cancels_unsent_draft_in_pg(self):
+        from apps.audit.models import AuditLog
+        order = self._accept(self._order())
+        pos_id = order.pos_order_id
+        with patch('apps.pos_orders.writer.cancel_order') as w:
+            r = self._status(order, 'cancelled', note='العميل ألغى')
+        w.assert_not_called()
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual(SoftechSalesOrder.objects.get(pk=pos_id).status, SoftechSalesOrder.STATUS_CANCELLED)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'cancelled')
+        self.assertFalse(order.needs_review)
+        self.assertTrue(AuditLog.objects.filter(action='marketplace_pos_draft_cancelled').exists())
+        self.assertEqual(order.events.last().note, 'العميل ألغى')
+
+    def test_cancel_after_push_flags_review_and_leaves_pos_alone(self):
+        order = self._accept(self._order())
+        SoftechSalesOrder.objects.filter(pk=order.pos_order_id).update(status=SoftechSalesOrder.STATUS_PUSHED)
+        r = self._status(order, 'cancelled', note='العميل ألغى')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual(SoftechSalesOrder.objects.get(pk=order.pos_order_id).status,
+                         SoftechSalesOrder.STATUS_PUSHED)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'cancelled')
+        self.assertTrue(order.needs_review)
+        self.assertIn('المسودة أُرسلت للكاشير', order.events.last().note)
+        self.assertTrue(r.json()['needs_review'])
+
+    # fix 9
+    def test_accept_refusal_in_arabic_and_pos_status_label(self):
+        bad = self._order(ext='FW2', item=False)
+        r = self.client_admin.post(f'/api/marketplace/orders/{bad.id}/accept/')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('غير مضاف للمنصة', r.json()['detail'])
+        self.assertNotIn('not_listed', r.json()['detail'])
+        self._accept(self._order())
+        rows = self.client_admin.get('/api/marketplace/orders/').json()['results']
+        row = next(o for o in rows if o['pos_order'])
+        self.assertEqual(row['pos_order']['status_label'], 'مسودة')
+
+    def test_settlement_error_is_arabic_with_code(self):
+        import json
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        up = SimpleUploadedFile('payout.pdf', b'x', content_type='application/pdf')
+        r = self.client_admin.post('/api/marketplace/settlements/', {
+            'channel': self.channel.id, 'file': up, 'column_map': json.dumps({'external_id': 'order'})},
+            format='multipart')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'bad_extension')
+        self.assertIn('.csv', r.json()['detail'])
+
+    # fix 10
+    def test_non_dict_body_is_400_not_500(self):
+        order = self._order()
+        for path in ('reject', 'status'):
+            r = self.client_admin.post(f'/api/marketplace/orders/{order.id}/{path}/', ['x'], format='json')
+            self.assertEqual(r.status_code, 400, path)
+        r = self.client_admin.post(f'/api/marketplace/listings/{self.listing.id}/approve/', ['x'], format='json')
+        self.assertEqual(r.status_code, 200)
+
+    # fix 5 (channel code)
+    def test_channel_code_frozen_once_orders_exist(self):
+        url = f'/api/marketplace/channels/{self.channel.id}/'
+        self.assertEqual(self.client_admin.patch(url, {'code': 'fw_new'}, format='json').status_code, 200)
+        self._order()
+        r = self.client_admin.patch(url, {'code': 'fw_other'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('code', r.json())
+        same = self.client_admin.patch(url, {'code': 'fw_new', 'name': 'ج'}, format='json')
+        self.assertEqual(same.status_code, 200)
+
+    # fix 7
+    def test_fake_adapter_refused_outside_debug_and_tests(self):
+        with override_settings(MARKETPLACE_ALLOW_FAKE_ADAPTER=False):
+            r = self.client_admin.post('/api/marketplace/channels/', {'code': 'fk1', 'name': 'ف', 'adapter': 'fake'},
+                                       format='json')
+            self.assertEqual(r.status_code, 400)
+            self.assertIn('adapter', r.json())
+            p = self.client_admin.patch(f'/api/marketplace/channels/{self.channel.id}/', {'adapter': 'fake'},
+                                        format='json')
+            self.assertEqual(p.status_code, 400)
+        with override_settings(MARKETPLACE_ALLOW_FAKE_ADAPTER=True):
+            r = self.client_admin.post('/api/marketplace/channels/', {'code': 'fk2', 'name': 'ف', 'adapter': 'fake'},
+                                       format='json')
+            self.assertEqual(r.status_code, 201, r.content[:300])
+
+    # fix 12
+    def test_allow_fridge_only_through_approve(self):
+        from apps.audit.models import AuditLog
+        it = make_item('ثلاجة', 'FW002')
+        it.requires_fridge = True
+        it.save()
+        c = self.client_admin.post('/api/marketplace/listings/', {'channel': self.channel.id, 'item': it.id,
+                                   'allow_fridge': True}, format='json')
+        self.assertEqual(c.status_code, 201, c.content[:300])
+        listing = ChannelListing.objects.get(pk=c.json()['id'])
+        self.assertFalse(listing.allow_fridge)
+        self.assertTrue(c.json()['fridge'])
+        bad = self.client_admin.post(f'/api/marketplace/listings/{listing.id}/approve/', {'allow_fridge': 'yes'},
+                                     format='json')
+        self.assertEqual(bad.status_code, 400)
+        r = self.client_admin.post(f'/api/marketplace/listings/{listing.id}/approve/', {'allow_fridge': True},
+                                   format='json')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        listing.refresh_from_db()
+        self.assertTrue(listing.approved and listing.allow_fridge)
+        self.assertEqual(r.json()['problem'], '')
+        log = AuditLog.objects.filter(action='marketplace_listing_approved').latest('id')
+        self.assertEqual((log.old_data['allow_fridge'], log.new_data['allow_fridge']), (False, True))
+        # a plain approve (keyboard Enter) leaves the decision as it is
+        self.client_admin.post(f'/api/marketplace/listings/{listing.id}/approve/')
+        listing.refresh_from_db()
+        self.assertTrue(listing.allow_fridge)
+        _, _, ph = make_pharmacist('fw_ph_fridge', branch=self.branch)
+        denied = ph.post(f'/api/marketplace/listings/{listing.id}/approve/', {'allow_fridge': False}, format='json')
+        self.assertEqual(denied.status_code, 403)
+
+    def test_listings_filter_by_item_returns_platform_price(self):
+        r = self.client_admin.get('/api/marketplace/listings/', {'channel': self.channel.id, 'item': self.item.id})
+        self.assertEqual(r.status_code, 200)
+        rows = r.json()['results']
+        self.assertEqual([row['id'] for row in rows], [self.listing.id])
+        self.assertEqual(rows[0]['price'], '11.40')
+
+    # fix 13
+    def test_store_refuses_closed_or_inactive_branch(self):
+        from apps.branches.models import Branch
+        closed = make_branch('مغلق', 'B07')
+        closed.kind = Branch.KIND_CLOSED
+        closed.save()
+        inactive = make_branch('موقوف', 'B08')
+        inactive.is_active = False
+        inactive.save()
+        old = make_branch('قديم', '110')
+        for b in (closed, inactive, old):
+            r = self.client_admin.post('/api/marketplace/stores/', {'channel': self.channel.id, 'branch': b.id},
+                                       format='json')
+            self.assertEqual(r.status_code, 400, b.softech_branch_id)
+            self.assertIn('branch', r.json())
+        ok = make_branch('مفتوح', 'B09')
+        r = self.client_admin.post('/api/marketplace/stores/', {'channel': self.channel.id, 'branch': ok.id},
+                                   format='json')
+        self.assertEqual(r.status_code, 201, r.content[:300])
+
+    # extra permission checks
+    def test_supervisor_approves_listing_and_patches_channel(self):
+        from apps.tests.factories import make_supervisor
+        _, _, sup = make_supervisor('fw_sup')
+        new = ChannelListing.objects.create(channel=self.channel, item=make_item('ب', 'FW003'))
+        self.assertEqual(sup.post(f'/api/marketplace/listings/{new.id}/approve/').status_code, 200)
+        r = sup.patch(f'/api/marketplace/channels/{self.channel.id}/', {'name': 'منصة ٢'}, format='json')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+
+    def test_pharmacist_manual_order_own_branch(self):
+        _, _, ph = make_pharmacist('fw_ph_manual', branch=self.branch)
+        body = {'channel': self.channel.id, 'branch': self.branch.id, 'external_id': 'PH-1',
+                'lines': [{'item_id': self.item.id, 'qty': 1, 'unit_price': '11.40'}]}
+        r = ph.post('/api/marketplace/orders/manual/', body, format='json')
+        self.assertEqual(r.status_code, 201, r.content[:300])
+
+    def test_settlement_upload_needs_edit(self):
+        import json
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        _, _, ph = make_pharmacist('fw_ph_settle', branch=self.branch)
+        up = SimpleUploadedFile('p.csv', b'order,gross\nA,1\n', content_type='text/csv')
+        r = ph.post('/api/marketplace/settlements/', {'channel': self.channel.id, 'file': up,
+                    'column_map': json.dumps({'external_id': 'order'})}, format='multipart')
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(SettlementBatch.objects.count(), 0)
+
+
+class MarketplaceSettlementFixTests(TestCase):
+    """Fixes 6 and 11."""
+
+    def setUp(self):
+        from datetime import date
+        self.today = date.today()
+        self.branch = make_branch()
+        self.channel = MarketplaceChannel.objects.create(code='sf_test', name='منصة')
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch)
+
+    def _order(self, ext, status, total='100'):
+        return ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                            external_id=ext, platform_total=Decimal(total), status=status)
+
+    def _csv(self, text, name='p.csv'):
+        import io
+        f = io.BytesIO(text.encode('utf-8'))
+        f.name = name
+        return f
+
+    def _import(self, f, cmap=None):
+        from apps.marketplace import settlement
+        batch = settlement.import_csv(self.channel, f, cmap or {'external_id': 'order', 'gross': 'gross'}, None,
+                                      period_from=self.today, period_to=self.today)
+        settlement.match(batch)
+        return {l.external_id: l for l in batch.lines.all()}
+
+    def test_matched_only_when_order_left_the_branch(self):
+        self._order('H1', ExternalOrder.STATUS_HANDED_OVER)
+        self._order('D1', ExternalOrder.STATUS_DELIVERED)
+        self._order('A1', ExternalOrder.STATUS_ACCEPTED)
+        self._order('C1', ExternalOrder.STATUS_CANCELLED)
+        by = self._import(self._csv('order,gross\nH1,100\nD1,100\nA1,100\nC1,100\n'))
+        self.assertEqual(by['H1'].match_status, 'matched')
+        self.assertEqual(by['D1'].match_status, 'matched')
+        self.assertEqual(by['A1'].match_status, 'amount_mismatch')
+        self.assertEqual(by['A1'].note, 'الطلب مقبول في النظام')
+        self.assertEqual(by['C1'].note, 'الطلب ملغى في النظام')
+
+    def test_csv_error_is_unreadable(self):
+        import csv
+        from apps.marketplace import settlement
+        big = 'x' * (csv.field_size_limit() + 10)
+        with self.assertRaisesMessage(ValueError, 'unreadable'):
+            settlement.import_csv(self.channel, self._csv(f'order,gross\n"{big}",1\n'),
+                                  {'external_id': 'order'}, None)
+
+    def test_numeric_ids_normalised(self):
+        import io
+        import openpyxl
+        self._order('12345', ExternalOrder.STATUS_DELIVERED)
+        self._order('AB-7', ExternalOrder.STATUS_DELIVERED)
+        wb = openpyxl.Workbook()
+        wb.active.append(['order', 'gross'])
+        wb.active.append([12345.0, 100])
+        wb.active.append(['  AB-7 ', 100])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = 'p.xlsx'
+        by = self._import(buf)
+        self.assertEqual(by['12345'].match_status, 'matched')
+        self.assertEqual(by['AB-7'].match_status, 'matched')
+
+    def test_blank_rows_count_toward_max_rows(self):
+        from apps.marketplace import settlement
+        cmap = {'external_id': 'order'}
+        with patch.object(settlement, 'MAX_ROWS', 3):
+            with self.assertRaisesMessage(ValueError, 'too_many_rows'):
+                settlement.import_csv(self.channel, self._csv('order,gross\nA,1\n,\n,\n,\n'), cmap, None)
+            with self.assertRaisesMessage(ValueError, 'too_many_rows'):
+                settlement.import_csv(self.channel, self._csv('order,gross\nA,1\n\n\n\n'), cmap, None)
+            settlement.import_csv(self.channel, self._csv('order,gross\nA,1\n\n\n'), cmap, None)

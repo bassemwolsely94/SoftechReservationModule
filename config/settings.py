@@ -613,6 +613,8 @@ USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
 # MARKETPLACE_PUSH_ENABLED gates pushing stock/price/status OUT to a platform (default OFF; dry-run first).
 MARKETPLACE_ENABLED = config('MARKETPLACE_ENABLED', default=False, cast=bool)
 MARKETPLACE_PUSH_ENABLED = config('MARKETPLACE_PUSH_ENABLED', default=False, cast=bool)
+# The 'fake' test adapter (shared-secret webhook, no real platform) may be chosen only in DEBUG / tests.
+MARKETPLACE_ALLOW_FAKE_ADAPTER = DEBUG or _RUNNING_TESTS
 # HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
 # the agent endpoints answer 503 and no collection is accepted. Read-only; never writes SOFTECH.
 HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool)

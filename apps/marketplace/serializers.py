@@ -5,7 +5,11 @@ Never serialized: MarketplaceChannel.credentials (write-only) and ExternalOrder.
 phones go out through apps/customers/access.py masking (lists always masked; the detail shows the number
 only to staff who may see record phones).
 """
+from django.conf import settings
 from rest_framework import serializers
+
+from apps.branches.models import Branch
+from apps.catalog.safety import item_safety_flags
 
 from apps.customers.access import mask, record_phone
 
@@ -33,10 +37,25 @@ class ChannelSerializer(serializers.ModelSerializer):
     def get_has_credentials(self, obj):
         return bool(obj.credentials)
 
+    def validate_adapter(self, value):
+        # the test adapter has a shared-secret webhook and no real platform behind it
+        if value == MarketplaceChannel.ADAPTER_FAKE and not getattr(settings, 'MARKETPLACE_ALLOW_FAKE_ADAPTER', False):
+            raise serializers.ValidationError('المحوّل التجريبي غير متاح على هذا السيرفر.')
+        return value
+
+    def validate_code(self, value):
+        # orders, webhook URLs and POS draft tokens are keyed on the code: frozen once an order exists
+        if self.instance is not None and value != self.instance.code and self.instance.orders.exists():
+            raise serializers.ValidationError('لا يمكن تغيير كود المنصة بعد وصول طلبات عليها.')
+        return value
+
     def validate_credentials(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError('بيانات الاعتماد يجب أن تكون كائنًا.')
         return value
+
+
+CLOSED_BRANCH_CODES = frozenset({'110'})
 
 
 class StoreSerializer(serializers.ModelSerializer):
@@ -52,10 +71,18 @@ class StoreSerializer(serializers.ModelSerializer):
     def get_branch_name(self, obj):
         return str(obj.branch.name_ar or obj.branch.name)
 
+    def validate_branch(self, branch):
+        if (not branch.is_active or branch.kind == Branch.KIND_CLOSED
+                or (branch.softech_branch_id or '').strip() in CLOSED_BRANCH_CODES):
+            raise serializers.ValidationError('هذا الفرع مغلق أو غير نشط — لا يُربط بمنصة.')
+        return branch
+
 
 class ListingSerializer(serializers.ModelSerializer):
     """`approved` / `approved_by` / `approved_at` change only through the approve / unapprove actions.
-    `problem`, `qty` and `price` are computed for the branch in context['branch'] (None → qty null)."""
+    `allow_fridge` is set only through the approve action (approve permission, audited).
+    `problem`, `qty` and `price` are computed for the branch in context['branch'] (None → qty null);
+    `fridge` = the item needs the fridge."""
     item_name = serializers.CharField(source='item.name', read_only=True)
     item_code = serializers.CharField(source='item.softech_id', read_only=True)
     channel_name = serializers.CharField(source='channel.name', read_only=True)
@@ -63,12 +90,13 @@ class ListingSerializer(serializers.ModelSerializer):
     problem = serializers.SerializerMethodField()
     qty = serializers.SerializerMethodField()
     price = serializers.SerializerMethodField()
+    fridge = serializers.SerializerMethodField()
 
     class Meta:
         model = ChannelListing
         fields = ['id', 'channel', 'channel_name', 'item', 'item_name', 'item_code', 'external_sku', 'approved',
-                  'approved_by', 'approved_by_name', 'approved_at', 'allow_fridge', 'note', 'problem', 'qty', 'price']
-        read_only_fields = ['approved', 'approved_by', 'approved_at']
+                  'approved_by', 'approved_by_name', 'approved_at', 'allow_fridge', 'note', 'problem', 'qty', 'price', 'fridge']
+        read_only_fields = ['approved', 'approved_by', 'approved_at', 'allow_fridge']
 
     def get_approved_by_name(self, obj):
         return _staff_name(obj.approved_by)
@@ -82,6 +110,9 @@ class ListingSerializer(serializers.ModelSerializer):
 
     def get_price(self, obj):
         return str(platform_price(obj))
+
+    def get_fridge(self, obj):
+        return any(f['code'] == 'fridge' for f in item_safety_flags(obj.item))
 
 
 class OrderListSerializer(serializers.ModelSerializer):
@@ -106,7 +137,7 @@ class OrderListSerializer(serializers.ModelSerializer):
 
     def get_pos_order(self, obj):
         p = obj.pos_order
-        return {'id': p.pk, 'status': p.status} if p is not None else None
+        return {'id': p.pk, 'status': p.status, 'status_label': p.get_status_display()} if p is not None else None
 
     def get_line_count(self, obj):
         n = getattr(obj, 'n_lines', None)

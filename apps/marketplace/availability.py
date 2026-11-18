@@ -16,7 +16,11 @@ from apps.pos_orders.models import SoftechSalesOrder
 
 # 102 unreturnable expired, 103 cosmetics, 105 returnable, 110 closed branch store (book residue).
 QUARANTINE_STORE_CODES = frozenset({'102', '103', '105', '110'})
-OPEN_STATUSES = (ExternalOrder.STATUS_ACCEPTED, ExternalOrder.STATUS_PREPARING, ExternalOrder.STATUS_READY)
+# Lines of every order except these reserve stock until its POS sale is settled (or cancelled): stock leaves
+# the shelf before the cashier settles the sale, so handed_over / delivered still hold their quantity.
+NOT_RESERVING = (ExternalOrder.STATUS_RECEIVED, ExternalOrder.STATUS_REJECTED, ExternalOrder.STATUS_CANCELLED)
+RELEASING_POS = (SoftechSalesOrder.STATUS_SETTLED, SoftechSalesOrder.STATUS_CANCELLED)
+_CENT = Decimal('0.01')
 _QUARTER = Decimal('0.25')
 
 
@@ -30,8 +34,8 @@ def _qty(on_hand, reserved, channel) -> Decimal:
 
 def _open_lines(branch):
     return (ExternalOrderLine.objects
-            .filter(order__branch=branch, order__status__in=OPEN_STATUSES)
-            .filter(Q(order__pos_order__isnull=True) | ~Q(order__pos_order__status=SoftechSalesOrder.STATUS_SETTLED)))
+            .filter(order__branch=branch).exclude(order__status__in=NOT_RESERVING)
+            .filter(Q(order__pos_order__isnull=True) | ~Q(order__pos_order__status__in=RELEASING_POS)))
 
 
 def _stock_qs(branch):
@@ -48,13 +52,20 @@ def sellable_qty(listing, branch) -> Decimal:
     return _qty(on_hand, reserved, listing.channel)
 
 
+def shelf_price(item) -> Decimal:
+    """Consumer shelf price of one pack: pack_price × (1 + sale_tax_pct/100), half-up to 0.01.
+    (Item.pack_price_tax is not used: on some 0%-tax items SOFTECH stores it below pack_price.)"""
+    tax = Decimal(item.sale_tax_pct or 0)
+    return (Decimal(item.pack_price or 0) * (1 + tax / Decimal(100))).quantize(_CENT, rounding=ROUND_HALF_UP)
+
+
 def platform_price(listing) -> Decimal:
-    shelf = listing.item.pack_price_tax or Decimal(0)
+    shelf = shelf_price(listing.item)
     channel = listing.channel
     if channel.price_rule == MarketplaceChannel.PRICE_SHELF_PLUS_PCT:
         raw = shelf * (1 + channel.price_pct / Decimal(100))
-        return ((raw / _QUARTER).quantize(Decimal(1), rounding=ROUND_HALF_UP) * _QUARTER).quantize(Decimal('0.01'))
-    return shelf.quantize(Decimal('0.01'))
+        return ((raw / _QUARTER).quantize(Decimal(1), rounding=ROUND_HALF_UP) * _QUARTER).quantize(_CENT)
+    return shelf
 
 
 def snapshot(channel, store) -> list:

@@ -10,6 +10,7 @@ pos_orders/pricing.py — nothing is reimplemented here. Line prices are the ite
 import uuid
 
 from apps.audit.models import AuditLog
+from apps.marketplace.models import ExternalOrder
 from apps.pos_orders.models import SoftechSalesOrder, SoftechSalesOrderLine
 
 
@@ -22,10 +23,11 @@ def convert(order, user):
     token = uuid.uuid5(uuid.NAMESPACE_URL, f'marketplace:{channel.code}:{order.external_id}')
     existing = SoftechSalesOrder.objects.filter(client_token=token).first()
     if existing:
-        if order.pos_order_id != existing.pk:
-            order.pos_order = existing
-            order.save(update_fields=['pos_order', 'updated_at'])
-        return existing
+        return _link_existing(order, existing, personcode, user)
+
+    lines = list(order.lines.select_related('item'))
+    if any(l.item is None for l in lines):
+        raise ValueError('في الطلب صنف غير مربوط بصنف في النظام — لا يمكن إنشاء مسودة نقطة البيع')
 
     branch = order.branch
     bc = branch.softech_branch_id or ''
@@ -35,7 +37,7 @@ def convert(order, user):
         cust_branch_code=personcode, customer_name=f'{channel.name} — {order.external_id}'[:255],
         notes=f'طلب {channel.name} رقم {order.external_id}', created_by=user,
         seller_usercode=((getattr(user, 'softech_user_id', '') or '').strip())[:5])
-    for l in order.lines.select_related('item'):
+    for l in lines:
         item = l.item
         SoftechSalesOrderLine.objects.create(
             order=draft, item=item, softech_itemcode=item.softech_id, item_name=item.name[:120], qty=l.qty,
@@ -47,3 +49,21 @@ def convert(order, user):
                  new_data={'pos_order_id': draft.pk},
                  extra={'channel': channel.code, 'external_id': order.external_id})
     return draft
+
+
+def _link_existing(order, existing, personcode, user):
+    """A draft with this order's token already exists (e.g. an earlier accept that lost its link): reuse it
+    only when it is plainly this order's draft; anything else is refused instead of silently linked."""
+    if order.pos_order_id == existing.pk:
+        return existing
+    linked_to = ExternalOrder.objects.filter(pos_order=existing).exclude(pk=order.pk).exists()
+    if (existing.branch_id != order.branch_id or existing.channel != 'contract'
+            or (existing.cust_branch_code or '').strip() != personcode
+            or existing.status == SoftechSalesOrder.STATUS_CANCELLED or linked_to):
+        raise ValueError('يوجد طلب نقطة بيع بنفس رقم الطلب لا يطابق هذا الطلب — راجع نقطة البيع')
+    order.pos_order = existing
+    order.save(update_fields=['pos_order', 'updated_at'])
+    AuditLog.log('marketplace_pos_draft_linked', user=user, obj=order,
+                 new_data={'pos_order_id': existing.pk, 'status': existing.status},
+                 extra={'channel': order.channel.code, 'external_id': order.external_id})
+    return existing

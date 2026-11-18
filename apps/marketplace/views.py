@@ -6,8 +6,8 @@ apps/marketplace/views.py — /api/marketplace/ (doc 38). MARKETPLACE_ENABLED of
   POST      channels/<id>/push-stock/ push the availability snapshot (edit); dry-run while the push switch is off
   GET|POST  stores/                   branch-scoped list (view) · create (edit)
   PATCH     stores/<id>/              edit (edit)
-  GET|POST  listings/                 ?channel=&q=&approved=&branch= with problem + qty · create unapproved (create)
-  POST      listings/<id>/approve/ | unapprove/   (approve; audited)
+  GET|POST  listings/                 ?channel=&item=&q=&approved=&branch= with problem + qty · create unapproved (create)
+  POST      listings/<id>/approve/ {allow_fridge?} | unapprove/   (approve; audited; allow_fridge only here)
   GET       orders/                   ?status=&channel=&branch= (branch-scoped, phone masked)
   GET       orders/<id>/              lines, problems, events, linked POS draft
   POST      orders/manual/            manual intake through the manual adapter (create)
@@ -65,6 +65,11 @@ def _int(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _body(request):
+    """JSON object body or {} (a list / string body must not 500)."""
+    return request.data if isinstance(request.data, dict) else {}
 
 
 class _Gate:
@@ -205,6 +210,9 @@ class ListingListCreate(_Gate, generics.ListCreateAPIView):
         ch = _int(p.get('channel'))
         if ch:
             qs = qs.filter(channel_id=ch)
+        item = _int(p.get('item'))
+        if item:
+            qs = qs.filter(item_id=item)
         q = (p.get('q') or '').strip()
         if q:
             qs = qs.filter(Q(item__name__icontains=q) | Q(item__softech_id=q) | Q(external_sku=q))
@@ -222,24 +230,35 @@ class ListingListCreate(_Gate, generics.ListCreateAPIView):
                                'external_sku': listing.external_sku, 'allow_fridge': listing.allow_fridge})
 
 
+def _approval_audit(listing):
+    return {'approved': listing.approved, 'approved_by': listing.approved_by_id,
+            'approved_at': listing.approved_at.isoformat() if listing.approved_at else None,
+            'allow_fridge': listing.allow_fridge}
+
+
 class _ListingApproval(_Gate, APIView):
     permission_classes = [IsAuthenticated, APPROVE]
     approve = True
 
     def post(self, request, pk):
         listing = get_object_or_404(ChannelListing.objects.select_related('item', 'channel'), pk=pk)
-        before = {'approved': listing.approved, 'approved_by': listing.approved_by_id,
-                  'approved_at': listing.approved_at.isoformat() if listing.approved_at else None}
+        before = _approval_audit(listing)
         profile = _profile(request)
+        fields = ['approved', 'approved_by', 'approved_at']
         if self.approve:
             listing.approved, listing.approved_by, listing.approved_at = True, profile, timezone.now()
+            # allow_fridge (selling a fridge item through the platform) is an approver's decision only
+            allow_fridge = _body(request).get('allow_fridge')
+            if allow_fridge is not None:
+                if not isinstance(allow_fridge, bool):
+                    return Response({'detail': 'قيمة «يسمح بالثلاجة» غير صحيحة.'}, status=status.HTTP_400_BAD_REQUEST)
+                listing.allow_fridge = allow_fridge
+                fields.append('allow_fridge')
         else:
             listing.approved, listing.approved_by, listing.approved_at = False, None, None
-        listing.save(update_fields=['approved', 'approved_by', 'approved_at'])
+        listing.save(update_fields=fields)
         AuditLog.log('marketplace_listing_approved' if self.approve else 'marketplace_listing_unapproved',
-                     user=profile, obj=listing, request=request, old_data=before,
-                     new_data={'approved': listing.approved, 'approved_by': listing.approved_by_id,
-                               'approved_at': listing.approved_at.isoformat() if listing.approved_at else None},
+                     user=profile, obj=listing, request=request, old_data=before, new_data=_approval_audit(listing),
                      extra={'channel': listing.channel.code, 'item_id': listing.item_id})
         return Response(ListingSerializer(listing, context={'request': request, 'branch': None}).data)
 
@@ -339,7 +358,7 @@ class OrderManual(_Gate, APIView):
     permission_classes = [IsAuthenticated, VIEW_CREATE]
 
     def post(self, request):
-        data = request.data if isinstance(request.data, dict) else {}
+        data = _body(request)
         channel = get_object_or_404(MarketplaceChannel, pk=_int(data.get('channel')) or 0)
         branch_id = _int(data.get('branch'))
         branch_scope.require(request.user, branch_id)
@@ -390,7 +409,7 @@ class OrderAccept(_OrderAction):
 
 class OrderReject(_OrderAction):
     def act(self, request, order):
-        reason = str(request.data.get('reason') or '').strip()
+        reason = str(_body(request).get('reason') or '').strip()
         if not reason:
             raise ValueError('اكتب سبب الرفض.')
         return intake.reject(order, _profile(request), reason, request=request)
@@ -398,8 +417,9 @@ class OrderReject(_OrderAction):
 
 class OrderStatus(_OrderAction):
     def act(self, request, order):
-        to_status = str(request.data.get('to_status') or '')
-        note = str(request.data.get('note') or '')[:300]
+        data = _body(request)
+        to_status = str(data.get('to_status') or '')
+        note = str(data.get('note') or '')[:300]
         return intake.set_status(order, to_status, _profile(request), note=note, request=request)
 
 
@@ -453,7 +473,8 @@ class SettlementListCreate(_Gate, generics.ListAPIView):
         try:
             batch = settlement.import_csv(channel, upload, cmap, _profile(request), frm, to)
         except ValueError as exc:
-            return Response({'detail': 'تعذر قراءة الملف', 'code': str(exc)}, status=400)
+            code = str(exc)
+            return Response({'detail': settlement.ERROR_TEXT.get(code, 'تعذر قراءة الملف'), 'code': code}, status=400)
         counts = settlement.match(batch, user=_profile(request))
         data = SettlementBatchSerializer(batch).data
         data['match'] = counts

@@ -27,6 +27,17 @@ _AMOUNT_KEYS = ('gross', 'commission', 'delivery_fee', 'net')
 _DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹٫٬', '01234567890123456789.,')
 _CLEAN = re.compile(r'[\s,،]')
 BAD_AMOUNT_NOTE = 'قيمة غير رقمية'
+# A payout line is MATCHED only for an order that left the branch.
+PAID_STATUSES = (ExternalOrder.STATUS_HANDED_OVER, ExternalOrder.STATUS_DELIVERED)
+# Import error code → the line staff see (the API also returns the code itself).
+ERROR_TEXT = {
+    'bad_extension': 'الملف يجب أن يكون .csv أو .xlsx',
+    'file_too_large': 'الملف أكبر من 5 ميجا',
+    'too_many_rows': f'الملف فيه أكثر من {MAX_ROWS} سطر',
+    'unreadable': 'تعذر قراءة الملف — تأكد أنه CSV (UTF-8) أو Excel سليم',
+    'external_id_column_required': 'حدد عمود رقم الطلب',
+    'column_missing': 'عمود محدد في الخريطة غير موجود في الملف',
+}
 
 
 def parse_amount(value):
@@ -67,9 +78,20 @@ def _rows(file, name):
             text = data.decode('utf-8-sig')
         except UnicodeDecodeError:
             raise ValueError('unreadable')
-        reader = csv.DictReader(io.StringIO(text))
-        rows = list(reader)
-        header = [h.strip() for h in (reader.fieldnames or []) if h]
+        rows, seen = [], 0
+        try:
+            reader = csv.reader(io.StringIO(text))
+            names = [h.strip() for h in next(reader, [])]
+            for r in reader:
+                seen += 1   # every row counts toward MAX_ROWS, blank ones too
+                if seen > MAX_ROWS:
+                    raise ValueError('too_many_rows')
+                if not any((c or '').strip() for c in r):
+                    continue
+                rows.append({n: c for n, c in zip(names, r) if n})
+        except csv.Error:
+            raise ValueError('unreadable')
+        header = [n for n in names if n]
     else:
         import openpyxl
         from openpyxl.utils.exceptions import InvalidFileException
@@ -85,18 +107,30 @@ def _rows(file, name):
                 return [], []
             names = [str(h).strip() if h is not None else '' for h in header]
             header = [n for n in names if n]
-            rows = []
+            rows, seen = [], 0
             for r in it:
-                if len(rows) > MAX_ROWS:
+                seen += 1   # every row counts toward MAX_ROWS, blank ones too
+                if seen > MAX_ROWS:
                     break
                 if r is None or all(c in (None, '') for c in r):
                     continue
                 rows.append({n: c for n, c in zip(names, r) if n})
         finally:
             wb.close()
-    if len(rows) > MAX_ROWS:
-        raise ValueError('too_many_rows')
+        if seen > MAX_ROWS:
+            raise ValueError('too_many_rows')
     return header, rows
+
+
+def external_id_text(value):
+    """Order number cell → text: Excel's 12345.0 → '12345'; text ids stripped."""
+    if isinstance(value, bool) or value is None:
+        return ''
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    if isinstance(value, Decimal) and value == value.to_integral_value():
+        return str(int(value))
+    return str(value).strip()
 
 
 @transaction.atomic
@@ -115,7 +149,7 @@ def import_csv(channel, file, column_map, user, period_from=None, period_to=None
         file_name=os.path.basename(name)[:255], uploaded_by=user, column_map=column_map)
     lines = []
     for row in rows:
-        ext = str(row.get(column_map['external_id']) or '').strip()
+        ext = external_id_text(row.get(column_map['external_id']))
         if not ext:
             continue
         vals, notes = {}, []
@@ -150,6 +184,9 @@ def match(batch, user=None):
             status, note = SettlementLine.AMOUNT_MISMATCH, 'مكرر في الملف'
         elif order is None or note:
             status = SettlementLine.UNMATCHED
+        elif order.status not in PAID_STATUSES:   # paid out but not delivered here
+            status = SettlementLine.AMOUNT_MISMATCH
+            note = f'الطلب {order.get_status_display()} في النظام'
         elif abs(order.platform_total - line.gross) <= TOLERANCE:
             status = SettlementLine.MATCHED
         else:
