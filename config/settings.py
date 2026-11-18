@@ -473,6 +473,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+# A test run hashes thousands of throw-away passwords; the production-strength PBKDF2 hash costs
+# ~0.3 s each. Tests only ever compare a password with check_password, which works with any
+# hasher, so a test run uses the cheap one. Real logins never run with argv[1] == 'test'.
+if _RUNNING_TESTS:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
