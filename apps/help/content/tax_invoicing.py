@@ -205,6 +205,11 @@ SCREENS = [
                        'الصنف المتروك يظهر بسببه (نسبة غير مؤكدة، بلا فئة...)، والنسخة المرفوضة تظهر أسباب رفضها. البناء يأخذ دقيقة أو اثنتين في الخلفية. '
                        '«تنزيل الملف كاملاً» هو ما يقرؤه المحصّل، و«الصفوف الجديدة فقط» للمراجعة؛ كل تنزيل يُسجَّل. القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات. '
                        'بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات. '
+                       'تحته «الجهاز المحلي (192.168.1.8)»: برنامج الختم على جهاز الختم يقرأ الملف ويكتبه بدلاً منك، ويعمل فقط والختم الإلكتروني موصول. '
+                       '«اقرأ الملف الحالي» يرفع نسخة منه ويقارنها بآخر نسخة لدينا. «اكتب الآن» يضع آخر نسخة مكانه بعد نسخة احتياطية في D:\\invoicer_mini\\backup (آخر 30). '
+                       'مفتاح الكتابة يفتحه المالك وحده؛ وهو مغلق يصبح الزر «معاينة الآن»: يتحقق الجهاز من الملف ولا يكتب شيئاً. '
+                       'إن كان في الملف الحالي تعديلات يدوية توقف الكتابة: «استورد التعديلات» يجعله نسختنا التالية (وإن نقصه أصناف مكوّدة تؤكد حذفها)، أو «اكتب فوقها» بسبب مكتوب يُسجَّل. '
+                       'كل ليلة 03:00 يُقرأ الملف، ويُكتب إن كان المفتاح مفتوحاً. «الملف مفتوح في المحصّل» = لم يُكتب، أغلقه وأعد المحاولة. '
                        '«طلبات الإنتاج» تطلب الأكواد من منظومة المصلحة الفعلية: «جهّز الطلبات» (أو «جهّز الطلب» على صف الصنف) يكوّن طلباً لكل صنف قراره «يُكوَّد» من فئته وأسمائه، ولا يُرسل شيئاً؛ المتروك يظهر بسببه. '
                        '«أرسل» لمن يملك الاعتماد النهائي، بعد كتابة عدد الطلبات، وهو مغلق حتى يفتح المالك مفتاح TAX_ETA_CODING_PRODUCTION_ENABLED. '
                        'حتى تعتمد المصلحة أول طلب يُرسل طلب واحد فقط، ولا يُرسل غيره وهو لديها. الطلب المرفوض قبل الإرسال يظهر بسببه، و«إلغاء» بسبب مكتوب للطلب الجاهز أو غير المقبول. '
@@ -220,6 +225,11 @@ SCREENS = [
                        'A skipped item shows its reason (rate not confirmed, no brick...), and a refused build shows why. A build takes a minute or two in the background. '
                        '"Download the full file" is what the Invoicer reads, and "New rows only" is for review; every download is logged. Columns L–P hold values, not formulas. '
                        'After replacing the file in D:\\invoicer_mini close Excel — an open file stops receipt uploads. '
+                       'Under it, "Local device (192.168.1.8)": the seal program on the seal PC reads and writes the file for you, only while the eSeal token is plugged in. '
+                       '"Read the current file" uploads a copy and compares it with our latest version. "Write now" puts the latest version in its place after a backup in D:\\invoicer_mini\\backup (newest 30). '
+                       'Only the owner turns the write switch on; while it is off the button reads "Preview now": the seal PC checks the file and writes nothing. '
+                       'If the current file has hand edits, writing stops: "Import the edits" makes it our next version (confirm if it drops coded items), or "Write over them" with a written, logged reason. '
+                       'Each night at 03:00 the file is read, and written if the switch is on. "File open in the Invoicer" = not written; close it and try again. '
                        '"Production requests" asks ETA production for codes: "Prepare requests" (or "Prepare request" on an item row) drafts one per item decided "code" from its brick and names, and sends nothing; a skipped item shows why. '
                        '"Send" is for those who hold finalize, after typing the number of requests, and it is off until the owner turns on TAX_ETA_CODING_PRODUCTION_ENABLED. '
                        'Until ETA approves the first request, one request goes at a time and none while it is with ETA. A request refused before sending shows its reason; "Cancel" with a written reason works on a prepared or failed one. '
@@ -505,13 +515,19 @@ SCREENS = [
              'text': T('نسخ ملف المحصّل: البناء يضيف الأصناف المعتمدة ولا يغير صفاً مكوّداً. بعد استبدال الملف أغلق Excel.',
                        'The Invoicer file’s versions: a build adds approved items and never changes a coded row. After replacing the file, close Excel.'),
              'open_hint': T('تبويب «🧮 طابور الترميز»، فوق «ما لدى المصلحة».', 'The "🧮 Coding queue" tab, above "What ETA holds".')},
+            {'target': 'tax-invoicing-queue-egs-agent', 'label': T('الجهاز المحلي (192.168.1.8)', 'Local device (192.168.1.8)'),
+             'text': T('برنامج جهاز الختم يقرأ ملف المحصّل ويكتبه بعد نسخة احتياطية. المفتاح مغلق = معاينة فقط. التعديلات اليدوية توقف الكتابة.',
+                       'The seal PC reads the Invoicer file and writes it after a backup. Switch off = preview only. Hand edits stop a write.'),
+             'warn': T('مفتاح الكتابة يفتحه المالك وحده. «اكتب فوقها» يمسح تعديلات المحصّل اليدوية ويُسجَّل بسببه.',
+                       'Only the owner turns the write switch on. "Write over them" erases the hand edits and is logged with its reason.'),
+             'open_hint': T('داخل «ملف أكواد الإيصالات (المحصّل)» في تبويب «🧮 طابور الترميز».', 'Inside "Receipt codes file (Invoicer)" on the "🧮 Coding queue" tab.')},
             {'target': 'tax-invoicing-queue-production', 'label': T('طلبات الإنتاج', 'Production requests'),
              'text': T('طلبات أكواد المنظومة الفعلية من قرارات «يُكوَّد». الإرسال مغلق حتى يفتحه المالك، ويحتاج الاعتماد النهائي وكتابة العدد، وأول طلب وحده.',
                        'Production code requests from "code" decisions. Sending is off until the owner opens it, needs finalize and the typed count, and the first goes alone.'),
              'open_hint': T('تبويب «🧮 طابور الترميز»، فوق «ملف أكواد الإيصالات».', 'The "🧮 Coding queue" tab, above "Receipt codes file".')},
         ],
         'updated': '2026-11-18',
-        'change_note': T('«🧮 طابور الترميز»: لوحة «طلبات الإنتاج» لطلب الأكواد من المصلحة الفعلية ومتابعتها، و«جرّب GS1» بعد رفض كود EGS',
-                         '"🧮 Coding queue": a "Production requests" panel to request codes from ETA production and follow them, and "Try GS1" after an EGS rejection'),
+        'change_note': T('«🧮 طابور الترميز»: لوحة «طلبات الإنتاج» لطلب الأكواد من المصلحة الفعلية ومتابعتها، و«جرّب GS1» بعد رفض كود EGS؛ «ملف أكواد الإيصالات (المحصّل)»: «الجهاز المحلي» يقرأ ملف المحصّل على جهاز الختم ويكتبه (معاينة حتى يفتح المالك المفتاح)',
+                         '"🧮 Coding queue": a "Production requests" panel to request codes from ETA production and follow them, and "Try GS1" after an EGS rejection; "Receipt codes file (Invoicer)": "Local device" reads and writes the Invoicer file on the seal PC (preview until the owner opens the switch)'),
     },
 ]
