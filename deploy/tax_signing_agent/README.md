@@ -31,10 +31,17 @@ asks for one of two jobs:
     `ElRezeiky_Bulk_EGS_Items.new.xlsx` beside it, copies the live sheet to
     `backup\ElRezeiky_Bulk_EGS_Items.<YYYYMMDD-HHMMSS>.xlsx`, and swaps the new file in. If Invoicer or Excel
     holds the sheet, it retries 5 times over about 2 minutes, then reports **busy**, removes the `.new` file
-    and leaves the live sheet as it was. Any other failure also leaves the live sheet as it was.
+    and leaves the live sheet as it was. Before every swap attempt it reads the live sheet again: if someone
+    saved a change while it waited, it refuses (`live_changed`) and keeps that change. Any other failure also
+    leaves the live sheet as it was. The server counts a write as done only when the agent read the live
+    sheet back as the new version.
 
 The folder comes only from `config.ini`; the server never sends a path. Backups are kept in
 `D:\invoicer_mini\backup`, newest 30.
+
+**Signing waits during a sheet job.** The agent does one job at a time. A write held by Invoicer can take
+several minutes (retries while reading, backing up and swapping), and a signing job waits behind it. This is
+fine while signing through the agent is not live; revisit it before it is.
 
 ### Updating the agent on the seal PC (192.168.1.8)
 
@@ -56,10 +63,17 @@ Writing stays a preview until the owner turns the write switch on, on the server
 
 ### Rolling back the sheet
 
+0. **First** ask the owner to turn `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` off on the server. Otherwise the 03:00
+   nightly job writes the latest version over the restored file.
+   اطلب من المالك إيقاف `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` أولاً — وإلا تكتب مهمة الساعة 3 فجراً أحدث نسخة
+   فوق الاسترجاع.
 1. Close Excel, and close Invoicer if it is open.
 2. In `D:\invoicer_mini\backup`, pick the backup to go back to (the name is the time it was taken).
 3. Copy it to `D:\invoicer_mini` and rename it to `ElRezeiky_Bulk_EGS_Items.xlsx`, replacing the live file.
 4. Press «اقرأ الملف الحالي» so the server knows what the live sheet is now.
+
+A rollback lasts only while the switch stays off, or until a newer version supersedes it: a restored backup
+is one of our own versions, so with the switch on the next write replaces it with the latest.
 
 To roll back the agent itself, copy the previous `agent.py` back and remove nothing else: an older agent
 ignores `invoicer_dir`, and the server then offers it signing jobs only.

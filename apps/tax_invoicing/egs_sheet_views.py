@@ -179,21 +179,27 @@ def _fetch_row(fetch, live, latest):
 @permission_classes([IsAuthenticated, VIEWER])
 def agent_state(request):
     """{switch, agent: {at, version, outdated}, live, last_fetch, held, jobs, busy, can_approve}. `switch` =
-    TAX_EGS_SHEET_AGENT_WRITE_ENABLED (the owner's, config/writers.py): off = every write is a preview."""
+    TAX_EGS_SHEET_AGENT_WRITE_ENABLED (the owner's, config/writers.py): off = every write is a preview. Stale jobs
+    are expired first, so a job an outdated agent never collects does not keep the panel polling."""
+    egs_agent.expire_stale()
     seen = egs_agent.agent_seen()
     live = egs_agent.live_state()
     latest = egs_sheet.latest()
     jobs = list(TaxAgentFileJob.objects.select_related('version', 'requested_by').order_by('-id')[:JOBS_SHOWN])
     version = seen.get('version')
+    outdated = not isinstance(version, int) or version < egs_agent.MIN_AGENT_VERSION
+    # busy = the panel keeps polling: a claimed job, or a pending one an up-to-date agent will collect
+    busy = (TaxAgentFileJob.objects.filter(status=TaxAgentFileJob.CLAIMED).exists()
+            or (not outdated and TaxAgentFileJob.objects.filter(status=TaxAgentFileJob.PENDING).exists()))
     return Response({
         'switch': writer_allowed(egs_agent.WRITE_FLAG),
         'agent': {'at': seen.get('at'), 'version': version, 'min_version': egs_agent.MIN_AGENT_VERSION,
-                  'outdated': not isinstance(version, int) or version < egs_agent.MIN_AGENT_VERSION},
+                  'outdated': outdated},
         'live': live and {'source': live['source'], 'job': live['job'].pk, 'hand_edits': live['hand_edits']},
         'last_fetch': _fetch_row(egs_agent.last_fetch(), live, latest),
         'held': _held(live, latest),
         'jobs': [_job_row(j) for j in jobs],
-        'busy': TaxAgentFileJob.objects.filter(status__in=TaxAgentFileJob.OPEN).exists(),
+        'busy': busy,
         'has_version': latest is not None,
         'can_approve': _can(request, 'approve'),
     })

@@ -322,7 +322,11 @@ off now (audited `egs_sheet_switch_off_at_claim`). At serve: a `write` job is no
 the live file to `backup\ElRezeiky_Bulk_EGS_Items.<YYYYMMDD-HHMMSS>.xlsx` and check the copy is the expected live file
 → keep the newest **30** backups → `os.replace(new, live)` → read back and compare. A file held by Invoicer/Excel
 (PermissionError) is retried 5 times, 24 s apart (≈2 min), then the job reports **busy**, `.new` is removed and the
-live file is untouched. Any other failure also leaves the live file as it was. Paths come only from the agent's
+live file is untouched. Before **each** `os.replace` attempt the live file is copied and re-hashed: an edit saved
+while the agent waited → refused (`live_changed`), the edit kept. A stale `.new` is removed at the start of a write
+(not in preview); a backup copy that fails is removed. Any other failure also leaves the live file as it was. The
+server counts a write-mode `done` only when the report has `written: true` and `live_sha256_after` = the version's
+hash; otherwise the job is recorded **failed** and audited `egs_sheet_write_anomaly`. Paths come only from the agent's
 `config.ini` (`invoicer_dir`); the server never sends one. The agent never opens the live file in place: a fetch
 copies it to a temp file first.
 
@@ -333,8 +337,8 @@ to this check. When the live file is the latest version, «اكتب الآن» d
 **held** (`egs_sheet_write_held`, once per fetch) and the panel shows what the live file has that the latest version
 lacks and the reverse. Two ways out:
 - «استورد التعديلات» — the fetched copy becomes the next version (`source='fetch'`, audited `egs_sheet_imported`).
-  Only the **latest fetch** may be imported, and only while no real write came after it (an older copy would undo
-  coded items). A copy that lacks coded items of the latest version needs `allow_removals` (the checkbox «أقبل حذف
+  Only the **latest fetch** may be imported, only while no real write came after it (an older copy would undo
+  coded items), and not while a write job is pending or claimed (checked under the job lock). A copy that lacks coded items of the latest version needs `allow_removals` (the checkbox «أقبل حذف
   أصناف» shows only then; the removed list is audited). The copy is re-hashed and re-validated first.
 - «اكتب فوقها» — a person, with a written reason, writes the latest version over the edits (audited
   `egs_sheet_write_override`); still a preview while the switch is off.
@@ -357,6 +361,14 @@ for a write (nothing when the live file already is the latest version, held on h
    `D:\invoicer_mini\ElRezeiky_Bulk_EGS_Items.xlsx`.
 3. Press «اقرأ الملف الحالي» so the server knows the live file again.
 4. To roll back the agent itself: copy the previous `agent.py` back; an old agent gets signing jobs only.
+
+A rollback lasts only while the switch is off, or until a newer version supersedes it (a restored backup is one of
+our versions, so the next write with the switch on replaces it).
+
+**One job at a time.** A sheet write held by Invoicer can occupy the agent loop for several minutes (retries while
+reading, backing up and swapping); signing jobs wait meanwhile. Acceptable while signing via the agent is not live;
+revisit before it is. The panel's `busy` (which drives its polling) counts a claimed job, or a pending one only when
+the agent is version ≥ 2; the state GET expires stale jobs first.
 
 ## Which ETA system
 

@@ -269,15 +269,32 @@ class WriteTests(_Base):
         with override_settings(**SWITCH_ON):
             egs_agent.request_write(self.actor)
             job, _ = self.claim()
-        client().post(files_url(job, 'result'), {'status': 'done', 'result': {'backup': 'b.xlsx'}}, format='json')
+        report = {'backup': 'b.xlsx', 'written': True, 'live_sha256_after': job.sha256}
+        client().post(files_url(job, 'result'), {'status': 'done', 'result': report}, format='json')
         job.refresh_from_db()
-        self.assertEqual((job.status, job.result['agent']), (TaxAgentFileJob.DONE, {'backup': 'b.xlsx'}))
+        self.assertEqual((job.status, job.result['agent']), (TaxAgentFileJob.DONE, report))
         self.assertIn('egs_sheet_written', actions())
         # the live file is now the latest version: nothing more to write until the next build
         self.assertIsNone(egs_agent.request_write(self.actor))
         # and the fetch taken before that write can no longer be imported (it would undo the write)
         with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.FETCH_NOT_CURRENT):
             egs_agent.import_fetched(self.actor, fetched)
+
+    def test_a_write_done_without_a_matching_read_back_is_failed(self):
+        self.fetch(self.data)
+        v2 = self.add_version(HAND_EDITED)
+        for report in ({'backup': 'b.xlsx'}, {'written': True, 'live_sha256_after': ''},
+                       {'written': True, 'live_sha256_after': '0' * 64},
+                       {'written': 'yes', 'live_sha256_after': v2.sha256}):
+            with self.subTest(report=report), override_settings(**SWITCH_ON):
+                egs_agent.request_write(self.actor)
+                job, _ = self.claim()
+                r = client().post(files_url(job, 'result'), {'status': 'done', 'result': report}, format='json')
+                job.refresh_from_db()
+                self.assertEqual((r.status_code, job.status, job.error),
+                                 (200, TaxAgentFileJob.FAILED, egs_agent.WRITE_UNCONFIRMED))
+        self.assertEqual(actions().count('egs_sheet_write_anomaly'), 4)
+        self.assertNotIn('egs_sheet_written', actions())
 
     def test_preview_done_is_not_a_write(self):
         self.fetch(self.data)
@@ -350,6 +367,13 @@ class HeldTests(_Base):
     def test_override_needs_a_person(self):
         with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.OVERRIDE_NEEDS_PERSON):
             egs_agent.request_write(None, override=True)
+
+    def test_import_is_refused_while_a_write_is_open(self):
+        egs_agent.request_write(self.actor, override=True, note='owner asked')     # pending write
+        with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.WRITE_OPEN):
+            egs_agent.import_fetched(self.actor, self.fetched)
+        self.assertEqual(TaxEgsSheetVersion.objects.count(), 2)
+        self.assertNotIn('egs_sheet_imported', actions())
 
     def test_import_makes_the_live_file_a_version(self):
         v3 = egs_agent.import_fetched(self.actor, self.fetched)
@@ -460,10 +484,27 @@ class PanelApiTests(_Base):
         self.assertEqual(r.status_code, 201, r.content)
         again = self.api.post(AGENT_STATE_URL + 'fetch/')
         self.assertEqual(again.data['job']['id'], r.data['job']['id'])
+        from django.core.cache import cache
+        cache.clear()      # the last-seen throttle of other tests
+        egs_agent.record_seen(2)
         d = self.api.get(AGENT_STATE_URL).data
         self.assertTrue(d['busy'])
         self.assertEqual((d['jobs'][0]['kind'], d['jobs'][0]['status'], d['jobs'][0]['requested_by']),
                          ('egs_fetch', 'pending', self.accountant.get_full_name() or self.accountant.username))
+
+    def test_a_job_an_outdated_agent_cannot_take_stops_the_polling(self):
+        from django.core.cache import cache
+        cache.clear()
+        egs_agent.record_seen(0)            # the seal PC still runs the old agent
+        old = egs_agent.request_fetch(self.actor)
+        TaxAgentFileJob.objects.filter(pk=old.pk).update(created_at=timezone.now() - dt.timedelta(hours=25))
+        d = self.api.get(AGENT_STATE_URL).data
+        old.refresh_from_db()
+        self.assertEqual(old.status, TaxAgentFileJob.FAILED)        # expired by the GET itself
+        egs_agent.request_fetch(self.actor)                          # a fresh pending job
+        d = self.api.get(AGENT_STATE_URL).data
+        self.assertTrue(d['agent']['outdated'])
+        self.assertFalse(d['busy'])
 
     def test_last_fetch_shows_the_difference_and_a_hold(self):
         fetched, _ = self.fetch(make_sheet(HAND_EDITED))

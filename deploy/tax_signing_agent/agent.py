@@ -684,13 +684,33 @@ def _make_backup(place, live_sha256):
     """Copy the live sheet into backup\\ and check the copy is the live sheet this write expects to replace."""
     place.backup_dir.mkdir(exist_ok=True)
     path = _backup_path(place)
-    _with_retries(place, lambda: shutil.copyfile(place.live, path), 'backing up the live sheet')
+    try:
+        _with_retries(place, lambda: shutil.copyfile(place.live, path), 'backing up the live sheet')
+    except (FileBusy, OSError):
+        _remove_quietly(path)       # never leave a partial backup behind
+        raise
     with open(path, 'rb') as handle:
         copied = _sha256(handle.read())
     if copied != live_sha256:
         path.unlink(missing_ok=True)
         raise LiveChanged('the live sheet changed while it was being backed up')
     return path
+
+
+def _remove_quietly(path):
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError as exc:
+        log.error('could not remove %s: %s', Path(path).name, type(exc).__name__)
+
+
+def _replace_if_unchanged(place, live_sha256):
+    """One swap attempt. The live sheet is read again (from a copy) right before it is replaced: an edit saved
+    while we waited for Invoicer or Excel to let go would otherwise be lost (it is in neither the backup nor the
+    new sheet)."""
+    if _sha256(read_copy(place.live)) != live_sha256:
+        raise LiveChanged('the live sheet changed while waiting to replace it')
+    os.replace(place.new, place.live)
 
 
 def _swap(place, data, expected, live, result):
@@ -708,7 +728,8 @@ def _swap(place, data, expected, live, result):
         result['backup'] = backup.name
         result['backups_removed'] = len(prune_backups(place))
         try:
-            _, retries = _with_retries(place, lambda: os.replace(place.new, place.live), 'replacing the live sheet')
+            _, retries = _with_retries(place, lambda: _replace_if_unchanged(place, live['sha256']),
+                                       'replacing the live sheet')
         except FileBusy as exc:
             result.update({'locked': True, 'retries': place.retries})
             return _outcome(BUSY, result, f'{exc}; live sheet untouched')
@@ -722,10 +743,7 @@ def _swap(place, data, expected, live, result):
         return _outcome(FAILED, result, f'could not write the sheet ({type(exc).__name__}); live sheet untouched')
     finally:
         if place.new.exists():
-            try:
-                place.new.unlink()
-            except OSError as exc:
-                log.error('could not remove %s: %s', NEW_NAME, type(exc).__name__)
+            _remove_quietly(place.new)
     result['written'] = True
     try:
         after = _live_state(place)
@@ -749,6 +767,12 @@ def write_sheet(place, job, download):
         return _outcome(FAILED, result, problem)
     if not SHA256_HEX.match(expected):
         return _outcome(FAILED, result, 'the job carries no valid SHA-256; nothing written')
+    if place.new.exists():
+        if job.get('mode') == 'write':      # ours, left by a crash; a preview still writes nothing here
+            _remove_quietly(place.new)
+            result['stale_new_removed'] = not place.new.exists()
+        else:
+            result['stale_new'] = True
     try:
         response = download(job['id'])
     except ServerUnreachable as exc:

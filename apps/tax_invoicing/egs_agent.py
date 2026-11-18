@@ -65,6 +65,9 @@ UPLOAD_UNPACKS_TOO_BIG = 'الملف المرفوع يتمدد لأكثر من 2
 MAX_UNPACKED = 200 * 1024 * 1024
 SWITCH_OFF_AT_SERVE = 'مفتاح الكتابة على جهاز الختم أُغلق بعد استلام المهمة — لم يُرسل الملف'
 FETCH_NOT_CURRENT = 'هذه ليست آخر قراءة للملف الحالي (أو كُتبت نسخة بعدها) — اقرأ الملف الحالي من جديد'
+WRITE_OPEN = 'توجد مهمة كتابة مفتوحة لجهاز الختم — انتظر نتيجتها ثم اقرأ الملف الحالي من جديد'
+WRITE_UNCONFIRMED = ('أبلغ جهاز الختم أن الكتابة تمّت دون تأكيد أن الملف الحالي صار هذه النسخة — اعتُبرت فاشلة؛ '
+                     'اقرأ الملف الحالي للتحقق')
 IMPORT_REMOVES = 'الملف الحالي ينقصه أصناف مكوّدة في آخر نسخة — الاستيراد يحذف ترميزها؛ أكّد الحذف صراحة'
 
 
@@ -401,6 +404,11 @@ def record_result(job, status, result=None, error='', upload=None):
         raise EgsAgentError('حالة غير معروفة')
     report = _agent_result(result or {})
     stored = None
+    unconfirmed = (job.kind == TaxAgentFileJob.KIND_WRITE and job.mode == TaxAgentFileJob.MODE_WRITE
+                   and status == TaxAgentFileJob.DONE
+                   and (report.get('written') is not True or report.get('live_sha256_after') != job.sha256))
+    if unconfirmed:     # a real write counts only when the agent read the live file back as this version
+        status, error = TaxAgentFileJob.FAILED, WRITE_UNCONFIRMED
     if job.kind == TaxAgentFileJob.KIND_FETCH and status == TaxAgentFileJob.DONE:
         if upload is None:
             _fail(job, UPLOAD_MISSING)
@@ -430,6 +438,10 @@ def record_result(job, status, result=None, error='', upload=None):
             else:
                 job.result = {**(job.result or {}), 'agent': report}
             job.save()
+            if unconfirmed:
+                audit('egs_sheet_write_anomaly', entity=ENTITY, entity_id=job.pk, reason=WRITE_UNCONFIRMED[:300],
+                      after={'version': job.version.number, 'sha256': job.sha256,
+                             'written': report.get('written'), 'live_sha256_after': report.get('live_sha256_after')})
             _audit_outcome(job)
             if stored:
                 transaction.on_commit(_prune_fetched)
@@ -488,6 +500,10 @@ def import_fetched(actor, job, *, allow_removals=False):
     version = None
     try:
         with transaction.atomic():      # no version without its audit event
+            _lock()                     # a write in flight would make this copy stale under us
+            expire_stale()
+            if _open(TaxAgentFileJob.KIND_WRITE) is not None:
+                raise EgsAgentError(WRITE_OPEN)
             version = egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_FETCH, built_by=actor,
                                       note=f'الملف الحالي من جهاز الختم (قراءة #{job.pk})', **counts)
             audit('egs_sheet_imported', actor=actor, entity='egs_sheet', entity_id=version.number,

@@ -267,6 +267,50 @@ class WriteTests(SheetTestCase):
         self.assertEqual(self.sleeps, [24, 24])
         self.assertEqual(self.live.read_bytes(), NEW)
 
+    def test_an_edit_saved_while_waiting_for_the_swap_is_kept(self):
+        edited = LIVE + b' saved in Excel while the agent waited'
+        calls = []
+
+        def held_then_saved(src, dst):
+            calls.append(1)
+            self.live.write_bytes(edited)        # the user saves and closes Excel during the retry window
+            raise PermissionError(32, 'in use')
+
+        with mock.patch.object(agent_module.os, 'replace', side_effect=held_then_saved):
+            done, sent, _ = self.run_job(write_job(), downloads=[download()])
+        self.assertEqual((done, sent['status']), (False, 'failed'))
+        self.assertIn('live_changed', sent['error'])
+        self.assertEqual(len(calls), 1)                  # never replaced over the new edit
+        self.assertEqual(self.live.read_bytes(), edited)
+        self.assertFalse((self.root / agent_module.NEW_NAME).exists())
+
+    def test_a_stale_new_file_is_removed_in_write_mode_only(self):
+        stale = self.root / agent_module.NEW_NAME
+        stale.write_bytes(b'left by a crash')
+        done, sent, _ = self.run_job(write_job(mode='preview'), downloads=[download(mode='preview')])
+        self.assertTrue(stale.exists())                  # a preview writes nothing, not even a delete
+        self.assertIs(sent['result']['stale_new'], True)
+        with mock.patch.object(agent_module.os, 'replace', side_effect=OSError(5, 'disk')):
+            done, sent, _ = self.run_job(write_job(), downloads=[download()])
+        self.assertIs(sent['result']['stale_new_removed'], True)
+        self.assertFalse(stale.exists())
+
+    def test_a_backup_that_fails_midway_leaves_no_partial_file(self):
+        real_copy = shutil.copyfile
+
+        def partial(src, dst, *args, **kwargs):
+            if Path(dst).parent.name == agent_module.BACKUP_FOLDER:
+                Path(dst).write_bytes(b'half')
+                raise OSError(28, 'disk full')
+            return real_copy(src, dst, *args, **kwargs)
+
+        with mock.patch.object(agent_module.shutil, 'copyfile', side_effect=partial):
+            done, sent, _ = self.run_job(write_job(), downloads=[download()])
+        self.assertEqual(sent['status'], 'failed')
+        self.assertEqual(self.backups(), [])
+        self.assertEqual(self.live.read_bytes(), LIVE)
+        self.assertFalse((self.root / agent_module.NEW_NAME).exists())
+
     def test_any_other_failure_leaves_the_live_sheet(self):
         with mock.patch.object(agent_module.os, 'replace', side_effect=OSError(5, 'disk')):
             done, sent, _ = self.run_job(write_job(), downloads=[download()])
