@@ -812,8 +812,6 @@ SCREENS = [
             {'key': 'flags', 'title': T('الإشارات المشبوهة', 'Suspicious flags'), 'body': T('أنماط يكشفها النظام (إلغاءات متكررة، تعديلات متكررة، عدم تطابق ERP، نشاط خارج الدوام) بدرجة خطورتها. «مراجعة» ← القرار: راجعت، تجاهل، أو تصعيد مع ملاحظة. «فحص الآن» لتشغيل الكشف.', 'Patterns the system detects (repeated cancellations, repeated edits, ERP mismatch, out-of-hours activity) by severity. "Review" → decision: reviewed, ignore or escalate with a note. "Scan now" runs detection.')},
             {'key': 'logs', 'title': T('سجل الإجراءات', 'Action log'), 'body': T('من فعل ماذا ومتى ومن أي عنوان IP، مع التغييرات قبل وبعد — صفِّ بنوع الإجراء (إنشاء حجوزات، تغيير حالة، اعتماد تحويلات، دخول، محاولات فاشلة، مزامنة…). لو السجل ما اتحمّلش بيظهر «تعذّر التحميل» مع السبب وزر «إعادة المحاولة» — مش «لا توجد سجلات».', 'Who did what, when and from which IP, with before/after changes — filter by action (reservations created, status changes, transfer approvals, logins, failed attempts, sync…). If the log fails to load it shows «failed to load» with the reason and "Retry" — not «no records».')},
         ],
-        'updated': '2026-11-18',
-        'change_note': T('فشل تحميل السجل بيظهر بسببه بدل «لا توجد سجلات».', 'A failed log load now shows its reason instead of «no records».'),
         'tour': [
             {'target': 'admin-audit-usage', 'label': T('📈 استخدام الشاشات', '📈 Screen usage'),
              'text': T('الشاشات · الأقسام · الموظفين، مع الفترة.', 'Screens · modules · staff, with the period.'),
@@ -897,8 +895,8 @@ SCREENS = [
              'warn': T('القرار بيتسجّل باسمك — «تجاهل» بس لو اتأكدت إن الحركة سليمة.', 'The decision is logged under your name — "Ignore" only once you are sure the activity is fine.'),
              'open_hint': T('اضغط «مراجعة» على إشارة مفتوحة.', 'Press "Review" on an open flag.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر نوع الإجراء وفلتر الخطورة يقبلان الآن أكثر من اختيار معاً', 'The action-type and severity filters now take several choices at once'),
+        'updated': '2026-11-18',
+        'change_note': T('فشل تحميل السجل بيظهر بسببه بدل «لا توجد سجلات».', 'A failed log load now shows its reason instead of «no records».'),
     },
     {
         'key': 'admin.networks',
