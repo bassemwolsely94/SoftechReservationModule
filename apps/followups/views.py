@@ -88,16 +88,9 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
     # ── Queryset with full select/prefetch + advanced filtering ───────────────
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
-        profile = _profile(self.request)
-        # Roles that may always see customer contact data
-        privileged_roles = ('admin', 'call_center', 'supervisor')
-        if profile:
-            ctx['can_see_phone'] = (
-                profile.role in privileged_roles
-                or getattr(profile, 'can_see_customer_phone', True)
-            )
-        else:
-            ctx['can_see_phone'] = False
+        # UAT W4 P0: the shared record-phone rule — masked for can_see_customer_phone = False
+        # (whatever the role, D3) and for the read-only viewer (D4 / D7)
+        ctx['can_see_phone'] = _ca.record_phones_visible(self.request.user)
         return ctx
 
     def _detail(self, task):

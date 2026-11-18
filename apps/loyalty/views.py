@@ -31,6 +31,14 @@ class TierListView(generics.ListAPIView):
     queryset           = LoyaltyTier.objects.order_by('order')
 
 
+def _require_readable(request, customer):
+    """D1 (UAT 2026-11-17): another branch's customer opens only after a full-phone find."""
+    from rest_framework.exceptions import PermissionDenied
+    from apps.customers import access
+    if not access.can_read(request.user, customer):
+        raise PermissionDenied('هذا العميل تابع لفرع آخر — ابحث عنه برقم الهاتف كاملاً لفتحه.')
+
+
 class AccountDetailView(generics.RetrieveAPIView):
     serializer_class   = LoyaltyAccountSerializer
     permission_classes = [IsAuthenticated, RouteModulePermission]
@@ -38,7 +46,9 @@ class AccountDetailView(generics.RetrieveAPIView):
     def get_object(self):
         from django.shortcuts import get_object_or_404
         from apps.customers.models import Customer
-        customer_id = get_object_or_404(Customer, pk=self.kwargs['customer_id']).pk
+        customer = get_object_or_404(Customer, pk=self.kwargs['customer_id'])
+        _require_readable(self.request, customer)
+        customer_id = customer.pk
         account, _ = LoyaltyAccount.objects.get_or_create(
             customer_id=customer_id,
         )
@@ -272,6 +282,7 @@ class SoftechBalanceView(APIView):
             customer = Customer.objects.get(pk=customer_id)
         except Customer.DoesNotExist:
             return Response({'detail': 'العميل غير موجود'}, status=404)
+        _require_readable(request, customer)
 
         account, _ = LoyaltyAccount.objects.get_or_create(customer=customer)
         softech_pic = customer.softech_pic

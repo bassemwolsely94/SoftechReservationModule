@@ -400,8 +400,8 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد زر «ملغي» على الكارت.', 'After the "Cancelled" button on a card.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والأولوية والحالة تقبل الآن أكثر من اختيار معاً', 'Branch, priority and status filters now take several choices at once'),
+        'updated': '2026-11-17',
+        'change_note': T('اللي مقفول عنده رقم العميل مبيشوفهوش كمان في تصدير Excel والإيصال ومشاركة واتساب', 'Staff whose customer numbers are hidden no longer see them in the Excel export, the receipt or the WhatsApp share either'),
     },
     {
         'key': 'reservations.list',

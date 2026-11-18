@@ -452,9 +452,8 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر التشخيص ونوع الدواء والشريحة وخطر الانقطاع والفرع — وفرع قائمة الاتصال — تقبل أكثر من اختيار',
-                         'Diagnosis, medicine type, segment, churn risk and branch filters — and the call-list branch — take several choices'),
+        'updated': '2026-11-17',
+        'change_note': T('رقم العميل بيتخفي للمشاهد ولأي حد مقفول عنده رقم العميل، مهما كان دوره', 'The customer number is hidden from viewers and from anyone whose customer numbers are hidden, whatever their role'),
     },
     {
         'key': 'followups.reminders',
