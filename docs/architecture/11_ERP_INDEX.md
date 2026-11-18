@@ -63,14 +63,8 @@ This is the primary navigation document for the ElRezeiky platform.
 | Network Access (trusted networks, request zone, device registry) | `apps/access` | COMPLETE (N1 log only; N2 device registry: enroll, approve/block/retire, remember 2FA on approved devices) | [network-device-access design](../security/2026-10-31-network-device-access-design.md) |
 | ERP Sync | `apps/sync` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#sync) |
 | Finance | `apps/finance` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#finance) |
-| Product Enrichment | `apps/enrichment` | PARTIAL | |
-| Recommendations | `apps/recommendations` | PARTIAL | |
-| Campaigns | `apps/campaigns` | PARTIAL | |
-| Cheques | `apps/cheques` | PARTIAL | |
 | Deliveries | `apps/delivery` | PARTIAL (backend complete) | |
 | Marketplace channels (المنصات والتطبيقات) | `apps/marketplace` | M1 BUILT (switches OFF) | [38_MARKETPLACE_CHANNELS_RESEARCH.md](38_MARKETPLACE_CHANNELS_RESEARCH.md) — RBAC module `marketplace`; flag `MARKETPLACE_ENABLED`; push switch `MARKETPLACE_PUSH_ENABLED` |
-| Payments | `apps/payments` | PARTIAL | |
-| Tasks | `apps/tasks` | PARTIAL | |
 | Customer Portal (external PWA) | `apps/portal` | COMPLETE | Stateless signed-token auth; no models. See note below. |
 | Branch QA Inspections | `apps/qa` | COMPLETE (mobile) | Templates + pass/fail/na inspections + score |
 | HR Attendance (geofenced) | `apps/hr` | COMPLETE (mobile) | AttendanceRecord; GPS clock in/out vs branch coords |
@@ -496,8 +490,8 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | Message broker | Redis | — |
 | Task scheduling | APScheduler | 3.10.4 |
 | Primary DB | PostgreSQL | — |
-| ERP DB | Sybase (ODBC) | — |
-| ERP connector | pyodbc | — |
+| ERP DB | Sybase ASE | — |
+| ERP connector | jConnect JDBC via jpype (`config/sybase.py`) | — |
 | OCR | Google Gemini API + pytesseract + EasyOCR | — |
 | Fuzzy matching | rapidfuzz | — |
 | QR codes | qrcode | — |

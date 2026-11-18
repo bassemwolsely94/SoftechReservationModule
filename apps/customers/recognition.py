@@ -78,6 +78,8 @@ def recognize(query, *, limit=6, user=None):
             base = base.filter(limit_q)
         rows = list(base.only(*fields, 'preferred_branch_id', 'created_by_id')[:limit])
 
+    if user is not None:
+        access.remember_found(user, raw, rows)          # D1: a full-phone find opens the detail
     matches = [_snippet(c, user) for c in rows]
     return {'matches': matches, 'duplicates': _duplicate_clusters(rows, user)}
 

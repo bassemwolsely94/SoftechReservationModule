@@ -496,8 +496,8 @@ SCREENS = [
              'when': T('اكتبها واضحة — الصيدلي بيشوفها وهو بيصرف.', 'Write them clearly — the pharmacist sees them when dispensing.'),
              'open_hint': T('بعد «تعديل» في كارت «أمراض مزمنة».', 'After "Edit" on the "Chronic conditions" card.')},
         ],
-        'updated': '2026-11-15',
-        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
+        'updated': '2026-11-17',
+        'change_note': T('عميل فرع تاني بيتفتح بعد البحث برقم موبايله كامل بس (لمدة ١٢ ساعة)', "Another branch's customer opens only after a search by their full phone number (for 12 hours)"),
     },
     {
         'key': 'customers.merge',
