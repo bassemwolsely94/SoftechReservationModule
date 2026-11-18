@@ -21,9 +21,20 @@ from __future__ import annotations
 import datetime
 import re
 
-from .driver import DeniedControl, LoginRequired, PortalError, canonical_sku
+from .driver import AmbiguousOrder, DeniedControl, LoginRequired, PortalError, canonical_sku
 
 LOGIN_MSG = 'سجّل الدخول ثم اضغط متابعة'
+LEFT_IN_CART = 'بقي %d صنف في السلة من الروبوت'
+# a dry run that stops for these leaves the cart alone: it is not (only) the robot's any more
+NO_CLEANUP = ('cart_mismatch', 'cart_not_empty', 'wrong_account', 'wrong_account_late')
+_URL = re.compile(r'\b[a-z][a-z0-9+.-]*://\S+', re.I)
+
+
+def safe_note(exc):
+    """An exception for a step note: its type and the first line of its text with any URL removed
+    (a page address can carry a session id). Never the full text or a call log."""
+    first = (str(exc).strip().splitlines() or [''])[0]
+    return ('%s: %s' % (type(exc).__name__, _URL.sub('<url>', first)[:150])).rstrip(': ')
 HANDOVER_MSG = 'راجع ثم اضغط Submit Order بنفسك'
 LOGIN_WAIT_S = 5 * 60
 ORDER_WAIT_S = 60 * 60          # the heartbeat keeps the lease while the person decides
@@ -62,6 +73,7 @@ class _Run:
         self.steps, self.sent_steps = [], 0
         self.lines = None          # the answers, in plan order (the report's "lines")
         self.done = []             # (canonical sku, answer) for the lines finished so far
+        self.added = set()         # every code the robot may have put in the cart (incl. in flight)
         self.credit = None
         self.seen = None
         self.started = datetime.datetime.now()
@@ -213,6 +225,7 @@ class _Run:
             self.rec('add_line', False, 'line %s: no code or qty' % line.get('line_id'))
             ans['status'] = 'not_found'
             return ans
+        self.added.add(sku)            # in flight from here: a halt cleans it up (dry run)
         text = self.d.add_line(sku_p, want)
         meaning = classify(self.recipe, text)
         ans['message'] = text[:255]
@@ -307,11 +320,50 @@ class _Run:
         self.with_login(lambda: self.check_cart(self.done))
         if self.plan.get('mode') == 'live':
             return self.live(on_report, order_wait_s)
+        self.review()                  # ruling R13: read-only, as in a live run (spec §6.2 5.6)
         for sku in self.expected(self.done):
-            self.with_login(lambda s=sku: self.d.remove_line(s))
+            self.with_login(lambda s=sku: self.d.remove_line(s))   # goes back to quick order first
             self.rec('remove_line', True, sku)
         self.with_login(lambda: self.check_cart([], 'check_cart_empty_after'))
         return self.payload('dry_run_ok')
+
+    def review(self):
+        """Proceed To Next Step and read the totals, the account and the credit. Nothing is pressed
+        there (driver._click refuses every control on the review page)."""
+        self.halt_if_stopped()
+        totals = self.with_login(self.d.go_review)
+        self.rec('go_review', True, ' '.join('%s=%s' % kv for kv in totals.items()))
+        self.check_account('check_account_review', 'wrong_account_late')
+        self.read_credit()
+
+    def cleanup(self):
+        """A dry run halted after adding: remove the robot's own codes (done and in flight), only
+        when the cart holds nothing else and the finished lines still have the quantities the
+        robot left. Otherwise touch nothing and say how many robot lines remain."""
+        try:
+            have = {}
+            for row in self.d.cart_lines():
+                have[row['sku']] = row['qty']
+            mine = sorted(s for s in have if s in self.added)
+            if not mine:
+                self.rec('cleanup', True, 'cart already clear of robot lines')
+                return
+            done = self.expected(self.done)
+            finished = {sku for sku, _ in self.done}
+            foreign = [s for s in have if s not in self.added
+                       or (s in finished and have[s] != done.get(s))]
+            if foreign:
+                self.rec('cleanup', False, (LEFT_IN_CART % len(mine)) + ' - cart changed, not touched')
+                return
+            for sku in mine:
+                self.d.remove_line(sku)
+            left = [r['sku'] for r in self.d.cart_lines() if r['sku'] in self.added]
+            if left:
+                self.rec('cleanup', False, LEFT_IN_CART % len(left))
+            else:
+                self.rec('cleanup', True, 'removed %d robot line(s)' % len(mine))
+        except Exception as e:  # noqa: BLE001 - a failed clean-up is reported, never raised
+            self.rec('cleanup', False, '%s (%s)' % (LEFT_IN_CART % len(self.added), safe_note(e)))
 
     def with_login(self, fn):
         for _ in range(MAX_RELOGINS):
@@ -322,11 +374,7 @@ class _Run:
         raise _Halt('login_required_timeout')
 
     def live(self, on_report, order_wait_s):
-        self.halt_if_stopped()
-        totals = self.d.go_review()
-        self.rec('go_review', True, ' '.join('%s=%s' % kv for kv in totals.items()))
-        self.check_account('check_account_review', 'wrong_account_late')
-        self.read_credit()
+        self.review()
         self.shot()
         old_refs = self.d.visible_order_numbers()          # an old Thank You tab is not this order
         handover = self.payload('handover')
@@ -344,7 +392,15 @@ class _Run:
         self.sent_steps = len(self.steps)
         self.tell(HANDOVER_MSG)
         self.rec('handover', True)
-        ref = self.d.wait_order_number(order_wait_s, stop=self.stop, ignore=old_refs)
+        try:
+            ref = self.d.wait_order_number(order_wait_s, stop=self.stop, ignore=old_refs)
+        except AmbiguousOrder as e:
+            # an order WAS placed but we cannot tell which number is this basket's: submit_seen
+            # with no ref -> queue needs_person 'submit_seen_no_ref', submitted_seen_at set, so it
+            # can only be linked to its order or cancelled by a person (never retried)
+            self.rec('order_seen', False, 'more than one new order number: %s' % ', '.join(e.numbers[:5]))
+            self.shot()
+            return self.final('submit_seen', order_ref='')
         if not ref:
             if self.stop.is_set():
                 self.rec('wait_submit', False, 'stopped_by_operator')
@@ -354,7 +410,7 @@ class _Run:
         self.rec('order_seen', True, ref)
         history = []
         try:
-            for order in self.d.order_history(self.started.date()):
+            for order in self.d.order_history(self.started.date(), keep_ref=ref):
                 if order['order_ref'] == ref:
                     history = order['lines']
                     break
@@ -393,8 +449,8 @@ class _Run:
         self.start()
         self.with_login(self.read_account)
         since = datetime.datetime.fromisoformat(str(self.plan['since'])).date()
-        orders = self.with_login(lambda: self.d.order_history(since))
         want = str(self.plan.get('order_ref') or '')
+        orders = self.with_login(lambda: self.d.order_history(since, keep_ref=want or None))
         match = next((o for o in orders if o['order_ref'] == want), None) or (orders[0] if orders else None)
         self.rec('read_order_history', True, 'since %s: %s' % (since, [o['order_ref'] for o in orders][:20]))
         if match is None:
@@ -420,12 +476,15 @@ def run_plan(plan, driver, *, stop, on_step=None, on_shot=None, say=None, on_rep
         run.rec('plan', False, 'unknown plan kind')
         return run.payload('error')
     except _Halt as h:
-        return run.payload(h.outcome) if run.sent_steps == 0 else run.final(h.outcome)
+        outcome = h.outcome
     except DeniedControl as e:
-        run.rec('denied', False, str(e))
+        run.rec('denied', False, safe_note(e))
         run.shot()
-        return run.payload('error') if run.sent_steps == 0 else run.final('error')
+        outcome = 'error'
     except (PortalError, LoginRequired, Exception) as e:  # noqa: BLE001 - reported, never raised
-        run.rec('agent', False, '%s: %s' % (type(e).__name__, str(e)[:200]))
+        run.rec('agent', False, safe_note(e))
         run.shot()
-        return run.payload('error') if run.sent_steps == 0 else run.final('error')
+        outcome = 'error'
+    if kind == 'fill' and run.plan.get('mode') == 'dry_run' and run.added and outcome not in NO_CLEANUP:
+        run.cleanup()
+    return run.payload(outcome) if run.sent_steps == 0 else run.final(outcome)

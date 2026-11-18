@@ -34,6 +34,14 @@ class PortalError(RuntimeError):
     """The page is not what the recipe expects (a missing table, a row that did not go)."""
 
 
+class AmbiguousOrder(RuntimeError):
+    """More than one new order number showed: which one is this basket's, a person decides."""
+
+    def __init__(self, numbers):
+        super().__init__('more than one new order number')
+        self.numbers = list(numbers)
+
+
 def _norm(s):
     return ' '.join(str(s or '').split())
 
@@ -63,8 +71,17 @@ def parse_qty(text):
     return int(f) if f.is_integer() and f >= 0 else _norm(text)
 
 
+_DMY = re.compile(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$')
+
+
 def parse_date(text, formats):
+    """The date, or None when it cannot be read for sure. A/B/YYYY with both parts 12 or less
+    (and not equal) is None: 05/11 may be 5 November or May 11, and a wrong guess could drop the
+    very order a history read looks for."""
     s = _norm(text)
+    m = _DMY.match(s)
+    if m and int(m.group(1)) <= 12 and int(m.group(2)) <= 12 and m.group(1).lstrip('0') != m.group(2).lstrip('0'):
+        return None
     for fmt in formats:
         try:
             return datetime.datetime.strptime(s, fmt).date()
@@ -362,33 +379,36 @@ class PortalWebDriver:
     # ── after the handover ────────────────────────────────────────────────────────────────
 
     def visible_order_numbers(self):
-        """Order numbers already shown on any open tab (e.g. an old Thank You page)."""
+        """Order numbers shown on the robot's own tab (where Submit is pressed), in page order.
+        Tabs the person opens are never read: an old order's page there is not this order."""
         pattern = next((re.compile(k, re.I) for k, v in self.recipe.MESSAGES.items() if v == 'order_ref'))
-        found = set()
-        for p in list(self.context.pages):
-            try:
-                found.update(pattern.findall(p.locator('body').inner_text(timeout=1000)))
-            except Exception:          # noqa: BLE001 - a page mid-navigation is read next round
-                continue
-        return found
+        try:
+            text = self.page.locator('body').inner_text(timeout=1000)
+        except Exception:              # noqa: BLE001 - a page mid-navigation is read next round
+            return []
+        return list(dict.fromkeys(pattern.findall(text)))
 
     def wait_order_number(self, timeout_s, stop=None, ignore=()):
         """The order number from the "Thank You … order number # N" answer, on any open tab,
         within timeout_s (None when it never shows or `stop` is set). Numbers in `ignore` (already
-        on screen before the handover) are not this order. Read only."""
+        on screen before the handover) are not this order. More than one new number raises
+        AmbiguousOrder: the robot never picks one. Read only."""
         deadline = time.monotonic() + timeout_s
         while True:
-            fresh = sorted(self.visible_order_numbers() - set(ignore))
+            fresh = [n for n in self.visible_order_numbers() if n not in set(ignore)]
+            if len(fresh) > 1:
+                raise AmbiguousOrder(fresh)
             if fresh:
                 return fresh[0]
             if (stop is not None and stop.is_set()) or time.monotonic() >= deadline:
                 return None
             time.sleep(0.5)
 
-    def order_history(self, since):
+    def order_history(self, since, keep_ref=None):
         """Orders placed on or after `since` (a date), newest first as listed, each
         {order_ref, date, lines: [{sku, qty}]} read from its details. A row whose date cannot be
-        read is kept (it may be the one we look for)."""
+        read for sure is kept (it may be the one we look for), and so is the row `keep_ref`
+        whatever its date."""
         r = self.recipe
         self.goto('order_history')
         rows = self._read_table(r.HISTORY_TABLE, r.HISTORY_COLUMNS)
@@ -396,7 +416,7 @@ class PortalWebDriver:
         for row in rows:
             ref = _norm(row.get('order_ref'))
             day = parse_date(row.get('date'), r.DATE_FORMATS)
-            if ref and (day is None or day >= since):
+            if ref and (ref == keep_ref or day is None or day >= since):
                 wanted.append((ref, day))
         out = []
         for ref, day in wanted:

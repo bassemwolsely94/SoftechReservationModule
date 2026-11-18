@@ -96,7 +96,9 @@ class PortalDriverTests(unittest.TestCase):
         self.shots, self.said, self.reports = [], [], []
         kw.setdefault("on_shot", lambda i, png: self.shots.append((i, png)))
         kw.setdefault("say", self.said.append)
-        result = run_plan(plan, d, stop=threading.Event(), on_step=None, **kw)
+        kw.setdefault("stop", threading.Event())
+        kw.setdefault("on_step", None)
+        result = run_plan(plan, d, **kw)
         self.assertLessEqual(set(result), REPORT_KEYS)
         return result
 
@@ -200,9 +202,85 @@ class PortalDriverTests(unittest.TestCase):
         d = self.driver({"unknown": {SKU: "Material blocked for this customer"}})
         result = self.go(d, fill_plan([(SKU, 5), ("60634", 2)]))
         self.assertEqual(result["outcome"], "unknown_message")
-        self.assertIn("Material blocked for this customer", result["steps"][-1]["note"])
+        self.assertTrue(any("Material blocked for this customer" in s["note"] for s in result["steps"]))
         self.assertTrue(self.shots)
         self.assertEqual([a["sku"] for a in self.fx(d)["log"]], [SKU])   # nothing after the banner
+
+    # -- a halted dry run cleans up its own lines (fix round 1, Important 1) --
+
+    def stop_after_first_add(self, stop, then=None):
+        def on_step(s):
+            if s["label"] == "add_line" and s["ok"] and not stop.is_set():
+                if then:
+                    then()
+                stop.set()
+        return on_step
+
+    def test_stop_after_first_add_removes_robot_lines(self):
+        d = self.driver()
+        stop = threading.Event()
+        result = self.go(d, fill_plan([(SKU, 3), ("60634", 2)]), stop=stop,
+                         on_step=self.stop_after_first_add(stop))
+        self.assertEqual(result["outcome"], "stopped_by_operator")
+        self.assertEqual(self.fx(d)["cart"], [])
+        cleanup = [s for s in result["steps"] if s["label"] == "cleanup"]
+        self.assertEqual([c["ok"] for c in cleanup], [True])
+
+    def test_stop_mid_stepdown_removes_the_line_in_flight(self):
+        d = self.driver({"stock": {SKU: 7}})
+        stop = threading.Event()
+
+        def on_step(s):
+            if s["label"] == "stepdown" and "added" in s["note"]:
+                stop.set()                                  # the line is in the cart, not yet done
+        result = self.go(d, fill_plan([(SKU, 20)]), stop=stop, on_step=on_step)
+        self.assertEqual(result["outcome"], "stopped_by_operator")
+        self.assertEqual(self.fx(d)["cart"], [])
+        self.assertTrue([s for s in result["steps"] if s["label"] == "cleanup" and s["ok"]])
+
+    def test_error_after_first_add_removes_robot_lines(self):
+        d = self.driver()
+        real_add, calls = d.add_line, []
+
+        def add_line(sku, qty):
+            calls.append(sku)
+            if len(calls) == 2:
+                raise RuntimeError("boom at https://shop.example/x?jsessionid=SECRET\ncall log line")
+            return real_add(sku, qty)
+        d.add_line = add_line
+        result = self.go(d, fill_plan([(SKU, 3), ("60634", 2)]))
+        self.assertEqual(result["outcome"], "error")
+        self.assertEqual(self.fx(d)["cart"], [])
+        notes = " ".join(s["note"] for s in result["steps"])
+        self.assertIn("RuntimeError: boom at <url>", notes)       # ruling R14: no URL, no call log
+        self.assertNotIn("SECRET", notes)
+        self.assertNotIn("call log", notes)
+        self.assertTrue([s for s in result["steps"] if s["label"] == "cleanup" and s["ok"]])
+
+    def test_cleanup_leaves_a_changed_cart_alone_and_says_so(self):
+        d = self.driver()
+        stop = threading.Event()
+
+        def someone_adds():                                 # a buyer adds an item by hand
+            d.page.evaluate("(() => { const fx = JSON.parse(localStorage.getItem('fx'));"
+                            " fx.cart.push({sku: '99999', qty: 1});"
+                            " localStorage.setItem('fx', JSON.stringify(fx)); })()")
+            d.page.reload()
+        result = self.go(d, fill_plan([(SKU, 3), ("60634", 2)]), stop=stop,
+                         on_step=self.stop_after_first_add(stop, someone_adds))
+        self.assertEqual(result["outcome"], "stopped_by_operator")
+        self.assertEqual(sorted(r["sku"] for r in self.fx(d)["cart"]), [SKU, "99999"])
+        cleanup = [s for s in result["steps"] if s["label"] == "cleanup"]
+        self.assertEqual(cleanup[0]["ok"], False)
+        self.assertIn("بقي 1 صنف في السلة من الروبوت", cleanup[0]["note"])
+
+    def test_cart_mismatch_is_not_cleaned_up(self):
+        d = self.driver()
+        # the same code twice: the second add answers "already in your cart" (merged), which on
+        # a cart the robot found empty means someone else uses it: no clean-up
+        result = self.go(d, fill_plan([(SKU, 3), (SKU, 2)]))
+        self.assertEqual(result["outcome"], "cart_mismatch")
+        self.assertFalse([s for s in result["steps"] if s["label"] == "cleanup"])
 
     def test_dry_run_leaves_cart_as_found(self):
         d = self.driver()
@@ -210,6 +288,11 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "dry_run_ok", result["steps"])
         self.assertEqual(self.fx(d)["cart"], [])
         self.assertEqual([a["a"] for a in self.fx(d)["log"]], ["add", "add", "remove", "remove"])
+        labels = [s["label"] for s in result["steps"]]
+        # ruling R13: the review page is visited read-only before the removal
+        self.assertLess(labels.index("go_review"), labels.index("remove_line"))
+        self.assertIn("check_account_review", labels)
+        self.assertIn("quick_order.html", d.page.url)            # back on quick order
         first = result["lines"][0]
         self.assertEqual((first["accepted_qty"], first["status"]), (3, "ok"))
         self.assertEqual(first["supplier_expiry"], "2027-06-30")
@@ -244,6 +327,35 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual(result["order_ref"], "2104322530")
         self.assertEqual(result["history_lines"], [{"sku": SKU, "qty": 3}])
 
+    def test_order_number_on_another_tab_is_not_this_order(self):
+        d = self.driver()
+        d.goto("quick_order")
+        other = d.context.new_page()                        # the person opens an old order page
+        other.goto((FIX / "thank_you.html").as_uri())
+        self.assertIsNone(d.wait_order_number(1))
+
+    def test_two_new_order_numbers_go_to_a_person(self):
+        from rpa_agent.portal_web.driver import AmbiguousOrder
+        d = self.driver()
+        d.page.goto((FIX / "thank_you.html").as_uri())
+        d.page.evaluate("document.body.insertAdjacentHTML('beforeend', '<p>Your order number # 2104322599</p>')")
+        with self.assertRaises(AmbiguousOrder):
+            d.wait_order_number(1)
+        d.page.goto((FIX / "quick_order.html").as_uri())
+
+        def on_report(payload):
+            d.page.get_by_role("button", name="Submit Order").click()
+            d.page.wait_for_url("**/thank_you.html")
+            d.page.evaluate("document.body.insertAdjacentHTML('beforeend',"
+                            " '<p>Your order number # 2104322599</p>')")
+            return True
+        result = self.go(d, fill_plan([(SKU, 3)], mode="live"), on_report=on_report, order_wait_s=5)
+        # queue.report: submit_seen with no ref -> needs_person 'submit_seen_no_ref', never retried
+        self.assertEqual(result["outcome"], "submit_seen")
+        self.assertEqual(result["order_ref"], "")
+        self.assertNotIn("history_lines", result)
+        self.assertIn("2104322599", result["steps"][-1]["note"])
+
     def test_live_handover_report_failure_does_not_hand_over(self):
         d = self.driver()
         result = self.go(d, fill_plan([(SKU, 3)], mode="live"), on_report=lambda p: False)
@@ -264,7 +376,7 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual(self.fx(d)["log"], [])
 
     def test_history_found_and_none(self):
-        orders = [{"ref": "2104300001", "date": "01/11/2026", "lines": [{"sku": "1", "qty": 1}]},
+        orders = [{"ref": "2104300001", "date": "25/10/2026", "lines": [{"sku": "1", "qty": 1}]},
                   {"ref": "2104322530", "date": "18/11/2026", "lines": [{"sku": SKU, "qty": 4}]}]
         d = self.driver({"orders": orders})
         plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00", "order_ref": ""}
@@ -274,6 +386,31 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual(result["history_lines"], [{"sku": SKU, "qty": 4}])
         result = self.go(d, dict(plan, since="2026-11-19T00:00:00+02:00"))
         self.assertEqual(result["outcome"], "history_none")
+
+
+    def test_history_keeps_the_plan_order_and_ambiguous_dates(self):
+        orders = [{"ref": "2104300001", "date": "20/10/2026", "lines": [{"sku": "1", "qty": 1}]},
+                  {"ref": "2104300002", "date": "05/11/2026", "lines": [{"sku": "2", "qty": 2}]}]
+        d = self.driver({"orders": orders})
+        plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00",
+                "order_ref": "2104300001"}
+        # the plan's own order is kept whatever its date
+        result = self.go(d, plan)
+        self.assertEqual((result["outcome"], result["order_ref"]), ("history_found", "2104300001"))
+        # 05/11/2026 may be 11 May or 5 November: kept, never read as "before since"
+        result = self.go(d, dict(plan, order_ref=""))
+        self.assertEqual((result["outcome"], result["order_ref"]), ("history_found", "2104300002"))
+
+
+class ParseDateTests(unittest.TestCase):
+
+    def test_ambiguous_day_month_is_unreadable(self):
+        from rpa_agent.portal_web.driver import parse_date
+        fmts = base_recipe.DATE_FORMATS
+        self.assertIsNone(parse_date("05/11/2026", fmts))
+        self.assertEqual(parse_date("18/11/2026", fmts), datetime.date(2026, 11, 18))
+        self.assertEqual(parse_date("11/11/2026", fmts), datetime.date(2026, 11, 11))
+        self.assertEqual(parse_date("2026-11-05", fmts), datetime.date(2026, 11, 5))
 
 
 if __name__ == "__main__":

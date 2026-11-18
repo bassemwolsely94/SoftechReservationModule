@@ -64,12 +64,14 @@ Set `RPA_PORTAL_TEST_BROWSER=msedge` (or a browser path) to drive another browse
 ### Supplier robot dry-run checklist
 
 1. Log in by hand on the account named in the job; the cart is empty.
-2. A dry-run basket fills, reads back and removes only its own lines; the cart ends empty and the
-   basket shows dry_run_ok in /rpa.
+2. A dry-run basket fills, reads back, opens the review page (reads only, presses nothing), goes
+   back and removes only its own lines; the cart ends empty and the basket shows dry_run_ok in /rpa.
 3. Put one item in the cart by hand, then run a basket: expect cart_not_empty, nothing touched.
 4. Log in on the other account, then run: expect wrong_account, nothing touched.
 5. Log out mid-run: the strip asks to log in; leaving it 5 minutes gives login_required_timeout.
-6. Press Esc mid-run: stopped_by_operator; the basket goes to a person.
+6. Press Esc mid-run: stopped_by_operator; in a dry run the robot removes its own lines (step
+   «cleanup»), unless the cart changed meanwhile: then it touches nothing and the step says
+   «بقي N صنف في السلة من الروبوت» — remove those lines by hand. The basket goes to a person.
 7. Live (only after the owner switches the portal live and `allow_live` is on): the robot stops on
    the review page with «راجع ثم اضغط Submit Order بنفسك». Check the page and press Submit Order
    yourself; the robot reads the order number and the Order History lines.
