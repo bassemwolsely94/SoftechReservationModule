@@ -56,6 +56,11 @@ CART_COLUMNS = {
     'Available Bonus': 'bonus_text', 'Expiry Date': 'expiry',
 }
 HISTORY_COLUMNS = {'Order Number': 'order_ref', 'Date Placed': 'date'}
+# a pager next to the Order History or details table (link / button names, regex): the robot never
+# presses it, it only learns that the table it read is not the whole list (CONFIRM on the real site)
+PAGER = r'^(Next|Next Page|>|»|›|Show More|Load More|Page \d+ of \d+)$'
+# the element holding how many lines an order has, when the details page shows it (CONFIRM)
+DETAILS_COUNT_LABEL = 'Number of items'
 DETAILS_COLUMNS = {'ID': 'sku', 'Qty': 'qty'}
 DATE_FORMATS = ('%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d', '%b %d, %Y', '%d %b %Y')
 

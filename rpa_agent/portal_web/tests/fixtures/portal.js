@@ -128,10 +128,22 @@
     location.href = 'thank_you.html';
   }
 
+  // a pager the robot must notice (never press): fx.history_page_size / fx.details_page_size
+  function pager(box, id) {
+    var old = document.getElementById(id);
+    if (old) old.remove();
+    var nav = el('nav', { id: id, 'aria-label': 'Pagination' });
+    nav.appendChild(el('a', { href: '#next' }, 'Next'));
+    box.appendChild(nav);
+  }
+
   function history() {
     var fx = load();
     var body = document.getElementById('history-body');
-    (fx.orders || []).slice().reverse().forEach(function (o) {
+    var all = (fx.orders || []).slice().reverse();
+    var size = fx.history_page_size || all.length;
+    if (all.length > size) pager(document.getElementById('history-box'), 'history-pager');
+    all.slice(0, size).forEach(function (o) {
       var tr = el('tr');
       var td = el('td');
       var a = el('a', { href: '#order-' + o.ref }, o.ref);
@@ -146,9 +158,19 @@
   }
 
   function details(o) {
+    var fx = load();
     var body = document.getElementById('details-body');
     body.innerHTML = '';
-    (o.lines || []).forEach(function (r) {
+    var section = document.getElementById('details');
+    var old = document.getElementById('details-pager');
+    if (old) old.remove();
+    var count = document.getElementById('details-count');
+    if (count) count.remove();
+    var size = fx.details_page_size || (o.lines || []).length;
+    if ((o.lines || []).length > size) pager(section, 'details-pager');
+    if (fx.details_count) section.appendChild(el('span', { id: 'details-count', 'aria-label': 'Number of items' },
+                                                 String((o.lines || []).length + (fx.details_count_extra || 0)) + ' items'));
+    (o.lines || []).slice(0, size).forEach(function (r) {
       var tr = el('tr');
       tr.appendChild(el('td', {}, pad(r.sku)));
       tr.appendChild(el('td', {}, 'ITEM ' + canon(r.sku)));

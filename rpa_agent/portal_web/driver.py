@@ -407,20 +407,40 @@ class PortalWebDriver:
                 return None
             time.sleep(0.5)
 
+    def _paged(self, table_name):
+        """True when a pager shows next to this table (in the element that holds it): the rows
+        read are not the whole list. Read only - the pager is never pressed."""
+        pattern = getattr(self.recipe, 'PAGER', None)
+        if not pattern:
+            return False
+        box = self._table(table_name).locator('xpath=..')
+        name = re.compile(pattern, re.I)
+        return any(box.get_by_role(role, name=name).count() for role in ('link', 'button'))
+
     def order_history(self, since, keep_ref=None):
         """Orders placed on or after `since` (a date), newest first as listed, each
         {order_ref, date, lines: [{sku, qty}]} read from its details. A row whose date cannot be
         read for sure is kept (it may be the one we look for), and so is the row `keep_ref`
-        whatever its date."""
+        whatever its date.
+
+        Pages: when the order list has more pages and its last row may still be inside the window,
+        the read stops with PortalError (an order on page 2 must never read as "none"). When an
+        order's details have more pages, or fewer rows than the count the page shows, a row with
+        no code is added: the server holds that order for a person, never reads the missing rows
+        as "not ordered"."""
         r = self.recipe
         self.goto('order_history')
         rows = self._read_table(r.HISTORY_TABLE, r.HISTORY_COLUMNS)
         wanted = []
+        last_day = None
         for row in rows:
             ref = _norm(row.get('order_ref'))
             day = parse_date(row.get('date'), r.DATE_FORMATS, strict=True)
+            last_day = day
             if ref and (ref == keep_ref or day is None or day >= since):
                 wanted.append((ref, day))
+        if rows and self._paged(r.HISTORY_TABLE) and (last_day is None or last_day >= since):
+            raise PortalError('Order History has more pages inside the window')
         out = []
         for ref, day in wanted:
             self.goto('order_history')
@@ -430,6 +450,9 @@ class PortalWebDriver:
             lines = [{'sku': canonical_sku(x.get('sku')) or _norm(x.get('sku')),
                       'qty': parse_qty(x.get('qty'))}
                      for x in self._read_table(r.DETAILS_TABLE, r.DETAILS_COLUMNS)]
+            shown = parse_number(self._text_of(r.DETAILS_COUNT_LABEL)) if getattr(r, 'DETAILS_COUNT_LABEL', '') else ''
+            if self._paged(r.DETAILS_TABLE) or (shown and shown != str(len(lines))):
+                lines.append({'sku': '', 'qty': 'more rows than read'})
             out.append({'order_ref': ref, 'date': day.isoformat() if day else '', 'lines': lines})
         return out
 

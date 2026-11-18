@@ -92,6 +92,16 @@ class RunPortalTests(unittest.TestCase):
                                        result={"outcome": "submit_seen", "steps": [], "order_ref": "9"})
         self.assertEqual([p["outcome"] for _, p in client.portal_reports], ["handover", "submit_seen"])
 
+    def test_report_answer_reaches_the_runner(self):
+        # the handover's answer is what the runner checks (status awaiting_submit) - never just "sent"
+        answer = {"run_id": 11, "outcome": "handover", "basket": 4, "status": "awaiting_submit"}
+        self.assertEqual(main.report_with_retry(None, 11, {}, send=lambda rid, p: answer), answer)
+        self.assertIs(main.report_with_retry(None, 11, {}, send=lambda rid, p: None), True)
+
+        def down(rid, p):
+            raise OSError("down")
+        self.assertIs(main.report_with_retry(None, 11, {}, send=down, sleep=lambda s: None), False)
+
     def test_is_portal_claim(self):
         self.assertTrue(main.is_portal_claim(portal_claim("history")))
         self.assertFalse(main.is_portal_claim({"run_id": 1, "mode": "dry_run", "keyplan": {}}))

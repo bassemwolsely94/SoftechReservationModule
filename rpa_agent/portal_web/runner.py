@@ -2,7 +2,7 @@
 the report payload for /api/rpa/agent/portal/runs/<id>/report/ (apps/rpa/portal/queue.report).
 
 Payload keys are only those queue.report reads: outcome, steps, lines, credit, discovery,
-order_ref, history_lines, account. Outcome names mirror queue.py. No HTTP and no UI here: the
+order_ref, history_lines, orders, account. Outcome names mirror queue.py. No HTTP and no UI here: the
 caller passes `on_report` (the live handover report), `say` (the overlay message) and `on_shot`.
 
 The fill flow (spec §6.2 step 5; plan "Driver contract"):
@@ -13,7 +13,8 @@ The fill flow (spec §6.2 step 5; plan "Driver contract"):
   3. read back every row, then check the cart holds exactly what we added (cart_mismatch);
   4. dry_run: remove only our own codes and check the cart is empty again -> dry_run_ok;
      live: Proceed To Next Step, re-check the account (wrong_account_late), report `handover`,
-     tell the person to press Submit Order themselves, wait for the order number, read it in
+     and only when the server answers status awaiting_submit tell the person to press Submit
+     Order themselves, wait for the order number, read it in
      Order History and return submit_seen.
 """
 from __future__ import annotations
@@ -40,6 +41,7 @@ HANDOVER_MSG = 'راجع ثم اضغط Submit Order بنفسك'
 LOGIN_WAIT_S = 5 * 60
 ORDER_WAIT_S = 60 * 60          # the heartbeat keeps the lease while the person decides
 MAX_RELOGINS = 3
+MAX_ORDERS = 50                 # orders one history report carries (the server reads as many)
 
 
 class _Halt(Exception):
@@ -50,6 +52,11 @@ class _Halt(Exception):
 
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def handed_over(answer):
+    """The server's answer to the handover report says the basket waits for Submit."""
+    return isinstance(answer, dict) and answer.get('status') == 'awaiting_submit'
 
 
 def _same(a, b):
@@ -385,11 +392,14 @@ class _Run:
         old_refs = self.d.visible_order_numbers()          # an old Thank You tab is not this order
         handover = self.payload('handover')
         try:
-            sent = bool(on_report and on_report(handover))
+            answer = on_report(handover) if on_report else None
         except Exception:      # noqa: BLE001 - not handed over: nobody is told to press Submit
-            sent = False
-        if not sent:
-            self.rec('handover', False, 'handover report not accepted')
+            answer = None
+        # only the server's own "awaiting_submit" is a handover: a retried report whose first try
+        # did arrive is refused there (handover_twice), and then nobody is told to press Submit
+        if not handed_over(answer):
+            self.rec('handover', False, 'handover not confirmed by the server (%s)'
+                     % ((answer or {}).get('status') if isinstance(answer, dict) else 'no answer'))
             try:
                 self.d.goto('quick_order')         # leave the review page
             except Exception:  # noqa: BLE001 - best effort; the error report still goes
@@ -456,12 +466,18 @@ class _Run:
         self.with_login(self.read_account)
         since = datetime.datetime.fromisoformat(str(self.plan['since'])).date()
         want = str(self.plan.get('order_ref') or '')
-        orders = self.with_login(lambda: self.d.order_history(since, keep_ref=want or None))
-        match = next((o for o in orders if o['order_ref'] == want), None) or (orders[0] if orders else None)
+        orders = self.with_login(lambda: self.d.order_history(since, keep_ref=want or None))[:MAX_ORDERS]
         self.rec('read_order_history', True, 'since %s: %s' % (since, [o['order_ref'] for o in orders][:20]))
-        if match is None:
+        if not orders:
             return self.payload('history_none')
-        return self.payload('history_found', order_ref=match['order_ref'], history_lines=match['lines'])
+        # every order in the window: the server decides which one (if any) is this basket's - the
+        # newest one is often another basket's order on the same account
+        extra = {'orders': [{'order_ref': o['order_ref'], 'date': o.get('date', ''), 'lines': o['lines']}
+                            for o in orders]}
+        match = next((o for o in orders if want and o['order_ref'] == want), None)
+        if match is not None:
+            extra.update(order_ref=match['order_ref'], history_lines=match['lines'])
+        return self.payload('history_found', **extra)
 
 
 def run_plan(plan, driver, *, stop, on_step=None, on_shot=None, say=None, on_report=None,

@@ -41,7 +41,12 @@ class AgentClient:
         self._post("portal/runs/%s/heartbeat/" % run_id)
 
     def portal_report(self, run_id, payload):
-        self._post("portal/runs/%s/report/" % run_id, json=payload)
+        """The server's answer, e.g. {"run_id", "outcome", "basket", "status"}."""
+        r = self._post("portal/runs/%s/report/" % run_id, json=payload)
+        try:
+            return r.json()
+        except ValueError:
+            return {}
 
     def portal_screenshot(self, run_id, step, png):
         kind = "image/jpeg" if png[:2] == bytes((0xFF, 0xD8)) else "image/png"

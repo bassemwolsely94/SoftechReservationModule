@@ -22,7 +22,10 @@ HAVE_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
 BROWSER = os.environ.get("RPA_PORTAL_TEST_BROWSER", "")
 FIX = pathlib.Path(__file__).resolve().parent / "fixtures"
 # keys apps/rpa/portal/queue.report reads; nothing else is sent
-REPORT_KEYS = {"outcome", "steps", "lines", "credit", "discovery", "order_ref", "history_lines", "account"}
+REPORT_KEYS = {"outcome", "steps", "lines", "credit", "discovery", "order_ref", "history_lines", "orders",
+               "account"}
+# the server's answer to an accepted handover (apps/rpa/portal/agent_views.ReportView)
+ACCEPTED = {"run_id": 1, "outcome": "handover", "basket": 9, "status": "awaiting_submit"}
 PRE_CART_STEPS = {"check_account", "check_cart_empty"}
 ACCOUNT = "ELREZEIKY PHARMACY 1"
 SKU = "52872"
@@ -62,9 +65,13 @@ class PortalDriverTests(unittest.TestCase):
 
     def setUp(self):
         from rpa_agent.portal_web.driver import PortalWebDriver
+        self.fresh_profile()
+        self.Driver = PortalWebDriver
+
+    def fresh_profile(self):
+        # a new browser profile: a clean cart and fixture state for the next driver
         self.profile = tempfile.mkdtemp(prefix="portal-profile-")
         self.addCleanup(shutil.rmtree, self.profile, True)
-        self.Driver = PortalWebDriver
 
     def driver(self, fx=None, **paths):
         state = {"account": ACCOUNT, "credit": {"consumption": "1,000.00", "credit": "9,000.00",
@@ -341,7 +348,7 @@ class PortalDriverTests(unittest.TestCase):
             self.reports.append(payload)
             # the person presses Submit Order themselves (not through the driver's _click)
             d.page.get_by_role("button", name="Submit Order").click()
-            return True
+            return ACCEPTED
 
         result = self.go(d, fill_plan([(SKU, 3)], mode="live"), on_report=on_report, order_wait_s=10)
         self.assertEqual([p["outcome"] for p in self.reports], ["handover"])
@@ -372,7 +379,7 @@ class PortalDriverTests(unittest.TestCase):
             d.page.wait_for_url("**/thank_you.html")
             d.page.evaluate("document.body.insertAdjacentHTML('beforeend',"
                             " '<p>Your order number # 2104322599</p>')")
-            return True
+            return ACCEPTED
         result = self.go(d, fill_plan([(SKU, 3)], mode="live"), on_report=on_report, order_wait_s=5)
         # queue.report: submit_seen with no ref -> needs_person 'submit_seen_no_ref', never retried
         self.assertEqual(result["outcome"], "submit_seen")
@@ -385,6 +392,19 @@ class PortalDriverTests(unittest.TestCase):
         result = self.go(d, fill_plan([(SKU, 3)], mode="live"), on_report=lambda p: False)
         self.assertEqual(result["outcome"], "error")
         self.assertNotIn("راجع ثم اضغط Submit Order بنفسك", self.said)
+
+    def test_retried_handover_refused_by_server_does_not_hand_over(self):
+        # the first try arrived but its answer was lost; the retry is refused (handover_twice), or
+        # the answer has no status: the person is never told to press Submit
+        refused = {"run_id": 1, "outcome": "error", "basket": 9, "status": "needs_person"}
+        for answer in (refused, True, {}):
+            self.fresh_profile()
+            d = self.driver()
+            result = self.go(d, fill_plan([(SKU, 3)], mode="live"), on_report=lambda p, a=answer: a)
+            self.assertEqual(result["outcome"], "error", answer)
+            self.assertNotIn("راجع ثم اضغط Submit Order بنفسك", self.said)
+            self.assertNotIn("review.html", d.page.url)                    # left the Submit page
+            d.close()
 
     # ── discovery and Order History reads ─────────────────────────────────────────────────
 
@@ -406,10 +426,63 @@ class PortalDriverTests(unittest.TestCase):
         plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00", "order_ref": ""}
         result = self.go(d, plan)
         self.assertEqual(result["outcome"], "history_found", result["steps"])
-        self.assertEqual(result["order_ref"], "2104322530")
-        self.assertEqual(result["history_lines"], [{"sku": SKU, "qty": 4}])
+        self.assertEqual(result["orders"], [{"order_ref": "2104322530", "date": "2026-11-18",
+                                             "lines": [{"sku": SKU, "qty": 4}]}])
+        self.assertNotIn("order_ref", result)          # no ref asked: the server picks, never orders[0]
         result = self.go(d, dict(plan, since="2026-11-19T00:00:00+02:00"))
         self.assertEqual(result["outcome"], "history_none")
+
+    def test_history_reports_every_order_in_the_window(self):
+        orders = [{"ref": "2104300010", "date": "18/11/2026", "lines": [{"sku": SKU, "qty": 4}]},
+                  {"ref": "2104300011", "date": "18/11/2026", "lines": [{"sku": "60634", "qty": 2}]},
+                  {"ref": "2104300012", "date": "19/11/2026", "lines": [{"sku": "777", "qty": 1}]}]
+        d = self.driver({"orders": orders})
+        plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00", "order_ref": ""}
+        result = self.go(d, plan)
+        self.assertEqual(result["outcome"], "history_found")
+        self.assertEqual([o["order_ref"] for o in result["orders"]], ["2104300012", "2104300011", "2104300010"])
+        self.assertEqual(result["orders"][1]["lines"], [{"sku": "60634", "qty": 2}])
+        # a known order number is named as well (and every order still goes along)
+        result = self.go(d, dict(plan, order_ref="2104300010"))
+        self.assertEqual((result["order_ref"], len(result["orders"])), ("2104300010", 3))
+
+    def test_history_details_pager_marks_the_order_unreadable(self):
+        lines = [{"sku": str(1000 + n), "qty": 1} for n in range(5)]
+        orders = [{"ref": "2104300020", "date": "18/11/2026", "lines": lines}]
+        d = self.driver({"orders": orders, "details_page_size": 3})
+        plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00", "order_ref": ""}
+        got = self.go(d, plan)["orders"][0]["lines"]
+        self.assertEqual(len(got), 4)
+        self.assertEqual(got[-1]["sku"], "")                       # the server holds it for a person
+        self.assertEqual(self.fx(d)["log"], [])                    # the pager was never pressed
+
+    def test_history_details_count_mismatch_marks_the_order_unreadable(self):
+        orders = [{"ref": "2104300021", "date": "18/11/2026", "lines": [{"sku": SKU, "qty": 4}]}]
+        plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00", "order_ref": ""}
+        d = self.driver({"orders": orders, "details_count": True, "details_count_extra": 1})
+        got = self.go(d, plan)["orders"][0]["lines"]
+        self.assertEqual(got, [{"sku": SKU, "qty": 4}, {"sku": "", "qty": "more rows than read"}])
+        d.close()
+        self.fresh_profile()
+        d2 = self.driver({"orders": orders, "details_count": True})          # matching count: clean
+        self.assertEqual(self.go(d2, plan)["orders"][0]["lines"], [{"sku": SKU, "qty": 4}])
+
+    def test_history_list_pager_inside_the_window_is_an_error(self):
+        plan = {"kind": "history", "basket_id": 9, "since": "2026-11-17T00:00:00+02:00", "order_ref": ""}
+        orders = [{"ref": "21043000%02d" % n, "date": "18/11/2026", "lines": [{"sku": SKU, "qty": 1}]}
+                  for n in range(4)]
+        d = self.driver({"orders": orders, "history_page_size": 2})
+        self.assertEqual(self.go(d, plan)["outcome"], "error")             # never "none"
+        d.close()
+        self.fresh_profile()
+        # the last row on the page is older than the window: the next page is older still
+        old = [{"ref": "2104300031", "date": "20/10/2026", "lines": []},
+               {"ref": "2104300032", "date": "21/10/2026", "lines": []},
+               {"ref": "2104300033", "date": "18/11/2026", "lines": [{"sku": SKU, "qty": 1}]}]
+        d2 = self.driver({"orders": old, "history_page_size": 2})
+        result = self.go(d2, plan)
+        self.assertEqual(result["outcome"], "history_found", result["steps"])
+        self.assertEqual([o["order_ref"] for o in result["orders"]], ["2104300033"])
 
 
     def test_history_keeps_the_plan_order_and_ambiguous_dates(self):
@@ -423,7 +496,8 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual((result["outcome"], result["order_ref"]), ("history_found", "2104300001"))
         # 05/11/2026 may be 11 May or 5 November: kept, never read as "before since"
         result = self.go(d, dict(plan, order_ref=""))
-        self.assertEqual((result["outcome"], result["order_ref"]), ("history_found", "2104300002"))
+        self.assertEqual((result["outcome"], [o["order_ref"] for o in result["orders"]]),
+                         ("history_found", ["2104300002"]))
 
 
 class ParseDateTests(unittest.TestCase):

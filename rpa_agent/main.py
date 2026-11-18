@@ -25,11 +25,14 @@ def load_config(path=CONFIG):
 
 
 def report_with_retry(client, doc_id, payload, attempts=4, sleep=time.sleep, send=None):
+    """The server's answer (a dict when it sent one, else True) once a report is taken; False
+    when every attempt failed. A portal handover reads the answer: only status awaiting_submit
+    means the server holds the basket for Submit (a retried handover is refused there)."""
     send = send or client.report
     for n in range(attempts):
         try:
-            send(doc_id, payload)
-            return True
+            answer = send(doc_id, payload)
+            return answer if answer is not None else True
         except Exception as e:  # noqa: BLE001
             print("report failed (%d/%d): %s" % (n + 1, attempts, e))
             if n < attempts - 1:
