@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/composition/', include('apps.composition.urls')),
     path('api/counselling/', include('apps.counselling.urls')),
     path('api/data-health/', include('apps.data_lifecycle.urls')),
+    path('api/rpa/', include('apps.rpa.urls')),   # روبوت الإدخال; RBAC module rpa
     path('api/crews/', include('apps.crews.urls')),   # الأطقم; RBAC module crews (view / edit)
     path('api/followups/', include('apps.followups.urls')),
     path('api/callcenter/', include('apps.callcenter.urls')),

@@ -45,6 +45,7 @@ Mode is `off`, `preview` or `on`. P-56 steps are listed for completeness and are
 | `images_obsolete` | file | 90 days after the item was first seen obsolete | 100 / 1,000 |
 | `delivery_proof` | file | 1 year | 200 / 5,000 |
 | `staff_messages` | file | 1 year | 500 / 5,000 |
+| `rpa_screenshots` | file | 180 days | 200 / 5,000 |
 | `unreferenced` | file | seen on two scans at least 30 days apart | 100 / 1,000 |
 | `p56_*` (six) | p56 | engine runs, notifications, PBX events, audit noise, slow requests, screen views | - |
 
