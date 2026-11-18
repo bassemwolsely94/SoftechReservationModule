@@ -287,6 +287,8 @@ SCREENS = [
               'At the bottom: low-stock alerts, the SOFTECH sync status and when the data was last refreshed.'),
         ],
         'tips': [
+            T('لو ظهر شريط أحمر «تعذّر تحميل بعض بيانات هذه الصفحة» فالأرقام قد تكون ناقصة، مش صفر فعلاً — اضغط «إعادة المحاولة».',
+              'A red strip «some data on this page failed to load» means figures may be missing, not truly zero — press "Retry".'),
             T('الأرقام هنا للمتابعة السريعة؛ اضغط على أي رقم أو قسم لتنتقل للشاشة التفصيلية.',
               'The numbers here are for quick monitoring; click any number or section to go to the detailed screen.'),
             T('لو حالة المزامنة «فشلت» أو آخر تحديث قديم، فالأرصدة قد لا تكون حديثة — بلّغ مسؤول النظام.',
@@ -494,8 +496,8 @@ SCREENS = [
              'when': T('بتأثر عليك إنت بس، مش على باقي الموظفين.', 'It affects only you, not other staff.'),
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('كل الجداول بتترتب بالضغط على عنوان العمود', 'Every table sorts by clicking a column heading'),
+        'updated': '2026-11-18',
+        'change_note': T('شريط أحمر لما بيانات الصفحة ما تتحمّلش، بدل ما تظهر كأنها فاضية.', 'A red strip when data on a page fails to load, instead of looking empty.'),
     },
     {
         'key': 'general.me',

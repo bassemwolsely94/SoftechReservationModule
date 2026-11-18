@@ -13,6 +13,7 @@
  */
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import QueryErrorStrip from './QueryErrorStrip'
 import useScreenUsage from '../hooks/useScreenUsage'
 import { useQuery } from '@tanstack/react-query'
 import useAuthStore from '../store/authStore'
@@ -180,6 +181,7 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
       {/* ── Content ──────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto pb-20">
         <ZoneBanner />
+        <QueryErrorStrip />
         <ErrorBoundary scope="page" resetKey={location.pathname}><PageSuspense>{children ?? <Outlet />}</PageSuspense></ErrorBoundary>
       </main>
 

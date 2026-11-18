@@ -5,6 +5,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deliveryApi } from '../api/client'
+import QueryState from '../components/QueryState'
+import { describeQueryError } from '../utils/queryErrors'
 
 const fmt = n => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const RSTATUS = {
@@ -21,8 +23,9 @@ export default function DispatchBoard() {
   const [selected, setSelected] = useState(() => new Set())
   const [driverId, setDriverId] = useState('')
 
-  const { data: orders = [] } = useQuery({
+  const ordersQ = useQuery({
     queryKey: ['dispatch-ready'],
+    meta: { ownErrorState: true },
     // not yet assigned: preparation is tracked in SOFTECH, so a driver may take any of these
     queryFn: () => deliveryApi.list({ status: UNASSIGNED.join(','), limit: 200 }).then(r => {
       const d = Array.isArray(r.data) ? r.data : (r.data.results || [])
@@ -30,15 +33,19 @@ export default function DispatchBoard() {
     }),
     refetchInterval: 20_000,
   })
+  const orders = ordersQ.data ?? []
+  // drivers keep the page-level strip: a failed driver list must not look like "no drivers"
   const { data: drivers = [] } = useQuery({
     queryKey: ['drivers-active'],
     queryFn: () => deliveryApi.listDrivers({ status: 'active' }).then(r => Array.isArray(r.data) ? r.data : (r.data.results || [])),
   })
-  const { data: routes = [] } = useQuery({
+  const routesQ = useQuery({
     queryKey: ['routes-today'],
+    meta: { ownErrorState: true },
     queryFn: () => deliveryApi.listRoutes({ date: today() }).then(r => Array.isArray(r.data) ? r.data : (r.data.results || [])),
     refetchInterval: 20_000,
   })
+  const routes = routesQ.data ?? []
 
   const after = () => {
     setSelected(new Set()); setDriverId('')
@@ -69,8 +76,8 @@ export default function DispatchBoard() {
             <span className="text-xs text-gray-400">{selected.size} محدد</span>
           </div>
           <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-50" data-tour="delivery-dispatch-ready">
-            {orders.length === 0 ? <div className="py-10 text-center text-gray-400 text-sm">لا توجد طلبات بانتظار سائق</div>
-              : orders.map(o => (
+            <QueryState q={ordersQ} isEmpty={orders.length === 0} empty="لا توجد طلبات بانتظار سائق">
+              {orders.map(o => (
               <label key={o.id} className="flex items-center gap-2 py-2 cursor-pointer">
                 <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} className="accent-brand-600" />
                 <div className="flex-1 min-w-0">
@@ -78,7 +85,8 @@ export default function DispatchBoard() {
                   <div className="text-[11px] text-gray-400 truncate">{o.delivery_area || o.delivery_governorate || '—'} · {o.payment_method === 'cash' ? 'كاش' : o.payment_method}</div>
                 </div>
               </label>
-            ))}
+              ))}
+            </QueryState>
           </div>
           <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
             <select className="input-field flex-1" data-tour="delivery-dispatch-driver" value={driverId} onChange={e => setDriverId(e.target.value)}>
@@ -88,14 +96,20 @@ export default function DispatchBoard() {
             <button data-tour="delivery-dispatch-create" onClick={() => createRoute.mutate()} disabled={!driverId || !selected.size || createRoute.isPending}
               className="btn-primary text-sm disabled:opacity-40">إنشاء مسار</button>
           </div>
+          {createRoute.isError && (
+            <div role="alert" className="text-xs text-red-700 mt-2">⚠️ لم يُنشأ المسار: {describeQueryError(createRoute.error)}</div>
+          )}
         </div>
 
         {/* Today's routes — live status */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <h2 className="font-bold text-gray-800 text-sm mb-2">🚚 مسارات اليوم ({routes.length})</h2>
+          {dispatchRoute.isError && (
+            <div role="alert" className="text-xs text-red-700 mb-2">⚠️ لم يُطلق المسار: {describeQueryError(dispatchRoute.error)}</div>
+          )}
           <div className="max-h-[62vh] overflow-y-auto space-y-2" data-tour="delivery-dispatch-routes">
-            {routes.length === 0 ? <div className="py-10 text-center text-gray-400 text-sm">لا توجد مسارات بعد</div>
-              : routes.map(r => {
+            <QueryState q={routesQ} isEmpty={routes.length === 0} empty="لا توجد مسارات بعد">
+              {routes.map(r => {
               const st = RSTATUS[r.status] || {}
               const pct = r.stop_count ? Math.round((r.delivered_count / r.stop_count) * 100) : 0
               return (
@@ -112,7 +126,8 @@ export default function DispatchBoard() {
                   )}
                 </div>
               )
-            })}
+              })}
+            </QueryState>
           </div>
         </div>
       </div>
