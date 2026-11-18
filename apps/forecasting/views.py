@@ -289,7 +289,6 @@ class KpiBoardView(APIView):
     ]
 
     def _call_center_block(self, year, month, cell, m_start, m_end):
-        from apps.branches.models import Branch
         from apps.incentives.models import SalesTarget
         from apps.forecasting.call_center import legacy_cc_branch
         cc = legacy_cc_branch()

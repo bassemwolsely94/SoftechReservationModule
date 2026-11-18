@@ -3,6 +3,8 @@ import pathlib
 from datetime import date
 from decimal import Decimal
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -109,6 +111,40 @@ class CcSeedTests(TestCase):
         b = get_cc_branch()
         self.assertEqual(b.kind, Branch.KIND_CALL_CENTER)
         self.assertEqual(legacy_cc_branch().pk, b.pk)
+
+    def test_reseed_keeps_owner_rows_and_audits_deleted(self):
+        cc_with_rollup()
+        cc_seed.seed()
+        crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
+        mine = CrewManualMember.objects.create(
+            crew=crew, mode='include', softech_usercode='99', label='x', reason='أضافه المالك',
+            valid_from=date(2026, 11, 1))
+        CrewKpiRollup.objects.create(crew=crew, year=2024, month=8, metric='m', value=1)
+        cc_seed.reseed()
+        self.assertTrue(CrewManualMember.objects.filter(pk=mine.pk).exists())
+        self.assertEqual(crew.manual_members.count(), 7)
+        log = AuditLog.objects.filter(action='crew_cc_reseeded').latest('id')
+        self.assertEqual(len(log.old_data['deleted_rows']), 6)
+        self.assertEqual(log.old_data['deleted_rollups'], 1)
+        self.assertEqual(log.old_data['deleted_rows'][0]['reason'], cc_seed.SEED_REASON)
+
+    def test_command_refuses_dry_run_with_reseed(self):
+        with self.assertRaises(CommandError):
+            call_command('seed_call_center_crew', '--dry-run', '--reseed')
+
+    def test_other_type_crew_with_name_is_refused(self):
+        Crew.objects.create(name=cc_seed.CC_CREW_NAME, type='custom')
+        with self.assertRaises(cc_seed.CcCrewNameTaken):
+            cc_seed.seed()
+        self.assertFalse(CrewManualMember.objects.exists())
+        with self.assertRaises(CommandError):
+            call_command('seed_call_center_crew')
+
+    def test_all_skipped_rerun_writes_no_audit(self):
+        cc_with_rollup()
+        cc_seed.seed()
+        cc_seed.seed()
+        self.assertEqual(AuditLog.objects.filter(action='crew_cc_seeded').count(), 1)
 
     def test_legacy_cc_branch_helper_used_everywhere(self):
         root = pathlib.Path(__file__).resolve().parents[1] / 'forecasting'

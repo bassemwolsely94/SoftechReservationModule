@@ -149,7 +149,6 @@ def forecast_targets(year, month, *, incentive_threshold=Decimal('0.90'),
 def cc_targets(year, month, *, incentive_threshold=Decimal('0.90'),
                benchmark_growth=Decimal('0.30'), factors=None):
     """Call-center targets (sales/profit/beauty/orders) per model from the CC rollup history."""
-    from apps.branches.models import Branch
     from apps.forecasting.call_center import legacy_cc_branch
     cc = legacy_cc_branch()
     if not cc:

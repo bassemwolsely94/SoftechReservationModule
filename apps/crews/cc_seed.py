@@ -19,8 +19,22 @@ from apps.hr.models import Employee
 
 from .models import Crew, CrewKpiRollup, CrewManualMember
 
+class CcCrewNameTaken(Exception):
+    """A live crew of another type already holds the call-center crew's name."""
+
+
 CC_CREW_NAME = 'الكول سنتر'
 SEED_REASON = 'بذرة الكول سنتر من إعداد الكول سنتر (piece 2b)'
+
+
+def _find_crew():
+    """The live call-center crew, or None. A live crew of another type with the name is refused,
+    never adopted."""
+    crew = Crew.objects.filter(name=CC_CREW_NAME, is_archived=False).first()
+    if crew is not None and crew.type != 'call_center':
+        raise CcCrewNameTaken(f'يوجد طاقم نشط باسم «{CC_CREW_NAME}» من نوع آخر ({crew.type}) — '
+                              f'غيّر اسمه أو أرشفه قبل البذر.')
+    return crew
 
 
 def seed_start() -> date:
@@ -88,10 +102,11 @@ def _existing(crew, item) -> bool:
 
 
 @transaction.atomic
-def seed(user=None, include_pbx_agent_extensions=False, dry_run=False, _action='crew_cc_seeded') -> dict:
+def seed(user=None, include_pbx_agent_extensions=False, dry_run=False, _action='crew_cc_seeded',
+         _old=None) -> dict:
     plan = seed_plan(include_pbx_agent_extensions)
     start = seed_start()
-    crew = Crew.objects.filter(name=CC_CREW_NAME, is_archived=False).first()
+    crew = _find_crew()
     created, skipped = [], []
     if dry_run:
         for item in plan:
@@ -111,17 +126,32 @@ def seed(user=None, include_pbx_agent_extensions=False, dry_run=False, _action='
             pbx_extension=item['value'] if item['kind'] == 'extension' else '',
             label=item['label'], reason=SEED_REASON, valid_from=start, created_by=user)
         created.append(item)
-    AuditLog.log(_action, user=user, obj=crew,
-                 new_data={'created': created, 'skipped': skipped, 'start': start.isoformat()},
-                 extra={'crew_id': crew.pk, 'row': None, 'row_id': None})
+    if created or _action != 'crew_cc_seeded':      # an all-skipped re-run writes no audit row
+        AuditLog.log(_action, user=user, obj=crew, old_data=_old,
+                     new_data={'created': created, 'skipped': skipped, 'start': start.isoformat()},
+                     extra={'crew_id': crew.pk, 'row': None, 'row_id': None})
     return {'crew_id': crew.pk, 'created': created, 'skipped': skipped, 'start': start}
+
+
+def _row_snapshot(r) -> dict:
+    def d(v):
+        return v.isoformat() if v else None
+    return {'id': r.pk, 'mode': r.mode, 'employee_id': r.employee_id,
+            'softech_usercode': r.softech_usercode, 'pbx_extension': r.pbx_extension,
+            'label': r.label, 'valid_from': d(r.valid_from), 'valid_to': d(r.valid_to),
+            'voided_at': d(r.voided_at), 'reason': r.reason}
 
 
 @transaction.atomic
 def reseed(user=None, **kw) -> dict:
-    """Delete the call-center crew's manual rows and shadow rollups, then seed again (audited)."""
-    crew = Crew.objects.filter(name=CC_CREW_NAME, is_archived=False).first()
+    """Delete ONLY the seed's own manual rows (reason == SEED_REASON; rows added by hand survive)
+    and the crew's shadow rollups, then seed again. The deleted rows and the rollup count are
+    recorded as old_data on the 'crew_cc_reseeded' audit entry."""
+    crew = _find_crew()
+    old = {'deleted_rows': [], 'deleted_rollups': 0}
     if crew is not None:
-        crew.manual_members.all().delete()
-        CrewKpiRollup.objects.filter(crew=crew).delete()
-    return seed(user=user, _action='crew_cc_reseeded', **kw)
+        rows = list(crew.manual_members.filter(reason=SEED_REASON))
+        old['deleted_rows'] = [_row_snapshot(r) for r in rows]
+        CrewManualMember.objects.filter(pk__in=[r.pk for r in rows]).delete()
+        old['deleted_rollups'] = CrewKpiRollup.objects.filter(crew=crew).delete()[0]
+    return seed(user=user, _action='crew_cc_reseeded', _old=old, **kw)
