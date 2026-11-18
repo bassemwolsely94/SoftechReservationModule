@@ -74,6 +74,7 @@ MODULE_BY_PREFIX = {
     'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
     'counselling': 'counselling',   # Project 4 sheets; assistant + cards are POS (see required_access)
     'data-health': 'data_health',   # Stage 5 /data-health; rules, held files, restore = IsAdminRole in the views
+    'marketplace': 'marketplace',   # doc 38 channels; /marketplace/webhooks/ is exempt below (own gate)
     'rpa': 'rpa',                   # روبوت الإدخال (SOFTECH screen RPA): view / create / edit / approve; jobs branch-scoped
     'crews': 'crews',               # الأطقم (spec 2026-11-13 §6.5): view / edit only; company-level
 }
@@ -262,6 +263,10 @@ def required(path, method):
     # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)
     if prefix == 'stockcount' and parts[3:4] == ['daily']:
         return None
+    # Inbound platform webhooks have no staff session: /api/marketplace/webhooks/ is exempt like
+    # EXEMPT_PREFIXES, own gate: adapter signature check + channel active (apps/marketplace/views.py webhook)
+    if prefix == 'marketplace' and parts[3:4] == ['webhooks']:
+        return None
     method = method.upper()
     # Owner answer Q-7e (2026-11-05): removing a LINE from a document (reservation line / image, shortage
     # list item, demand item, availability line, invoice line, bundle item, variant member, product media /
@@ -288,6 +293,14 @@ def required(path, method):
     # asks `edit`, as the views do
     if prefix == 'crews' and method not in ('GET', 'HEAD', 'OPTIONS'):
         return 'crews', ('edit',)
+    # Marketplace (doc 38): writes ask exactly what the views ask (apps/marketplace/views.py) — approving /
+    # unapproving a listing = approve; channel and store writes (push-stock included) = edit; the rest
+    # (listing proposals, manual intake, order actions) = the default write grants
+    if prefix == 'marketplace' and method not in ('GET', 'HEAD', 'OPTIONS'):
+        if parts[3:4] == ['listings'] and parts[5:6] in (['approve'], ['unapprove']):
+            return 'marketplace', ('approve',)
+        if parts[3:4] in (['channels'], ['stores'], ['settlements']):
+            return 'marketplace', ('edit',)
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
         return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)

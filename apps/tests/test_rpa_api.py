@@ -343,7 +343,11 @@ class StatusTests(_Base):
 
 class FixRoundTests(_Base):
     def _file(self):
-        return SimpleUploadedFile('same.xlsx', _xlsx([['1', 2, None]]).read())
+        # build the bytes once per test: openpyxl stamps the save time (to the second) into the
+        # workbook, so two builds across a second boundary hash differently and stop being duplicates
+        if not hasattr(self, '_same_bytes'):
+            self._same_bytes = _xlsx([['1', 2, None]]).read()
+        return SimpleUploadedFile('same.xlsx', self._same_bytes)
 
     def test_every_ordering_key_works_and_unknown_is_400(self):
         from apps.rpa import views

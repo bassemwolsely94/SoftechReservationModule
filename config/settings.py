@@ -248,6 +248,7 @@ INSTALLED_APPS = [
     'apps.tax_invoicing',  # Tax invoices to ETA (doc 36) — drafts, review, gated submission
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
     'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
+    'apps.marketplace',    # Marketplace / delivery-platform channels (doc 38) — never writes SOFTECH, flags below
     'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
@@ -612,6 +613,13 @@ POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 SELF_APPROVAL_ADMIN_EXEMPT = config('SELF_APPROVAL_ADMIN_EXEMPT', default=True, cast=bool)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
+
+# Marketplace channels (apps.marketplace, doc 38). OFF = screen hidden, API 404. Never writes SOFTECH.
+# MARKETPLACE_PUSH_ENABLED gates pushing stock/price/status OUT to a platform (default OFF; dry-run first).
+MARKETPLACE_ENABLED = config('MARKETPLACE_ENABLED', default=False, cast=bool)
+MARKETPLACE_PUSH_ENABLED = config('MARKETPLACE_PUSH_ENABLED', default=False, cast=bool)
+# The 'fake' test adapter (shared-secret webhook, no real platform) may be chosen only in DEBUG / tests.
+MARKETPLACE_ALLOW_FAKE_ADAPTER = DEBUG or _RUNNING_TESTS
 # HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
 # the agent endpoints answer 503 and no collection is accepted. Read-only; never writes SOFTECH.
 HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool)
