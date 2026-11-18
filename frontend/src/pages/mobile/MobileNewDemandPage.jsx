@@ -104,7 +104,7 @@ export default function MobileNewDemandPage() {
       {/* Items */}
       <div data-tour="demand-mobile-new-items" className="bg-white rounded-2xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">💊 الأصناف المطلوبة *</h2>
-        <ItemSearchWidget selected={null} onSelect={addCatalog} onClear={() => {}}
+        <ItemSearchWidget mode="list" selected={null} onSelect={addCatalog} onClear={() => {}}
           placeholder="ابحث وأضف صنفاً..." />
         <div className="flex gap-2 mt-2">
           <input className="input-field flex-1 text-sm" placeholder="أو اكتب اسم صنف غير مكوَّد..."
