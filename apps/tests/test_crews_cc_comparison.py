@@ -270,6 +270,28 @@ class SectionTests(_Base):
         cd = {x['member_key']: x for x in res['people'] if x['metric'] == 'cash_delivery'}
         self.assertEqual((cd['code:62']['old'], cd['code:62']['crew']), (1000.0, 1000.0))
 
+    def test_summary_total_rows_mark_partial_and_gross(self):
+        from openpyxl import load_workbook
+        self.june_sales()
+        self.store_old()
+        # May has no CDR rows (call_count not computed) and no stored rollup
+        res = C.compare(self.crew(), (2026, 5), JUNE, returns=False,
+                        cdr_rows_by_month={JUNE: CDR})
+        buf = io.BytesIO()
+        C.build_workbook(res).save(buf)
+        ws = load_workbook(io.BytesIO(buf.getvalue()))['ملخص']
+        totals = {r[3]: r for r in ws.iter_rows(min_row=2, values_only=True) if r[0] == 'الإجمالي'}
+        self.assertEqual(len(totals), len(C.METRICS))
+        calls = totals['call_count'][9]
+        self.assertIn('جزئي: 1 خانة غير محسوب (المخزن)', calls)
+        self.assertIn('جزئي: 1 خانة غير محسوب (القديم الآن)', calls)
+        self.assertIn('جزئي: 1 خانة غير محسوب (الطاقم)', calls)
+        self.assertEqual(totals['call_count'][6], 3)          # June only, flagged partial
+        self.assertIn('لم يُخصم المرتجع (--no-returns)', totals['cash_delivery'][9])
+        self.assertIn('لم يُخصم المرتجع (--no-returns)', totals['gross_profit'][9])
+        self.assertNotIn('لم يُخصم', totals['beauty'][9] or '')
+        self.assertNotIn('القديم الآن', totals['beauty'][9] or '')   # beauty computed both months
+
     def test_workbook_sheets_and_no_formulas(self):
         from openpyxl import load_workbook
         self.june_sales()

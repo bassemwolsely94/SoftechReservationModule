@@ -454,6 +454,18 @@ def _total_label(metric) -> str:
     return f'{METRIC_LABELS[metric]} ({COUNT_TOTAL_AR} / {COUNT_TOTAL_EN})'
 
 
+_TOTAL_COLS = (('stored', 'المخزن'), ('old_now', 'القديم الآن'), ('crew', 'الطاقم'))
+
+
+def _total_note(metric, t, returns) -> str:
+    """Why a total over months is not the whole story: months left out per column, gross figures."""
+    parts = [f"جزئي: {t[f'{col}_missing']} خانة {NOT_COMPUTED} ({label})"
+             for col, label in _TOTAL_COLS if t[f'{col}_missing']]
+    if not returns and metric in RETURN_METRICS:
+        parts.append('لم يُخصم المرتجع (--no-returns)')
+    return '، '.join(parts)
+
+
 def markdown_summary(result) -> str:
     lines = ['## مقارنة الكول سنتر: الرقم القديم مقابل الطاقم', '',
              f"الفترة {result['start'][0]}-{result['start'][1]:02d} → "
@@ -535,7 +547,7 @@ def build_workbook(result):
         t = result['totals']['metrics'][metric]
         summary.append((['الإجمالي', '', _total_label(metric), metric, t['stored'], t['old_now'],
                          t['crew'], _diff(t['crew'], t['stored']), _diff(t['crew'], t['old_now']),
-                         '', ''], _fmt(metric)))
+                         _total_note(metric, t, result['returns']), ''], _fmt(metric)))
     sheet('ملخص', ['السنة', 'الشهر', 'المؤشر', 'metric', 'المخزن (اللوحة)', 'القديم محسوباً الآن',
                    'الطاقم', 'الطاقم − المخزن', 'الطاقم − القديم الآن', 'السبب', 'reason'],
           summary, num_cols=(5, 6, 7, 8, 9))
