@@ -61,6 +61,11 @@ NO_STALE_PENDING = 'لم يستلم جهاز الختم المهمة خلال 24
 UPLOAD_MISSING = 'لم يُرفع الملف'
 UPLOAD_TOO_BIG = 'الملف المرفوع أكبر من 20 ميجابايت'
 UPLOAD_NOT_XLSX = 'الملف المرفوع ليس ملف Excel (xlsx)'
+UPLOAD_UNPACKS_TOO_BIG = 'الملف المرفوع يتمدد لأكثر من 200 ميجابايت — مرفوض'
+MAX_UNPACKED = 200 * 1024 * 1024
+SWITCH_OFF_AT_SERVE = 'مفتاح الكتابة على جهاز الختم أُغلق بعد استلام المهمة — لم يُرسل الملف'
+FETCH_NOT_CURRENT = 'هذه ليست آخر قراءة للملف الحالي (أو كُتبت نسخة بعدها) — اقرأ الملف الحالي من جديد'
+IMPORT_REMOVES = 'الملف الحالي ينقصه أصناف مكوّدة في آخر نسخة — الاستيراد يحذف ترميزها؛ أكّد الحذف صراحة'
 
 
 class EgsAgentError(Exception):
@@ -205,6 +210,10 @@ def request_write(actor=None, *, override=False, note=''):
         base = {'kind': TaxAgentFileJob.KIND_WRITE, 'version': version, 'requested_by': actor,
                 'live_sha256': live['sha256'], 'override': override}
         if live['hand_edits'] and not override:
+            held = (TaxAgentFileJob.objects.filter(kind=TaxAgentFileJob.KIND_WRITE, status=TaxAgentFileJob.HELD,
+                                                   version=version).order_by('-id').first())
+            if held is not None and (held.result or {}).get('fetch_job') == live['job'].pk:
+                return held     # the same hold again (nightly): no new row
             r = live['job'].result or {}
             job = TaxAgentFileJob.objects.create(
                 **base, status=TaxAgentFileJob.HELD, finished_at=timezone.now(),
@@ -255,6 +264,8 @@ def claim_next():
             job.mode = TaxAgentFileJob.MODE_PREVIEW
             job.result = {**(job.result or {}), 'switch_off_at_claim': True}
             fields += ['mode', 'result']
+            audit('egs_sheet_switch_off_at_claim', entity=ENTITY, entity_id=job.pk,
+                  before={'mode': TaxAgentFileJob.MODE_WRITE}, after={'mode': TaxAgentFileJob.MODE_PREVIEW})
         job.save(update_fields=fields)
     return job
 
@@ -270,7 +281,13 @@ def payload(job):
 
 
 def download_bytes(job):
-    """Exactly the stored version file. EgsAgentError (and the job fails) when it is gone or its hash changed."""
+    """Exactly the stored version file. EgsAgentError (and the job fails) when it is gone or its hash changed, or
+    when a write-mode job is served after the write switch was turned off."""
+    if job.mode == TaxAgentFileJob.MODE_WRITE and not writer_allowed(WRITE_FLAG):
+        audit('egs_sheet_switch_off_at_serve', entity=ENTITY, entity_id=job.pk,
+              after={'version': job.version.number, 'mode': job.mode})
+        _fail(job, SWITCH_OFF_AT_SERVE)
+        raise EgsAgentError(SWITCH_OFF_AT_SERVE)
     try:
         data = egs_sheet.open_version(job.version)
     except egs_sheet.SheetError as exc:
@@ -310,6 +327,13 @@ def validate_upload(data):
         raise EgsAgentError(UPLOAD_TOO_BIG)
     if not zipfile.is_zipfile(io.BytesIO(data)):
         raise EgsAgentError(UPLOAD_NOT_XLSX)
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            unpacked = sum(i.file_size for i in z.infolist())
+    except zipfile.BadZipFile as exc:
+        raise EgsAgentError(UPLOAD_NOT_XLSX) from exc
+    if unpacked > MAX_UNPACKED:      # a zip bomb never reaches openpyxl
+        raise EgsAgentError(UPLOAD_UNPACKS_TOO_BIG)
     try:
         return egs_sheet.read_counts(data)
     except egs_sheet.SheetError as exc:
@@ -435,12 +459,17 @@ def _audit_outcome(job):
 
 # ── «استورد التعديلات» ──────────────────────────────────────────────────────────────────────────
 
-def import_fetched(actor, job):
+def import_fetched(actor, job, *, allow_removals=False):
     """The fetched copy of a done egs_fetch becomes the next version (source 'fetch'), so the hand edits are ours
-    and a later build starts from them. EgsAgentError when the copy is gone, changed, invalid, or already the
-    latest version. Audited (egs_sheet_imported)."""
+    and a later build starts from them. Only the current live state may be imported: the newest fetch, with no real
+    write after it (an older copy would undo coded items). A copy that lacks coded items of the latest version is
+    refused unless `allow_removals` (audited with the list). EgsAgentError when the copy is not current, gone,
+    changed, invalid, or already the latest version. Audited (egs_sheet_imported)."""
     if job.kind != TaxAgentFileJob.KIND_FETCH or job.status != TaxAgentFileJob.DONE or not job.fetched_file:
         raise EgsAgentError(NOT_FETCH)
+    newest, live = last_fetch(), live_state()
+    if newest is None or newest.pk != job.pk or live is None or live['job'].pk != job.pk:
+        raise EgsAgentError(FETCH_NOT_CURRENT)
     path = _fetched_dir() / job.fetched_file
     if not path.is_file():
         raise EgsAgentError(FETCHED_GONE)
@@ -452,6 +481,10 @@ def import_fetched(actor, job):
     if latest is not None and latest.sha256 == sha:
         raise EgsAgentError(ALREADY_LATEST)
     counts = validate_upload(data)
+    removed = sorted(set(latest.coded_itemcodes if latest else ()) - set(counts['coded_itemcodes']),
+                     key=egs_sheet._code_key)
+    if removed and not allow_removals:
+        raise EgsAgentError(IMPORT_REMOVES)
     version = None
     try:
         with transaction.atomic():      # no version without its audit event
@@ -460,7 +493,8 @@ def import_fetched(actor, job):
             audit('egs_sheet_imported', actor=actor, entity='egs_sheet', entity_id=version.number,
                   after={'number': version.number, 'fetch_job': job.pk, 'sha256': sha,
                          'from': latest.number if latest else None, 'coded_rows': version.coded_rows,
-                         'total_rows': version.total_rows})
+                         'total_rows': version.total_rows, 'allow_removals': allow_removals,
+                         'removed': removed})
     except Exception:
         if version is not None:
             egs_sheet.discard_file(version)

@@ -145,6 +145,18 @@ class FetchTests(_Base):
         job, r = self.fetch(buf.getvalue())
         self.assertEqual((r.status_code, job.status), (400, TaxAgentFileJob.FAILED))
 
+    def test_a_declared_body_over_the_cap_fails_the_job_before_reading(self):
+        with mock.patch.object(egs_agent, 'MAX_UPLOAD', -1024 * 1024):
+            job, r = self.fetch(self.data)
+        self.assertEqual(r.status_code, 413)
+        self.assertEqual((job.status, job.error), (TaxAgentFileJob.FAILED, egs_agent.UPLOAD_TOO_BIG))
+
+    def test_a_file_that_unpacks_too_big_is_refused(self):
+        with mock.patch.object(egs_agent, 'MAX_UNPACKED', 1000):
+            job, r = self.fetch(self.data)
+        self.assertEqual((r.status_code, job.status, job.error),
+                         (400, TaxAgentFileJob.FAILED, egs_agent.UPLOAD_UNPACKS_TOO_BIG))
+
     def test_an_upload_over_the_cap_is_refused(self):
         with mock.patch.object(egs_agent, 'MAX_UPLOAD', 100):
             job, r = self.fetch(self.data)
@@ -208,6 +220,7 @@ class WriteTests(_Base):
         self.assertEqual(served, (Path(self.store_dir) / v2.file_name).read_bytes())
         self.assertEqual(r['X-Content-SHA256'], job.sha256)
         self.assertEqual(r['Content-Type'], 'application/octet-stream')
+        self.assertEqual(r['X-Job-Mode'], 'preview')
         self.assertIn('egs_sheet_served', actions())
 
     @override_settings(**SWITCH_ON)
@@ -225,6 +238,20 @@ class WriteTests(_Base):
         self.assertEqual(job.mode, 'write')
         job, body = self.claim()
         self.assertEqual((body['mode'], job.mode, job.result['switch_off_at_claim']), ('preview', 'preview', True))
+        self.assertIn('egs_sheet_switch_off_at_claim', actions())
+
+    def test_a_write_claimed_with_the_switch_on_is_not_served_once_it_is_off(self):
+        self.fetch(self.data)
+        self.add_version(HAND_EDITED)
+        with override_settings(**SWITCH_ON):
+            egs_agent.request_write(self.actor)
+            job, body = self.claim()
+            self.assertEqual(client().get(body['download_url'])['X-Job-Mode'], 'write')
+        r = client().get(body['download_url'])
+        job.refresh_from_db()
+        self.assertEqual((r.status_code, job.status, job.error),
+                         (409, TaxAgentFileJob.FAILED, egs_agent.SWITCH_OFF_AT_SERVE))
+        self.assertIn('egs_sheet_switch_off_at_serve', actions())
 
     def test_a_changed_version_file_fails_the_download(self):
         self.fetch(self.data)
@@ -237,7 +264,7 @@ class WriteTests(_Base):
         self.assertEqual((r.status_code, job.status), (409, TaxAgentFileJob.FAILED))
 
     def test_outcomes_are_audited(self):
-        self.fetch(self.data)
+        fetched, _ = self.fetch(self.data)
         self.add_version(HAND_EDITED)
         with override_settings(**SWITCH_ON):
             egs_agent.request_write(self.actor)
@@ -248,6 +275,9 @@ class WriteTests(_Base):
         self.assertIn('egs_sheet_written', actions())
         # the live file is now the latest version: nothing more to write until the next build
         self.assertIsNone(egs_agent.request_write(self.actor))
+        # and the fetch taken before that write can no longer be imported (it would undo the write)
+        with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.FETCH_NOT_CURRENT):
+            egs_agent.import_fetched(self.actor, fetched)
 
     def test_preview_done_is_not_a_write(self):
         self.fetch(self.data)
@@ -292,6 +322,25 @@ class HeldTests(_Base):
         self.assertEqual((job.result['fetch_job'], job.result['added']), (self.fetched.pk, ['900']))
         self.assertIn('egs_sheet_write_held', actions())
         self.assertIsNone(client().post(NEXT_URL).json()['job'])
+
+    def test_the_same_hold_is_not_recorded_twice(self):
+        self.assertEqual(egs_agent.request_write(None).pk, egs_agent.request_write(None).pk)
+        self.assertEqual(TaxAgentFileJob.objects.filter(status=TaxAgentFileJob.HELD).count(), 1)
+        self.assertEqual(actions().count('egs_sheet_write_held'), 1)
+
+    def test_only_the_newest_fetch_may_be_imported(self):
+        self.fetch(make_sheet(HAND_EDITED))
+        with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.FETCH_NOT_CURRENT):
+            egs_agent.import_fetched(self.actor, self.fetched)
+
+    def test_an_import_that_drops_coded_items_needs_an_explicit_yes(self):
+        fewer, _ = self.fetch(make_sheet([ROWS[0], ROWS[2], ROWS[3], HAND_EDITED[-1]]))     # 0200 gone
+        with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.IMPORT_REMOVES):
+            egs_agent.import_fetched(self.actor, fewer)
+        version = egs_agent.import_fetched(self.actor, fewer, allow_removals=True)
+        self.assertNotIn('0200', version.coded_itemcodes)
+        event = TaxAuditEvent.objects.filter(action='egs_sheet_imported').get()
+        self.assertEqual((event.after['allow_removals'], event.after['removed']), (True, ['0200']))
 
     def test_a_person_may_write_over_them(self):
         job = egs_agent.request_write(self.actor, override=True, note='owner asked')

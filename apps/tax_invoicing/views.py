@@ -835,6 +835,7 @@ def agent_file_download(request, pk):
                    after={'version': job.version.number, 'sha256': job.sha256, 'size': len(data), 'mode': job.mode})
     response = HttpResponse(data, content_type='application/octet-stream')
     response['X-Content-SHA256'] = job.sha256
+    response['X-Job-Mode'] = job.mode
     response['Content-Length'] = str(len(data))
     return response
 
@@ -850,11 +851,12 @@ def agent_file_result(request, pk):
         declared = int(request.META.get('CONTENT_LENGTH') or 0)
     except ValueError:
         declared = 0
-    if declared > egs_agent.MAX_UPLOAD + 1024 * 1024:       # refused before the body is read
-        return Response({'detail': egs_agent.UPLOAD_TOO_BIG}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
     job = TaxAgentFileJob.objects.select_related('version').filter(pk=pk, status=TaxAgentFileJob.CLAIMED).first()
     if job is None:
         return Response({'detail': 'no such claimed job'}, status=status.HTTP_404_NOT_FOUND)
+    if declared > egs_agent.MAX_UPLOAD + 1024 * 1024:       # refused before the body is read; the job fails
+        egs_agent.record_result(job, TaxAgentFileJob.FAILED, error=egs_agent.UPLOAD_TOO_BIG)
+        return Response({'detail': egs_agent.UPLOAD_TOO_BIG}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
     upload = request.FILES.get('file')
     if upload is not None and upload.size > egs_agent.MAX_UPLOAD:
         egs_agent.record_result(job, TaxAgentFileJob.FAILED, error=egs_agent.UPLOAD_TOO_BIG)
