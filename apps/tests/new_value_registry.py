@@ -121,6 +121,15 @@ def eta_recon_export():
     return _get('/api/tax-invoicing/history/recon/export/?system=production')
 
 
+def crew_cc_comparison():
+    """Call-center old-vs-crew comparison workbook (apps/crews/cc_comparison.py, piece 2b). The
+    crew is seeded in a rolled-back transaction; no CDR configured and no returns (no SOFTECH)."""
+    from apps.crews import cc_comparison as C
+    with mock.patch.object(C, 'cdr_configured', return_value=False):
+        res = C.compare_seeded_in_transaction((2026, 8), (2026, 10), returns=False)
+    return _xlsx(C.build_workbook(res))
+
+
 EXPORTS = [
     # the KPI board has a call-center block by design: only pending / closed must be absent
     ('kpi_export', kpi_export, frozenset({PENDING, CLOSED})),
@@ -131,4 +140,6 @@ EXPORTS = [
     ('stock_count_board', stock_count_board, ABSENT_ALL),
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
+    # the report exists to show the old CC figures: only pending / closed must be absent
+    ('crew_cc_comparison', crew_cc_comparison, frozenset({PENDING, CLOSED})),
 ]
