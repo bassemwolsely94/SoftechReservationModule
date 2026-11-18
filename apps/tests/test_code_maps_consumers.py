@@ -66,14 +66,46 @@ class FollowUpChannelTests(_ChannelCacheMixin, TestCase):
         self.assertFalse(t.channel_is_favoured)
 
     def test_priority_sort_order(self):
-        # Calls the view's filter step directly: through the HTTP list the global DRF
-        # OrderingFilter re-applies the view's default `ordering`, so by_priority is not
-        # visible there (pre-existing; reported, not changed in this task).
         from apps.followups.views import FollowUpTaskViewSet
         for code in ('30', '77', '91', '15', '10'):
             self._task(code)
         qs = FollowUpTaskViewSet()._apply_filters(FollowUpTask.objects.all(), {'by_priority': '1'})
         self.assertEqual([t.sales_channel for t in qs], ['91', '30', '10', '15', '77'])
+
+    def _list(self, client, **params):
+        r = client.get('/api/followups/tasks/', {'page_size': 50, **params})
+        self.assertEqual(r.status_code, 200, r.data)
+        rows = r.data.get('results', r.data) if isinstance(r.data, dict) else r.data
+        return [row['sales_channel'] for row in rows]
+
+    def _dated_tasks(self):
+        # Soonest-due first is 77, 10, 15, 30, 91 — the reverse of the priority order.
+        today = timezone.localdate()
+        for i, code in enumerate(('77', '10', '15', '30', '91')):
+            t = self._task(code)
+            t.due_date = today + dt.timedelta(days=i)
+            t.save(update_fields=['due_date'])
+
+    def test_priority_sort_through_http_list(self):
+        self._dated_tasks()
+        _, _, client = make_admin('cm_prio_admin')
+        self.assertEqual(self._list(client, by_priority='1'), ['91', '30', '10', '15', '77'])
+
+    def test_score_sort_through_http_list(self):
+        self._dated_tasks()
+        FollowUpTask.objects.filter(sales_channel='15').update(priority_score=90)
+        FollowUpTask.objects.filter(sales_channel='30').update(priority_score=50)
+        _, _, client = make_admin('cm_score_admin')
+        self.assertEqual(self._list(client, by_score='1')[:2], ['15', '30'])
+
+    def test_default_and_explicit_ordering_unchanged(self):
+        self._dated_tasks()
+        _, _, client = make_admin('cm_order_admin')
+        self.assertEqual(self._list(client), ['77', '10', '15', '30', '91'])
+        self.assertEqual(self._list(client, ordering='-due_date'), ['91', '30', '15', '10', '77'])
+        # an explicit ?ordering= still wins over by_priority
+        self.assertEqual(self._list(client, ordering='due_date', by_priority='1'),
+                         ['77', '10', '15', '30', '91'])
 
     def test_favoured_only_filter_uses_registry(self):
         for code in ('91', '30', '10', '13'):
