@@ -59,7 +59,6 @@ apps/followups/call_list_views.py::CallListAgentsView.get::admin,call_center,sup
 apps/followups/call_lists.py::<module>::admin,call_center,supervisor x1
 apps/followups/reminder_views.py::<module>::admin,supervisor x1
 apps/followups/reminder_views.py::CanViewReminders.has_permission::admin,call_center,quality_manager,supervisor x1
-apps/followups/views.py::FollowUpTaskViewSet.get_serializer_context::admin,call_center,supervisor x1
 apps/forecasting/views.py::<module>::admin,purchasing,supervisor x1
 apps/gamification/champions.py::excluded_roles::admin,viewer x1
 apps/help/content/analytics.py::<module>::admin,purchasing x1

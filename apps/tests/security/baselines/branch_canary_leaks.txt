@@ -10,10 +10,12 @@ GET /api/followups/tasks/filter-meta/
 
 # reason: configuration lists shared across branches — delivery area fees and the rider roster
 #   (riders are dispatched across branches), shift templates, PBX queues, omni channel accounts,
-#   replacement rules, transit pick zones and item overrides.
+#   replacement rules, transit pick zones and item overrides; the phone-alerts channel picker lists the
+#   same channel accounts («التنبيهات والإعلانات» module, 2026-11-17).
 GET /api/delivery/area-fees/
 GET /api/delivery/drivers/
 GET /api/hr/shifts/
+GET /api/notifications/phone-alerts/channel/
 GET /api/omni/accounts/
 GET /api/pbx/queues/
 GET /api/replacement/rules/
