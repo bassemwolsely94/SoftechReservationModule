@@ -512,7 +512,7 @@ def _report_discovery(job, run, outcome, payload, now):
         try:
             with transaction.atomic():
                 skus.record_discovery(job, found if isinstance(found, list) else [], run=run)
-        except Exception as exc:                     # noqa: BLE001 - the read is closed as an error
+        except Exception as exc:                     # the read is closed as an error
             logger.warning('portal discovery: recording failed for job %s (%s)', job.pk, type(exc).__name__)
             outcome = 'error'
     elif outcome not in PERSON_OUTCOMES:
@@ -678,7 +678,7 @@ def _report_fill(basket, run, outcome, payload, device, now, *, wrong_identity=F
         try:
             with transaction.atomic():
                 return recording.record_order(basket, order_ref=ref, history_lines=history, staff=user)
-        except Exception as exc:                     # noqa: BLE001 - the order WAS placed: a person records it
+        except Exception as exc:                     # the order WAS placed: a person records it
             logger.warning('portal report: record_order failed for basket %s (%s)', basket.pk, type(exc).__name__)
             basket.refresh_from_db()
             _needs_person(basket, f'record_failed:{ref}', user=user, now=now)
@@ -698,7 +698,7 @@ def _report_fill(basket, run, outcome, payload, device, now, *, wrong_identity=F
         try:
             with transaction.atomic():
                 recording.record_check(basket, payload.get('lines') if isinstance(payload.get('lines'), list) else [])
-        except Exception as exc:                     # noqa: BLE001 - a person looks at the answers
+        except Exception as exc:                     # a person looks at the answers
             logger.warning('portal report: record_check failed for basket %s (%s)', basket.pk, type(exc).__name__)
             basket.refresh_from_db()
             _needs_person(basket, 'record_failed', user=user, now=now)

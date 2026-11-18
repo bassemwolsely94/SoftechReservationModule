@@ -144,7 +144,7 @@ def _ranking(item_ids):
     buyer still sees and picks the lines, only without the ranking."""
     try:
         return bl_service.rank_suppliers(item_ids)
-    except Exception as exc:                     # noqa: BLE001 - display aid only
+    except Exception as exc:                     # display aid only
         logger.warning('portal buy list: supplier ranking failed (%s)', type(exc).__name__)
         return {}
 
