@@ -146,8 +146,8 @@ function ItemClassifier() {
   const classifyMut = useMutation({
     mutationFn: (payload) => chronicApi.classifyItem(selected.id, payload),
     onSuccess: (res) => {
-      qc.invalidateQueries(['chronicItems'])
-      qc.invalidateQueries(['chronicItemSummary'])
+      qc.invalidateQueries({ queryKey: ['chronicItems'] })
+      qc.invalidateQueries({ queryKey: ['chronicItemSummary'] })
       // update selected with fresh data
       setSelected(res.data)
       setPanel(false)
@@ -159,8 +159,8 @@ function ItemClassifier() {
     mutationFn: ({ itemId, ingredientId }) =>
       chronicApi.unclassifyItem(itemId, ingredientId ? { ingredient_id: ingredientId } : {}),
     onSuccess: () => {
-      qc.invalidateQueries(['chronicItems'])
-      qc.invalidateQueries(['chronicItemSummary'])
+      qc.invalidateQueries({ queryKey: ['chronicItems'] })
+      qc.invalidateQueries({ queryKey: ['chronicItemSummary'] })
       setSelected(null)
       setPanel(false)
     },
@@ -631,7 +631,7 @@ function IngredientsManager() {
   const createIngMut = useMutation({
     mutationFn: (data) => chronicApi.createIngredient(data),
     onSuccess: (res) => {
-      qc.invalidateQueries(['chronicIngredients'])
+      qc.invalidateQueries({ queryKey: ['chronicIngredients'] })
       setSelected(res.data)
       setShowForm(false)
     },
@@ -639,18 +639,18 @@ function IngredientsManager() {
 
   const addTagMut = useMutation({
     mutationFn: ({ id, tagId }) => chronicApi.addTag(id, tagId),
-    onSuccess: () => qc.invalidateQueries(['chronicIngredient', selected?.id]),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chronicIngredient', selected?.id] }),
   })
 
   const removeTagMut = useMutation({
     mutationFn: ({ id, tagId }) => chronicApi.removeTag(id, tagId),
-    onSuccess: () => qc.invalidateQueries(['chronicIngredient', selected?.id]),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chronicIngredient', selected?.id] }),
   })
 
   const addProtMut = useMutation({
     mutationFn: (data) => chronicApi.addProtocol(selected.id, data),
     onSuccess: () => {
-      qc.invalidateQueries(['chronicIngredient', selected?.id])
+      qc.invalidateQueries({ queryKey: ['chronicIngredient', selected?.id] })
       setShowProtForm(false)
       setProt({
         name: '', frequency_type: 'days_after_purchase', days: 30,
@@ -1416,10 +1416,10 @@ function AIEnrichmentTab() {
 
   // ── Mutations ────────────────────────────────────────────────────────
   const invalidate = () => {
-    qc.invalidateQueries(['enrQueue'])
-    qc.invalidateQueries(['enrSuggestions', selected?.item_id])
-    qc.invalidateQueries(['enrDetail', selected?.item_id])
-    qc.invalidateQueries(['enrReport'])
+    qc.invalidateQueries({ queryKey: ['enrQueue'] })
+    qc.invalidateQueries({ queryKey: ['enrSuggestions', selected?.item_id] })
+    qc.invalidateQueries({ queryKey: ['enrDetail', selected?.item_id] })
+    qc.invalidateQueries({ queryKey: ['enrReport'] })
   }
 
   const approveMut = useMutation({

@@ -2188,6 +2188,31 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 
 ---
 
+### 13.6 More web processes (full audit PERF-3)
+
+One Daphne process uses one of the 4 cores, and a 70–165 s export holds up every other request in it.
+Two extra processes on ports 8001 and 8002 (same code, same `.env`; WebSocket groups go through Redis):
+
+```bash
+sudo cp /opt/elrezeiky/app/deploy/elrezeiky-web-extra@.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now elrezeiky-web-extra@8001 elrezeiky-web-extra@8002
+curl -s http://127.0.0.1:8001/api/public/health/ ; curl -s http://127.0.0.1:8002/api/public/health/
+```
+
+Then uncomment the two `server 127.0.0.1:800x;` lines in the `upstream django_backend` block of
+`/etc/nginx/sites-available/elrezeiky` and run `sudo nginx -t && sudo systemctl reload nginx`. `release.sh`
+restarts every enabled `elrezeiky-web-extra@*` unit after a release (re-install `release.sh` once, as its header
+says). Memory: each process is about 250–400 MB; check `free -m` stays above 1 GB with the scheduler running.
+To undo: comment the lines back, reload nginx, `sudo systemctl disable --now elrezeiky-web-extra@8001 elrezeiky-web-extra@8002`.
+
+### 13.7 Load test before Stage B (full audit D-22)
+
+`deploy/loadtest/locustfile.py` — read-only (GETs + login). Run from another machine against the VPS while it
+is still a reader, with a test staff account without 2FA: 20 users for 15 minutes, then 40. Keep the CSV and
+write p50/p95/p99 per route into `docs/full-project-audit/07_PERFORMANCE_AUDIT.md`. Stage B waits until the
+20-user run has p95 under 2 s on the polled routes and no failures.
+
 ## 14. Troubleshooting
 
 | Symptom | Check |

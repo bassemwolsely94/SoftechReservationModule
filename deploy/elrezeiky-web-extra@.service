@@ -1,0 +1,33 @@
+[Unit]
+# Extra Daphne web processes (full audit 2026-11-15, PERF-3). One Daphne process uses one of the VPS's 4
+# cores and every request — including 70–165 s exports — queues behind the others in it. Each instance
+# listens on the port in its name: elrezeiky-web-extra@8001, elrezeiky-web-extra@8002. nginx spreads
+# requests over 8000 (elrezeiky-web) + these; WebSocket groups are shared through Redis (REDIS_URL).
+# Install + enable (runbook §13.6), then uncomment the matching lines in the nginx upstream.
+Description=ElRezeiky Pharmacy Platform — extra Daphne web process on port %i
+After=network-online.target postgresql.service redis-server.service zerotier-one.service elrezeiky-tunnel-watch.service
+Wants=network-online.target postgresql.service redis-server.service
+PartOf=elrezeiky-web.service
+
+[Service]
+Type=simple
+User=elrezeiky
+Group=elrezeiky
+WorkingDirectory=/opt/elrezeiky
+EnvironmentFile=/opt/elrezeiky/.env
+ExecStart=/opt/elrezeiky/venv/bin/daphne \
+    -b 127.0.0.1 \
+    -p %i \
+    --proxy-headers \
+    config.asgi:application
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=elrezeiky-web-%i
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

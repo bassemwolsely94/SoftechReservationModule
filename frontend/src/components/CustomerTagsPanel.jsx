@@ -67,7 +67,7 @@ function TagSearch({ existingTagIds, onAdd }) {
         tag_type: newTagType,
         color: newTagColor,
       })
-      qc.invalidateQueries(['all-tags'])
+      qc.invalidateQueries({ queryKey: ['all-tags'] })
       onAdd(res.data.id)
       setNewTagName(''); setShowCreate(false); setOpen(false); setQ('')
     } catch { }
@@ -142,7 +142,7 @@ export default function CustomerTagsPanel({ customerId, readonly = false }) {
     enabled: !!customerId,
   })
 
-  const invalidate = () => qc.invalidateQueries(['customer-tags', customerId])
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['customer-tags', customerId] })
 
   async function handleAdd(tagId) {
     try {

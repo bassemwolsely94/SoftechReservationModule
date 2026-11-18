@@ -43,7 +43,7 @@
  *  Keys: ↑/↓ move · Enter add · ArrowRight toggles the preview · Esc closes preview, then list.
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import api, { itemsApi } from '../api/client'
 import AdvancedItemSearchModal from './AdvancedItemSearchModal'
 import PosResultRow from '../pos/search/PosResultRow'
@@ -280,7 +280,7 @@ export default function ItemSearchWidget({
           .then(r => ({ rows: r.data.results || r.data, asOf: null })),
     enabled: debouncedQ.length >= 2,
     staleTime: 15_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
   const results = found?.rows || []
   const stockAsOf = found?.asOf ?? null

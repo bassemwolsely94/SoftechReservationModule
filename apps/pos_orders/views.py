@@ -333,7 +333,11 @@ def push_order(request, pk):
                             status=status.HTTP_409_CONFLICT)
 
     try:
-        result = writer.push_order(order, dry_run=dry)
+        # «راجعت SOFTECH ولم يُحفظ» — the only way to re-push an outcome-unknown order (audit S-1); audited
+        confirmed = bool(request.data.get('confirmed_not_landed')) and not dry
+        result = writer.push_order(order, dry_run=dry, confirmed_not_landed=confirmed)
+        if confirmed:
+            result['confirmed_not_landed'] = True
     except writer.WriterDisabled as e:
         return Response({'detail': str(e)}, status=status.HTTP_501_NOT_IMPLEMENTED)
     except ValueError as e:
@@ -373,13 +377,15 @@ def push_order(request, pk):
 def cancel_order(request, pk):
     order = branch_scope.get_or_404(SoftechSalesOrder, request.user, pk=pk)
     before = order.status
+    confirmed = bool(request.data.get('confirmed_not_landed'))   # audit S-6: outcome-unknown orders only
     try:
-        writer.cancel_order(order)
+        writer.cancel_order(order, confirmed_not_landed=confirmed)
     except (ValueError, writer.WriterDisabled) as e:
         return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     from core.softech_audit import audit_softech_write          # who cancelled (Batch 2, P-16)
     audit_softech_write('softech_pos_order_cancelled', actor=request.user, obj=order,
-                        before={'status': before}, after={'status': order.status})
+                        before={'status': before},
+                        after={'status': order.status, 'confirmed_not_landed': confirmed})
     return Response(OrderSerializer(order).data)
 
 
@@ -1261,7 +1267,8 @@ def flush_now(request):
     statuses = [SoftechSalesOrder.STATUS_QUEUED]
     if request.data.get('include_failed'):
         statuses.append(SoftechSalesOrder.STATUS_PUSH_FAILED)
-    qs = (branch_scope.scope(SoftechSalesOrder.objects.filter(status__in=statuses), request.user)
+    qs = (branch_scope.scope(SoftechSalesOrder.objects.filter(status__in=statuses)
+                             .exclude(erp_error__startswith=writer.OUTCOME_UNKNOWN), request.user)   # audit S-1
           .select_related('branch').order_by('created_at')[:50])
     pushed = queued = failed = 0
     results = []

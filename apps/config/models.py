@@ -189,3 +189,22 @@ class MedicineTypeMap(models.Model):
 
     def __str__(self):
         return f'{self.code} — {self.label or self.get_group_display()}'
+
+
+class IdempotentRequest(models.Model):
+    """One row per (X-Idempotency-Key, path) a mobile offline-queue replay sent (full audit 2026-11-15, FE-1).
+
+    The /m offline queue replays a POST when its reply was lost; without this a write that had already
+    landed was created a second time. status 0 = the first request is still running; a 2xx = done (a
+    replay gets that status back and writes nothing). Failures delete the row so the retry runs.
+    Kept 7 days (sync.maintenance.prune_idempotent_requests)."""
+    key        = models.CharField(max_length=64)
+    path       = models.CharField(max_length=200)
+    status     = models.PositiveSmallIntegerField(default=0)
+    user_id    = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['key', 'path'], name='config_idempotent_key_path_uniq')]
+        verbose_name = 'طلب مكرر محمي'
+        verbose_name_plural = 'طلبات مكررة محمية'

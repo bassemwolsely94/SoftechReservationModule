@@ -63,7 +63,7 @@ function MediaTab({ product, productId }) {
   const uploadMutation = useMutation({
     mutationFn: (formData) => productsApi.uploadMedia(productId, formData),
     onSuccess: () => {
-      queryClient.invalidateQueries(['product-detail', productId])
+      queryClient.invalidateQueries({ queryKey: ['product-detail', productId] })
       setUploadError('')
     },
     onError: (err) => {
@@ -73,12 +73,12 @@ function MediaTab({ product, productId }) {
 
   const updateMutation = useMutation({
     mutationFn: ({ mediaId, data }) => productsApi.updateMedia(productId, mediaId, data),
-    onSuccess: () => queryClient.invalidateQueries(['product-detail', productId]),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product-detail', productId] }),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (mediaId) => productsApi.deleteMedia(productId, mediaId),
-    onSuccess: () => queryClient.invalidateQueries(['product-detail', productId]),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['product-detail', productId] }),
   })
 
   const handleFileChange = useCallback(async (e) => {
@@ -239,7 +239,7 @@ function ContentTab({ productId, initialContent }) {
   const mutation = useMutation({
     mutationFn: (data) => productsApi.patchContent(productId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['product-detail', productId])
+      queryClient.invalidateQueries({ queryKey: ['product-detail', productId] })
       setDirty(false)
     },
   })
@@ -333,7 +333,7 @@ function AttributesTab({ productId, initialAttributes }) {
   const mutation = useMutation({
     mutationFn: (data) => productsApi.patchAttributes(productId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['product-detail', productId])
+      queryClient.invalidateQueries({ queryKey: ['product-detail', productId] })
       setDirty(false)
     },
   })
@@ -415,7 +415,7 @@ function SeoTab({ productId, initialSeo }) {
   const mutation = useMutation({
     mutationFn: (data) => productsApi.patchSeo(productId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['product-detail', productId])
+      queryClient.invalidateQueries({ queryKey: ['product-detail', productId] })
       setDirty(false)
     },
   })

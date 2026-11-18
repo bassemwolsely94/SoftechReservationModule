@@ -364,3 +364,57 @@ class ReversalTests(TestCase):
             recon_writer.push_allocation(alloc, dry_run=False)
         cand.refresh_from_db()
         self.assertEqual(cand.status, MatchCandidate.STATUS_WRITTEN)
+
+
+@override_settings(AP_RECONCILE_WRITER_ENABLED=True)
+class OneWriterPerInvoiceTests(TestCase):
+    """Full audit 2026-11-15, S-2: a live write holds advisory locks on its invoice and voucher; a second
+    write on either while the first runs is refused before any SOFTECH connection opens."""
+
+    def test_same_invoice_or_same_voucher_share_a_lock(self):
+        _, inv, pay, alloc = _setup()
+        _, inv2, pay2, alloc2 = _setup_other()
+        other_voucher_same_invoice = Allocation.objects.create(
+            payment=pay2, invoice=inv, amount=Decimal('1'), origin=Allocation.ORIGIN_APPROVED)
+        keys = set(recon_writer._write_lock_keys(alloc))
+        self.assertEqual(len(keys), 2)
+        self.assertTrue(keys & set(recon_writer._write_lock_keys(other_voucher_same_invoice)))
+        self.assertFalse(keys & set(recon_writer._write_lock_keys(alloc2)))
+
+    def _held_elsewhere(self):
+        class _Busy:
+            def __init__(self, key):
+                pass
+
+            def __enter__(self):
+                return False
+
+            def __exit__(self, *exc):
+                return False
+        return mock.patch('apps.vouchers.coupon_dashboard.pg_lock', _Busy)
+
+    def test_concurrent_write_is_refused_without_touching_softech(self):
+        _, inv, pay, alloc = _setup()
+        with self._held_elsewhere(), \
+             mock.patch('config.sybase.get_sybase_connection') as connect:
+            with self.assertRaises(recon_writer.ReconWriteError):
+                recon_writer.push_allocation(alloc, dry_run=False)
+            with self.assertRaises(recon_writer.ReconWriteError):
+                recon_writer.reverse_allocation(alloc)
+        connect.assert_not_called()
+        alloc.refresh_from_db()
+        self.assertEqual(alloc.origin, Allocation.ORIGIN_APPROVED)
+
+    def test_dry_run_takes_no_lock(self):
+        _, inv, pay, alloc = _setup()
+        with self._held_elsewhere():
+            self.assertTrue(recon_writer.push_allocation(alloc, dry_run=True)['dry_run'])
+
+    def test_lock_released_after_a_write(self):
+        _, inv, pay, alloc = _setup()
+        with mock.patch('config.sybase.get_sybase_connection', return_value=_FakeSoftech()):
+            recon_writer.push_allocation(alloc, dry_run=False)
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()")
+            self.assertEqual(cur.fetchone()[0], 0)

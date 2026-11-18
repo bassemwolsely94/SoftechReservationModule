@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { usersApi, branchesApi } from '../api/client'
 import BranchSelect from '../components/BranchSelect'
 import useAuthStore from '../store/authStore'
@@ -636,7 +636,7 @@ export default function UserManagementPage() {
       ordering: ordering || undefined,
       page,
     }).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const { data: branches } = useQuery({

@@ -572,3 +572,122 @@ class ReturnTests(TestCase):
              patch.object(writer, 'read_contract_copay', return_value={}):
             with self.assertRaises(ValueError):
                 writer.build_return_from_sale(o, selection=[{'dblitemflag': 1}])   # partial → rejected
+
+
+@override_settings(POS_WRITER_ENABLED=True)
+class OutcomeUnknownTests(TestCase):
+    """Full audit 2026-11-15/16, S-1 + S-6. SOFTECH drops our vf2 tag when the cashier settles a pending
+    sale (checked live on branch 130), so a push whose commit reply was lost must never be retried
+    automatically, and cancelling it must look for the pending sale first."""
+
+    def _ready(self):
+        from unittest import mock
+        o = _order(channel='cash')
+        o.branch.db_host = '10.0.0.9'
+        o.branch.save()
+        o.status = SoftechSalesOrder.STATUS_READY
+        o.save()
+        return o
+
+    def _push(self, o, conn, write=None, **kw):
+        from unittest import mock
+        with mock.patch('config.sybase.get_branch_connection', return_value=conn), \
+             mock.patch.object(writer, 'build_payload', return_value={}), \
+             mock.patch.object(writer, '_pending_docnumber_by_vf2', return_value=None), \
+             mock.patch.object(writer, '_execute_write',
+                               side_effect=write or (lambda *a: {'ok': True, 'docnumber': 470001})):
+            return writer.push_order(o, dry_run=False, **kw)
+
+    def test_lost_commit_reply_is_outcome_unknown(self):
+        from unittest import mock
+        o = self._ready()
+        conn = mock.MagicMock()
+        conn.commit.side_effect = RuntimeError('JZ0T3: Read operation timed out')
+        with self.assertRaises(RuntimeError):
+            self._push(o, conn)
+        o.refresh_from_db()
+        self.assertEqual(o.status, SoftechSalesOrder.STATUS_PUSH_FAILED)
+        self.assertTrue(o.erp_error.startswith(writer.OUTCOME_UNKNOWN))
+
+    def test_error_before_commit_stays_a_plain_failure(self):
+        from unittest import mock
+        o = self._ready()
+        with self.assertRaises(RuntimeError):
+            self._push(o, mock.MagicMock(), write=RuntimeError('Attempt to insert duplicate key'))
+        o.refresh_from_db()
+        self.assertEqual(o.status, SoftechSalesOrder.STATUS_PUSH_FAILED)
+        self.assertFalse(o.erp_error.startswith(writer.OUTCOME_UNKNOWN))
+
+    def _unknown(self):
+        o = self._ready()
+        o.status = SoftechSalesOrder.STATUS_PUSH_FAILED
+        o.erp_error = writer.OUTCOME_UNKNOWN + 'JZ0T3'
+        o.save()
+        return o
+
+    def test_outcome_unknown_is_never_pushed_automatically(self):
+        from unittest import mock
+        o = self._unknown()
+        with mock.patch('config.sybase.get_branch_connection') as connect:
+            res = writer.push_order(o, dry_run=False)
+        self.assertEqual(res['mode'], 'outcome_unknown')
+        connect.assert_not_called()
+        o.refresh_from_db()
+        self.assertEqual(o.status, SoftechSalesOrder.STATUS_PUSH_FAILED)
+
+    def test_a_person_who_checked_softech_can_re_push(self):
+        from unittest import mock
+        o = self._unknown()
+        res = self._push(o, mock.MagicMock(), confirmed_not_landed=True)
+        self.assertTrue(res['ok'])
+        o.refresh_from_db()
+        self.assertEqual((o.status, int(o.softech_docnumber)), (SoftechSalesOrder.STATUS_PUSHED, 470001))
+
+    def test_cancel_finds_the_pending_sale_by_tag_and_deletes_it(self):
+        from unittest import mock
+        o = self._unknown()
+        with mock.patch.object(writer, '_find_pending_for_cancel', return_value=468999), \
+             mock.patch.object(writer, '_delete_pending_from_softech') as delete:
+            writer.cancel_order(o)
+        delete.assert_called_once()
+        o.refresh_from_db()
+        self.assertEqual((o.status, int(o.softech_docnumber)), (SoftechSalesOrder.STATUS_CANCELLED, 468999))
+
+    def test_cancel_without_a_pending_sale_needs_a_person(self):
+        from unittest import mock
+        o = self._unknown()
+        with mock.patch.object(writer, '_find_pending_for_cancel', return_value=None):
+            with self.assertRaises(ValueError):
+                writer.cancel_order(o)
+            writer.cancel_order(o, confirmed_not_landed=True)
+        o.refresh_from_db()
+        self.assertEqual(o.status, SoftechSalesOrder.STATUS_CANCELLED)
+
+
+class PrepareOrderLockTests(TestCase):
+    """Full audit BE-2/BE-3: prepare_order never overwrites an order pushed meanwhile, and a refused
+    prepare leaves the lines untouched."""
+
+    def test_stale_copy_never_overwrites_a_pushed_order(self):
+        o = _order(channel='cash')
+        stale = SoftechSalesOrder.objects.get(pk=o.pk)                 # loaded before the flush job
+        SoftechSalesOrder.objects.filter(pk=o.pk).update(status=SoftechSalesOrder.STATUS_PUSHED,
+                                                         softech_docnumber=470002)
+        with self.assertRaises(ValueError):
+            writer.prepare_order(stale)
+        o.refresh_from_db()
+        self.assertEqual((o.status, int(o.softech_docnumber)), (SoftechSalesOrder.STATUS_PUSHED, 470002))
+
+    def test_refused_prepare_leaves_lines_unchanged(self):
+        from unittest import mock
+        o = _order(channel='cash')
+        before = list(o.lines.order_by('id').values_list('trans_price_total', flat=True))
+        def saves_lines_then_refuses(order, **k):          # what a blocked contract item does
+            for line in order.lines.all():
+                line.trans_price_total = 1
+                line.save()
+            raise ValueError('blocked item')
+        with mock.patch.object(writer, '_prepare_order_unlocked', side_effect=saves_lines_then_refuses):
+            with self.assertRaises(ValueError):
+                writer.prepare_order(o)
+        self.assertEqual(list(o.lines.order_by('id').values_list('trans_price_total', flat=True)), before)

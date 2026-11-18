@@ -41,6 +41,10 @@ $U $PY manage.py collectstatic --noinput
 echo "== writer role (P-54)"; $U $PY manage.py writer_status | tail -1
 echo "== restart"
 systemctl restart elrezeiky-web
+# extra web processes (PERF-3), only where they were enabled — none on a fresh install
+for unit in $(systemctl list-units --all --plain --no-legend 'elrezeiky-web-extra@*' | awk '{print $1}'); do
+  systemctl restart "$unit"
+done
 systemctl restart elrezeiky-scheduler
 $U git diff --quiet $OLD $NEW -- ocr_sidecar || systemctl restart elrezeiky-ocr
 # the AMI bridge runs only after cutover (runbook §11); when it runs it is a Django process too

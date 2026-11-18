@@ -4,3 +4,9 @@
 # neutralise_formulas(wb, keep_safe_formulas=True), which keeps plain in-workbook arithmetic live
 # and writes anything else as text; core/export_safety.py itself is skipped by the scanner.
 # New lines need a '# reason:' line above them.
+
+# reason: the Invoicer's bulk EGS sheet (doc 36 S3) is the Invoicer's input workbook, not a report: build saves
+#   the owner's workbook with its cells exactly as checked (neutralising would change item names and break the
+#   Invoicer's read); new_rows_xlsx writes those same checked values for review. Downloads need approve + audit.
+apps/tax_invoicing/egs_sheet.py::build
+apps/tax_invoicing/egs_sheet.py::new_rows_xlsx

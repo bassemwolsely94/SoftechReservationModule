@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from core.errors import redact
 
+from . import egs_sheet
 from .models import (EtaDeviceBranch, EtaHistoryState, EtaMirrorReceipt, EtaReconLine, EtaReconUncodedItem,
                      TaxChannelRule, TaxItemProfile)
 
@@ -189,8 +190,18 @@ def _decide(sale, matches):
 
 
 def coded_items():
-    """SOFTECH item codes that have an ETA code today. A receipt carries only these items' lines."""
-    return set(TaxItemProfile.objects.exclude(eta_code='').values_list('softech_itemcode', flat=True))
+    """SOFTECH item codes coded in the owner's bulk EGS sheet: a receipt carries only these items' lines (Invoicer
+    uploads only sheet-coded items). Once a sheet version is stored (S3, egs_sheet), the latest version's coded
+    itemcodes are the source. Before that, the 13-Nov workbook import is the sheet (white, with a code, coding_env
+    empty); codes requested through our own screens (coding_env set) are not in it and do not count."""
+    version = egs_sheet.latest()
+    if version is not None:
+        if not version.coded_itemcodes:
+            logger.warning('EGS sheet version %s has no coded items: every receipt line counts as uncoded',
+                           version.number)
+        return {str(c) for c in version.coded_itemcodes}
+    return set(TaxItemProfile.objects.filter(list_status=TaxItemProfile.LIST_WHITE, coding_env='')
+               .exclude(eta_code='').values_list('softech_itemcode', flat=True))
 
 
 def _reason(outcome, sale, eta_total, coded):

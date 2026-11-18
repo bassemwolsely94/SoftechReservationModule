@@ -30,6 +30,7 @@ class Command(BaseCommand):
         if opts['include_failed']:
             statuses.append(SoftechSalesOrder.STATUS_PUSH_FAILED)
         qs = (SoftechSalesOrder.objects.filter(status__in=statuses)
+              .exclude(erp_error__startswith=writer.OUTCOME_UNKNOWN)      # audit S-1: a person decides
               .select_related('branch').order_by('created_at')[:opts['limit']])
         pushed = queued = failed = 0
         for order in qs:

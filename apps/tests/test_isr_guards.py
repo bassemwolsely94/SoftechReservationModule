@@ -162,6 +162,45 @@ class PushGuardTests(TestCase):
                                          items_snapshot=[{'itemcode': 'A', 'qty': 1}])
         G.check_push(leg2)
 
+    @override_settings(ISR_WRITER_ENABLED=True, WRITER_INSTANCE=True)
+    def test_lost_reply_after_send_marks_outcome_unknown_and_blocks_a_twin(self):
+        # Full audit 2026-11-15, S-5: an error after the INSERTs were sent left the draft APPROVED, so a
+        # retry wrote a second approved ISR. Now: FAILED + 'outcome-unknown', and a twin needs a reason.
+        p = self._approved(_lines(('A', 2)))
+        conn = mock.MagicMock()
+
+        def _boom(*a, progress=None, **k):
+            progress['sent'] = True
+            raise RuntimeError('JZ006: Caught IOException: Connection reset')
+        with mock.patch('config.sybase.get_branch_connection', return_value=conn), \
+             mock.patch.object(G, 'review_push', return_value={'issues': [], 'needs_reason': False}), \
+             mock.patch.object(G, 'enforce_review'), \
+             mock.patch.object(W, '_write_isr', side_effect=_boom):
+            with self.assertRaises(RuntimeError):
+                W.push_isr_record(p)
+        p.refresh_from_db()
+        self.assertEqual(p.status, P.STATUS_FAILED)
+        self.assertTrue(p.error.startswith(W.OUTCOME_UNKNOWN))
+        twin = self._approved(_lines(('A', 2)))
+        with self.assertRaises(G.GuardError) as e:
+            G.check_push(twin)
+        self.assertEqual(e.exception.code, 'outcome_unknown_twin')
+        G.check_push(twin, force_reason='راجعت SOFTECH — الطلب الأول لم يُحفظ')
+        twin.refresh_from_db()
+        self.assertIn('forced_after_unknown', twin.params)
+
+    @override_settings(ISR_WRITER_ENABLED=True, WRITER_INSTANCE=True)
+    def test_error_before_send_leaves_the_draft_approved(self):
+        p = self._approved(_lines(('A', 2)))
+        with mock.patch('config.sybase.get_branch_connection', return_value=mock.MagicMock()), \
+             mock.patch.object(G, 'review_push', return_value={'issues': [], 'needs_reason': False}), \
+             mock.patch.object(G, 'enforce_review'), \
+             mock.patch.object(W, '_write_isr', side_effect=RuntimeError('serial read failed')):
+            with self.assertRaises(RuntimeError):
+                W.push_isr_record(p)
+        p.refresh_from_db()
+        self.assertEqual(p.status, P.STATUS_APPROVED)
+
     @override_settings(ISR_WRITER_ENABLED=True)
     def test_writer_refuses_before_connecting(self):
         self._pushed(_lines(('A', 2)))
