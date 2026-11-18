@@ -1,6 +1,6 @@
 # 38 — Marketplace & Delivery-App Channels (research + proposed design)
 
-**Status:** 🔍 RESEARCH / PROPOSAL (2026-11-17) — nothing built, nothing approved.
+**Status:** 🟡 M1 INFRASTRUCTURE BUILT (2026-11-18), switches OFF, no platform connected. (Research / proposal 2026-11-17.)
 **Scope:** selling our products through Talabat, Instashop, Chefaa, Amazon.eg and Noon Egypt,
 and connecting their orders to our stock, POS writer, delivery and finance.
 

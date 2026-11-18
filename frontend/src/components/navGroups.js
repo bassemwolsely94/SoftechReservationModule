@@ -33,6 +33,7 @@ export const NAV_GROUPS = [
       { to: '/followups/reminders', icon: '💬', label: 'تذكيرات الصرف واتساب', roles: ['admin','call_center','supervisor','quality_manager'] },
       { to: '/delivery',      icon: '🚚', label: 'توصيل الطلبات',    roles: ['admin','pharmacist','delivery','call_center','supervisor','quality_manager'] },
       { to: '/delivery/dispatch', icon: '🧭', label: 'لوحة التوزيع',  roles: ['admin','call_center','supervisor','quality_manager'] },
+      { to: '/marketplace',   icon: '🛍️', label: 'المنصات والتطبيقات', roles: [], cap: 'can_marketplace' },
       { to: '/rider',         icon: '🛵', label: 'مهام السائق',       roles: ['admin','delivery','supervisor'] },
       { to: '/stock-count',   icon: '📦', label: 'الجرد الفعلي',     roles: ['admin','pharmacist','supervisor','quality_manager'] },
       { to: '/tasks',         icon: '✅', label: 'المهام التشغيلية', roles: null, module: 'tasks' },

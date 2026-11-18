@@ -53,6 +53,14 @@ class MarketplaceAccessTests(TestCase):
         self.assertFalse(a.can_approve)
         self.assertFalse(a.can_edit)
 
+    def test_me_flag_follows_switch_and_rbac(self):
+        """/api/auth/me/ can_marketplace drives the side menu: flag off → False even for admin."""
+        _, _, client = make_admin('mp_me_admin')
+        with override_settings(MARKETPLACE_ENABLED=False):
+            self.assertIs(client.get('/api/auth/me/').json()['can_marketplace'], False)
+        with override_settings(MARKETPLACE_ENABLED=True):
+            self.assertIs(client.get('/api/auth/me/').json()['can_marketplace'], True)
+
 
 class MarketplaceModelTests(TestCase):
     def test_external_order_unique_per_channel(self):
