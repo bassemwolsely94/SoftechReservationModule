@@ -13,8 +13,8 @@ Per month x KPI three figures:
             CallCenterConfig extensions
   crew    = apps.crews.kpi.compute_crew_month (dated member identities)
 and one reason code per row (REASONS; priority in _reason). Also per person (old per config code
-vs crew per member), per CC SalesTarget, the CC ForecastResult rows, per invoice branch, and the
-questions only the owner can answer.
+vs crew per member), per CC SalesTarget, the CC ForecastResult rows, and the questions only the
+owner can answer. Single scope (the call-center crew): no per-branch rows (spec §6.8).
 
 A figure that cannot be computed (SOFTECH / CDR unreachable) is None — «غير محسوب» — never 0.
 SOFTECH reads only through cc_softech / softech_returns (config.sybase); CDR through config.issabel.
@@ -24,7 +24,6 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Sum
 
 from apps.forecasting.call_center import LEGACY_CC_KEY, legacy_cc_branch
 from apps.forecasting.callcount import count_calls
@@ -34,7 +33,7 @@ from config.issabel import cdr_configured, fetch_cdr_rows
 
 from . import kpi as crew_kpi
 from .membership import identities
-from .unattributed import branch_label, generic_rule, is_generic
+from .unattributed import generic_rule, is_generic
 
 METRICS = ['cash_delivery', 'gross_profit', 'beauty', 'customer_count', 'pic_count', 'call_count']
 MONEY_METRICS = ('cash_delivery', 'gross_profit', 'beauty')
@@ -63,6 +62,8 @@ REASONS = {
                    'en': 'Crew members differ from the CallCenterConfig codes'},
     'returns_unreachable': {'ar': 'لم يُحسب خصم المرتجعات (SOFTECH غير متاح)',
                             'en': 'Returns not deducted (SOFTECH unreachable)'},
+    'returns_not_deducted': {'ar': 'لم يُخصم المرتجع في هذا التشغيل (--no-returns) — القيم إجمالية',
+                             'en': 'Returns not deducted in this run (--no-returns) — gross figures'},
     'cdr_unavailable': {'ar': 'عدد المكالمات غير قابل لإعادة الحساب هنا (CDR غير متاح) — القيمة المخزنة فقط',
                         'en': 'Call count cannot be recomputed here (no CDR) — stored value only'},
     'return_before_membership': {'ar': 'مرتجع لبيع سابق لبداية العضوية',
@@ -137,13 +138,18 @@ def _old_sales(resolver, y, m, codes, returns) -> dict:
 
 # ── reason per month row ───────────────────────────────────────────────────────
 
-def _reason(metric, stored, old_now, crew, *, cdr_missing, returns_missing, gross_equal) -> str:
+def _reason(metric, stored, old_now, crew, *, cdr_missing, returns_missing, returns_skipped,
+            gross_equal) -> str:
     if stored is None:
         return 'no_stored_value'
     if metric == CALL_METRIC and cdr_missing:
         return 'cdr_unavailable'
     if metric in RETURN_METRICS and returns_missing:
         return 'returns_unreachable'
+    if metric in RETURN_METRICS and returns_skipped:
+        # stored is net of returns, old_now / crew are gross: no diff here may be blamed on
+        # membership or drift
+        return 'returns_not_deducted'
     if _close(crew, stored) and _close(old_now, stored):
         return 'same'
     if metric in RETURN_METRICS and gross_equal and not _close(old_now, crew):
@@ -232,9 +238,13 @@ def _people_rows(y, m, crew_month, ids, *, old_for, cfg_codes, cfg_exts, cdr_row
     return out
 
 
-# ── targets / forecasts / branches ──────────────────────────────────────────────
+# ── targets / forecasts ──────────────────────────────────────────────────────
 
-def _targets(cc, stored, crew_values) -> list:
+NOTE_NO_STORED_MONTH = 'شهر بلا رقم مخزن'
+NOTE_OUTSIDE_RANGE = 'خارج فترة التقرير'
+
+
+def _targets(cc, stored, crew_values, compared) -> list:
     from apps.forecasting import kpi_board
     from apps.incentives.models import SalesTarget
     if cc is None:
@@ -244,7 +254,15 @@ def _targets(cc, stored, crew_values) -> list:
             'period_start', 'metric', 'id'):
         months = _months((t.period_start.year, t.period_start.month),
                          (t.period_end.year, t.period_end.month))
-        board = sum((stored.get((y, m, t.metric), 0) for y, m in months), Decimal('0'))
+        notes = []
+        board_parts = [stored.get((y, m, t.metric)) for y, m in months]
+        if any(v is None for v in board_parts):     # never a silent 0 for a missing month
+            board = None
+            notes.append(NOTE_NO_STORED_MONTH)
+        else:
+            board = sum((Decimal(str(v)) for v in board_parts), Decimal('0'))
+        if not set(months) <= compared:
+            notes.append(NOTE_OUTSIDE_RANGE)
         crew_parts = [crew_values.get((y, m, t.metric)) for y, m in months]
         crew = None if any(v is None for v in crew_parts) else sum(
             (Decimal(str(v)) for v in crew_parts), Decimal('0'))
@@ -253,7 +271,8 @@ def _targets(cc, stored, crew_values) -> list:
                'period': f'{t.period_start.isoformat()} → {t.period_end.isoformat()}',
                'target': _f(target), 'achieved_board': _f(board),
                'achieved_salestarget_today': _f(t.actual_value()), 'achieved_crew': _f(crew),
-               'pct_board': None, 'pct_crew': None, 'pace_board': None, 'pace_crew': None}
+               'pct_board': None, 'pct_crew': None, 'pace_board': None, 'pace_crew': None,
+               'notes': notes}
         if len(months) == 1:        # the board's own to-date % and pace (kpi_board)
             _s, m_end, through, _t, _e, frac = kpi_board.month_pacing(*months[0])
             for name, a in (('board', board), ('crew', crew)):
@@ -276,43 +295,6 @@ def _forecasts() -> list:
              'scenario': f'{r.scenario.name} ({r.scenario.year}-{r.scenario.month:02d})',
              'metric': r.metric, 'forecast': _f(r.forecast_value), 'target': _f(r.target_value)}
             for r in qs]
-
-
-def _branch_sales(resolver, months, codes, crew) -> list:
-    """Gross net-of-doc-30 sales (mirror only, before SOFTECH returns) per invoice branch over the
-    whole range, old codes vs crew spans. Live branches always listed; any other branch with
-    sales listed too so nothing drops."""
-    from apps.branches.models import Branch
-
-    from .branches import live_branches
-
-    def by_branch(qs):
-        out = defaultdict(Decimal)
-        for r in qs.filter(doc_code__in=['115', '30']).values('branch_id', 'doc_code').annotate(
-                s=Sum('total_amount')):
-            v = r['s'] or Decimal('0')
-            out[r['branch_id']] += v if r['doc_code'] == '115' else -v
-        return out
-
-    old, new = defaultdict(Decimal), defaultdict(Decimal)
-    for y, m in months:
-        start, end = resolver.month_bounds(y, m)
-        if codes:
-            for b, v in by_branch(resolver._ph_qs(None, start, end, softech_user=list(codes))).items():
-                old[b] += v
-        spans = crew_kpi.seller_spans(crew, start, end) if crew else []
-        if spans:
-            for b, v in by_branch(resolver._ph_qs(None, start, end)
-                                  .filter(crew_kpi.sales_q(spans))).items():
-                new[b] += v
-    branches = {b.id: b for b in live_branches()}
-    missing = (set(old) | set(new)) - set(branches) - {None}
-    if missing:
-        branches.update({b.id: b for b in Branch.objects.filter(id__in=missing)})
-    rows = [{'branch_id': bid, 'label': branch_label(b), 'old': _f(old.get(bid, 0)),
-             'crew': _f(new.get(bid, 0)), 'diff': _diff(new.get(bid, 0), old.get(bid, 0))}
-            for bid, b in branches.items()]
-    return sorted(rows, key=lambda r: (-(r['old'] or 0), r['label']))
 
 
 # ── questions ───────────────────────────────────────────────────────────────────
@@ -396,7 +378,8 @@ def compare(crew, start, end, *, returns=True, cdr_rows_by_month=None, cdr_from_
                            and metric in cm.gross
                            and _close(cm.gross.get(metric), old['gross'].get(metric)))
             reason = _reason(metric, s, o, c, cdr_missing=cdr_missing,
-                             returns_missing=returns_missing, gross_equal=gross_equal)
+                             returns_missing=returns_missing, returns_skipped=not returns,
+                             gross_equal=gross_equal)
             crew_values[(y, m, metric)] = _f(c)
             month_rows.append({'year': y, 'month': m, 'metric': metric, 'stored': _f(s),
                                'old_now': _f(o), 'crew': _f(c), 'diff_stored_crew': _diff(c, s),
@@ -407,12 +390,11 @@ def compare(crew, start, end, *, returns=True, cdr_rows_by_month=None, cdr_from_
         people += _people_rows(y, m, cm, ids, old_for=old_for, cfg_codes=codes, cfg_exts=exts,
                                cdr_rows=rows, labeller=labeller, returns_missing=returns_missing)
 
-    targets = _targets(cc, stored, crew_values)
+    targets = _targets(cc, stored, crew_values, set(months))
     result = {
         'crew_id': crew.pk if crew else None, 'start': list(start), 'end': list(end),
         'returns': returns, 'months': month_rows, 'people': people, 'targets': targets,
         'forecasts': _forecasts(),
-        'branches': _branch_sales(resolver, months, codes, crew),
         'questions': _questions(targets, cdr_from_csv=cdr_from_csv),
     }
     result['totals'] = _totals(month_rows)
@@ -455,10 +437,21 @@ def compare_seeded_in_transaction(start, end, **kw) -> dict:
 
 # ── outputs ─────────────────────────────────────────────────────────────────────
 
+COUNT_TOTAL_AR = 'مجموع شهري'
+COUNT_TOTAL_EN = 'sum of monthly counts'
+
+
 def _num(v, money=True):
     if v is None:
         return NOT_COMPUTED
     return f'{v:,.2f}' if money else f'{v:,.0f}'
+
+
+def _total_label(metric) -> str:
+    """Counts summed across months are a sum of monthly counts, not a distinct count."""
+    if metric in MONEY_METRICS:
+        return METRIC_LABELS[metric]
+    return f'{METRIC_LABELS[metric]} ({COUNT_TOTAL_AR} / {COUNT_TOTAL_EN})'
 
 
 def markdown_summary(result) -> str:
@@ -472,7 +465,7 @@ def markdown_summary(result) -> str:
         t = result['totals']['metrics'][metric]
         money = metric in MONEY_METRICS
         miss = sum(t[f'{c}_missing'] for c in ('stored', 'old_now', 'crew'))
-        lines.append(f"| {METRIC_LABELS[metric]} | {metric} | {_num(t['stored'], money)} | "
+        lines.append(f"| {_total_label(metric)} | {metric} | {_num(t['stored'], money)} | "
                      f"{_num(t['old_now'], money)} | {_num(t['crew'], money)} | "
                      f"{_num(_diff(t['crew'], t['stored']), money)} |"
                      + (f' ({miss} خانة {NOT_COMPUTED})' if miss else ''))
@@ -482,15 +475,18 @@ def markdown_summary(result) -> str:
         lines.append(f"| {REASONS[code]['ar']} | {code} | {n} |")
     lines += ['', '### المستهدفات (الفرع الوهمي CC)', '']
     if result['targets']:
-        lines += ['| # | metric | الفترة | المستهدف | اللوحة | SalesTarget اليوم | الطاقم | % اللوحة | % الطاقم |',
-                  '|---|---|---|---:|---:|---:|---:|---:|---:|']
+        lines += ['| # | metric | الفترة | المستهدف | اللوحة | SalesTarget اليوم | الطاقم '
+                  '| % اللوحة | % الطاقم | ملاحظات |',
+                  '|---|---|---|---:|---:|---:|---:|---:|---:|---|']
         for t in result['targets']:
             money = t['metric'] in MONEY_METRICS
             lines.append(f"| {t['target_id']} | {t['metric']} | {t['period']} | "
                          f"{_num(t['target'], money)} | {_num(t['achieved_board'], money)} | "
                          f"{_num(t['achieved_salestarget_today'], money)} | "
-                         f"{_num(t['achieved_crew'], money)} | {t['pct_board'] if t['pct_board'] is not None else '—'} | "
-                         f"{t['pct_crew'] if t['pct_crew'] is not None else '—'} |")
+                         f"{_num(t['achieved_crew'], money)} | "
+                         f"{'—' if t['pct_board'] is None else t['pct_board']} | "
+                         f"{'—' if t['pct_crew'] is None else t['pct_crew']} | "
+                         f"{'، '.join(t['notes']) or '—'} |")
     else:
         lines.append('لا توجد مستهدفات للكول سنتر.')
     lines += ['', '### أسئلة للمالك', '']
@@ -499,6 +495,10 @@ def markdown_summary(result) -> str:
 
 
 _MONEY_FMT, _COUNT_FMT = '#,##0.00', '#,##0'
+
+
+def _fmt(metric):
+    return _MONEY_FMT if metric in MONEY_METRICS else _COUNT_FMT
 
 
 def build_workbook(result):
@@ -510,28 +510,35 @@ def build_workbook(result):
     wb = Workbook()
     wb.remove(wb.active)
 
-    def sheet(title, header, rows, money_cols=(), metric_col=None):
+    def sheet(title, header, rows, num_cols=()):
+        """rows = [(values, number_format | None)]; the format applies to num_cols."""
         ws = safe_sheet(wb.create_sheet(title))
         ws.sheet_view.rightToLeft = True
         ws.append(header)
         for i in range(1, len(header) + 1):
             ws.cell(row=1, column=i).font = Font(bold=True)
-        for values, metric in rows:
+        for values, fmt in rows:
             ws.append([NOT_COMPUTED if v is None else v for v in values])
-            r = ws.max_row
-            fmt = _MONEY_FMT if metric is None or metric in MONEY_METRICS else _COUNT_FMT
-            for col in money_cols:
-                ws.cell(row=r, column=col).number_format = fmt
-        for i, _ in enumerate(header, 1):
+            if fmt:
+                r = ws.max_row
+                for col in num_cols:
+                    ws.cell(row=r, column=col).number_format = fmt
+        for i in range(1, len(header) + 1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = 18
         return ws
 
+    summary = [([r['year'], r['month'], METRIC_LABELS[r['metric']], r['metric'], r['stored'],
+                 r['old_now'], r['crew'], r['diff_stored_crew'], r['diff_old_crew'],
+                 REASONS[r['reason']]['ar'], r['reason']], _fmt(r['metric']))
+               for r in result['months']]
+    for metric in METRICS:
+        t = result['totals']['metrics'][metric]
+        summary.append((['الإجمالي', '', _total_label(metric), metric, t['stored'], t['old_now'],
+                         t['crew'], _diff(t['crew'], t['stored']), _diff(t['crew'], t['old_now']),
+                         '', ''], _fmt(metric)))
     sheet('ملخص', ['السنة', 'الشهر', 'المؤشر', 'metric', 'المخزن (اللوحة)', 'القديم محسوباً الآن',
                    'الطاقم', 'الطاقم − المخزن', 'الطاقم − القديم الآن', 'السبب', 'reason'],
-          [([r['year'], r['month'], METRIC_LABELS[r['metric']], r['metric'], r['stored'],
-             r['old_now'], r['crew'], r['diff_stored_crew'], r['diff_old_crew'],
-             REASONS[r['reason']]['ar'], r['reason']], r['metric']) for r in result['months']],
-          money_cols=(5, 6, 7, 8, 9))
+          summary, num_cols=(5, 6, 7, 8, 9))
 
     def person_metric(metric):
         label = METRIC_LABELS[metric]
@@ -541,34 +548,29 @@ def build_workbook(result):
                              'metric', 'القديم (أكواد الإعداد)', 'الطاقم', 'الفرق'],
                [([p['year'], p['month'], p['label'], p['member_key'], 'نعم' if p['generic'] else '',
                   person_metric(p['metric']), p['metric'], p['old'], p['crew'], p['diff']],
-                 p['metric']) for p in result['people']],
-               money_cols=(8, 9, 10))
+                 _fmt(p['metric'])) for p in result['people']],
+               num_cols=(8, 9, 10))
     ws.append([])
     ws.append([PIC_NOT_ADDITIVE])
 
     sheet('المستهدفات', ['#', 'metric', 'الفترة', 'المستهدف', 'المحقق (اللوحة)',
                          'المحقق (SalesTarget.actual_value اليوم)', 'المحقق (الطاقم)', '% اللوحة',
-                         '% الطاقم', 'الإيقاع (اللوحة)', 'الإيقاع (الطاقم)'],
+                         '% الطاقم', 'الإيقاع (اللوحة)', 'الإيقاع (الطاقم)', 'ملاحظات'],
           [([t['target_id'], t['metric'], t['period'], t['target'], t['achieved_board'],
              t['achieved_salestarget_today'], t['achieved_crew'],
              '—' if t['pct_board'] is None else t['pct_board'],
              '—' if t['pct_crew'] is None else t['pct_crew'],
-             t['pace_board'] or '—', t['pace_crew'] or '—'], t['metric'])
-           for t in result['targets']], money_cols=(4, 5, 6, 7))
+             t['pace_board'] or '—', t['pace_crew'] or '—', '، '.join(t['notes'])],
+            _fmt(t['metric'])) for t in result['targets']], num_cols=(4, 5, 6, 7))
 
     sheet('التنبؤات', ['السيناريو', '#', 'metric', 'التنبؤ', 'الهدف'],
-          [([f['scenario'], f['scenario_id'], f['metric'], f['forecast'], f['target']], f['metric'])
-           for f in result['forecasts']], money_cols=(4, 5))
+          [([f['scenario'], f['scenario_id'], f['metric'], f['forecast'], f['target']],
+            _fmt(f['metric'])) for f in result['forecasts']], num_cols=(4, 5))
 
     sheet('أسئلة للمالك', ['#', 'السؤال'],
-          [([i, q], 'customer_count') for i, q in enumerate(result['questions'], 1)])
+          [([i, q], None) for i, q in enumerate(result['questions'], 1)])
 
     counts = result['totals']['reasons']
     sheet('شرح الفروق', ['code', 'السبب', 'reason', 'عدد الصفوف'],
-          [([code, r['ar'], r['en'], counts.get(code, 0)], 'customer_count')
-           for code, r in REASONS.items()])
-
-    sheet('حسب الفرع', ['الفرع', 'القديم (أكواد الإعداد)', 'الطاقم', 'الفرق'],
-          [([b['label'], b['old'], b['crew'], b['diff']], None) for b in result['branches']],
-          money_cols=(2, 3, 4))
+          [([code, r['ar'], r['en'], counts.get(code, 0)], None) for code, r in REASONS.items()])
     return neutralise_formulas(wb)

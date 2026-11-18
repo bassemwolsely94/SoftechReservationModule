@@ -92,6 +92,12 @@ class _Base(TestCase):
         cc_seed.seed()
         return Crew.objects.get(name=cc_seed.CC_CREW_NAME)
 
+    def cmp(self, crew, **kw):
+        """compare with returns ON and SOFTECH mocked to no returns on both sides."""
+        with mock.patch.object(C, 'cc_returns_from_softech', return_value=NO_RET), \
+                mock.patch('apps.crews.softech_returns.returns_for_spans', return_value=NO_RET):
+            return C.compare(crew, JUNE, JUNE, returns=True, cdr_rows_by_month={JUNE: CDR}, **kw)
+
     def rows(self, result, **match):
         return [r for r in result['months']
                 if all(r[k] == v for k, v in match.items())]
@@ -106,7 +112,7 @@ class ReasonTests(_Base):
     def test_identical_membership_gives_same_reason(self):
         self.june_sales()
         self.store_old()
-        res = C.compare(self.crew(), JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        res = self.cmp(self.crew())
         self.assertEqual(len(res['months']), len(C.METRICS))
         for metric in C.METRICS:
             r = self.row(res, metric)
@@ -122,7 +128,7 @@ class ReasonTests(_Base):
         crew = self.crew()
         CrewManualMember.objects.create(crew=crew, mode='include', softech_usercode='99',
                                         valid_from=date(2026, 6, 1), reason='t')
-        res = C.compare(crew, JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        res = self.cmp(crew)
         r = self.row(res, 'cash_delivery')
         self.assertEqual(r['reason'], 'membership')
         self.assertEqual((r['stored'], r['old_now'], r['crew']), (1800.0, 1800.0, 2500.0))
@@ -136,7 +142,7 @@ class ReasonTests(_Base):
     def test_stored_drift_reason(self):
         self.june_sales()
         self.store_old(overrides={'cash_delivery': Decimal('1500')}, skip=('beauty',))
-        res = C.compare(self.crew(), JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        res = self.cmp(self.crew())
         r = self.row(res, 'cash_delivery')
         self.assertEqual(r['reason'], 'drift_since_build')
         self.assertEqual((r['stored'], r['old_now'], r['crew']), (1500.0, 1800.0, 1800.0))
@@ -156,6 +162,20 @@ class ReasonTests(_Base):
         self.assertEqual((r['stored'], r['old_now'], r['crew']), (1700.0, 1700.0, 1800.0))
         self.assertEqual(self.row(res, 'gross_profit')['reason'], 'return_before_membership')
         self.assertEqual(self.row(res, 'beauty')['reason'], 'same')
+
+    def test_no_returns_run_gives_returns_not_deducted(self):
+        # stored is net of a 100 return; a --no-returns run compares gross figures against it
+        self.june_sales()
+        self.store_old(overrides={'cash_delivery': Decimal('1700'), 'gross_profit': Decimal('700')})
+        crew = self.crew()
+        CrewManualMember.objects.create(crew=crew, mode='include', softech_usercode='99',
+                                        valid_from=date(2026, 6, 1), reason='t')
+        res = C.compare(crew, JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        for metric in ('cash_delivery', 'gross_profit'):
+            self.assertEqual(self.row(res, metric)['reason'], 'returns_not_deducted', metric)
+        self.assertEqual(self.row(res, 'cash_delivery')['crew'], 2500.0)    # gross, shown
+        self.assertEqual(self.row(res, 'beauty')['reason'], 'same')          # no returns involved
+        self.assertIn('returns_not_deducted', C.markdown_summary(res))
 
     def test_report_marks_unrecomputable_call_count(self):
         self.june_sales()
@@ -204,8 +224,23 @@ class SectionTests(_Base):
         self.assertEqual(row['achieved_crew'], 1800.0)
         self.assertEqual((row['pct_board'], row['pct_crew']), (75.0, 90.0))
         self.assertEqual((row['pace_board'], row['pace_crew']), ('missed', 'missed'))
+        self.assertEqual(row['notes'], [])
         self.assertTrue(any('actual_value' in q for q in res['questions']))
         self.assertTrue(any('value-for-value' in q for q in res['questions']))
+
+    def test_target_missing_stored_month_and_outside_range(self):
+        self.june_sales()
+        self.store_old()
+        # June + July: July has no stored rollup and is outside the compared range
+        SalesTarget.objects.create(scope_type=SalesTarget.SCOPE_BRANCH, branch=self.cc,
+                                   metric='cash_delivery', period_start=date(2026, 6, 1),
+                                   period_end=date(2026, 7, 31), target_value=Decimal('4000'))
+        res = C.compare(self.crew(), JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        row = res['targets'][0]
+        self.assertIsNone(row['achieved_board'])        # never a silent 0 for July
+        self.assertIsNone(row['achieved_crew'])
+        self.assertEqual(row['notes'], ['شهر بلا رقم مخزن', 'خارج فترة التقرير'])
+        self.assertIn('خارج فترة التقرير', C.markdown_summary(res))
 
     def test_forecasts_section_lists_cc_rows(self):
         from apps.forecasting.models import ForecastResult, ForecastScenario
@@ -259,6 +294,10 @@ class SectionTests(_Base):
                         texts.append(cell.value)
         self.assertIn('=HYPERLINK("http://x","y")', texts)
         self.assertTrue(any('غير تجميعي' in t for t in texts))      # pic_count per person
+        self.assertTrue(any('مجموع شهري' in t and 'عدد المكالمات' in t for t in texts))
+        self.assertIn('sum of monthly counts', C.markdown_summary(res))
+        self.assertNotIn('حسب الفرع', wb.sheetnames)
+        self.assertNotIn('branches', res)
         self.assertTrue(any(REASON in t for t in texts for REASON in [C.REASONS['same']['ar']]))
 
 

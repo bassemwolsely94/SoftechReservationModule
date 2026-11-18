@@ -11,7 +11,8 @@ fake «CC» branch to the call-center crew (money gate). Reads only.
 
 --from defaults to the earliest month with a CC rollup, --to to the current month.
 --seed-in-transaction seeds the crew inside a transaction and rolls it back after computing
-(for a DB where the seed must not persist yet). Without it the live call-center crew is used.
+(for a DB where the seed must not persist yet); it holds one DB transaction open for the whole
+run. Without it the live call-center crew is used.
 SOFTECH (returns) and the CDR (call_count) are read when reachable; what cannot be read is
 reported «غير محسوب», never 0. Without --out / --md the markdown summary goes to stdout.
 """
@@ -45,7 +46,9 @@ class Command(BaseCommand):
         parser.add_argument('--md', help='write the markdown summary here')
         parser.add_argument('--no-returns', action='store_true', help='skip SOFTECH returns (gross)')
         parser.add_argument('--seed-in-transaction', action='store_true',
-                            help='seed the crew, compare, roll the seed back')
+                            help='seed the crew, compare, roll the seed back; holds ONE database '
+                                 'transaction open for the whole run (SOFTECH/CDR reads included), '
+                                 'so prefer a short --from/--to on a busy DB')
         parser.add_argument('--cdr-csv', help='Issabel CDR CSV export for a single month')
 
     def handle(self, *args, **o):
