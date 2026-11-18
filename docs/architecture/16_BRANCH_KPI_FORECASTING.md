@@ -64,6 +64,12 @@
   inventory) — Phase 6 adds *targets+forecast* at those grains, not new dashboards. Perf: non-branch
   generate does per-member resolver queries (~1–3 min for 60 members); optimise with batched
   aggregation if needed.
+- **Crews piece 2b (2026-11-18, owner gate open):** the call center is also the crew «الكول سنتر»
+  (`seed_call_center_crew`), and `build_crew_rollups` computes its figures from members' dated
+  identities into the shadow table `crews.CrewKpiRollup`, which nothing but the comparison reads.
+  The board, targets, forecasts and incentives still read the `CC` branch below (one lookup:
+  `apps/forecasting/call_center.py::legacy_cc_branch()`) until the owner signs off the
+  `compare_call_center_crew` report — plan `docs/superpowers/plans/2026-11-18-crews-piece2b-call-center.md` Part B.
 - **Phase 5 (call center):** decoded from the owner's Call-Center-KPIs workbook + CDR CSVs.
   **Sales/profit/beauty/orders** = `PurchaseHistory` where `softech_user ∈ {62,63,64}` (all
   branches; validated Jun sales 833,733 == workbook). **Call count** = Issabel CDR: ANSWERED,
