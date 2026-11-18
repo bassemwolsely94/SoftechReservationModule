@@ -58,8 +58,12 @@ const HANG_MS = 60_000
 // One user's whole sweep (~10-15 min with openScreen); the chunk runner kills at 45 min.
 const USER_TIMEOUT_MS = 40 * 60_000
 const SPINNERS = '[aria-busy="true"], .animate-spin, [data-loading="true"]'
-// Same refusal wording as lib/page.js (gotoSettled), which this spec no longer calls.
-const REFUSED_TEXT = /غير مصرح|ليس لديك صلاحية|لا تملك صلاحية|403|Forbidden/
+// Refusal wording from lib/page.js (gotoSettled), which this spec no longer calls.
+const REFUSED_TEXT = /غير مصرح|ليس لديك صلاحية|لا تملك صلاحية/
+// lib/page.js also counts a bare "403"/"Forbidden" anywhere on the page as a refusal, which a figure
+// or code on a data screen matches (run 4b: admin "refused" on /finance with data 200). Here they
+// count only on a near-empty screen (< 200 chars), like an unhandled 403 response.
+const REFUSED_CODE = /(^|[^0-9])403([^0-9]|$)|Forbidden/
 const OUT_DIR = path.resolve(__dirname, '..', '..', 'test-results-uat')
 const MATRIX = path.join(OUT_DIR, 'visibility-matrix.json')
 const SHOTS = path.join(OUT_DIR, 'visibility', 'shots')
@@ -143,8 +147,9 @@ async function openScreen(page, url) {
   const crashed = consoleErrors.some(e => e.startsWith('pageerror')) || apiErrors.some(e => e.status >= 500 && e.status !== 503)
   let status
   if (crashed) status = 'crash'
-  else if (REFUSED_TEXT.test(text) || apiErrors.some(e => e.status === 403) && text.length < 200 ||
-           (finalUrl !== new URL(url, 'http://x').pathname && /\/(dashboard|login|rider|m)$/.test(finalUrl))) status = 'refused'
+  else if (REFUSED_TEXT.test(text) || (REFUSED_CODE.test(text) || apiErrors.some(e => e.status === 403)) && text.length < 200 ||
+           // Anchored: unanchored, /finance → /finance/dashboard (its own index) counted as a refusal.
+           (finalUrl !== new URL(url, 'http://x').pathname && /^\/(dashboard|login|rider|m)\/?$/.test(finalUrl))) status = 'refused'
   else if (timedOut) status = 'slow'
   else if (text.length < 20) status = 'blank'
   else status = ms > SLOW_MS ? 'slow' : 'ok'
