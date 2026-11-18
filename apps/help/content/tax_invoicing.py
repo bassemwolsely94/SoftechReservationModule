@@ -204,7 +204,12 @@ SCREENS = [
                        '«ملف أكواد الإيصالات (المحصّل)» يحفظ نسخ ملف ElRezeiky_Bulk_EGS_Items.xlsx: «بناء نسخة جديدة» يكوّد صف كل صنف اعتمدته المصلحة الفعلية أو يضيف له صفاً، ولا يغيّر صفاً مكوّداً. '
                        'الصنف المتروك يظهر بسببه (نسبة غير مؤكدة، بلا فئة...)، والنسخة المرفوضة تظهر أسباب رفضها. البناء يأخذ دقيقة أو اثنتين في الخلفية. '
                        '«تنزيل الملف كاملاً» هو ما يقرؤه المحصّل، و«الصفوف الجديدة فقط» للمراجعة؛ كل تنزيل يُسجَّل. القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات. '
-                       'بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات.',
+                       'بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات. '
+                       'تحته «الجهاز المحلي (192.168.1.8)»: برنامج الختم على جهاز الختم يقرأ الملف ويكتبه بدلاً منك، ويعمل فقط والختم الإلكتروني موصول. '
+                       '«اقرأ الملف الحالي» يرفع نسخة منه ويقارنها بآخر نسخة لدينا. «اكتب الآن» يضع آخر نسخة مكانه بعد نسخة احتياطية في D:\\invoicer_mini\\backup (آخر 30). '
+                       'مفتاح الكتابة يفتحه المالك وحده؛ وهو مغلق يصبح الزر «معاينة الآن»: يتحقق الجهاز من الملف ولا يكتب شيئاً. '
+                       'إن كان في الملف الحالي تعديلات يدوية توقف الكتابة: «استورد التعديلات» يجعله نسختنا التالية (وإن نقصه أصناف مكوّدة تؤكد حذفها)، أو «اكتب فوقها» بسبب مكتوب يُسجَّل. '
+                       'كل ليلة 03:00 يُقرأ الملف، ويُكتب إن كان المفتاح مفتوحاً. «الملف مفتوح في المحصّل» = لم يُكتب، أغلقه وأعد المحاولة.',
                        'Items sold on production receipts with no code, biggest sales first. Each has a suggestion from where it was bought (code or keep out) and a VAT rate from SOFTECH; both are inputs only, and your decision is what is saved, with who and when. '
                        'Tick items with Space, then Enter accepts each one’s suggestion (an item with none is left), or C to code and K to keep out. A red rate needs checking: pick 0 or 14, then decide that item on its own; bulk accept is off while the selection holds one. '
                        '"Reopen" in the item details (M or a click) clears the decision with a written reason and keeps the confirmed VAT rate; to change the rate, edit it on the items tab. "What ETA holds" lists codes active on ETA production that are not in the coding sheet. Nothing is sent to ETA from here. '
@@ -214,7 +219,12 @@ SCREENS = [
                        '"Receipt codes file (Invoicer)" keeps the versions of ElRezeiky_Bulk_EGS_Items.xlsx: "Build a new version" codes the row of each item ETA production approved, or adds a row for it, and never changes a coded row. '
                        'A skipped item shows its reason (rate not confirmed, no brick...), and a refused build shows why. A build takes a minute or two in the background. '
                        '"Download the full file" is what the Invoicer reads, and "New rows only" is for review; every download is logged. Columns L–P hold values, not formulas. '
-                       'After replacing the file in D:\\invoicer_mini close Excel — an open file stops receipt uploads.')},
+                       'After replacing the file in D:\\invoicer_mini close Excel — an open file stops receipt uploads. '
+                       'Under it, "Local device (192.168.1.8)": the seal program on the seal PC reads and writes the file for you, only while the eSeal token is plugged in. '
+                       '"Read the current file" uploads a copy and compares it with our latest version. "Write now" puts the latest version in its place after a backup in D:\\invoicer_mini\\backup (newest 30). '
+                       'Only the owner turns the write switch on; while it is off the button reads "Preview now": the seal PC checks the file and writes nothing. '
+                       'If the current file has hand edits, writing stops: "Import the edits" makes it our next version (confirm if it drops coded items), or "Write over them" with a written, logged reason. '
+                       'Each night at 03:00 the file is read, and written if the switch is on. "File open in the Invoicer" = not written; close it and try again.')},
             {'key': 'receipts', 'title': T('🧾 الإيصالات', '🧾 Receipts'),
              'body': T('ملخص بالحالات لكل فرع، والقائمة بأسباب الحجز، واستيراد يوم من SOFTECH للقراءة فقط، وإعداد جهاز كل فرع، وقرار كل قناة. «إصدار الجاهز» يجمد الإيصالات في سلسلة الفرع، و«معاينة الإرسال» لا ترسل شيئاً. الإرسال الفعلي يظهر بعد المعاينة ويحتاج كتابة كود الفرع، وهو معطل طالما الإرسال مغلق.',
                        'A per-branch summary by status, the list with hold reasons, reading a day from SOFTECH (read only), each branch’s device setup, and each channel’s decision. "Issue ready" freezes receipts into the branch chain, and "Preview sending" sends nothing. The real send appears after the preview and needs the typed branch code; it is disabled while sending is off.')},
@@ -495,9 +505,15 @@ SCREENS = [
              'text': T('نسخ ملف المحصّل: البناء يضيف الأصناف المعتمدة ولا يغير صفاً مكوّداً. بعد استبدال الملف أغلق Excel.',
                        'The Invoicer file’s versions: a build adds approved items and never changes a coded row. After replacing the file, close Excel.'),
              'open_hint': T('تبويب «🧮 طابور الترميز»، فوق «ما لدى المصلحة».', 'The "🧮 Coding queue" tab, above "What ETA holds".')},
+            {'target': 'tax-invoicing-queue-egs-agent', 'label': T('الجهاز المحلي (192.168.1.8)', 'Local device (192.168.1.8)'),
+             'text': T('برنامج جهاز الختم يقرأ ملف المحصّل ويكتبه بعد نسخة احتياطية. المفتاح مغلق = معاينة فقط. التعديلات اليدوية توقف الكتابة.',
+                       'The seal PC reads the Invoicer file and writes it after a backup. Switch off = preview only. Hand edits stop a write.'),
+             'warn': T('مفتاح الكتابة يفتحه المالك وحده. «اكتب فوقها» يمسح تعديلات المحصّل اليدوية ويُسجَّل بسببه.',
+                       'Only the owner turns the write switch on. "Write over them" erases the hand edits and is logged with its reason.'),
+             'open_hint': T('داخل «ملف أكواد الإيصالات (المحصّل)» في تبويب «🧮 طابور الترميز».', 'Inside "Receipt codes file (Invoicer)" on the "🧮 Coding queue" tab.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('«🧮 طابور الترميز»: لوحة «ملف أكواد الإيصالات (المحصّل)» لبناء نسخ ملف المحصّل وتنزيلها',
-                         '"🧮 Coding queue": a "Receipt codes file (Invoicer)" panel to build and download the Invoicer file’s versions'),
+        'updated': '2026-11-18',
+        'change_note': T('«ملف أكواد الإيصالات (المحصّل)»: «الجهاز المحلي» يقرأ ملف المحصّل على جهاز الختم ويكتبه (معاينة حتى يفتح المالك المفتاح)',
+                         '"Receipt codes file (Invoicer)": "Local device" reads and writes the Invoicer file on the seal PC (preview until the owner opens the switch)'),
     },
 ]

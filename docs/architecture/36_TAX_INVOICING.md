@@ -4,7 +4,8 @@ E-invoices for finalized insurance claims and e-receipts for branch POS sales, s
 Authority (ETA). API prefix `/api/tax-invoicing/`, RBAC module `tax_invoicing`, route `/tax-invoicing`.
 
 **Live sending is off.** Flags `TAX_ETA_SUBMIT_ENABLED` and `TAX_ERECEIPT_SUBMIT_ENABLED` default to False and
-go through `writer_allowed`. No SOFTECH writes: e-receipt import is SELECT only.
+go through `writer_allowed`. No SOFTECH writes: e-receipt import is SELECT only. The one write outside the server
+is the Invoicer's sheet on the seal PC, behind `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` (off = preview; batch S5 below).
 
 ## Boundaries
 
@@ -278,8 +279,84 @@ Not passed through `core/export_safety` (an input workbook, not a report; docume
 export middleware's stamp changes the document properties only, so a downloaded file's hash differs from the stored
 one; the cells do not.
 
-**Replacing the Invoicer's file** is done by a person until S5: download the full file, put it in D:\invoicer_mini,
-then close Excel — an open file stops receipt uploads.
+**Replacing the Invoicer's file** by hand still works: download the full file, put it in D:\invoicer_mini, then close
+Excel — an open file stops receipt uploads. From S5 the seal PC's agent can do it (next section).
+
+## ملف الأكواد للمحصّل — الكتابة عبر جهاز الختم (batch S5)
+
+The signing agent on the seal PC (192.168.1.8, `deploy/tax_signing_agent`, README "The bulk EGS sheet") reads and
+writes the live `D:\invoicer_mini\ElRezeiky_Bulk_EGS_Items.xlsx`. Server code `egs_agent.py`; agent endpoints in
+`views.py`; person endpoints in `egs_sheet_views.py`; panel part «الجهاز المحلي (192.168.1.8)» (`EgsAgentPart.jsx`)
+inside «ملف أكواد الإيصالات (المحصّل)».
+
+**Outward write channel.** `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` (`config/writers.py`, default False, writer instance
+only, forced False in tests) is the only thing that lets a file on the seal PC be replaced. It is the owner's switch.
+Off = every write job is a **preview**: the agent downloads and checks the version and reports what it would do (live
+size/hash, in use or not, backup folder writable, `would_write`), and writes nothing in D:\invoicer_mini.
+
+**Jobs** (`TaxAgentFileJob`): `egs_fetch` (upload a copy of the live sheet) and `egs_write` (mode `preview` | `write`,
+the version, `sha256` of the served bytes, `live_sha256` = the live file the write expects to replace). Status
+pending → claimed → done | failed | busy; `held` = a write that is never offered (hand edits). One open job of each
+kind (advisory lock). A claimed job with no answer in 30 min, or a pending one nobody collected in 24 h, fails.
+Person endpoints (`/api/tax-invoicing/codes/sheet/agent/`): `GET` state (view): switch, agent last poll + version,
+last fetch with its difference from the latest version, the hold that stands, the last 20 jobs; `POST fetch/`,
+`POST write/` (`{override: true, note}` = «اكتب فوقها», a reason required), `POST import/` (`{job, allow_removals}`) —
+all `approve`. The panel polls only while a job is pending or claimed.
+
+**Handshake.** The agent sends `X-Tax-Agent-Version`; the server records the last poll and version (`SystemSetting`
+`tax_signing_agent_seen`, at most once a minute). File jobs go only to version ≥ 2, and only when no signing job
+waits; an old agent (no header) keeps receiving signing jobs only. The panel warns «حدّث برنامج الختم على جهاز الختم»
+below version 2. The agent polls only while the eSeal token is plugged in, so file jobs, like signing, wait for it.
+
+**Exact-bytes download.** `GET signing-agent/files/<job>/download/` (agent token + finalize account) serves exactly the
+stored version file as `application/octet-stream`, with `X-Content-SHA256` and `X-Job-Mode`. No export stamping.
+The server re-hashes the file first (changed → the job fails). The agent checks the hash of the bytes it received
+against both the job and the header; a mismatch or truncated download → failed, nothing written.
+
+**Switch re-checked twice.** At claim: a `write` job created while the switch was on is claimed as `preview` if it is
+off now (audited `egs_sheet_switch_off_at_claim`). At serve: a `write` job is not served once the switch is off
+(fails, `egs_sheet_switch_off_at_serve`). The agent writes only when the job and `X-Job-Mode` both say `write`.
+
+**Swap on the agent (write mode).** The live file must still hash to the job's `live_sha256` (else **refused,
+`live_changed`**, untouched). Then: write `ElRezeiky_Bulk_EGS_Items.new.xlsx` beside it and re-check its hash → copy
+the live file to `backup\ElRezeiky_Bulk_EGS_Items.<YYYYMMDD-HHMMSS>.xlsx` and check the copy is the expected live file
+→ keep the newest **30** backups → `os.replace(new, live)` → read back and compare. A file held by Invoicer/Excel
+(PermissionError) is retried 5 times, 24 s apart (≈2 min), then the job reports **busy**, `.new` is removed and the
+live file is untouched. Any other failure also leaves the live file as it was. Paths come only from the agent's
+`config.ini` (`invoicer_dir`); the server never sends one. The agent never opens the live file in place: a fetch
+copies it to a temp file first.
+
+**Hand edits** = the live file (last fetch) is none of our versions: compared by hash first, else by the set of
+coded itemcodes among the newest 50 versions. So a re-saved file with the same coded itemcodes is still that version,
+and an edit that leaves the coded itemcodes the same (e.g. a changed name or price on a coded row) is **invisible**
+to this check. When the live file is the latest version, «اكتب الآن» does nothing. When it has hand edits, a write is
+**held** (`egs_sheet_write_held`, once per fetch) and the panel shows what the live file has that the latest version
+lacks and the reverse. Two ways out:
+- «استورد التعديلات» — the fetched copy becomes the next version (`source='fetch'`, audited `egs_sheet_imported`).
+  Only the **latest fetch** may be imported, and only while no real write came after it (an older copy would undo
+  coded items). A copy that lacks coded items of the latest version needs `allow_removals` (the checkbox «أقبل حذف
+  أصناف» shows only then; the removed list is audited). The copy is re-hashed and re-validated first.
+- «اكتب فوقها» — a person, with a written reason, writes the latest version over the edits (audited
+  `egs_sheet_write_override`); still a preview while the switch is off.
+
+**Uploads** (fetch results): 20 MB cap (checked on the declared length before reading), must be a zip that unpacks to
+≤ 200 MB and an xlsx with the DataEntry header. The newest 10 fetched copies are kept under
+`TAX_EGS_SHEET_DIR/fetched/`.
+
+**Nightly** `egs_sheet_agent_nightly` (03:00, `SCHEDULER_JOB_GUARDS`): one fetch; with the switch on, its result asks
+for a write (nothing when the live file already is the latest version, held on hand edits).
+
+**Audit** (entity `egs_sheet_agent`): `egs_sheet_fetch_requested`, `egs_sheet_write_requested`,
+`egs_sheet_write_override`, `egs_sheet_write_held`, `egs_sheet_served`, `egs_sheet_fetched`, `egs_sheet_written`,
+`egs_sheet_previewed`, `egs_sheet_busy`, `egs_sheet_failed`, `egs_sheet_switch_off_at_claim` / `_at_serve`;
+`egs_sheet_imported` on entity `egs_sheet`.
+
+**Rollback.**
+1. Turn `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` off: every later write is a preview, and a claimed write is not served.
+2. On the seal PC: close Excel and Invoicer, copy the chosen backup from `D:\invoicer_mini\backup` to
+   `D:\invoicer_mini\ElRezeiky_Bulk_EGS_Items.xlsx`.
+3. Press «اقرأ الملف الحالي» so the server knows the live file again.
+4. To roll back the agent itself: copy the previous `agent.py` back; an old agent gets signing jobs only.
 
 ## Which ETA system
 

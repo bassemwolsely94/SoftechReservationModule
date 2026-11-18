@@ -412,3 +412,129 @@ class NightlyAndStaleTests(_Base):
         sign = make_job()
         self.assertEqual(client(2).post(NEXT_URL).json()['job']['id'], sign.pk)
         self.assertEqual(TaxSigningJob.objects.get(pk=sign.pk).status, TaxSigningJob.CLAIMED)
+
+
+AGENT_STATE_URL = '/api/tax-invoicing/codes/sheet/agent/'
+
+
+class PanelApiTests(_Base):
+    """S5 Task 3: the person-facing endpoints behind the panel's «الجهاز المحلي» part."""
+
+    def setUp(self):
+        from apps.tax_invoicing.models import TaxIssuerProfile
+        from apps.tests.test_tax_invoicing import Fixture
+        from apps.users.models import RoleModuleAccess
+        super().setUp()
+        Fixture.build(self, 'egsa')
+        TaxIssuerProfile.objects.filter(pk=1).update(tax_id='499-336-534')
+        RoleModuleAccess.objects.update_or_create(role='pharmacist', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': False})
+        self.api = self.person(self.accountant)
+
+    def person(self, user):
+        c = APIClient()
+        c.force_authenticate(user)
+        return c
+
+    def test_state_before_anything(self):
+        r = self.api.get(AGENT_STATE_URL)
+        self.assertEqual(r.status_code, 200, r.content)
+        d = r.data
+        self.assertEqual((d['switch'], d['last_fetch'], d['held'], d['live'], d['jobs'], d['busy']),
+                         (False, None, None, None, [], False))
+        self.assertTrue(d['agent']['outdated'])
+        self.assertTrue(d['can_approve'])
+
+    def test_an_old_agent_is_shown_as_outdated_and_a_new_one_is_not(self):
+        from django.core.cache import cache
+        cache.clear()      # the last-seen throttle of other tests
+        client(None).post(NEXT_URL)
+        self.assertTrue(self.api.get(AGENT_STATE_URL).data['agent']['outdated'])
+        client(2).post(NEXT_URL)
+        agent = self.api.get(AGENT_STATE_URL).data['agent']
+        self.assertEqual((agent['version'], agent['outdated']), (2, False))
+        self.assertTrue(agent['at'])
+
+    def test_fetch_button_makes_one_job_and_the_state_polls_it(self):
+        r = self.api.post(AGENT_STATE_URL + 'fetch/')
+        self.assertEqual(r.status_code, 201, r.content)
+        again = self.api.post(AGENT_STATE_URL + 'fetch/')
+        self.assertEqual(again.data['job']['id'], r.data['job']['id'])
+        d = self.api.get(AGENT_STATE_URL).data
+        self.assertTrue(d['busy'])
+        self.assertEqual((d['jobs'][0]['kind'], d['jobs'][0]['status'], d['jobs'][0]['requested_by']),
+                         ('egs_fetch', 'pending', self.accountant.get_full_name() or self.accountant.username))
+
+    def test_last_fetch_shows_the_difference_and_a_hold(self):
+        fetched, _ = self.fetch(make_sheet(HAND_EDITED))
+        self.add_version(ROWS + [(None, 'x', 'C', None, 0, 500, 0)])
+        r = self.api.post(AGENT_STATE_URL + 'write/', {}, format='json')
+        self.assertEqual((r.status_code, r.data['job']['status']), (200, 'held'))
+        d = self.api.get(AGENT_STATE_URL).data
+        f = d['last_fetch']
+        self.assertEqual((f['id'], f['hand_edits'], f['current'], f['importable'], f['import_removes']),
+                         (fetched.pk, True, True, True, 0))
+        self.assertEqual(f['added_vs_latest'], {'count': 1, 'items': ['900']})
+        self.assertEqual(d['held']['added'], {'count': 1, 'items': ['900']})
+        self.assertEqual(d['jobs'][0]['result'], {'added': 1, 'removed': 0})
+
+    def test_write_over_needs_a_reason_and_is_audited(self):
+        self.fetch(make_sheet(HAND_EDITED))
+        self.add_version(ROWS + [(None, 'x', 'C', None, 0, 500, 0)])
+        r = self.api.post(AGENT_STATE_URL + 'write/', {'override': True}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(TaxAgentFileJob.objects.filter(kind='egs_write').exists())
+        r = self.api.post(AGENT_STATE_URL + 'write/', {'override': True, 'note': 'المالك طلب'}, format='json')
+        self.assertEqual((r.status_code, r.data['job']['status'], r.data['job']['mode'], r.data['job']['override']),
+                         (200, 'pending', 'preview', True))
+        event = TaxAuditEvent.objects.get(action='egs_sheet_write_override')
+        self.assertEqual(event.reason, 'المالك طلب')
+        self.assertIsNone(self.api.get(AGENT_STATE_URL).data['held'])
+
+    def test_write_without_a_fetch_and_with_nothing_to_write(self):
+        r = self.api.post(AGENT_STATE_URL + 'write/', {}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, egs_agent.NO_FETCH))
+        self.fetch(self.data)
+        r = self.api.post(AGENT_STATE_URL + 'write/', {}, format='json')
+        self.assertEqual((r.status_code, r.data['job']), (200, None))
+
+    def test_import_with_and_without_removals(self):
+        fewer, _ = self.fetch(make_sheet([ROWS[0], ROWS[2], ROWS[3], HAND_EDITED[-1]]))
+        self.assertEqual(self.api.get(AGENT_STATE_URL).data['last_fetch']['import_removes'], 1)
+        r = self.api.post(AGENT_STATE_URL + 'import/', {'job': fewer.pk}, format='json')
+        self.assertEqual((r.status_code, r.data['detail']), (400, egs_agent.IMPORT_REMOVES))
+        r = self.api.post(AGENT_STATE_URL + 'import/', {'job': fewer.pk, 'allow_removals': True}, format='json')
+        self.assertEqual((r.status_code, r.data['version']['number']), (201, 2))
+        self.assertTrue(TaxAuditEvent.objects.filter(action='egs_sheet_imported').exists())
+        self.assertFalse(self.api.get(AGENT_STATE_URL).data['last_fetch']['importable'])
+        self.assertEqual(self.api.post(AGENT_STATE_URL + 'import/', {'job': 'x'}, format='json').status_code, 400)
+        self.assertEqual(self.api.post(AGENT_STATE_URL + 'import/', {'job': 99999}, format='json').status_code, 404)
+
+    def test_pharmacist_403_and_viewer_reads_only(self):
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        ph = self.person(self.pharmacist)
+        self.assertEqual(ph.get(AGENT_STATE_URL).status_code, 403)
+        for what in ('fetch/', 'write/', 'import/'):
+            self.assertEqual(ph.post(AGENT_STATE_URL + what, {}, format='json').status_code, 403)
+        RoleModuleAccess.objects.update_or_create(role='viewer', module='tax_invoicing', action='view',
+                                                  defaults={'is_allowed': True})
+        RoleModuleAccess.objects.filter(role='viewer', module='tax_invoicing').exclude(action='view').delete()
+        module_access.clear_cache()
+        viewer, _, _ = make_user('viewer_egsa', role='viewer', branch=self.branch)
+        c = self.person(viewer)
+        r = c.get(AGENT_STATE_URL)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data['can_approve'])
+        for what in ('fetch/', 'write/', 'import/'):
+            self.assertEqual(c.post(AGENT_STATE_URL + what, {}, format='json').status_code, 403)
+        self.assertFalse(TaxAgentFileJob.objects.exists())
+
+    @override_settings(**SWITCH_ON)
+    def test_switch_on_is_shown_and_writes_are_real(self):
+        self.fetch(self.data)
+        self.add_version(HAND_EDITED)
+        self.assertTrue(self.api.get(AGENT_STATE_URL).data['switch'])
+        r = self.api.post(AGENT_STATE_URL + 'write/', {}, format='json')
+        self.assertEqual(r.data['job']['mode'], 'write')
