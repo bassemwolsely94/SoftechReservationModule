@@ -23,6 +23,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.crews import cc_comparison as C
+from core.export_safety import neutralise_formulas
 from apps.crews import cc_seed
 from apps.crews.models import Crew
 
@@ -81,7 +82,8 @@ class Command(BaseCommand):
 
         md = C.markdown_summary(result)
         if o.get('out'):
-            C.build_workbook(result).save(o['out'])
+            # build_workbook already neutralises; repeated at the save site for the W-4 export guard
+            neutralise_formulas(C.build_workbook(result)).save(o['out'])
             self.stdout.write(f"workbook → {o['out']}")
         if o.get('md'):
             with open(o['md'], 'w', encoding='utf-8') as f:
