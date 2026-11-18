@@ -29,6 +29,7 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
   const [price, setPrice] = useState('')
   const searchBox = useRef(null)
   const qtyRef = useRef(null)
+  const pickedId = useRef(null)   // the item a late price answer must still match
 
   const stores = useQuery({
     queryKey: ['marketplace', 'stores', { channel }],
@@ -42,12 +43,14 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
   const pick = (item) => {
     if (!item?.item_id) { toast.error('الصنف غير موجود في كتالوج النظام — اختر صنفًا آخر.'); return }
     setPicked(item)
+    pickedId.current = item.item_id
     setQty('1')
     setPrice('')
     setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select() }, 0)
     // the platform price comes from the server (apps/marketplace/availability.platform_price)
     marketplaceApi.listings({ channel, item: item.item_id })
       .then(r => {
+        if (pickedId.current !== item.item_id) return   // another item was picked meanwhile
         const row = rowsOf(r.data)[0]
         if (row) setPrice(p => (p === '' ? String(row.price) : p))
         else toast.error('الصنف غير مضاف لهذه المنصة — اكتب سعر المنصة يدويًا، والطلب لن يُقبل قبل إضافته واعتماده.')
@@ -62,6 +65,7 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
     setLines(ls => [...ls, { key: `${picked.item_id}-${Date.now()}`, item_id: picked.item_id, name: picked.name,
                              code: picked.softech_id, qty: String(n), unit_price: price.trim() }])
     setPicked(null)
+    pickedId.current = null
     focusSearch()
   }
   const save = useMutation({
@@ -128,7 +132,7 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
             <span className="text-sm font-medium" dir="ltr">{picked.name}</span>
             <label className="flex flex-col text-xs text-gray-500">الكمية
               <input ref={qtyRef} value={qty} onChange={e => setQty(e.target.value)} inputMode="decimal"
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLine() } if (e.key === 'Escape') { setPicked(null); focusSearch() } }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLine() } if (e.key === 'Escape') { setPicked(null); pickedId.current = null; focusSearch() } }}
                 className={`${inputCls} w-20`} />
             </label>
             <label className="flex flex-col text-xs text-gray-500">سعر المنصة

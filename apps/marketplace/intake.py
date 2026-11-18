@@ -9,6 +9,7 @@ import logging
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.marketplace import push, to_pos
@@ -182,15 +183,22 @@ def _cancel_pos_draft(order, user, request=None):
     pos = order.pos_order
     if pos is None or pos.status == SoftechSalesOrder.STATUS_CANCELLED:
         return ''
-    if pos.status in (SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY):
+    unsent = (SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY)
+    if pos.status in unsent:
         before = pos.status
-        pos.status = SoftechSalesOrder.STATUS_CANCELLED
-        pos.save(update_fields=['status', 'updated_at'])
-        AuditLog.log('marketplace_pos_draft_cancelled', user=user, obj=order, request=request,
-                     old_data={'pos_order_id': pos.pk, 'status': before},
-                     new_data={'pos_order_id': pos.pk, 'status': pos.status},
-                     extra={'channel': order.channel.code, 'external_id': order.external_id})
-        return ''
+        # conditional UPDATE: a POS push claims the row the same way, so whichever runs first wins
+        n = (SoftechSalesOrder.objects.filter(pk=pos.pk, status__in=unsent)
+             .update(status=SoftechSalesOrder.STATUS_CANCELLED, updated_at=timezone.now()))
+        if n == 1:
+            pos.status = SoftechSalesOrder.STATUS_CANCELLED
+            AuditLog.log('marketplace_pos_draft_cancelled', user=user, obj=order, request=request,
+                         old_data={'pos_order_id': pos.pk, 'status': before},
+                         new_data={'pos_order_id': pos.pk, 'status': pos.status},
+                         extra={'channel': order.channel.code, 'external_id': order.external_id})
+            return ''
+        pos.refresh_from_db(fields=['status'])   # a push claimed it first: treat as sent
+        if pos.status == SoftechSalesOrder.STATUS_CANCELLED:
+            return ''
     order.needs_review = True
     order.save(update_fields=['needs_review', 'updated_at'])
     return PUSHED_DRAFT_NOTE

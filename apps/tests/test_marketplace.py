@@ -1349,3 +1349,48 @@ class MarketplaceSettlementFixTests(TestCase):
             with self.assertRaisesMessage(ValueError, 'too_many_rows'):
                 settlement.import_csv(self.channel, self._csv('order,gross\nA,1\n\n\n\n'), cmap, None)
             settlement.import_csv(self.channel, self._csv('order,gross\nA,1\n\n\n'), cmap, None)
+
+
+@override_settings(MARKETPLACE_ENABLED=True, MARKETPLACE_PUSH_ENABLED=False)
+class MarketplaceReReviewTests(TestCase):
+    """Re-review: cancel vs a concurrent POS push claim; unapprove resets allow_fridge."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, self.staff, self.client_admin = make_admin('rr_admin')
+        self.channel = MarketplaceChannel.objects.create(code='rr_test', name='منصة', softech_personcode='PL01',
+                                                         stock_buffer=Decimal('0'), is_active=True)
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch, is_active=True)
+        self.item = make_item('صنف', 'RR001')
+
+    def test_push_claim_between_read_and_cancel_wins(self):
+        from apps.audit.models import AuditLog
+        from apps.marketplace import intake
+        pos = SoftechSalesOrder.objects.create(branch=self.branch, status=SoftechSalesOrder.STATUS_DRAFT,
+                                               channel='contract', cust_branch_code='PL01',
+                                               softech_branchcode='B01', store_code='B01')
+        order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                             external_id='RR1', status=ExternalOrder.STATUS_READY, pos_order=pos)
+        order = intake._locked(order)                       # pos loaded in memory as 'draft'
+        self.assertEqual(order.pos_order.status, SoftechSalesOrder.STATUS_DRAFT)
+        SoftechSalesOrder.objects.filter(pk=pos.pk).update(status=SoftechSalesOrder.STATUS_QUEUED)  # push claims
+        note = intake._cancel_pos_draft(order, self.staff)
+        self.assertEqual(SoftechSalesOrder.objects.get(pk=pos.pk).status, SoftechSalesOrder.STATUS_QUEUED)
+        self.assertIn('المسودة أُرسلت للكاشير', note)
+        order.refresh_from_db()
+        self.assertTrue(order.needs_review)
+        self.assertFalse(AuditLog.objects.filter(action='marketplace_pos_draft_cancelled').exists())
+
+    def test_unapprove_resets_allow_fridge_audited(self):
+        from apps.audit.models import AuditLog
+        listing = ChannelListing.objects.create(channel=self.channel, item=self.item)
+        r = self.client_admin.post(f'/api/marketplace/listings/{listing.id}/approve/', {'allow_fridge': True},
+                                   format='json')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        r = self.client_admin.post(f'/api/marketplace/listings/{listing.id}/unapprove/')
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        listing.refresh_from_db()
+        self.assertFalse(listing.approved)
+        self.assertFalse(listing.allow_fridge)
+        log = AuditLog.objects.filter(action='marketplace_listing_unapproved').latest('id')
+        self.assertEqual((log.old_data['allow_fridge'], log.new_data['allow_fridge']), (True, False))

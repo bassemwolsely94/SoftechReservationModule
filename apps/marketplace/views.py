@@ -254,8 +254,10 @@ class _ListingApproval(_Gate, APIView):
                     return Response({'detail': 'قيمة «يسمح بالثلاجة» غير صحيحة.'}, status=status.HTTP_400_BAD_REQUEST)
                 listing.allow_fridge = allow_fridge
                 fields.append('allow_fridge')
-        else:
+        else:   # a new approval decides the fridge question again
             listing.approved, listing.approved_by, listing.approved_at = False, None, None
+            listing.allow_fridge = False
+            fields.append('allow_fridge')
         listing.save(update_fields=fields)
         AuditLog.log('marketplace_listing_approved' if self.approve else 'marketplace_listing_unapproved',
                      user=profile, obj=listing, request=request, old_data=before, new_data=_approval_audit(listing),
