@@ -635,11 +635,8 @@ export default function InsuranceClaimsPage() {
   const filteredClaims = useMemo(() => {
     let list = claims
     if (filters.search && searchMode === 'claim') {
-      const q = filters.search.toLowerCase()
       list = list.filter(c =>
-        c.claim_number?.toLowerCase().includes(q) ||
-        wildcardMatch([c.client_name, c.subclient_name], filters.search) ||
-        c.softech_motalba_no?.includes(filters.search)
+        wildcardMatch([c.claim_number, c.client_name, c.subclient_name, c.softech_motalba_no], filters.search)
       )
     }
     if (filters.date_from) {

@@ -326,8 +326,7 @@ function PurchaseExpiryAuditTab() {
       if (minVar && (r.value_at_risk || 0) < Number(minVar)) return false
       if (minQ && (r.current_qty || 0) < Number(minQ)) return false
       if (search) {
-        const q = search.toLowerCase()
-        if (!(wildcardMatch(r.item_name, search) || (r.item_code || '').includes(q))) return false
+        if (!wildcardMatch([r.item_name, r.item_code], search)) return false
       }
       return true
     })
@@ -985,8 +984,7 @@ function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
       if (fridgeOnly && !r.is_fridge) return false
       if (!_inList(medType, r.medicine_type)) return false
       if (search) {
-        const q = search.toLowerCase()
-        if (!(wildcardMatch(r.item_name, search) || (r.item_code || '').includes(q))) return false
+        if (!wildcardMatch([r.item_name, r.item_code], search)) return false
       }
       return true
     })

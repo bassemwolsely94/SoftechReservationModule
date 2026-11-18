@@ -1332,9 +1332,9 @@ function SupplierMultiSelect({ partyType, selected, onChange }) {
     staleTime: 5 * 60 * 1000,
   })
   const byCode = Object.fromEntries(options.map(o => [o.code, o]))
-  const needle = q.trim().toLowerCase()
+  const needle = q.trim()
   const shown = needle
-    ? options.filter(o => o.code.includes(needle) || wildcardMatch(o.name, needle))
+    ? options.filter(o => wildcardMatch([o.code, o.name], needle))
     : options
   const toggle = (code) => onChange(selected.includes(code) ? selected.filter(c => c !== code) : [...selected, code])
   return (

@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
+import { wildcardMatch } from '../utils/wildcard'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -93,10 +94,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
 
   const agents = agentsData || []
   const filteredAgents = mentionQ
-    ? agents.filter(a =>
-        a.username.toLowerCase().includes(mentionQ.toLowerCase()) ||
-        a.name.toLowerCase().includes(mentionQ.toLowerCase())
-      )
+    ? agents.filter(a => wildcardMatch([a.username, a.name], mentionQ))
     : agents
 
   // ── Mention handling ─────────────────────────────────────────────────────────

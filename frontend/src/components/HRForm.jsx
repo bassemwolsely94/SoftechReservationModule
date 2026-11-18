@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { wildcardMatch } from '../utils/wildcard'
 
 // ── Weekday helper ──────────────────────────────────────────────────────────
 export function weekdayAr(dateStr) {
@@ -95,7 +96,7 @@ export function IdentityFields({ onChange }) {
 
   const filteredApprovers = useMemo(() => {
     const q = approverSearch.trim()
-    return staff.filter(s => !q || (s.full_name || '').includes(q) || String(s.hr_code || '').includes(q))
+    return staff.filter(s => wildcardMatch([s.full_name, s.hr_code], q))
   }, [staff, approverSearch])
 
   const selectedNames = staff.filter(s => approverIds.includes(s.id)).map(s => s.full_name)

@@ -3328,8 +3328,7 @@ function RevisionTab({ claimId }) {
     .filter(r => !statusFilter
       || (statusFilter === 'pending' && !r.review_approved)
       || (statusFilter === 'approved' && r.review_approved))
-    .filter(r => !q || wildcardMatch(r.item_name, q) || (r.itemcode || '').includes(q)
-      || wildcardMatch(r.patient_name, q) || String(r.docnumber || '').includes(q))
+    .filter(r => !q || wildcardMatch([r.item_name, r.itemcode, r.patient_name, r.docnumber], q))
   const { sorted, headerProps } = useSortableRows(rows, { defaultSort: { key: 'net_amount', dir: 'desc', type: 'number' } })
   // keyboard flow (shared review-grid keys): Enter approves the line and moves on, Space
   // toggles approve / un-approve
