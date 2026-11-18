@@ -8,7 +8,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { marketplaceApi } from '../../api/client'
-import ItemSearchInput from '../../components/ItemSearchInput'
+import ItemSearchWidget from '../../components/ItemSearchWidget'
 import SortTh from '../../components/SortTh'
 import useServerSort from '../../hooks/useServerSort'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
@@ -106,7 +106,7 @@ export default function ListingsTab({ canCreate, canApprove }) {
         <div className="bg-white rounded-xl border p-3 flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[16rem]">
             <div className="text-xs text-gray-500 mb-1">إضافة صنف للمنصة {channel ? '' : '(اختر المنصة أولًا)'}</div>
-            <ItemSearchInput onSelect={pick} disabled={!channel || add.isPending} placeholder="ابحث عن الصنف ثم Enter لإضافته" />
+            <ItemSearchWidget mode="list" onSelect={pick} disabled={!channel || add.isPending} placeholder="ابحث عن الصنف ثم Enter لإضافته" />
           </div>
           <label className="flex flex-col text-xs text-gray-500">كود الصنف عند المنصة (اختياري)
             <input value={sku} onChange={e => setSku(e.target.value)} className={`${inputCls} w-40`} dir="ltr" />

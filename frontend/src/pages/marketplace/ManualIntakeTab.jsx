@@ -7,7 +7,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { marketplaceApi } from '../../api/client'
-import ItemSearchInput from '../../components/ItemSearchInput'
+import ItemSearchWidget from '../../components/ItemSearchWidget'
 import SortTh from '../../components/SortTh'
 import useSortableRows from '../../hooks/useSortableRows'
 import useBranchLabels from '../../hooks/useBranchLabels'
@@ -125,7 +125,7 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
       <div className="bg-white rounded-xl border p-3 space-y-2">
         <div className="flex flex-wrap items-end gap-2">
           <div ref={searchBox} className="flex-1 min-w-[16rem]">
-            <ItemSearchInput onSelect={pick} branchId={branch ? Number(branch) : null}
+            <ItemSearchWidget mode="list" onSelect={pick} branchId={branch ? Number(branch) : null}
               placeholder="ابحث عن الصنف ثم Enter (* أو % بين الأجزاء)" />
           </div>
           {picked && <>
