@@ -719,6 +719,10 @@ accountant POST /api/tax-invoicing/receipts/configs/
 accountant POST /api/tax-invoicing/signing/smoke-test/
 accountant POST /api/tax-invoicing/signing-agent/next/
 accountant POST /api/tax-invoicing/signing-agent/jobs/987654321/result/
+# reason: S5 — the seal-PC agent's file endpoints (EGS sheet fetch/write) answer only the agent token
+#   plus the dedicated finalize account, like signing-agent/next/ and jobs/<id>/result/ above.
+accountant GET /api/tax-invoicing/signing-agent/files/987654321/download/
+accountant POST /api/tax-invoicing/signing-agent/files/987654321/result/
 
 # reason: data lifecycle Stage 5 (design 2026-11-07 §7) — supervisor and quality manager hold data_health view
 #   for Growth, Problems and the refresh only; the register, held files and their thumbnails are admin only
