@@ -484,8 +484,9 @@ class PortalWiringTests(TestCase):
 **Driver contract (ruling, Task 7 review):** the driver reports `cart_not_empty` and `wrong_account`
 **only** from run_plan step 1, before any line is added. These two are the only outcomes treated as
 "nothing touched". Any identity mismatch found later (for example on the review page) is reported as
-`wrong_account_late`, which counts as "may have ordered". The queue also checks the reported steps and
-treats a "pre-cart" outcome that lists an added line as "may have ordered".
+`wrong_account_late`, which counts as "may have ordered". The queue accepts a "pre-cart" outcome only
+when its steps are a list of `check_account` / `check_cart_empty` entries and `lines` is absent, None or
+empty; anything else counts as "may have ordered" (ruling R11). The login wait is not a step label.
 
 - **A report from the wrong device**, or for a run that isn't open → 409.
 - **Credit.** Every report carrying `credit` saves it on `PortalAccount.last_credit` (with `at`). Every
@@ -621,7 +622,7 @@ treats a "pre-cart" outcome that lists an added line as "may have ordered".
   flow follows spec §6.2 step 5:
   1. Account check, then cart-empty check (non-empty → `cart_not_empty`, nothing touched). These two
      steps are reported with the labels `check_account` and `check_cart_empty`. A report with outcome
-     `cart_not_empty` or `wrong_account` must carry ONLY those step labels and an empty `lines` list. The
+     `cart_not_empty` or `wrong_account` must carry ONLY those step labels and no lines (`lines` absent, None or empty). The
      server treats anything else (another label, a non-list, a line entry) as "cart touched" and gates the
      retry (ruling R11). A later identity mismatch is reported as `wrong_account_late`.
   2. Add each line.
