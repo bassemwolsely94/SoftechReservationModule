@@ -47,14 +47,14 @@ import { sweepRoutes, menuEntryFor, menuShown } from './routes.js'
 // Time-to-content, not time-to-idle (run 3): lib gotoSettled waits for networkidle, which polling
 // screens (bell, freshness, queue status) reach late or never: 125 min for one user. A visibility
 // check only needs "rendered or refused", so openScreen() below waits for the FIRST of: content
-// (main / [data-tour] / h1 with text, no spinner, no loading text), a refusal (refusal text, URL
+// (main or an h1 with text, no spinner, no loading text), a refusal (refusal text, URL
 // left the route, /login). CAP_MS bounds that wait; SETTLE_MS then collects late API errors.
 // ms = time to that first signal; > SLOW_MS is 'slow'; no signal within CAP_MS = 'slow' at CAP_MS.
 const CAP_MS = 20_000
 const SLOW_MS = 5_000
 const SETTLE_MS = 1_500
 // Backstop per visit: past it the visit is a 'hang' finding and the sweep moves on.
-const HANG_MS = 150_000
+const HANG_MS = 60_000
 // One user's whole sweep (~10-15 min with openScreen); the chunk runner kills at 45 min.
 const USER_TIMEOUT_MS = 40 * 60_000
 const SPINNERS = '[aria-busy="true"], .animate-spin, [data-loading="true"]'
@@ -99,27 +99,39 @@ async function openScreen(page, url) {
   const wanted = url.split('?')[0]
   page.on('console', onConsole); page.on('pageerror', onPageError); page.on('response', onResponse)
   const t0 = Date.now()
-  let timedOut = false, ms
+  let timedOut = false, ms, blocker
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CAP_MS * 2 })
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CAP_MS })
     await page.waitForFunction(({ wanted, spin, refused, loading }) => {
       const p = location.pathname.replace(/\/$/, '') || '/'
       if (p !== (wanted.replace(/\/$/, '') || '/')) return true                     // redirected (refusal / landing / login)
       const root = document.querySelector('main') || document.querySelector('#root')
       const text = root ? root.innerText : ''
       if (new RegExp(refused).test(text)) return true                              // refusal text
-      const content = document.querySelector('main, [data-tour], h1')
-      return !!content && content.innerText.trim().length > 0 && !document.querySelector(spin) && !new RegExp(loading).test(text)
+      // main first: an icon-only (collapsed) nav rail [data-tour=shell-rail] precedes it with no text,
+      // and querySelector('main, [data-tour], h1') returned that rail, so no screen ever "rendered"
+      // for those users (run 4: 20 s on every desktop screen, users over the 40-min cap).
+      const hasText = [document.querySelector('main'), ...document.querySelectorAll('h1')].some(e => e && e.innerText.trim().length > 0)
+      return hasText && !document.querySelector(spin) && !new RegExp(loading).test(text)
     }, { wanted, spin: SPINNERS, refused: REFUSED_TEXT.source, loading: LOADING.source }, { timeout: CAP_MS, polling: 200 })
       .catch(() => { timedOut = true })
     ms = Date.now() - t0
+    if (timedOut) blocker = await page.evaluate(({ spin, loading }) => {
+      const sp = document.querySelector(spin)
+      const main = document.querySelector('main')
+      const m = (main?.innerText || '').match(new RegExp(loading))
+      return [sp ? `spinner ${sp.tagName.toLowerCase()}.${String(sp.className).slice(0, 60)} in ${sp.closest('main') ? 'main' : (sp.closest('header,nav,aside')?.tagName.toLowerCase() || 'page')}` : '',
+        m ? `loading text in main` : '', main ? `main text ${main.innerText.trim().length}` : 'no <main>',
+        ...[...document.querySelectorAll('[data-tour], h1')].slice(0, 3).map(e => `${e.tagName.toLowerCase()}${e.dataset.tour ? '[' + e.dataset.tour + ']' : ''} text ${e.innerText.trim().length}`),
+        `path ${location.pathname}`].filter(Boolean).join('; ')
+    }, { spin: SPINNERS, loading: LOADING.source }).catch(() => 'page did not answer')
     await page.waitForTimeout(SETTLE_MS)
   } finally {
     page.off('console', onConsole); page.off('pageerror', onPageError); page.off('response', onResponse)
   }
   if (ms === undefined) ms = Date.now() - t0
   const finalUrl = new URL(page.url()).pathname
-  const text = (await page.locator('main, #root').first().innerText().catch(() => '')).trim()
+  const text = (await page.locator('main, #root').first().innerText({ timeout: 5_000 }).catch(() => '')).trim()
   const crashed = consoleErrors.some(e => e.startsWith('pageerror')) || apiErrors.some(e => e.status >= 500 && e.status !== 503)
   let status
   if (crashed) status = 'crash'
@@ -128,7 +140,7 @@ async function openScreen(page, url) {
   else if (timedOut) status = 'slow'
   else if (text.length < 20) status = 'blank'
   else status = ms > SLOW_MS ? 'slow' : 'ok'
-  return { ms, status, consoleErrors, apiErrors, finalUrl }
+  return { ms, status, consoleErrors, apiErrors, finalUrl, blocker }
 }// Calls any screen may make that say nothing about the screen's own data (pickers, badges, help).
 const GENERIC_API = /^\/api\/(auth|config|access\/whoami|audit\/screen-view|help|users\/my-permissions|notifications|sync\/(status|freshness)|branches|counselling\/status|personal)(\/|$)/
 const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/\d+(?=\/|$)/g, '/:n')
@@ -263,7 +275,7 @@ for (const u of users) {
           r = await visitOnce(route)
           if (/^\/login\/?$/.test(r.finalUrl)) throw new Error(`${u.key}: session lost again on ${route}; this run does not count`)
         }
-        const text = await page.locator('main, #root').first().innerText().catch(() => '')
+        const text = await page.locator('main, #root').first().innerText({ timeout: 5_000 }).catch(() => '')
         const wanted = route.split('?')[0]
         let status = r.status
         // A redirect to a landing screen is the app's refusal (RequireRole / RiderHome / mobile guards).
@@ -279,6 +291,7 @@ for (const u of users) {
         let evidence
         if (!['ok', 'slow', 'refused', 'hang'].includes(status)) evidence = await shot(page, u.key, route)
         raw.push({ route, r, status, apis: seen, evidence })
+        console.log(`[w2] ${u.key} ${raw.length}/${list.length} ${route} ${status} ${r.ms} ms (+${Math.round((Date.now() - t0) / 1000)} s)${r.blocker ? ' [' + r.blocker + ']' : ''}`)
       }
 
       // Stop attributing: pass 2's evidence revisits (shotAgain) would otherwise be credited to the
@@ -349,7 +362,7 @@ for (const u of users) {
 async function shot(page, key, route) {
   fs.mkdirSync(SHOTS, { recursive: true })
   const file = path.join(SHOTS, `${safeKey(key)}${route.replace(/[^a-zA-Z0-9]+/g, '_')}.png`)
-  try { await page.screenshot({ path: file }) } catch { return undefined }
+  try { await page.screenshot({ path: file, timeout: 15_000 }) } catch { return undefined }
   return path.relative(path.resolve(OUT_DIR, '..'), file)
 }
 // Judged after the loop, so the page has moved on: reopen briefly for the picture.
