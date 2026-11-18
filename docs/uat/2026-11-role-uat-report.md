@@ -50,7 +50,7 @@ The questions as originally asked:
 
 | id | sev | finding |
 |---|---|---|
-| B-01 | P2 | `apps/users/mfa.py:60` reads `bool(s.typed_value)` without calling it, so any `security.mfa_enforced` row — even "false" — means enforced. |
+| B-01 | P2 | `apps/users/mfa.py:60` reads `bool(s.typed_value)` without calling it, so any `security.mfa_enforced` row — even "false" — means enforced. **Fixed** in this PR (`test_mfa_enforced_toggle`). |
 | B-02 | P1 | Only admin (2), call_center (1) and salesperson (83) have real active accounts; 7 roles have none. |
 | B-03 | P2 | Only 1 real user opened any screen in the last 30 days (audit ScreenView). |
 | B-04 | P3 | JWT logins never update `last_login` (latest 2026-07-01), so "last seen" columns are wrong. |
