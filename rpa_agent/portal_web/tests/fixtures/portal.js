@@ -47,7 +47,7 @@
       tr.appendChild(el('td', {}, '12.50'));
       tr.appendChild(el('td', {}, '10'));
       tr.appendChild(el('td', {}, '1+0'));
-      tr.appendChild(el('td', {}, '30/06/2027'));
+      tr.appendChild(el('td', {}, fx.expiry || '30/06/2027'));
       if (editable) {
         var act = el('td');
         var upd = el('button', { type: 'button' }, 'Update');

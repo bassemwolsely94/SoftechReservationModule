@@ -25,6 +25,7 @@ from .driver import AmbiguousOrder, DeniedControl, LoginRequired, PortalError, c
 
 LOGIN_MSG = 'سجّل الدخول ثم اضغط متابعة'
 LEFT_IN_CART = 'بقي %d صنف في السلة من الروبوت'
+LEFT_UP_TO = 'قد يكون بقي حتى %d صنف في السلة من الروبوت'
 # a dry run that stops for these leaves the cart alone: it is not (only) the robot's any more
 NO_CLEANUP = ('cart_mismatch', 'cart_not_empty', 'wrong_account', 'wrong_account_late')
 _URL = re.compile(r'\b[a-z][a-z0-9+.-]*://\S+', re.I)
@@ -340,11 +341,13 @@ class _Run:
         """A dry run halted after adding: remove the robot's own codes (done and in flight), only
         when the cart holds nothing else and the finished lines still have the quantities the
         robot left. Otherwise touch nothing and say how many robot lines remain."""
+        seen = None                    # robot lines last seen in the cart (None: never read)
         try:
             have = {}
             for row in self.d.cart_lines():
                 have[row['sku']] = row['qty']
             mine = sorted(s for s in have if s in self.added)
+            seen = len(mine)
             if not mine:
                 self.rec('cleanup', True, 'cart already clear of robot lines')
                 return
@@ -357,13 +360,16 @@ class _Run:
                 return
             for sku in mine:
                 self.d.remove_line(sku)
+                seen -= 1
             left = [r['sku'] for r in self.d.cart_lines() if r['sku'] in self.added]
             if left:
                 self.rec('cleanup', False, LEFT_IN_CART % len(left))
             else:
                 self.rec('cleanup', True, 'removed %d robot line(s)' % len(mine))
         except Exception as e:  # noqa: BLE001 - a failed clean-up is reported, never raised
-            self.rec('cleanup', False, '%s (%s)' % (LEFT_IN_CART % len(self.added), safe_note(e)))
+            # the cart was never read: the robot touched at most len(added) codes ("up to")
+            left = LEFT_IN_CART % seen if seen is not None else LEFT_UP_TO % len(self.added)
+            self.rec('cleanup', False, '%s (%s)' % (left, safe_note(e)))
 
     def with_login(self, fn):
         for _ in range(MAX_RELOGINS):

@@ -274,6 +274,24 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual(cleanup[0]["ok"], False)
         self.assertIn("بقي 1 صنف في السلة من الروبوت", cleanup[0]["note"])
 
+    def test_cleanup_error_counts_only_lines_seen_in_the_cart(self):
+        d = self.driver({"stock": {SKU: 0}})                # line 1 is out: never in the cart
+        stop = threading.Event()
+
+        def broken_remove(sku):
+            raise RuntimeError("remove failed")
+
+        def on_step(s):
+            if s["label"] == "add_line" and s["note"] == "line 101: 2":     # 60634 is in the cart
+                d.remove_line = broken_remove
+                stop.set()
+        result = self.go(d, fill_plan([(SKU, 4), ("60634", 2), ("11111", 1)]), stop=stop, on_step=on_step)
+        self.assertEqual(result["outcome"], "stopped_by_operator")
+        cleanup = [s for s in result["steps"] if s["label"] == "cleanup"]
+        # two codes were tried, one reached the cart: the note counts the one seen, not two
+        self.assertIn("\u0628\u0642\u064a 1 \u0635\u0646\u0641", cleanup[0]["note"])
+        self.assertFalse(cleanup[0]["ok"])
+
     def test_cart_mismatch_is_not_cleaned_up(self):
         d = self.driver()
         # the same code twice: the second add answers "already in your cart" (merged), which on
@@ -281,6 +299,12 @@ class PortalDriverTests(unittest.TestCase):
         result = self.go(d, fill_plan([(SKU, 3), (SKU, 2)]))
         self.assertEqual(result["outcome"], "cart_mismatch")
         self.assertFalse([s for s in result["steps"] if s["label"] == "cleanup"])
+
+    def test_expiry_day_up_to_12_is_read_with_the_recipe_format(self):
+        d = self.driver({"expiry": "01/03/2027"})           # 1 March 2027, a short-dated item
+        result = self.go(d, fill_plan([(SKU, 3)]))
+        self.assertEqual(result["outcome"], "dry_run_ok", result["steps"])
+        self.assertEqual(result["lines"][0]["supplier_expiry"], "2027-03-01")
 
     def test_dry_run_leaves_cart_as_found(self):
         d = self.driver()
@@ -407,7 +431,10 @@ class ParseDateTests(unittest.TestCase):
     def test_ambiguous_day_month_is_unreadable(self):
         from rpa_agent.portal_web.driver import parse_date
         fmts = base_recipe.DATE_FORMATS
-        self.assertIsNone(parse_date("05/11/2026", fmts))
+        self.assertIsNone(parse_date("05/11/2026", fmts, strict=True))          # Order History only
+        self.assertEqual(parse_date("05/11/2026", fmts), datetime.date(2026, 11, 5))  # pinned format
+        self.assertEqual(parse_date("01/03/2027", fmts), datetime.date(2027, 3, 1))
+        self.assertEqual(parse_date("18/11/2026", fmts, strict=True), datetime.date(2026, 11, 18))
         self.assertEqual(parse_date("18/11/2026", fmts), datetime.date(2026, 11, 18))
         self.assertEqual(parse_date("11/11/2026", fmts), datetime.date(2026, 11, 11))
         self.assertEqual(parse_date("2026-11-05", fmts), datetime.date(2026, 11, 5))

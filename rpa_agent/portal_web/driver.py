@@ -74,13 +74,16 @@ def parse_qty(text):
 _DMY = re.compile(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$')
 
 
-def parse_date(text, formats):
-    """The date, or None when it cannot be read for sure. A/B/YYYY with both parts 12 or less
-    (and not equal) is None: 05/11 may be 5 November or May 11, and a wrong guess could drop the
-    very order a history read looks for."""
+def parse_date(text, formats, strict=False):
+    """The date in the recipe's formats (first match wins), or None.
+
+    strict=True (the Order History filter only): A/B/YYYY with both parts 12 or less (and not
+    equal) is None: 05/11 may be 5 November or May 11, and a wrong guess could drop the very
+    order a history read looks for. Cart expiries are read with the recipe's pinned format
+    (not strict), so 01/03/2027 stays 1 March 2027 and short_expiry still flags it."""
     s = _norm(text)
     m = _DMY.match(s)
-    if m and int(m.group(1)) <= 12 and int(m.group(2)) <= 12 and m.group(1).lstrip('0') != m.group(2).lstrip('0'):
+    if strict and m and int(m.group(1)) <= 12 and int(m.group(2)) <= 12 and m.group(1).lstrip('0') != m.group(2).lstrip('0'):
         return None
     for fmt in formats:
         try:
@@ -415,7 +418,7 @@ class PortalWebDriver:
         wanted = []
         for row in rows:
             ref = _norm(row.get('order_ref'))
-            day = parse_date(row.get('date'), r.DATE_FORMATS)
+            day = parse_date(row.get('date'), r.DATE_FORMATS, strict=True)
             if ref and (ref == keep_ref or day is None or day >= since):
                 wanted.append((ref, day))
         out = []
