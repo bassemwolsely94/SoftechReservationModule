@@ -97,6 +97,8 @@ export const NAV_GROUPS = [
       { to: '/invoices',          icon: '🧾', label: 'فواتير الموردين',   roles: ['admin','purchasing'] },
       { to: '/pricing-approvals', icon: '🏷️', label: 'موافقات الأسعار', roles: ['admin','purchasing','pharmacist','supervisor','quality_manager'] },
       { to: '/discount-alignment', icon: '🎯', label: 'مطابقة الخصومات', roles: ['admin','purchasing','pharmacist','supervisor','quality_manager'] },
+      // supplier-portal robot: shown by the matrix grant rpa.view (the server checks every action)
+      { to: '/rpa/portals',      icon: '🛒', label: 'مواقع الموردين',   roles: null, module: 'rpa' },
     ],
   },
   {

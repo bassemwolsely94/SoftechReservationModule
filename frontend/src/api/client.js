@@ -3048,6 +3048,38 @@ export const rpaApi = {
   revokeDevice:  (id)        => api.post(`/rpa/devices/${id}/revoke/`),
 }
 
+// Supplier-portal robot (/rpa/portals). The server owns every rule (rounding, four-eyes, retry gates).
+export const rpaPortalApi = {
+  portals:        ()             => api.get('/rpa/portal/portals/'),
+  setPortal:      (key, data)    => api.patch(`/rpa/portal/portals/${key}/`, data),        // admin; audited
+  accounts:       ()             => api.get('/rpa/portal/accounts/'),
+  addAccount:     (data)         => api.post('/rpa/portal/accounts/', data),               // admin; no secrets
+  editAccount:    (id, data)     => api.patch(`/rpa/portal/accounts/${id}/`, data),        // admin; audited
+  buylists:       (params)       => api.get('/rpa/portal/buylists/', { params }),
+  buylist:        (id)           => api.get(`/rpa/portal/buylists/${id}/`),
+  fromPivot:      (snapshot_id)  => api.post('/rpa/portal/buylists/from-pivot/', { snapshot_id }),
+  fromIsr:        (push_id)      => api.post('/rpa/portal/buylists/from-isr/', { push_id }),
+  upload:         (formData)     => api.post('/rpa/portal/buylists/upload/', formData),     // multipart
+  pick:           (id, line_id, supplier) => api.post(`/rpa/portal/buylists/${id}/pick/`, { line_id, supplier }),
+  sendOther:      (id, supplier) => api.post(`/rpa/portal/buylists/${id}/send-other/`, { supplier }),
+  sendOtherXlsx:  (id, supplier) => api.post(`/rpa/portal/buylists/${id}/send-other/?format=xlsx`, { supplier },
+                                             { responseType: 'blob' }),
+  jobs:           (params)       => api.get('/rpa/portal/jobs/', { params }),
+  createJob:      (data)         => api.post('/rpa/portal/jobs/', data),
+  job:            (id)           => api.get(`/rpa/portal/jobs/${id}/`),
+  approveJob:     (id, reasons)  => api.post(`/rpa/portal/jobs/${id}/approve/`, { reasons }),
+  cancelJob:      (id, reason)   => api.post(`/rpa/portal/jobs/${id}/cancel/`, { reason }),
+  discovery:      (jobId)        => api.get(`/rpa/portal/discovery/${jobId}/`),
+  confirmCode:    (availability_line_id) => api.post('/rpa/portal/discovery/confirm/', { availability_line_id }),
+  noneOfThese:    (buyline_id)   => api.post('/rpa/portal/discovery/none/', { buyline_id }),
+  baskets:        (params)       => api.get('/rpa/portal/baskets/', { params }),
+  basket:         (id)           => api.get(`/rpa/portal/baskets/${id}/`),
+  // action: 'retry' | 'link_order' | 'cancel' (+ order_ref, confirm_none, confirm_placed_order_cancel, reason)
+  resolveBasket:  (id, data)     => api.post(`/rpa/portal/baskets/${id}/resolve/`, data),
+  historyCheck:   (id)           => api.post(`/rpa/portal/baskets/${id}/history-check/`),
+  remainders:     ()             => api.get('/rpa/portal/remainders/'),
+}
+
 // ── Pick zones (replenishment picking-sheet classification) ───────────────────
 
 export const pickZonesApi = {
