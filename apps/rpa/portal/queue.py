@@ -55,9 +55,9 @@ PRE_CART = ('cart_not_empty', 'wrong_account')
 WRONG_ACCOUNT_LATE = 'wrong_account_late'
 CART_NOT_EMPTY_LATE = 'cart_not_empty_late'
 LATE_OUTCOMES = (WRONG_ACCOUNT_LATE, CART_NOT_EMPTY_LATE)
-# defense in depth (R10): a "pre-cart" report whose steps or lines show a line was added is late.
-# Step labels are the driver methods that put a line in the cart (plan Task 9 PortalWebDriver).
-ADD_LINE_STEPS = ('add_line', 'set_qty')
+# defense in depth (R10, R11): a "pre-cart" report stays pre-cart only when it shows nothing but the
+# two pre-cart steps (plan Task 9 run_plan step 1) and no lines. Anything else is late (fail safe).
+PRE_CART_STEPS = frozenset({'check_account', 'check_cart_empty'})
 # R9: an Order History read starts at local midnight of (window start - 2 h), in settings.TIME_ZONE
 HISTORY_MARGIN = timedelta(hours=2)
 ACTIONS = ('retry', 'link_order', 'cancel')
@@ -193,21 +193,17 @@ def _counted_fill_runs(basket):
 
 
 def _touched_cart(payload) -> bool:
-    """True when the report shows any line was added: an add_line / set_qty step, or a line with a
-    non-zero accepted or added quantity."""
-    for s in payload.get('steps') if isinstance(payload.get('steps'), list) else []:
-        if isinstance(s, dict) and str(s.get('label', '')).strip().lower() in ADD_LINE_STEPS:
+    """R11 allow-list: False only when steps is a list of dicts labelled check_account /
+    check_cart_empty (empty is fine) and lines is absent, None or an empty list. Anything else -
+    another label, a non-list, a non-dict entry, any line at all - counts as the cart touched."""
+    steps = payload.get('steps')
+    if not isinstance(steps, list):
+        return True
+    for s in steps:
+        if not isinstance(s, dict) or not isinstance(s.get('label'), str) or s['label'] not in PRE_CART_STEPS:
             return True
-    for ln in payload.get('lines') if isinstance(payload.get('lines'), list) else []:
-        if not isinstance(ln, dict):
-            continue
-        for key in ('accepted_qty', 'added_qty'):
-            try:
-                if int(ln.get(key) or 0) != 0:
-                    return True
-            except (TypeError, ValueError):
-                return True          # an unreadable quantity proves nothing: assume touched
-    return False
+    lines = payload.get('lines')
+    return not (lines is None or (isinstance(lines, list) and not lines))
 
 
 def history_since(window_start):

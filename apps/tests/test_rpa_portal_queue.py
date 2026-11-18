@@ -223,7 +223,7 @@ class QueueTests(_World, TestCase):
 
     def test_cart_not_empty_outcome_needs_person(self):
         run = self._fill_run()
-        b = queue.report(run, self.dev, {'outcome': 'cart_not_empty', 'steps': [{'label': 'cart'}]})
+        b = queue.report(run, self.dev, {'outcome': 'cart_not_empty', 'steps': [{'label': 'check_account'}, {'label': 'check_cart_empty'}]})
         self.assertEqual((b.status, b.needs_person_reason), ('needs_person', 'cart_not_empty'))
         run.refresh_from_db()
         self.assertEqual(run.outcome, 'cart_not_empty')
@@ -329,7 +329,7 @@ class QueueTests(_World, TestCase):
         self.assertEqual(b.status, 'ready')
         # cleared: a fresh live run that stops before the cart retries straight away
         run2 = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
-        b = queue.report(run2, self.dev, {'outcome': 'cart_not_empty'})
+        b = queue.report(run2, self.dev, {'outcome': 'cart_not_empty', 'steps': [{'label': 'check_cart_empty'}]})
         self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready')
 
     def test_live_error_after_claim_needs_history_before_retry(self):
@@ -362,25 +362,68 @@ class QueueTests(_World, TestCase):
             PortalRun.objects.filter(pk=claim['run_id']).update(finished_at=timezone.now(), outcome='error')
             PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
 
+    def _assert_gated(self, payload, reason):
+        run = self._live_run()
+        b = queue.report(run, self.dev, payload)
+        self.assertEqual(b.needs_person_reason, reason, payload)
+        with self.assertRaises(queue.QueueError, msg=repr(payload)):
+            queue.resolve(b, staff=self.boss, action='retry')
+        self.assertTrue(PortalRun.objects.filter(basket=b, kind='history', finished_at__isnull=True).exists(),
+                        payload)
+        PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
+
     def test_pre_cart_outcome_with_added_line_is_gated(self):
+        pre = [{'label': 'check_account', 'ok': True}, {'label': 'check_cart_empty', 'ok': True}]
         cases = [
-            ({'outcome': 'cart_not_empty', 'steps': [{'label': 'add_line', 'ok': True}]}, 'cart_not_empty_late'),
-            ({'outcome': 'wrong_account', 'lines': [{'line_id': 1, 'accepted_qty': 3}]}, 'wrong_account_late'),
-            ({'outcome': 'wrong_account', 'lines': [{'line_id': 1, 'added_qty': 2}]}, 'wrong_account_late'),
+            ({'outcome': 'cart_not_empty', 'steps': pre + [{'label': 'add_line', 'ok': True}]},
+             'cart_not_empty_late'),
+            ({'outcome': 'wrong_account', 'steps': pre, 'lines': [{'line_id': 1, 'accepted_qty': 3}]},
+             'wrong_account_late'),
+            ({'outcome': 'wrong_account', 'steps': pre, 'lines': [{'line_id': 1, 'added_qty': 2}]},
+             'wrong_account_late'),
+            # R11: even a zero-quantity line is a line - only an empty list is "nothing touched"
+            ({'outcome': 'cart_not_empty', 'steps': pre, 'lines': [{'line_id': 1, 'accepted_qty': 0}]},
+             'cart_not_empty_late'),
         ]
         for payload, reason in cases:
+            self._assert_gated(payload, reason)
+
+    def test_pre_cart_report_fail_safe(self):
+        """R11: a pre-cart outcome is believed only on an allow-listed payload; anything else is
+        "cart touched" and gated."""
+        pre = [{'label': 'check_account'}, {'label': 'check_cart_empty'}]
+        cases = [
+            {'steps': {'label': 'check_account'}},                       # non-list steps (dict)
+            {'steps': 'check_account'},                                  # non-list steps (string)
+            {},                                                          # steps missing
+            {'steps': None},                                             # steps null
+            {'steps': pre + ['check_cart_empty']},                       # a non-dict entry
+            {'steps': pre + [{'label': 'cart'}]},                        # an unknown label
+            {'steps': [{'label': 'Check_Account'}]},                     # labels match exactly
+            {'steps': [{'label': 'check_account '}]},
+            {'steps': [{'note': 'no label'}]},                           # no label at all
+            {'steps': [{'label': None}]},
+            {'steps': pre, 'lines': [{'line_id': 1, 'status': 'added'}]},  # status only
+            {'steps': pre, 'lines': [{'line_id': 1, 'accepted_qty': 0.5}]},  # fractional qty
+            {'steps': pre, 'lines': 'line 1 added'},                     # lines is a string
+            {'steps': pre, 'lines': {'line_id': 1}},                     # lines is a dict
+            {'steps': pre, 'lines': [None]},                             # a non-dict line
+        ]
+        for outcome, reason in (('cart_not_empty', 'cart_not_empty_late'),
+                                ('wrong_account', 'wrong_account_late')):
+            for case in cases:
+                self._assert_gated({'outcome': outcome, **case}, reason)
+
+    def test_pre_cart_allow_listed_report_retries_freely(self):
+        for payload in ({'steps': [{'label': 'check_account', 'ok': True},
+                                   {'label': 'check_cart_empty', 'ok': False}], 'lines': []},
+                        {'steps': [{'label': 'check_account'}]},
+                        {'steps': [], 'lines': None}):
             run = self._live_run()
-            b = queue.report(run, self.dev, payload)
-            self.assertEqual(b.needs_person_reason, reason)
-            with self.assertRaises(queue.QueueError, msg=reason):
-                queue.resolve(b, staff=self.boss, action='retry')
-            self.assertTrue(PortalRun.objects.filter(basket=b, kind='history', finished_at__isnull=True).exists())
+            b = queue.report(run, self.dev, {'outcome': 'cart_not_empty', **payload})
+            self.assertEqual((b.status, b.needs_person_reason), ('needs_person', 'cart_not_empty'), payload)
+            self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready', payload)
             PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
-        # zero quantities and other steps are still "nothing touched"
-        run = self._live_run()
-        b = queue.report(run, self.dev, {'outcome': 'cart_not_empty', 'steps': [{'label': 'cart'}],
-                                         'lines': [{'line_id': 1, 'accepted_qty': 0}]})
-        self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready')
 
     def test_driver_reported_wrong_account_late_is_gated(self):
         run = self._live_run()
@@ -417,7 +460,7 @@ class QueueTests(_World, TestCase):
     def test_live_pre_cart_outcomes_retry_freely(self):
         for outcome in ('cart_not_empty', 'wrong_account'):
             run = self._live_run()
-            b = queue.report(run, self.dev, {'outcome': outcome})
+            b = queue.report(run, self.dev, {'outcome': outcome, 'steps': [{'label': 'check_account'}]})
             self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready', outcome)
             PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
         # a past-the-cart outcome from the wrong account is NOT pre-cart
