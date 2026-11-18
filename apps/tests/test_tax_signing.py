@@ -1003,7 +1003,8 @@ class AgentRunTests(SimpleTestCase):
         details = cades.inspect_signature(base64.b64decode(sent[0]['signature']), TEXT.encode('utf-8'))
         self.assertEqual(details['thumbprint'], SEAL.thumbprint)
         first = http.of('next')[0]
-        self.assertEqual(first['headers'], {'Authorization': 'Bearer A1', 'X-Tax-Agent-Token': AGENT_TOKEN})
+        self.assertEqual(first['headers'], {'Authorization': 'Bearer A1', 'X-Tax-Agent-Token': AGENT_TOKEN,
+                                            'X-Tax-Agent-Version': '2'})
         for call in http.calls:
             self.assertIs(call['allow_redirects'], False)
             self.assertIs(call['verify'], True)
