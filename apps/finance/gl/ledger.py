@@ -30,6 +30,7 @@ _MAX_AMOUNT = Decimal('1e16')  # LedgerLine.debit/credit: max_digits=18, decimal
 CLOSE_SOURCE_TYPES = ('closing_stock', 'closing_stock_rev', 'year_end', 'year_end_stock')
 
 MESSAGES = {
+    'self_approval':       'مينفعش تعتمد قيد إنت اللي عملته — يعتمده زميل تاني.',
     'unbalanced':          'القيد مش متزن: إجمالي المدين لازم يساوي إجمالي الدائن.',
     'empty':               'القيد فاضي: لازم يكون فيه مبلغ.',
     'missing_accounts':    'حسابات مش موجودة في دليل الحسابات',
@@ -237,13 +238,17 @@ def save_draft(*, user, entry_date, description, lines, book='general', branch=N
 
 
 def approve(entry_id: int, *, user, _allow_before_opening: bool = False,
-            _close_service: bool = False) -> LedgerEntry:
+            _close_service: bool = False, checker: bool = False) -> LedgerEntry:
     """Approve a draft. `_allow_before_opening` is for gl_reproduce_workbook only (rolled back);
     `_close_service` is for gl/close.py only (its own entries, into the month it is closing)."""
     with transaction.atomic():
         entry = LedgerEntry.objects.select_for_update().get(pk=entry_id)
         if entry.status != 'draft':
             raise LedgerError('not_draft')
+        if checker:   # the approve API (UAT W5b P0): the drafter does not approve their own entry
+            from core import maker_checker
+            if maker_checker.refusal(entry.created_by, user):
+                raise LedgerError('self_approval')
         lines = list(entry.lines.select_related('account').order_by('line_no'))
         total_debit = sum((ln.debit for ln in lines), Decimal('0'))
         total_credit = sum((ln.credit for ln in lines), Decimal('0'))

@@ -11,8 +11,9 @@ included — or edit a shift template; /api/incentives/ and /api/insights/ serve
 Now: analytics and insights reads = analytics view (insight writes keep their admin / supervisor
 checks); sales targets sit on the KPI board's side: analytics view, writes still admin /
 supervisor / purchasing; shift templates and assignments are written by managers only (admin /
-supervisor / purchasing); a staff member's own incentive progress and HR self-service (check-in /
-out, leave, permit, overtime, expense, advance) stay open to every role — viewer included.
+supervisor / purchasing); a staff member's own incentive progress and attendance check-in / out stay
+open to every role — viewer included. Filing an HR request (leave, permit, overtime, expense,
+advance) needs hr create (UAT W5, owner 2026-11-17): viewer and quality_manager hold hr view only.
 """
 from django.test import TestCase, override_settings
 
@@ -24,6 +25,15 @@ from .routes import Tripwire
 from .sweep import sweep
 
 MISSING = '987654321'
+_LEAVE = {'leave_type_code': 'annual', 'start_date': '2026-08-01', 'end_date': '2026-08-03',
+          'return_to_work_date': '2026-08-05', 'days_requested': '3', 'reason': 'ظرف'}
+
+
+def _seed_hr():
+    from io import StringIO
+    from django.core.management import call_command
+    call_command('seed_hr_config', stdout=StringIO())
+    call_command('seed_approval_workflows', stdout=StringIO())
 
 
 class PeopleReportsSweepTests(TestCase):
@@ -78,6 +88,27 @@ class PeopleReportsTests(TestCase):
     def test_pharmacist_still_reads_targets_and_quality_reads_analytics(self):
         self.assertEqual(self._call('pharmacist', 'get', '/api/incentives/targets/').status_code, 200)
         self.assertEqual(self._call('quality_manager', 'get', '/api/analytics/sales/').status_code, 200)
+
+    def test_hr_view_only_roles_cannot_file_leave(self):
+        for role in ('viewer', 'quality_manager'):
+            with self.subTest(role=role):
+                r = self._call(role, 'post', '/api/hr/leave-requests/submit/', _LEAVE)
+                self.assertEqual(r.status_code, 403, r.content)
+
+    def test_hr_view_only_roles_cannot_file_other_requests(self):
+        self.assertEqual(self._call('viewer', 'post', '/api/hr/permits/submit/').status_code, 403)
+        self.assertEqual(self._call('quality_manager', 'post', '/api/hr/overtime/submit/').status_code, 403)
+
+    def test_roles_with_hr_create_still_file_leave(self):
+        _seed_hr()
+        for role in ('salesperson', 'accountant'):
+            with self.subTest(role=role):
+                user, profile, _ = make_user(f'z9a_{role}', role=role)
+                profile.hr_code = f'HR-{role}'                   # leave needs the employee's HR code
+                profile.save(update_fields=['hr_code'])
+                with Tripwire():
+                    r = bearer_client(user).post('/api/hr/leave-requests/submit/', _LEAVE, format='json')
+                self.assertEqual(r.status_code, 201, r.content)
 
     def test_supervisor_still_assigns_shifts(self):
         self.assertNotEqual(self._call('supervisor', 'post', '/api/hr/shift-assignments/').status_code, 403)

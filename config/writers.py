@@ -31,6 +31,7 @@ WRITER_FLAGS = {
     'TAX_ERECEIPT_SUBMIT_ENABLED':         {'protects': 'إرسال الإيصالات الإلكترونية إلى مصلحة الضرائب'},
     'TAX_ETA_CODING_ENABLED':              {'protects': 'طلب أكواد الأصناف EGS من مصلحة الضرائب'},
     'TAX_ETA_PRODUCTION_ALLOWED':          {'protects': 'أي إرسال لمنظومة المصلحة الفعلية (غير التجريبية)'},
+    'TAX_EGS_SHEET_AGENT_WRITE_ENABLED':   {'protects': 'استبدال ملف أكواد المحصّل على جهاز الختم (D:\\invoicer_mini)'},
     'TAX_ETA_CODING_PRODUCTION_ENABLED':   {'protects': 'طلب أكواد الأصناف من منظومة المصلحة الفعلية (الإنتاج)'},
     'TAX_ETA_CODING_PRODUCTION_BATCH_OK':  {'protects': 'إرسال أكثر من طلب كود للمنظومة الفعلية قبل اعتماد أول طلب'},
     'ISR_WRITER_ENABLED':                  {'protects': 'طلبات التوريد ISR (stockisrm / stockisr)'},
