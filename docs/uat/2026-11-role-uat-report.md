@@ -1,10 +1,10 @@
-# Role-by-role UAT — report (DRAFT, 2026-11-17)
+# Role-by-role UAT — report (final, 2026-11-19)
 
 Design `docs/superpowers/specs/2026-11-16-role-uat-design.md` · Plan `docs/superpowers/plans/2026-11-16-role-uat.md`
 · Runbook `scripts/uat/README.md`
 
-> **Status: draft.** Every workstream is in. Fixes: PR 163 merged 2026-11-18; PR 161 merging.
-> W2 numbers are from run 4b; its clean rerun (4c) will replace them.
+> **Status: final.** Every workstream is in. Fixes merged to main 2026-11-18 (PR 163, PR 161) and applied
+> on the office (customers 0036, users 0060). Open items are the owner decisions and follow-ups below.
 
 ## How it was tested
 
@@ -94,41 +94,45 @@ The questions as originally asked:
 | pass | supervisor | `/approvals` | inbox across branches with decision buttons |
 | pass | admin | `/users`, `/insurance` | list and claims load; no phones on the user list |
 
-### W2 — screen visibility (branch `claude/uat-w2-visibility-f91f78`)
+### W2 — screen visibility (branch `claude/uat-w2-visibility-f91f78`, spec `50deab72`)
 
-19 users × 190 routes (23 skipped) = **3,466 visits**, every one checked signed in first (0 relogins needed);
-0 hangs, crashes or blank screens. Numbers below are from run 4b (2026-11-18, harness bugs fixed and
-rechecked); **run 4c (clean rerun) final counts: _pending_**.
+Run 4c (2026-11-18/19): 19 users × 190 routes (23 skipped) = **3,466 visits**, all 19 users on the first
+try, every visit checked signed in first (0 relogins); 0 hangs, crashes or blank screens.
+**458 findings:** screen P1 94 · P2 47 · P3 316 · slow P3 1. Data: `findings-w2.jsonl` +
+`visibility-matrix.json` (run folder, not in git).
 
-**P1 — the menu hides the screen, but it opens and its data API answers 200** (a role can reach by URL what the
-menu says it may not see; matrix tightening per D5, or a menu-model fix):
+**P1 — the menu hides the screen, but it opens and its data API answers 200 (60 rows).** A role reaches by
+URL what the menu says it may not see — tighten the server to the matrix (D5) or fix the menu model:
 
-| screen | users | screen | users |
+| screen (data API) | users | screen (data API) | users |
 |---|---|---|---|
-| `/salesperson-board` (forecasting) | 9 | `/m/delivery` | 5 |
-| `/purchasing` (runs/latest) | 9 | `/m/shortage` (+ detail) | 4 |
-| `/recommendations` | 7 | `/m/vouchers`, `/m/stock-count`, `/m/demand` (+ detail) | 3 each |
-| `/m/qa`, `/m/approvals` | 6 each | `/analytics/transfers` | 2 salespersons |
-| `/demand/dashboard`, `/demand/recovery` | purchasing | | |
+| `/salesperson-board` (forecasting) | 9 | `/m/delivery` (`/api/delivery/`) | 5 |
+| `/purchasing` (`runs/latest`) | 9 | `/m/shortage` (+ detail) | 4 |
+| `/recommendations` | 8 | `/m/vouchers`, `/m/stock-count`, `/m/demand` (+ detail) | 3 each |
+| `/m/qa` (`qa/inspections`) | 6 | `/analytics/transfers` | 2 (salesperson, salesperson@B) |
+| `/m/approvals` (pricing + pending approvals) | 6 | `/demand/dashboard`, `/demand/recovery` | purchasing |
 
-Doubtful (only a setup call answers, no business data): `/stock-audit` (12, `stock-audit/me`), `/callcenter`
-(11, PBX/WebRTC config), `/demand` (staff list), `/inventory` and `/analytics/sales` (filter options).
+Doubtful P1 (34 rows — only a setup or picker call answers, no business data): `/stock-audit` 12
+(`stock-audit/me`), `/callcenter` 11 (PBX/WebRTC config), `/inventory`, `/analytics`, `/analytics/sales` 3 each
+(item filter options), `/demand` 2 (staff list).
 
-**P2 — menu shows it, the server refuses:** `/rider` for admin, supervisor and others (rider APIs 403);
-`/customers/merge` and `/transits` for some roles. Delivery and delivery@B see 17 menu entries that refuse —
-they live in the rider shell, so this is likely the menu model, not access (owner to confirm).
-`/stock-count` (call_center, accountant) and `/vouchers` (accountant) get a clean 403 but show a misleading
-empty state («لا توجد جلسات جرد») instead of "no access".
+**P2 (47 rows):**
+- `/market-shortage` never finishes loading for 10 users (>22 s; `purchasing/runs/active` answers 404).
+- `/rider` is in the menu but refused (rider APIs 403) for admin, supervisor, restricted, the real admin and delivery@B.
+- delivery and delivery@B: 16 menu entries each refuse (`/dashboard`, `/m/me`, `/tasks` …). They live in the
+  rider shell — likely the menu model, not access (owner to confirm).
 
-**P3 — unhandled 403 (empty page, not saying "no access")**, menu hides them: worst `/insurance` and its 4
-subpages (14 users), `/offers` (12), `/procurement/*` (9–10), `/supply` (5). Under a shown `/finance` or
-`/delivery` entry, `/finance/cashflow`, `/finance/cash`, `/finance/receivables`, `/finance/supplier-terms` and
-`/delivery/my` are reachable from the menu for some users.
+**P3:** 126 unhandled-403 screens — the data API refuses but the page shows an empty state instead of
+"no access"; all hidden from the menu. Worst: `/insurance` and its 4 subpages (13–14 users), `/offers` (12),
+`/procurement` suppliers / margins / optimization / mappings (10 each), `/stock-count` (4), `/vouchers` and
+`/shortage` (accountant). Another 115 "shown but refused" rows are subpages inherited under a shown parent
+(mostly `/finance/*`).
 
-**Speed (time to first content):** p50 0.62 s, p95 1.9 s overall; per role p50 0.40–1.0 s, p95 0.96–2.9 s
-(call_center highest). Slow: `/sync` 20 s with no content (2 users); `/m/pos` 1.9 s; `/composition` 1.4 s.
-Panel data after first content: `/market-shortage` >22 s, `/finance/cash` and `/finance/cashflow` ~15 s,
-`/insurance` ~10.5 s.
+**Speed (time to first content):** p50 0.41 s, p95 1.0 s overall; per role p50 0.38–0.59 s, p95 0.80–1.83 s;
+one visit over 5 s. Slowest by median: `/delivery/my` 2.0 s, `/phantom-sales` 1.7, `/targets` 1.4, `/m/pos` 1.3.
+Data still loading after first content: `/market-shortage` 22 s, `/procurement/overview` 8.3 s,
+`/phantom-sales` 6.4, `/analytics` 6.2, `/discount-alignment` 5.8, `/analytics/sales` and `/sales` 5.7,
+`/followups/reminders` 5.4.
 
 ### W4 — phones and other branches on screen (branch `claude/uat-w4-exposure-e89046`)
 
@@ -193,6 +197,14 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
 - Every Playwright run empties `test-results-uat` (findings included) — copy findings per run.
 - One shared dev server for six sessions: it dropped once for 18 minutes; a run must fail, not
   pass, when the backend is unreachable.
+- W2 (fixed in its spec, shared `frontend/uat/lib` untouched — port before the next round): a collapsed,
+  text-less nav rail passed the "screen has content" check, so every desktop visit waited out its cap;
+  text reads and screenshots had no timeout; a bare "403" in page text (a figure on a data screen) counted
+  as a refusal; a screen redirecting to its own dashboard counted as refused; "still loading" was judged
+  1.5 s after first content; the shared `gotoSettled` waits for network idle (never comes on polling
+  screens). Traces at the shared setting reached 600 MB — keep trace off for sweeps.
+- Test runs from several sessions share one heavy-run lock and one Postgres; a 3-hour wait for the lock
+  looked like a hang. Check the lock file before assuming a run is stuck.
 
 ## Speed and load (W7, branch `claude/uat-w7-load-8dc62f`, `docs/uat/light-load.md`)
 
@@ -211,3 +223,15 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
   lists come back empty with an error note.
 - Mobile / rider screens were only visited, not worked through.
 - 2FA (switched off on the copy; covered by backend tests).
+
+## Open after this round
+
+- **Owner decisions:** D4 real roles (then switch `SELF_APPROVAL_ADMIN_EXEMPT` off); voucher OTP visible to
+  staff; `DAILY_COUNT_ENABLED` at go-live; quality manager `hr:create`; delivery cash rules (above);
+  office `DEBUG` off; the rider-shell menu (W2 P2).
+- **Follow-up fixes:** the 60 W2 P1 screens (server gates to the matrix); 126 unhandled-403 screens should say
+  "no access"; `/market-shortage` loading (`purchasing/runs/active` 404); backend role lists still looser than
+  the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons); the 103
+  stricter-than-matrix checks (W3).
+- **Housekeeping:** `makemigrations --check` on main wants a migration deleting `reservations.ActivityLog`
+  (not from this round); harness fixes from W2 into the shared lib.
