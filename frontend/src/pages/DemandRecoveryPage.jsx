@@ -259,7 +259,7 @@ export default function DemandRecoveryPage() {
             </p>
           </div>
           {canSeeDashboard && (
-            <button onClick={() => navigate('/demand/dashboard')} className="btn-secondary text-sm" data-tour="demand-recovery-dashboard">
+            <button onClick={() => navigate('/demand/dashboard')} data-perm="analytics:view" className="btn-secondary text-sm" data-tour="demand-recovery-dashboard">
               📊 لوحة الطلب الضائع
             </button>
           )}
