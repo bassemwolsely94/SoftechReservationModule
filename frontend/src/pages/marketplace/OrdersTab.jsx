@@ -18,13 +18,15 @@ import {
 } from './shared'
 
 // The status buttons shown after acceptance. Display only: the server (apps/marketplace/intake.ALLOWED)
-// refuses any move that is not allowed. Accept / reject have their own buttons.
+// refuses any move that is not allowed. Accept / reject have their own buttons; cancel needs a reason
+// (typed inline, no popup) and the server also cancels a POS draft that never reached the cashier.
 const NEXT = {
-  accepted: ['preparing', 'cancelled'],
-  preparing: ['ready', 'cancelled'],
-  ready: ['handed_over', 'cancelled'],
+  accepted: ['preparing'],
+  preparing: ['ready'],
+  ready: ['handed_over'],
   handed_over: ['delivered'],
 }
+const CANCELLABLE = new Set(['accepted', 'preparing', 'ready'])
 const ORDERING = ['created_at', 'status', 'channel', 'branch', 'external_id', 'platform_total', 'customer_name']
 
 function StatusChip({ status, label }) {
@@ -39,6 +41,7 @@ function OrderPanel({ id, canCreate, onClose }) {
   const qc = useQueryClient()
   const [noticeBar, toast] = useNotice()
   const [reason, setReason] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
   const q = useQuery({ queryKey: ['marketplace', 'order', id], queryFn: () => marketplaceApi.order(id).then(r => r.data) })
   const done = (msg) => (d) => {
     qc.setQueryData(['marketplace', 'order', id], d)
@@ -55,7 +58,15 @@ function OrderPanel({ id, canCreate, onClose }) {
     onSuccess: (d) => { setReason(''); done('تم الرفض')(d) }, onError: fail,
   })
   const move = useMutation({ mutationFn: (to) => marketplaceApi.setStatus(id, to).then(r => r.data), onSuccess: done('تم تحديث الحالة'), onError: fail })
-  const busy = accept.isPending || reject.isPending || move.isPending
+  const cancel = useMutation({
+    mutationFn: () => marketplaceApi.setStatus(id, 'cancelled', cancelReason.trim()).then(r => r.data),
+    onSuccess: (d) => {
+      setCancelReason('')
+      done(d.needs_review ? 'أُلغي الطلب — المسودة كانت عند الكاشير، راجعها في نقطة البيع' : 'أُلغي الطلب')(d)
+    },
+    onError: fail,
+  })
+  const busy = accept.isPending || reject.isPending || move.isPending || cancel.isPending
   const o = q.data
   const lines = useSortableRows(o?.lines || [], { persistKey: 'mp-order-lines' })
 
@@ -82,9 +93,13 @@ function OrderPanel({ id, canCreate, onClose }) {
 
         {o.pos_order && (
           <div className="rounded-lg bg-blue-50 text-blue-800 text-sm px-3 py-2">
-            مسودة نقطة البيع رقم {o.pos_order.id} ({o.pos_order.status}) على حساب المنصة —{' '}
+            مسودة نقطة البيع رقم {o.pos_order.id} ({o.pos_order.status_label || o.pos_order.status}) على حساب المنصة —{' '}
             <Link to="/pos" className="underline font-medium">افتح نقطة البيع</Link> وكمّلها من المسودات.
           </div>
+        )}
+
+        {o.needs_review && (
+          <div className="rounded-lg bg-amber-50 text-amber-800 text-sm px-3 py-2">⚠ يحتاج مراجعة — راجع سجل الحالات.</div>
         )}
 
         {o.problems?.length > 0 && (
@@ -131,11 +146,19 @@ function OrderPanel({ id, canCreate, onClose }) {
             {(NEXT[o.status] || []).length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {NEXT[o.status].map(to => (
-                  <button key={to} disabled={busy} onClick={() => move.mutate(to)}
-                    className={to === 'cancelled' ? `${btnQuiet} text-red-600` : btnQuiet}>
-                    {to === 'cancelled' ? 'إلغاء الطلب' : `← ${STATUS_LABEL[to]}`}
+                  <button key={to} disabled={busy} onClick={() => move.mutate(to)} className={btnQuiet}>
+                    ← {STATUS_LABEL[to]}
                   </button>
                 ))}
+              </div>
+            )}
+            {CANCELLABLE.has(o.status) && (
+              <div className="flex gap-2">
+                <input value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="سبب الإلغاء"
+                  onKeyDown={e => { if (e.key === 'Enter' && cancelReason.trim() && !busy) cancel.mutate() }}
+                  className={`${inputCls} flex-1`} />
+                <button disabled={busy || !cancelReason.trim()} onClick={() => cancel.mutate()}
+                  className={`${btnQuiet} text-red-600`}>إلغاء الطلب</button>
               </div>
             )}
           </div>

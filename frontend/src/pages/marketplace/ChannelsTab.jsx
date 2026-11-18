@@ -13,7 +13,10 @@ import useServerSort from '../../hooks/useServerSort'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import { Pager, btnPrimary, btnQuiet, dateTime, errText, inputCls, rowsOf, useChannels, useNotice } from './shared'
 
-const ADAPTERS = { manual: 'يدوي', fake: 'تجريبي' }
+// The 'fake' test adapter is not offered (the server refuses it outside DEBUG / tests); a channel that
+// already uses it still shows its value as a disabled option.
+const ADAPTERS = { manual: 'يدوي' }
+const LEGACY_ADAPTERS = { fake: 'تجريبي' }
 const SCOPES = { per_branch: 'لكل فرع', national: 'على مستوى الشركة' }
 const PRICE_RULES = { shelf: 'سعر الرف', shelf_plus_pct: 'سعر الرف + نسبة' }
 const MODES = { platform_rider: 'مندوب المنصة', own_rider: 'مندوبنا' }
@@ -23,7 +26,14 @@ const DRY_RUN = 'تجريبي — لا يُرسل'
 function ChannelEditor({ channel, canEdit, toast }) {
   const qc = useQueryClient()
   const [f, setF] = useState(null)
-  useEffect(() => { setF(Object.fromEntries(EDIT_FIELDS.map(k => [k, channel[k] ?? '']))) }, [channel])
+  // reset the form only when another channel is picked or the saved row changed (updated_at), not on
+  // every refetch that hands back an equal object and would wipe what the user is typing
+  const version = `${channel.id}:${channel.updated_at}`
+  const [seen, setSeen] = useState(null)
+  if (seen !== version) {
+    setSeen(version)
+    setF(Object.fromEntries(EDIT_FIELDS.map(k => [k, channel[k] ?? ''])))
+  }
   const save = useMutation({
     mutationFn: () => marketplaceApi.updateChannel(channel.id, {
       ...f, max_qty_per_item: f.max_qty_per_item === '' ? null : f.max_qty_per_item,
@@ -36,6 +46,7 @@ function ChannelEditor({ channel, canEdit, toast }) {
   const sel = (k, opts) => (
     <select value={f[k]} onChange={set(k)} disabled={!canEdit} className={inputCls}>
       {Object.entries(opts).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      {f[k] !== '' && !(f[k] in opts) && <option value={f[k]} disabled>{LEGACY_ADAPTERS[f[k]] || f[k]}</option>}
     </select>
   )
   return (

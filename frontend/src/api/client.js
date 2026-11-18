@@ -3165,7 +3165,7 @@ export const marketplaceApi = {
   updateStore:   (id, data)     => api.patch(`/marketplace/stores/${id}/`, data),
   listings:      (params = {})  => api.get('/marketplace/listings/', { params }),
   createListing: (data)         => api.post('/marketplace/listings/', data),
-  approve:       (id)           => api.post(`/marketplace/listings/${id}/approve/`),
+  approve:       (id, data = {}) => api.post(`/marketplace/listings/${id}/approve/`, data),
   unapprove:     (id)           => api.post(`/marketplace/listings/${id}/unapprove/`),
   orders:        (params = {})  => api.get('/marketplace/orders/', { params }),
   order:         (id)           => api.get(`/marketplace/orders/${id}/`),

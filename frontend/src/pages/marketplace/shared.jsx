@@ -7,14 +7,13 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { marketplaceApi } from '../../api/client'
 
-/** {'detail': …} or {'code': …} (HTTP 400) → one Arabic line. */
+/** {'detail': …} (HTTP 400) → one Arabic line. A bare machine `code` is never shown to staff. */
 export const errText = (e) => {
   const d = e?.response?.data
   if (!d) return 'حدث خطأ — حاول مرة أخرى.'
   if (typeof d === 'string') return 'حدث خطأ — حاول مرة أخرى.'
-  if (d.detail && d.code) return `${d.detail} (${d.code})`
   if (d.detail) return d.detail
-  if (d.code) return String(d.code)
+  if (d.code) return 'حدث خطأ — حاول مرة أخرى.'
   const first = Object.entries(d)[0]
   if (first) return `${first[0]}: ${Array.isArray(first[1]) ? first[1].join(' ') : String(first[1])}`
   return 'حدث خطأ — حاول مرة أخرى.'

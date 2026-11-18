@@ -2,6 +2,7 @@
  * «🏷️ الأصناف المعروضة» — items added to a platform. Nothing is listed until a supervisor approves it
  * (server-side `marketplace.approve`); prescription items are listed only by that explicit decision.
  * `problem`, `qty` (for the chosen branch) and `price` are computed by the server.
+ * «❄ يسمح» (fridge items only) is set by an approver through the approve action — never on create.
  * Keyboard: ↑↓ move · Enter approve / unapprove the active row.
  */
 import { useCallback, useMemo, useState } from 'react'
@@ -55,6 +56,12 @@ export default function ListingsTab({ canCreate, canApprove }) {
   const toggle = useMutation({
     mutationFn: (row) => (row.approved ? marketplaceApi.unapprove(row.id) : marketplaceApi.approve(row.id)).then(r => r.data),
     onSuccess: (d) => { refresh(); toast.ok(d.approved ? `اعتُمد ${d.item_name}` : `أُلغي اعتماد ${d.item_name}`) },
+    onError: (e) => toast.error(errText(e)),
+  })
+  // «يسمح بالثلاجة» is an approver's decision: it goes through the approve action (which also approves)
+  const fridge = useMutation({
+    mutationFn: ({ row, allow }) => marketplaceApi.approve(row.id, { allow_fridge: allow }).then(r => r.data),
+    onSuccess: (d) => { refresh(); toast.ok(d.allow_fridge ? `اعتُمد ${d.item_name} مع السماح بالثلاجة` : `أُوقف السماح بالثلاجة لـ ${d.item_name}`) },
     onError: (e) => toast.error(errText(e)),
   })
   const pick = (item) => {
@@ -118,15 +125,16 @@ export default function ListingsTab({ canCreate, canApprove }) {
               <th className="text-start px-3 py-2">المشكلة</th>
               <th className="text-start px-3 py-2">الكمية المتاحة</th>
               <th className="text-start px-3 py-2">سعر المنصة</th>
+              <th className="text-start px-3 py-2">ثلاجة</th>
               <SortTh {...sort.headerProps('approved')} className="text-start px-3 py-2">الاعتماد</SortTh>
               <SortTh {...sort.headerProps('approved_at', 'date')} className="text-start px-3 py-2">اعتُمد في</SortTh>
             </tr>
           </thead>
           <tbody>
-            {list.isLoading && <tr><td colSpan={8} className="py-10 text-center text-gray-400">جاري التحميل…</td></tr>}
-            {list.isError && <tr><td colSpan={8} className="py-10 text-center text-red-600">{errText(list.error)}</td></tr>}
+            {list.isLoading && <tr><td colSpan={9} className="py-10 text-center text-gray-400">جاري التحميل…</td></tr>}
+            {list.isError && <tr><td colSpan={9} className="py-10 text-center text-red-600">{errText(list.error)}</td></tr>}
             {!list.isLoading && !list.isError && rows.length === 0 && (
-              <tr><td colSpan={8} className="py-10 text-center text-gray-400">لا توجد أصناف مضافة. لا يُعرض شيء على أي منصة بدون إضافة واعتماد.</td></tr>
+              <tr><td colSpan={9} className="py-10 text-center text-gray-400">لا توجد أصناف مضافة. لا يُعرض شيء على أي منصة بدون إضافة واعتماد.</td></tr>
             )}
             {rows.map(r => {
               const rp = kb.rowProps(r)
@@ -138,6 +146,15 @@ export default function ListingsTab({ canCreate, canApprove }) {
                   <td className={`px-3 py-2 ${r.problem ? 'text-red-600' : 'text-emerald-700'}`}>{LISTING_PROBLEM[r.problem] ?? r.problem}</td>
                   <td className="px-3 py-2">{qtyText(r.qty)}</td>
                   <td className="px-3 py-2">{money(r.price)}</td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    {!r.fridge ? <span className="text-gray-300">—</span> : canApprove ? (
+                      <label className="flex items-center gap-1">
+                        <input type="checkbox" checked={!!r.allow_fridge} disabled={fridge.isPending || (!r.approved && r.allow_fridge)}
+                          onChange={e => fridge.mutate({ row: r, allow: e.target.checked })} />
+                        ❄ يسمح
+                      </label>
+                    ) : (r.allow_fridge ? <span className="text-sky-700">❄ مسموح</span> : <span className="text-gray-500">❄ غير مسموح</span>)}
+                  </td>
                   <td className="px-3 py-2">
                     {canApprove ? (
                       <button disabled={toggle.isPending} onClick={() => toggle.mutate(r)}

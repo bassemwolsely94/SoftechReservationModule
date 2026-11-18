@@ -43,15 +43,24 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
     if (!item?.item_id) { toast.error('الصنف غير موجود في كتالوج النظام — اختر صنفًا آخر.'); return }
     setPicked(item)
     setQty('1')
-    setPrice(item.pack_price != null ? String(item.pack_price) : '')
+    setPrice('')
     setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select() }, 0)
+    // the platform price comes from the server (apps/marketplace/availability.platform_price)
+    marketplaceApi.listings({ channel, item: item.item_id })
+      .then(r => {
+        const row = rowsOf(r.data)[0]
+        if (row) setPrice(p => (p === '' ? String(row.price) : p))
+        else toast.error('الصنف غير مضاف لهذه المنصة — اكتب سعر المنصة يدويًا، والطلب لن يُقبل قبل إضافته واعتماده.')
+      })
+      .catch(() => {})
   }
   const addLine = () => {
     if (!picked) return
     const n = Number(qty)
     if (!(n > 0)) { toast.error('اكتب كمية صحيحة.'); return }
+    if (price.trim() === '' || !(Number(price) >= 0)) { toast.error('اكتب سعر المنصة.'); return }
     setLines(ls => [...ls, { key: `${picked.item_id}-${Date.now()}`, item_id: picked.item_id, name: picked.name,
-                             code: picked.softech_id, qty: String(n), unit_price: price === '' ? '0' : price }])
+                             code: picked.softech_id, qty: String(n), unit_price: price.trim() }])
     setPicked(null)
     focusSearch()
   }
@@ -127,7 +136,7 @@ export default function ManualIntakeTab({ canCreate, onSaved }) {
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLine() } }}
                 className={`${inputCls} w-24`} />
             </label>
-            <button onClick={addLine} className={btnQuiet}>إضافة (Enter)</button>
+            <button onClick={addLine} disabled={price.trim() === ''} className={btnQuiet}>إضافة (Enter)</button>
           </>}
         </div>
         {lines.length > 0 && (
