@@ -76,6 +76,7 @@ class _World(TestCase):
         cls.account = PortalAccount.objects.create(portal=cls.portal, label='main', identity_text='HQ 565',
                                                    last_credit={'credit': '1000', 'at': '2026-11-18T08:00:00'})
         cls.vendor = VendorProfile.objects.create(name='Pharma Overseas', softech_personcode='565')
+        VendorProfile.objects.create(name='Ibn Sina', softech_personcode='30')
         cls.items = [Item.objects.create(softech_id=f'PA{n}', name=f'ITEM {n}', is_active=True,
                                          pack_price=Decimal('10')) for n in range(6)]
 

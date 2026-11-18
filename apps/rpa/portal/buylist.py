@@ -148,6 +148,15 @@ def create_from_rows(rows, *, staff, file_sha256):
 
 # ── pick / result / remainder ──────────────────────────────────────────────────
 
+def is_known_supplier(code) -> bool:
+    """A supplier code the rest of the system orders from: a SOFTECH supplier (VendorProfile
+    personcode, as rank_suppliers and send_other use) or a supplier with a portal."""
+    from apps.invoices.models import VendorProfile
+    code = str(code or '').strip()
+    return bool(code) and (VendorProfile.objects.filter(softech_personcode=code).exists()
+                           or SupplierPortal.objects.filter(supplier_code=code).exists())
+
+
 def pick(line, supplier_code, *, staff):
     if line.buylist.status != 'open':
         raise BuyListError('القائمة مغلقة')
@@ -156,6 +165,8 @@ def pick(line, supplier_code, *, staff):
     supplier_code = str(supplier_code or '').strip()[:120]
     if not supplier_code:
         raise BuyListError('اختر المورد')
+    if not is_known_supplier(supplier_code):
+        raise BuyListError('مورد غير معروف — اختر مورداً له كود في SOFTECH')
     before = line.chosen_supplier
     line.chosen_supplier = supplier_code
     line.save(update_fields=['chosen_supplier'])
@@ -213,6 +224,8 @@ def send_other(buylist, supplier_code, *, staff, lang='ar', idempotency_key=None
     from apps.supply.execution import commit_order
     from apps.supply.models import SupplyDecision
     supplier_code = str(supplier_code)
+    if not is_known_supplier(supplier_code):
+        raise BuyListError('مورد غير معروف — اختر مورداً له كود في SOFTECH')
     if SupplierPortal.objects.filter(supplier_code=supplier_code).exists():
         raise BuyListError('هذا المورد له موقع — يُرسل عبر الروبوت وليس كقائمة واتساب')
     prefix = f'buylist-{buylist.pk}-{supplier_code}-'

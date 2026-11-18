@@ -514,9 +514,12 @@ class QueueTests(_World, TestCase):
         queue.report(hrun2, self.dev, {'outcome': 'history_none'})
         with self.assertRaises(queue.QueueError):
             queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='retry')
-        # only a person's explicit "nothing was ordered" does
+        # only a person's explicit "nothing was ordered" does - and over a found order, with a
+        # written reason (final review I2)
+        with self.assertRaises(queue.QueueError):
+            queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='retry', confirm_none=True)
         b = queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='retry',
-                          confirm_none=True)
+                          confirm_none=True, reason='555 is another basket, checked on the site')
         self.assertEqual((b.status, b.claimed_by_id), ('ready', None))
 
     def test_retry_after_history_found_nothing(self):

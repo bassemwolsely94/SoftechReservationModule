@@ -426,7 +426,9 @@ def buylist_send_other(request, pk):
     if request.query_params.get('format') == 'xlsx':
         body = _order_list_xlsx(res['order_ref'], supplier)
         resp = HttpResponse(body, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        resp['Content-Disposition'] = f'attachment; filename="order-{supplier}-{lst.pk}.xlsx"'
+        # the supplier code is typed by a person: only safe characters go into the header
+        safe = re.sub(r'[^A-Za-z0-9_-]', '', supplier)[:40] or 'supplier'
+        resp['Content-Disposition'] = f'attachment; filename="order-{safe}-{lst.pk}.xlsx"'
         return resp
     return Response(res)
 

@@ -159,7 +159,13 @@ def approve_job(job, *, staff, reasons=None):
         job.estimated_value = value
         job.save(update_fields=['status', 'approved_by', 'approved_at', 'estimated_value'])
         build_baskets(job)
-    _audit('rpa_portal_job_approved', job, staff=staff, extra={'estimated_value': str(value)})
+        # in the same transaction as the approval (rule 8): who, the value, and why each over-need
+        # line was approved anyway
+        over = {str(ln.pk): reasons[ln.pk][:255] for ln in lines
+                if rows.get(ln.item_id, {}).get('exceeds_need') and reasons.get(ln.pk)}
+        _audit('rpa_portal_job_approved', job, staff=staff,
+               extra={'estimated_value': str(value), 'lines': len(lines), 'over_need_reasons': over,
+                      'unpriced': unpriced[:20], 'four_eyes_limit': str(limit) if limit is not None else None})
     return job
 
 
@@ -207,10 +213,21 @@ def cancel_job(job, *, staff, reason):
         job = PortalJob.objects.select_for_update().get(pk=job.pk)
         if job.status in ('cancelled', 'done'):
             raise JobError('المهمة منتهية')
-        if job.baskets.exclude(status__in=['pending', 'ready']).exists():
+        # The basket rows are locked, so a claim (ready → in_progress) waits for this transaction
+        # and then finds the basket cancelled. Only pending / ready baskets are cancelled, and if
+        # one moved on in between (the count differs) nothing is cancelled at all.
+        baskets = _lock_baskets(job)
+        if any(b.status not in ('pending', 'ready') for b in baskets):
             raise JobError('لا يمكن الإلغاء بعد أن بدأ الروبوت العمل على سلة')
-        job.baskets.update(status='cancelled')
+        n = PortalBasket.objects.filter(job=job, status__in=('pending', 'ready')).update(status='cancelled')
+        if n != len(baskets):
+            raise JobError('لا يمكن الإلغاء بعد أن بدأ الروبوت العمل على سلة')
         job.status = 'cancelled'
         job.save(update_fields=['status'])
-    _audit('rpa_portal_job_cancelled', job, staff=staff, note=(reason or '')[:255])
+        _audit('rpa_portal_job_cancelled', job, staff=staff, note=(reason or '')[:255],
+               extra={'baskets': [b.pk for b in baskets]})
     return job
+
+
+def _lock_baskets(job):
+    return list(PortalBasket.objects.select_for_update().filter(job=job).order_by('pk'))

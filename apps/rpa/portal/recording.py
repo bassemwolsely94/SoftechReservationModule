@@ -331,8 +331,11 @@ def _apply_results(b, lines, recorded, supplier_code):
               .filter(pk__in=[ln.buyline_id for ln in lines]).order_by('pk')}
     for ln in lines:
         bl = locked[ln.buyline_id]
-        if any(isinstance(t, dict) and t.get('basket') == b.pk for t in bl.tried or []):
+        if any(isinstance(t, dict) and t.get('basket') == b.pk and not t.get('cancelled')
+               for t in bl.tried or []):
             continue                                # already credited with this basket
+        # (a `cancelled` note is not a credit: a cancelled basket whose order a person links later
+        # is still credited once)
         apply_result(bl, supplier_code=supplier_code, accepted=recorded.get(ln.pk, 0), basket_id=b.pk)
 
 

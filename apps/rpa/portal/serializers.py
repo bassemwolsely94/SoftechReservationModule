@@ -131,6 +131,11 @@ def basket_detail(b):
         'portal': b.job.portal.key, 'account_label': b.job.account.label, 'dry_run': b.job.dry_run,
         'job_status': b.job.status, 'submitted_seen_at': b.submitted_seen_at, 'credit_seen': b.credit_seen or {},
         'diff': b.diff or {}, 'may_have_ordered': queue.may_have_ordered(b),
+        # computed by the queue: cancelling needs a confirmation and a reason; the order number a
+        # person most likely links (''); every order the robot read for it (the link editor's prefill)
+        'cancel_needs_confirmation': b.status == 'needs_person' and queue.may_have_placed(b),
+        'suggested_order_ref': queue.suggested_order_ref(b),
+        'history_orders': queue.history_orders(b),
         'line_count': len(lines), 'lines': [portal_line_row(ln) for ln in lines],
         'runs': [run_row(r) for r in runs],
     })
@@ -168,7 +173,11 @@ def remainder_rows(lines, ranking):
     for ln in lines:
         row = buyline_row(ln, ranking=ranking.get(ln.item_id))
         tried = {str(t.get('supplier')) for t in row['tried'] if isinstance(t, dict)}
-        row['next_supplier'] = next((c for c in row['ranking'] if str(c) not in tried), '')
+        # a basket cancelled while its order may have been placed: no one-key next supplier - a
+        # person checks the supplier's site and picks from the buy list (queue._hold_lines)
+        row['may_have_ordered'] = any(isinstance(t, dict) and t.get('may_have_ordered') for t in row['tried'])
+        row['next_supplier'] = ('' if row['may_have_ordered'] else
+                                next((c for c in row['ranking'] if str(c) not in tried), ''))
         rows.append(row)
     return rows
 

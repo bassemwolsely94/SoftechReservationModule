@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from apps.branches.models import Branch
 from apps.catalog.models import Item, ItemSupplierLink
+from apps.invoices.models import VendorProfile
 from apps.purchasing.models import PivotSheetSnapshot
 from apps.rpa.models import BuyList, BuyListLine
 from apps.rpa.portal import buylist as bl
@@ -22,6 +23,7 @@ class BuyListTests(TestCase):
     def setUpTestData(cls):
         cls.user, cls.staff, _ = make_user('bl_buyer', role='purchasing')
         cls.hq = Branch.objects.create(softech_branch_id='100', name='HQ', kind=Branch.KIND_HQ)
+        VendorProfile.objects.create(name='Ibn Sina', softech_personcode='30')   # pick / send need a known code
         cls.items = [Item.objects.create(softech_id=f'BL{n}', name=f'item {n}', is_active=True)
                      for n in range(4)]
 
