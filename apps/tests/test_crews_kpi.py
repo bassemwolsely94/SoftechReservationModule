@@ -150,11 +150,28 @@ class CrewSalesTests(_Base):
         for m in ('cash_delivery', 'gross_profit', 'beauty', 'customer_count'):
             self.assertEqual(sum(v[m] for v in month.per_member.values()), month.kpis[m], m)
 
-    def test_no_seller_spans_is_empty_with_note(self):
+    def test_no_sellers_skips_sales_but_counts_calls(self):
+        self.inv('62', date(2026, 6, 3), 100, phc='A')
         c = self.crew([('', '10', SEED_FROM, None)])
-        month = crew_kpi.compute_crew_month(c, 2026, 6, returns=False, cdr_rows=[])
+        get_conn = mock.Mock()
+        rows = [_cdr('2026-06-02', '10', '01000000001'), _cdr('2026-06-03', '10', '01000000002')]
+        with mock.patch('apps.crews.softech_returns.get_sybase_connection', get_conn):
+            month = crew_kpi.compute_crew_month(c, 2026, 6, cdr_rows=rows)
+        self.assertEqual(month.kpis, {'call_count': Decimal('2')})
+        self.assertIn('no_sellers', month.notes)
+        self.assertNotIn('no_members', month.notes)
+        self.assertEqual(month.gross, {})
+        self.assertIsNone(month.returns)
+        get_conn.assert_not_called()
+
+    def test_no_identities_is_no_members(self):
+        c = self.crew([])
+        month = crew_kpi.compute_crew_month(c, 2026, 6, cdr_rows=[_cdr('2026-06-02', '10', '01000000001')])
         self.assertEqual(month.kpis, {})
-        self.assertIn('no_members', month.notes)
+        self.assertEqual(month.notes, ['no_members'])
+        # a crew whose only member ended before the month is also empty
+        c2 = self.crew([('62', '10', SEED_FROM, date(2026, 5, 31))])
+        self.assertEqual(crew_kpi.compute_crew_month(c2, 2026, 6, cdr_rows=[]).notes, ['no_members'])
 
 
 class CrewReturnsTests(_Base):
@@ -167,6 +184,9 @@ class CrewReturnsTests(_Base):
         self.assertEqual(month.kpis['cash_delivery'], Decimal('880'))
         self.assertEqual(month.kpis['gross_profit'], Decimal('355'))
         self.assertNotIn('returns_unreachable', month.notes)
+        self.assertEqual(month.gross['cash_delivery'], Decimal('1000'))
+        self.assertEqual(month.gross['gross_profit'], Decimal('400'))
+        self.assertEqual(month.returns, {'amount': Decimal('120'), 'profit': Decimal('45'), 'docs': 2})
         sql, params = cur.execute.call_args[0]
         self.assertNotIn("'62'", sql)
         self.assertNotIn("'63'", sql)
@@ -197,6 +217,33 @@ class CrewReturnsTests(_Base):
         self.assertIn('returns_unreachable', month.notes)
         self.assertEqual(month.kpis['cash_delivery'], Decimal('1000'))    # gross, not zeroed
         self.assertEqual(month.kpis['gross_profit'], Decimal('400'))
+        self.assertIsNone(month.returns)
+        self.assertEqual(month.gross, {m: month.kpis[m] for m in FIVE})
+
+    def test_returns_sql_differs_from_cc_softech_only_in_usercode_predicate(self):
+        import re
+        from apps.crews.softech_returns import returns_for_spans
+        from apps.forecasting.cc_softech import cc_returns_from_softech
+        old_conn, old_cur = _sybase([(None, None, 0)])
+        with mock.patch('config.sybase.get_sybase_connection', old_conn):
+            cc_returns_from_softech(2026, 6, ['62', '63'])
+        old_sql = old_cur.execute.call_args[0][0]
+        new_conn, new_cur = _sybase([(None, None, 0)])
+        spans = [('62', SEED_FROM, date(2026, 6, 30)), ('63', SEED_FROM, date(2026, 6, 30))]
+        with mock.patch('apps.crews.softech_returns.get_sybase_connection', new_conn):
+            returns_for_spans(2026, 6, spans)
+        new_sql, params = new_cur.execute.call_args[0]
+
+        def norm(s):
+            return ' '.join(s.split())
+        old_n = re.sub(r"AND o\.usercode IN \([^)]*\)", 'AND <USERS>', norm(old_sql))
+        span = r"\(o\.usercode = \? AND o\.docdate >= \? AND o\.docdate < \?\)"
+        new_n, k = re.subn(rf"AND \({span}(?: OR {span})*\)", 'AND <USERS>', norm(new_sql))
+        self.assertEqual(k, 1)
+        for p in params[:2]:                         # the month bounds, rendered as legacy inlines them
+            new_n = new_n.replace('?', f"'{p}'", 1)
+        self.assertEqual(old_n.count('<USERS>'), 1)
+        self.assertEqual(new_n, old_n)
 
     def test_no_spans_no_softech_call(self):
         from apps.crews.softech_returns import returns_for_spans
@@ -290,6 +337,9 @@ class BuildCrewRollupsCommandTests(_Base):
                                                       metric='cash_delivery').count(), 1)
 
     def test_build_command_cdr_csv(self):
+        self._build_with_csv()
+
+    def _build_with_csv(self):
         import csv
         import tempfile
         import os
@@ -308,3 +358,22 @@ class BuildCrewRollupsCommandTests(_Base):
             os.remove(path)
         self.assertEqual(CrewKpiRollup.objects.get(crew=c, year=2026, month=6,
                                                    metric='call_count').value, Decimal('2'))
+        return c
+
+    def test_rebuild_without_cdr_removes_stale_call_count(self):
+        c = self._build_with_csv()
+        with mock.patch('apps.crews.kpi.cdr_configured', return_value=False):
+            call_command('build_crew_rollups', crew=c.pk, year=2026, month=6, no_returns=True,
+                         stdout=StringIO())
+        rows = CrewKpiRollup.objects.filter(crew=c, year=2026, month=6)
+        self.assertEqual(set(rows.values_list('metric', flat=True)), set(FIVE))
+        self.assertIn('cdr_unavailable', rows.first().notes)
+
+    def test_month_with_nothing_computed_writes_nothing_and_warns(self):
+        c = self.crew([('62', '', date(2026, 7, 1), None)])     # no identity in June
+        CrewKpiRollup.objects.create(crew=c, year=2026, month=6, metric='beauty', value=1)
+        out = StringIO()
+        call_command('build_crew_rollups', crew=c.pk, year=2026, month=6, stdout=out)
+        self.assertIn('nothing computed', out.getvalue())
+        self.assertIn('no_members', out.getvalue())
+        self.assertFalse(CrewKpiRollup.objects.filter(crew=c).exists())   # stale row removed

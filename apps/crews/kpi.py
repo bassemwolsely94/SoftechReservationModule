@@ -31,12 +31,13 @@ from config.issabel import cdr_configured, fetch_cdr_rows
 from . import softech_returns
 from .membership import identities
 
-Span = tuple            # (value: str, valid_from: date, valid_to: date) — inclusive
+Span = tuple[str, date, date]       # (value, valid_from, valid_to) — both inclusive
 
 RETURNS_LOOKBACK_DAYS = 400
 SALES_METRICS = (K.M_CASH_DELIVERY, K.M_GROSS_PROFIT, K.M_BEAUTY, K.M_CUSTOMERS, K.M_PIC_COUNT)
 
-NOTE_NO_MEMBERS = 'no_members'
+NOTE_NO_MEMBERS = 'no_members'                  # no seller and no extension identity
+NOTE_NO_SELLERS = 'no_sellers'                  # extensions only: sales metrics not computed
 NOTE_RETURNS_UNREACHABLE = 'returns_unreachable'
 NOTE_CDR_UNAVAILABLE = 'cdr_unavailable'        # no CDR configured and no CSV given
 NOTE_CDR_UNREACHABLE = 'cdr_unreachable'        # configured, but the pull failed
@@ -121,6 +122,8 @@ class CrewMonth:
     kpis: dict
     per_member: dict = field(default_factory=dict)     # Identity.member_key -> {metric: Decimal}
     notes: list = field(default_factory=list)
+    gross: dict = field(default_factory=dict)          # the five sales metrics before returns
+    returns: dict | None = None                        # returns_for_spans result; None = not run/unreachable
 
 
 def _by_member(ids) -> dict:
@@ -150,19 +153,30 @@ def _cdr_rows(year, month, notes):
 
 def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr_rows=None,
                        per_member: bool = True) -> CrewMonth:
+    """kpis = net figures (+ call_count); gross = the five sales metrics before returns;
+    returns = the crew's returns_for_spans result, None when not run or unreachable.
+    No seller AND no extension identity in the month → kpis {} + 'no_members'; no seller only →
+    the five sales metrics are skipped ('no_sellers') and call_count is still computed."""
     resolver = KpiResolver()
     start, end = resolver.month_bounds(year, month)
     ids = identities(crew, start, end)
     sellers = _spans(ids, 'softech_user')
-    if not sellers:
+    extensions = _spans(ids, 'extension')
+    if not sellers and not extensions:
         return CrewMonth(kpis={}, notes=[NOTE_NO_MEMBERS])
     notes = []
-    kpis = compute_sales(year, month, sellers, resolver)
     members = _by_member(ids) if per_member else {}
-    per = {key: compute_sales(year, month, _spans(mids, 'softech_user'), resolver)
-           for key, mids in members.items()}
+    if sellers:
+        kpis = compute_sales(year, month, sellers, resolver)
+        per = {key: compute_sales(year, month, _spans(mids, 'softech_user'), resolver)
+               for key, mids in members.items()}
+    else:
+        notes.append(NOTE_NO_SELLERS)
+        kpis, per = {}, {key: {} for key in members}
+    gross = dict(kpis)
+    ret_total = None
 
-    if returns:
+    if returns and sellers:
         back = identities(crew, start - timedelta(days=RETURNS_LOOKBACK_DAYS), end)
         back_by_member = _by_member(back)
         try:    # fetch everything first, so a failure half-way subtracts nothing
@@ -174,6 +188,7 @@ def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr
         except Exception:   # SOFTECH unreachable: the figures stay gross and say so
             notes.append(NOTE_RETURNS_UNREACHABLE)
         else:
+            ret_total = total
             _subtract_returns(kpis, total)
             for key, ret in each.items():
                 _subtract_returns(per[key], ret)
@@ -181,7 +196,7 @@ def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr
     rows = cdr_rows if cdr_rows is not None else _cdr_rows(year, month, notes)
     if rows is not None:
         rows = list(rows)
-        kpis[K.M_CALL_COUNT] = Decimal(count_calls_spans(rows, _spans(ids, 'extension')))
+        kpis[K.M_CALL_COUNT] = Decimal(count_calls_spans(rows, extensions))
         for key, mids in members.items():
             per[key][K.M_CALL_COUNT] = Decimal(count_calls_spans(rows, _spans(mids, 'extension')))
-    return CrewMonth(kpis=kpis, per_member=per, notes=notes)
+    return CrewMonth(kpis=kpis, per_member=per, notes=notes, gross=gross, returns=ret_total)

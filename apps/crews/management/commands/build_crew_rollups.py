@@ -13,7 +13,8 @@ legacy KpiActualRollup rows stay the live source until the owner signs the compa
   python manage.py build_crew_rollups --crew 3 --no-returns
 
 Each row stores the month's notes (returns_unreachable, cdr_unavailable, ...). A metric that
-could not be computed is not written. The run is logged to stdout only.
+could not be computed is not written and its row from an earlier run is deleted (no stale
+figure); a month with nothing computed writes nothing (old rows removed) and warns. Logged to stdout only.
 """
 import csv
 from datetime import date
@@ -61,10 +62,18 @@ class Command(BaseCommand):
                 res = compute_crew_month(crew, year, month, returns=not o.get('no_returns'),
                                          cdr_rows=cdr_rows, per_member=False)
                 with transaction.atomic():
+                    # a metric this run could not compute must not survive from an earlier run
+                    stale = CrewKpiRollup.objects.filter(crew=crew, year=year, month=month).exclude(
+                        metric__in=list(res.kpis)).delete()[0]
                     for metric, value in res.kpis.items():
                         CrewKpiRollup.objects.update_or_create(
                             crew=crew, year=year, month=month, metric=metric,
                             defaults={'value': value, 'notes': list(res.notes)})
+                if not res.kpis:
+                    self.stdout.write(self.style.WARNING(
+                        f"  crew {crew.pk} {year}-{month:02d}: nothing computed, nothing written, "
+                        f"{stale} old row(s) removed (notes={','.join(res.notes) or '-'})"))
+                    continue
                 k = res.kpis
                 self.stdout.write(
                     f"  crew {crew.pk} {year}-{month:02d}: "
