@@ -13,14 +13,14 @@ MODULE = {
         'بيع أصنافنا على تطبيقات التوصيل. لا يُعرض أي صنف على أي منصة إلا بعد أن يعتمده مشرف لهذه المنصة، '
         'وأدوية الروشتة لا تُعرض أبدًا إلا باعتماد مشرف صريح لكل صنف، والصنف الممنوع أو المقيد أو الثلاجة لا يُباع. '
         'الطلب يصل من المنصة أو يُدخل يدويًا، يُراجع ثم يُقبل أو يُرفض. القبول يحوّل الطلب إلى مسودة في نقطة البيع '
-        'على حساب المنصة في SOFTECH (بيع آجل)، والكاشير يكمّلها ويسويها بالطريقة المعتادة — هذه الشاشة لا تكتب في SOFTECH. '
+        'على حساب المنصة في SOFTECH (بيع آجل)، وتُرسَل للكاشير من زر 🛵 «طلبات المنصات» في نقطة البيع — هذه الشاشة لا تكتب في SOFTECH. '
         'طالما مفتاح الإرسال مقفول لا يُرسل أي شيء لأي منصة: إرسال المخزون والحالات يُسجَّل فقط كتجربة. '
         'ملف التسوية من المنصة يُرفع ويُطابق مع طلباتنا ويظهر ما لا يطابق.',
         'Sell our items on delivery apps. No item shows on any platform until a supervisor approves it for that '
         'platform; prescription medicines are never listed unless a supervisor approves each one explicitly, and a '
         'blocked, restricted or fridge item is not sold. An order arrives from the platform or is entered by hand, is '
         'checked, then accepted or rejected. Accepting turns it into a POS draft on the platform’s SOFTECH account (a '
-        'credit sale), and the cashier completes and settles it the usual way — this screen writes nothing to SOFTECH. '
+        'credit sale), and it is sent to the cashier from the 🛵 "Platform orders" button on the POS screen — this screen writes nothing to SOFTECH. '
         'While the send switch is off nothing is sent to any platform: stock and status pushes are only logged as a '
         'dry run. The platform’s payout file is uploaded and matched to our orders, and what does not match is shown.'),
     'workflows': [{
@@ -221,6 +221,6 @@ SCREENS = [
              'text': T('الملف والفترة وأسماء الأعمدة، ثم المطابقة مع طلباتنا.', 'The file, period and column names, then matching to our orders.'),
              'open_hint': T('افتح تبويب «💰 التسويات».', 'Open the "💰 Payouts" tab.')},
         ],
-        'updated': '2026-11-18',
+        'updated': '2026-11-19',
     },
 ]

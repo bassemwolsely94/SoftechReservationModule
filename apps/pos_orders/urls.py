@@ -25,6 +25,7 @@ urlpatterns = [
     path('return-lookup/',    views.return_lookup,                 name='pos-order-return-lookup'),
     path('referral-stats/',   views.referral_stats,                name='pos-order-referral-stats'),
     path('flush/',            views.flush_now,                     name='pos-order-flush'),
+    path('platform-drafts/',  views.platform_drafts,               name='pos-order-platform-drafts'),
     path('contract-assist/config/',         views.contract_assist_config,         name='pos-contract-assist-config'),
     path('contract-assist/patients/',       views.contract_assist_patients,       name='pos-contract-assist-patients'),
     path('contract-assist/history/',        views.contract_assist_history,        name='pos-contract-assist-history'),
