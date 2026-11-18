@@ -45,10 +45,11 @@ LEASE_EXPIRED = 'lease_expired'
 PERSON_OUTCOMES = ('cart_not_empty', 'wrong_account', 'cart_mismatch', 'unknown_message',
                    'login_required_timeout', 'stopped_by_operator', 'timeout', 'error')
 HOLDING = ('in_progress', 'awaiting_submit')       # a device holds the basket under a lease
-# outcomes the driver reports before it touches the cart (spec §6.2 step 5.1: account check, then
-# empty-cart check). Any other outcome of a live fill run - including none (expired) - may have
-# left the robot on the review page with Submit on screen.
-PRE_CART = ('cart_not_empty', 'wrong_account', 'login_required_timeout')
+# outcomes the driver reports strictly before it adds a line (plan Task 9 run_plan step 1: account
+# check, then empty-cart check, "nothing touched"). Any other outcome of a live fill run - including
+# none (expired) and login_required_timeout, since a login page can appear mid-run with the cart
+# full (spec §6.6) - may have left the robot on the review page with Submit on screen.
+PRE_CART = ('cart_not_empty', 'wrong_account')
 # a fill report whose own outcome was past the cart, but from the wrong account: not PRE_CART
 WRONG_ACCOUNT_LATE = 'wrong_account_late'
 ACTIONS = ('retry', 'link_order', 'cancel')
@@ -173,10 +174,29 @@ def may_have_ordered(basket) -> bool:
     explicit word) before it may be filled again."""
     if basket.submitted_seen_at or basket.portal_ref or basket.filled_at:
         return True
+    return _counted_fill_runs(basket).exists()
+
+
+def _counted_fill_runs(basket):
     runs = PortalRun.objects.filter(basket=basket, kind='fill', mode='live')
     if basket.retried_at:
         runs = runs.filter(started_at__gte=basket.retried_at)
-    return runs.exclude(outcome__in=PRE_CART, finished_at__isnull=False).exists()
+    return runs.exclude(outcome__in=PRE_CART, finished_at__isnull=False)
+
+
+def order_window_start(basket):
+    """Where an Order History read must start: the earliest fill run that may have ordered since
+    the last retry (any fill run of that period when none is live, e.g. an unexpected Submit
+    sighting in a dry run), or filled_at, whichever is earlier. None when there is nothing."""
+    times = list(_counted_fill_runs(basket).values_list('started_at', flat=True))
+    if not times:
+        any_runs = PortalRun.objects.filter(basket=basket, kind='fill')
+        if basket.retried_at:
+            any_runs = any_runs.filter(started_at__gte=basket.retried_at)
+        times = list(any_runs.values_list('started_at', flat=True))
+    if basket.filled_at:
+        times.append(basket.filled_at)
+    return min(times) if times else None
 
 
 def request_history(basket):
@@ -234,13 +254,19 @@ def _claim_history(device, jobs, now, plans):
            .order_by('started_at', 'pk').first())
     if run is None:
         return None
+    try:
+        plan = plans.history_plan(run.basket, since=order_window_start(run.basket))
+    except plans.PlanError:          # no window: a read could not prove anything - a person decides
+        _close(run, 'error', now, [{'i': None, 'label': 'order_history', 'at': now.isoformat(),
+                                    'ok': False, 'note': 'no order window'}])
+        return None
     if not PortalRun.objects.filter(pk=run.pk, device__isnull=True).update(
             device=device, started_at=now, lease_until=now + LEASE):
         return None
     _audit('rpa_portal_basket_claimed', run.basket, user=device.staff,
            new={'kind': 'history', 'run_id': run.pk, 'device_id': device.pk},
            note=f'basket {run.basket_id}: Order History')
-    return {'run_id': run.pk, 'plan': plans.history_plan(run.basket)}
+    return {'run_id': run.pk, 'plan': plan}
 
 
 def _claim_discovery(device, jobs, now, plans):

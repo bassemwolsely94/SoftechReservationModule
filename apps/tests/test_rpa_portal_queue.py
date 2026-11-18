@@ -319,8 +319,11 @@ class QueueTests(_World, TestCase):
         self.assertIsNone(b.filled_at)
         with self.assertRaises(queue.QueueError):
             queue.resolve(b, staff=self.boss, action='retry')
-        hrun = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
+        claim = queue.claim_next(self.dev)
+        hrun = PortalRun.objects.get(pk=claim['run_id'])
         self.assertEqual(hrun.kind, 'history')
+        # the read starts where the robot may first have reached the cart
+        self.assertEqual(claim['plan']['since'], run.started_at.isoformat())
         queue.report(hrun, self.dev, {'outcome': 'history_none'})
         b = queue.resolve(b, staff=self.boss, action='retry')
         self.assertEqual(b.status, 'ready')
@@ -341,8 +344,36 @@ class QueueTests(_World, TestCase):
             self.assertEqual(b.status, 'ready')
             PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
 
+    def test_login_timeout_mid_run_needs_history(self):
+        # a login page can appear mid-run with the cart full: the operator may log in and Submit
+        for identity in (None, 'Some Other Pharmacy'):
+            run = self._live_run()
+            payload = {'outcome': 'login_required_timeout'}
+            if identity:
+                payload['account'] = {'identity_text': identity}
+            b = queue.report(run, self.dev, payload)
+            self.assertEqual(b.needs_person_reason,
+                             'wrong_account_late' if identity else 'login_required_timeout')
+            with self.assertRaises(queue.QueueError):
+                queue.resolve(b, staff=self.boss, action='retry')
+            claim = queue.claim_next(self.dev)
+            self.assertEqual((claim['plan']['kind'], claim['plan']['basket_id']), ('history', b.pk))
+            self.assertEqual(claim['plan']['since'], run.started_at.isoformat())
+            PortalRun.objects.filter(pk=claim['run_id']).update(finished_at=timezone.now(), outcome='error')
+            PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
+
+    def test_history_read_without_window_is_not_handed_out(self):
+        _, (b,) = self.make_job(statuses=('needs_person',))
+        PortalBasket.objects.filter(pk=b.pk).update(needs_person_at=timezone.now())
+        b.refresh_from_db()
+        hrun = queue.request_history(b)
+        self.assertIsNone(queue.claim_next(self.dev))
+        hrun.refresh_from_db()
+        self.assertEqual((hrun.outcome, hrun.device_id), ('error', None))
+        self.assertIsNotNone(hrun.finished_at)
+
     def test_live_pre_cart_outcomes_retry_freely(self):
-        for outcome in ('cart_not_empty', 'login_required_timeout'):
+        for outcome in ('cart_not_empty', 'wrong_account'):
             run = self._live_run()
             b = queue.report(run, self.dev, {'outcome': outcome})
             self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready', outcome)

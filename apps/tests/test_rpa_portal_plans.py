@@ -92,7 +92,10 @@ class PlanTests(TestCase):
 
     def test_history_plan(self):
         job, basket = self._job()
-        self.assertEqual(plans.history_plan(basket)['since'], None)
+        with self.assertRaises(plans.PlanError):          # no window, no read
+            plans.history_plan(basket)
+        start = timezone.now() - timedelta(hours=2)
+        self.assertEqual(plans.history_plan(basket, since=start)['since'], start.isoformat())
         at = timezone.now() - timedelta(days=1)
         PortalBasket.objects.filter(pk=basket.pk).update(filled_at=at, portal_ref='R-9')
         basket.refresh_from_db()

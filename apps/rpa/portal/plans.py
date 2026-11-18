@@ -62,7 +62,14 @@ def fill_plan(basket) -> dict:
             'expect_lines': len(lines), 'max_stepdown_tries': MAX_STEPDOWN_TRIES}
 
 
-def history_plan(basket) -> dict:
-    return {'kind': 'history', 'basket_id': basket.pk,
-            'since': basket.filled_at.isoformat() if basket.filled_at else None,
+def history_plan(basket, *, since=None) -> dict:
+    """An Order History read for orders placed since `since` (else the basket's filled_at).
+
+    A read without a window is refused: its "nothing found" is what lets a person retry a basket
+    (apps/rpa/portal/queue.resolve), so an undefined window could clear a basket that was
+    ordered."""
+    since = since or basket.filled_at
+    if since is None:
+        raise PlanError('لا توجد بداية لنافذة البحث في سجل الطلبات')
+    return {'kind': 'history', 'basket_id': basket.pk, 'since': since.isoformat(),
             'order_ref': basket.portal_ref or ''}
