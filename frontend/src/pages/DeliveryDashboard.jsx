@@ -8,14 +8,16 @@ import { deliveryApi, branchesApi } from '../api/client'
 import DeliveryBackfillModal from '../components/DeliveryBackfillModal'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import { cairoDaysAgo, cairoToday } from '../utils/cairoDate'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
-const _today  = () => new Date().toISOString().slice(0, 10)
-const _daysAgo = d => { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().slice(0, 10) }
+// Cairo calendar dates — the UTC date hid 00:00–02:00 orders from «اليوم» (UAT W5a)
+const _today  = () => cairoToday()
+const _daysAgo = d => cairoDaysAgo(d)
 const fmtTime = dt => dt ? new Date(dt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—'
 const fmtDate = dt => dt ? new Date(dt).toLocaleDateString('en-US', { day: '2-digit', month: 'short' }) : '—'
 

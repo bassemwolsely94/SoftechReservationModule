@@ -36,6 +36,7 @@ FEATURE_FLAGS_ON = {
     'MISSED_SALES_ENABLED': True,             # Project 3 missed sales (apps/pos_orders)
     'MISSED_CALL_CALLBACKS_ENABLED': True,    # Project 3 call-backs (apps/pbx, pic_analytics)
     'COUNSELLING_CONTENT_ENABLED': True,      # Project 4 counselling sheets (apps/counselling)
+    'MARKETPLACE_ENABLED': True,              # doc 38 marketplace channels (apps/marketplace); push switch stays OFF
 }
 
 _OK_ALWAYS = {301, 503}          # trailing-slash redirect / feature switched off — no data

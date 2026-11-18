@@ -6,8 +6,11 @@ Views that catch a broad `Exception` used to echo it to the browser
 SQL fragments, table and column names. `public_error(request, exc)` logs the full
 exception with a short reference code and returns what the caller may see:
 
-  • admin role, or DEBUG → the technical text (as before) + the reference
-  • everyone else        → only "مرجع: <ref>" — IT finds the details in the log
+  • admin role    → the technical text (as before) + the reference
+  • everyone else → only "مرجع: <ref>" — IT finds the details in the log
+
+Not tied to DEBUG (UAT W5, 2026-11-17; like SEC-4): the office dev server runs DEBUG on the
+LAN, so every role was shown the JDBC text with the SOFTECH host and connection URL.
 
 Deliberate, user-facing domain errors (ValueError, *Error classes raised with an
 Arabic message) are NOT routed through this — they are meant to be shown.
@@ -63,6 +66,6 @@ def public_error(request, exc) -> str:
     logger.error('[ref %s] %s %s — %s: %s\n%s', ref, getattr(request, 'method', '?'),
                  getattr(request, 'path', '?'), type(exc).__name__, redact(exc), tb)
     profile = getattr(getattr(request, 'user', None), 'staff_profile', None)
-    if settings.DEBUG or (profile is not None and profile.role in DETAIL_ROLES):
+    if profile is not None and profile.role in DETAIL_ROLES:
         return f'{redact(exc)[:300]} (مرجع: {ref})'
     return f'خطأ داخلي (مرجع: {ref})'

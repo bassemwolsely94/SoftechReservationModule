@@ -45,6 +45,8 @@ class GLApiTests(TestCase):
 
     def setUp(self):
         _, self.acct, self.c = make_user('gl_acct', role='accountant')
+        # maker-checker (UAT W5b): a second accountant approves what gl_acct drafts
+        _, self.acct2, self.c2 = make_user('gl_acct2', role='accountant')
         _, _, self.viewer = make_user('gl_viewer', role='viewer', access_all=True)
         _, _, self.pharm = make_user('gl_pharm', role='pharmacist')
         _, _, self.admin = make_user('gl_admin', role='admin', access_all=True)
@@ -76,10 +78,10 @@ class GLApiTests(TestCase):
         d = self._draft()
         self.assertEqual(d['status'], 'draft')
         self.assertEqual(d['total_debit'], '100.00')
-        r = self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        r = self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data['number'], 'JV-2026-000001')
-        self.assertEqual(r.data['created_by_name'], r.data['approved_by_name'])
+        self.assertNotEqual(r.data['created_by_name'], r.data['approved_by_name'])   # maker != checker
         lst = self.c.get(BASE + 'entries/', {'status': 'approved'})
         self.assertEqual([e['number'] for e in lst.data['results']], ['JV-2026-000001'])
         self.assertEqual(lst.data['results'][0]['total_debit'], '100.00')
@@ -103,14 +105,14 @@ class GLApiTests(TestCase):
 
     def test_put_on_approved_entry_409(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         r = self.c.put(f'{BASE}entries/{d["id"]}/', _body(debit='5.00', credit='5.00'), format='json')
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.data['code'], 'not_draft')
 
     def test_delete_approved_entry_refused(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         self.assertEqual(self.c.delete(f'{BASE}entries/{d["id"]}/').status_code, 409)
         d2 = self._draft()
         self.assertEqual(self.c.delete(f'{BASE}entries/{d2["id"]}/').status_code, 204)
@@ -119,7 +121,7 @@ class GLApiTests(TestCase):
     def test_bulk_approve_reports_each(self):
         ok = self._draft()
         bad = self._draft(credit='90.00')
-        r = self.c.post(BASE + 'entries/approve/', {'ids': [ok['id'], bad['id']]}, format='json')
+        r = self.c2.post(BASE + 'entries/approve/', {'ids': [ok['id'], bad['id']]}, format='json')
         self.assertEqual(r.status_code, 200)
         by_id = {x['id']: x for x in r.data['results']}
         self.assertTrue(by_id[ok['id']]['ok'])
@@ -128,7 +130,7 @@ class GLApiTests(TestCase):
 
     def test_ledger_error_shape(self):
         d = self._draft(credit='90.00')
-        r = self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        r = self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.data['code'], 'unbalanced')
         self.assertIn('متزن', r.data['detail'])
@@ -141,7 +143,7 @@ class GLApiTests(TestCase):
 
     def test_reverse(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         self.assertEqual(self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {}).status_code, 400)
         r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'خطأ'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
@@ -151,7 +153,7 @@ class GLApiTests(TestCase):
 
     def test_reverse_refused_on_a_close_entry(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/', {}, format='json')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/', {}, format='json')
         LedgerEntry.objects.filter(pk=d['id']).update(source_type='closing_stock')
         r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x'}, format='json')
         self.assertEqual(r.status_code, 409)
@@ -161,13 +163,13 @@ class GLApiTests(TestCase):
         from apps.finance.gl.corrections import post_late_correction
         from apps.finance.models import FinancialPeriod
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         FinancialPeriod.objects.filter(year=2026, month=3, period_type='month').update(status='closed')
         lines = _body(debit='150.00', credit='150.00')['lines']
         fix = post_late_correction(d['id'], lines, user=self.acct, reason='x')
         r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'خطأ'}, format='json')
         self.assertEqual((r.status_code, r.data['code']), (409, 'has_corrections'))   # draft correction
-        self.assertEqual(self.c.post(f'{BASE}entries/{fix.pk}/approve/').status_code, 200)
+        self.assertEqual(self.c2.post(f'{BASE}entries/{fix.pk}/approve/').status_code, 200)
         r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'خطأ'}, format='json')
         self.assertEqual((r.status_code, r.data['code']), (409, 'has_corrections'))   # approved one
         self.assertEqual(r.data['detail'], MESSAGES['has_corrections'])
@@ -178,7 +180,7 @@ class GLApiTests(TestCase):
 
     def test_trial_balance_and_statement(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         tb = self.c.get(BASE + 'reports/trial-balance/', {'from': '2026-01-01', 'to': '2026-12-31'})
         self.assertEqual(tb.status_code, 200)
         total = tb.data[-1]
@@ -229,7 +231,7 @@ class GLApiTests(TestCase):
         eid = r.data['id']
         r = c.put(f'{BASE}entries/{eid}/', _body(debit='5.00', credit='5.00'), format='json')
         self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(c.post(f'{BASE}entries/{eid}/approve/').status_code, 200)
+        self.assertEqual(_bearer(self.acct2.user).post(f'{BASE}entries/{eid}/approve/').status_code, 200)
         r = c.post(f'{BASE}entries/{eid}/reverse/', {'reason': 'x'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         d2 = c.post(BASE + 'entries/', _body(), format='json').data
@@ -252,14 +254,14 @@ class GLApiTests(TestCase):
         r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x'}, format='json')
         self.assertEqual((r.status_code, r.data['code']), (409, 'not_approved'))
         self.assertEqual(r.data['detail'], MESSAGES['not_approved'])
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         mirror = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x'}, format='json').data
         r = self.c.post(f'{BASE}entries/{mirror["id"]}/reverse/', {'reason': 'y'}, format='json')
         self.assertEqual((r.status_code, r.data['code']), (409, 'is_reversal'))
-        r = self.c.post(f'{BASE}entries/{mirror["id"]}/approve/')
+        r = self.c2.post(f'{BASE}entries/{mirror["id"]}/approve/')
         self.assertEqual((r.status_code, r.data['code']), (409, 'not_draft'))
         bad = self._draft(credit='90.00')
-        r = self.c.post(f'{BASE}entries/{bad["id"]}/approve/')
+        r = self.c2.post(f'{BASE}entries/{bad["id"]}/approve/')
         self.assertEqual((r.status_code, r.data['code']), (400, 'unbalanced'))
 
     def test_notes_saved_in_audited_draft(self):
@@ -281,7 +283,7 @@ class GLApiTests(TestCase):
 
     def test_closing_stock_param_and_warnings(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         params = {'from': '2026-01-01', 'to': '2026-12-31'}
         r = self.c.get(BASE + 'reports/statements/', params)
         self.assertEqual(r.data['stock_basis'], 'missing')
@@ -349,11 +351,11 @@ class GLApiTests(TestCase):
 
     def test_bulk_approve_dedupes(self):
         d = self._draft()
-        r = self.c.post(BASE + 'entries/approve/', {'ids': [d['id'], d['id'], str(d['id'])]}, format='json')
+        r = self.c2.post(BASE + 'entries/approve/', {'ids': [d['id'], d['id'], str(d['id'])]}, format='json')
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(r.data['results']), 1)
         self.assertEqual(r.data['approved'], 1)
-        r = self.c.post(BASE + 'entries/approve/', {'ids': list(range(1, 502))}, format='json')
+        r = self.c2.post(BASE + 'entries/approve/', {'ids': list(range(1, 502))}, format='json')
         self.assertEqual(r.status_code, 400)
 
     def test_account_statement_unknown_code_404_and_bad_range(self):
@@ -396,7 +398,7 @@ class GLApiTests(TestCase):
     # ── final review wave ───────────────────────────────────────────────────
     def test_trial_balance_server_decides_balanced_and_balance(self):
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         for by in ('account', 'group'):
             tb = self.c.get(BASE + 'reports/trial-balance/', {'from': '2026-01-01', 'to': '2026-12-31', 'by': by}).data
             self.assertIs(tb[-1]['balanced'], True)
@@ -447,7 +449,30 @@ class GLApiTests(TestCase):
         self.assertEqual((r.status_code, r.data['code']), (400, 'bad_input'))
         self.assertFalse(LedgerEntry.objects.exists())
         d = self._draft()
-        self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.c2.post(f'{BASE}entries/{d["id"]}/approve/')
         r = self.c.post(f'{BASE}entries/{d["id"]}/reverse/', {'reason': 'x' * 501}, format='json')
         self.assertEqual(r.status_code, 400)
         self.assertEqual(LedgerEntry.objects.get(pk=d['id']).status, 'approved')
+
+    # ── maker-checker (UAT W5b P0, 2026-11-17) ─────────────────────────────────────
+    def test_drafter_cannot_approve_own_entry(self):
+        d = self._draft()
+        r = self.c.post(f'{BASE}entries/{d["id"]}/approve/')
+        self.assertEqual(r.status_code, 403, r.content)
+        self.assertEqual(r.data['code'], 'self_approval')
+        self.assertEqual(LedgerEntry.objects.get(pk=d['id']).status, 'draft')
+
+    def test_bulk_approve_refuses_own_entries_only(self):
+        d = self._draft()
+        r = self.c.post(BASE + 'entries/approve/', {'ids': [d['id']]}, format='json')
+        self.assertEqual(r.data['approved'], 0)
+        self.assertEqual(r.data['results'][0]['code'], 'self_approval')
+
+    def test_admin_may_approve_own_entry_while_exempt(self):
+        d = self.admin.post(BASE + 'entries/', _body(), format='json').data
+        self.assertEqual(self.admin.post(f'{BASE}entries/{d["id"]}/approve/').status_code, 200)
+
+    @override_settings(SELF_APPROVAL_ADMIN_EXEMPT=False)
+    def test_admin_refused_when_exemption_off(self):
+        d = self.admin.post(BASE + 'entries/', _body(), format='json').data
+        self.assertEqual(self.admin.post(f'{BASE}entries/{d["id"]}/approve/').status_code, 403)

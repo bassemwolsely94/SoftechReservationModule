@@ -877,8 +877,9 @@ SCREENS = [
              'when': T('بعد ما تختار الصفوف والأعمدة.', 'After choosing the rows and columns.'),
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('تعديل البنود: تقدر تلاقي الصنف الجديد بالاسم، والكود بيتملى لوحده', 'Line editing: find the new item by name and its code is filled in'),
+        'updated': '2026-11-18',
+        'change_note': T('المطالبة المقدَّمة متقفلة: مبترجعش مسودة إلا من مدير النظام وبسبب مكتوب، والتعديل بملحق؛ تعديل البنود: تقدر تلاقي الصنف الجديد بالاسم، والكود بيتملى لوحده',
+                         'A submitted claim is locked: only the admin can return it to draft, with a written reason; changes go through a supplement; line editing: find the new item by name and its code is filled in'),
     },
     {
         'key': 'insurance.print',
