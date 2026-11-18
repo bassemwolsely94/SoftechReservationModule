@@ -1,8 +1,9 @@
 """
 apps/marketplace/to_pos.py — turn an accepted ExternalOrder into a DRAFT POS order (doc 38 §5.1).
 
-Every platform order is a credit (آجل) sale to the platform's own SOFTECH customer: channel='contract',
-cust_branch_code = channel.softech_personcode. This module only creates a draft SoftechSalesOrder; staff
+Every platform order is a credit (آجل) sale to the platform's own SOFTECH customer, classed «عميل دائم»
+(owner 2026-11-18): channel='permanent', cust_branch_code = channel.softech_personcode. A «عميل دائم» sale
+normally defaults to cash; pos_orders/platform_accounts.py makes a platform account's sale 100% آجل. This module only creates a draft SoftechSalesOrder; staff
 push it through the existing POS flow. It never calls the SOFTECH writer. Totals are computed at push by
 pos_orders/pricing.py — nothing is reimplemented here. Line prices are the item's normal POS prices
 (Item.pack_price / pack_price_tax / sale_tax_pct), never the platform price.
@@ -12,6 +13,8 @@ import uuid
 from apps.audit.models import AuditLog
 from apps.marketplace.models import ExternalOrder
 from apps.pos_orders.models import SoftechSalesOrder, SoftechSalesOrderLine
+
+POS_CHANNEL = 'permanent'   # «عميل دائم» — the class of every platform account in SOFTECH (owner 2026-11-18)
 
 
 def convert(order, user):
@@ -32,7 +35,7 @@ def convert(order, user):
     branch = order.branch
     bc = branch.softech_branch_id or ''
     draft = SoftechSalesOrder.objects.create(
-        status=SoftechSalesOrder.STATUS_DRAFT, doc_kind='sale', channel='contract', client_token=token,
+        status=SoftechSalesOrder.STATUS_DRAFT, doc_kind='sale', channel=POS_CHANNEL, client_token=token,
         branch=branch, softech_branchcode=bc, store_code=bc if len(bc) <= 3 else bc[:3],
         cust_branch_code=personcode, customer_name=f'{channel.name} — {order.external_id}'[:255],
         notes=f'طلب {channel.name} رقم {order.external_id}', created_by=user,
@@ -57,7 +60,7 @@ def _link_existing(order, existing, personcode, user):
     if order.pos_order_id == existing.pk:
         return existing
     linked_to = ExternalOrder.objects.filter(pos_order=existing).exclude(pk=order.pk).exists()
-    if (existing.branch_id != order.branch_id or existing.channel != 'contract'
+    if (existing.branch_id != order.branch_id or existing.channel != POS_CHANNEL
             or (existing.cust_branch_code or '').strip() != personcode
             or existing.status == SoftechSalesOrder.STATUS_CANCELLED or linked_to):
         raise ValueError('يوجد طلب نقطة بيع بنفس رقم الطلب لا يطابق هذا الطلب — راجع نقطة البيع')
