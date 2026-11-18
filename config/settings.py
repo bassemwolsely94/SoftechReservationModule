@@ -988,6 +988,7 @@ CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=Fa
 CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
 # SOFTECH screen RPA: the Windows agent may type documents into SOFTECH. Off by default.
 RPA_SOFTECH_ENTRY_ENABLED   = config('RPA_SOFTECH_ENTRY_ENABLED', default=False, cast=bool)
+RPA_SUPPLIER_PORTAL_ENABLED = config('RPA_SUPPLIER_PORTAL_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

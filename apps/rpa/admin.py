@@ -55,3 +55,11 @@ class RpaRunAdmin(ReadOnlyAdmin):
 @admin.register(models.RpaScreenshot)
 class RpaScreenshotAdmin(ReadOnlyAdmin):
     list_display = ('id', 'run', 'step_index', 'created_at')
+
+
+from .portal import models as portal_models  # noqa: E402 — portal models live in a sub-module
+
+for _m in (portal_models.SupplierPortal, portal_models.PortalAccount, portal_models.BuyList,
+           portal_models.BuyListLine, portal_models.PortalJob, portal_models.PortalBasket,
+           portal_models.PortalLine, portal_models.PortalRun):
+    admin.site.register(_m, ReadOnlyAdmin)
