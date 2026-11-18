@@ -231,7 +231,9 @@ class ItemClassifierViewSet(viewsets.ViewSet):
     NOTE: stktransm.phcode = customer personcode (e.g. 04HD1006).
           Item classification is per-item via ItemIngredientMap.
     """
-    permission_classes = [IsAuthenticated, CHRONIC]
+    # DELETE (unclassify) follows the matrix's delete like the other chronic viewsets; without it
+    # every chronic user could unlink an item in RBAC log mode (role sweep, owner fix 2026-11-18).
+    permission_classes = [IsAuthenticated, CHRONIC, RouteModuleDeletePermission]
     pagination_class   = StandardPagination
 
     def _base_qs(self):

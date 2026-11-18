@@ -61,6 +61,8 @@ SCHEDULER_JOB_GUARDS = {
         'ETA history mirror: read only towards ETA; windows keyed (system, kind, dates) and rows upserted by (system, uuid), so a second run re-reads, never duplicates'),
     'eta_recon_daily': ('idempotent_upsert', 'apps.tax_invoicing.eta_recon.reconcile_day', 'EtaReconLine.objects.filter(system=system, softech_branchcode=branch, day=day).delete()',
         'SOFTECH↔ETA reconciliation: read-only towards SOFTECH and ETA; each (system, branch, day) is replaced in one transaction, so a second run recomputes the same lines'),
+    'egs_sheet_agent_nightly': ('advisory_lock', 'apps.tax_invoicing.egs_agent._lock', 'pg_advisory_xact_lock(hashtext(',
+        'creates at most one open egs_fetch (and, on its result, one egs_write) under a transaction advisory lock; a second run returns the open job; no SOFTECH, no sends'),
     'gpc_ai_suggest': ('unique_key', 'apps.tax_invoicing.gpc_ai._store', 'TaxBrickSuggestion.objects.update_or_create(profile=profile',
         'AI GPC brick proposals: one row per item (OneToOne profile), update_or_create, so a second run only re-asks and overwrites the same row; no sends, no SOFTECH, no ETA; switch off by default'),
     'eta_history_topup': ('idempotent_upsert', 'apps.tax_invoicing.eta_history.upsert_receipts', 'update_conflicts=True',

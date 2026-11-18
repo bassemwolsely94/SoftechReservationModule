@@ -253,9 +253,14 @@ class QueriesTests(SimpleTestCase):
             pay = queries.supplier_payments('5014')['cheques'][0]
             self.assertEqual((pay['cheqsno'], pay['amount'], pay['note'], pay['bankname']), (1, 5, 'n', None))
             self.assertEqual(queries.customer_payments('4231')['days'], 180)
-        with mock.patch.object(queries, '_rows', side_effect=RuntimeError('softech down')):
-            self.assertEqual(queries.supplier_transactions('5014'), {'error': 'softech down'})
-            self.assertEqual(queries.supplier_payments('5014')['cheques'], [{'_error': 'softech down'}])
+        # UAT W5: the driver text stays in the log; the widget shows a reference code only
+        with mock.patch.object(queries, '_rows', side_effect=RuntimeError('softech down')), \
+             self.assertLogs('elrezeiky.errors', level='ERROR'):
+            err = queries.supplier_transactions('5014')['error']
+            cheque_err = queries.supplier_payments('5014')['cheques'][0]['_error']
+        for text in (err, cheque_err):
+            self.assertNotIn('softech down', text)
+            self.assertIn('مرجع', text)
         for fn in (queries.supplier_transactions, queries.supplier_payments,
                    queries.customer_transactions, queries.customer_payments):
             self.assertEqual(fn(''), {'error': 'no person_code'})

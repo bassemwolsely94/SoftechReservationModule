@@ -442,8 +442,9 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('تصحيح الصنف في مراجعة الاستيراد بقى بنفس خانة البحث (Ctrl+F1 للبحث المتقدم)', 'Correcting an item in the import review uses the shared search box (Ctrl+F1 for advanced search)'),
+        'updated': '2026-11-18',
+        'change_note': T('بعد «إنشاء» القائمة الجديدة بتتفتح على طول وبتظهر في القائمة من غير تحديث الصفحة؛ تصحيح الصنف في مراجعة الاستيراد بقى بنفس خانة البحث (Ctrl+F1 للبحث المتقدم)',
+                         'After "Create" the new list opens straight away and shows in the list without reloading the page; correcting an item in the import review uses the shared search box (Ctrl+F1 for advanced search)'),
     },
     {
         'key': 'shortage.market',
