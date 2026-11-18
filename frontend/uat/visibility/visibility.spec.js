@@ -26,7 +26,7 @@
 //   skipped: [{route, reason}],                        // :param / public routes not visited
 //   users: {
 //     [key]: { role, shape, branch, at: ISO, durationMs, relogins, shellApis: {desk|m|rider: [apiPath]},
-//       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'unhandled403'|'crash', raw: <gotoSettled status>,
+//       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'unhandled403'|'crash'|'hang', raw: <gotoSettled status>,
 //                          served: 'data'|'refused'|'none', ms, finalUrl,
 //                          menu: true|false|null, menuPath, inherited: bool,
 //                          canView: bool|null,             // can(key, item.module, 'view') when the menu item names a module
@@ -47,6 +47,11 @@ import { sweepRoutes, menuEntryFor, menuShown } from './routes.js'
 
 const CAP_MS = 60_000
 const SLOW_MS = 5_000
+// Hard stop per visit (gotoSettled can need ~2 × CAP_MS): past it the visit is a 'hang' finding
+// and the sweep moves on, so one wedged screen cannot hold the heavy lock.
+const HANG_MS = 150_000
+// One user's whole sweep (35-125 min on the copy in run 2); the chunk runner kills at 150 min.
+const USER_TIMEOUT_MS = 140 * 60_000
 const OUT_DIR = path.resolve(__dirname, '..', '..', 'test-results-uat')
 const MATRIX = path.join(OUT_DIR, 'visibility-matrix.json')
 const SHOTS = path.join(OUT_DIR, 'visibility', 'shots')
@@ -83,6 +88,8 @@ const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/
  *   'data' ≥1 answered 2xx · 'refused' none 2xx and ≥1 answered 403 · 'none' no data API ran.
  */
 function judge({ status, served, menu, inherited, knownGap }) {
+  if (status === 'hang') return { verdict: 'P2', kind: 'slow', severity: 'P2', reason: 'hang',
+    expected: `screen settles or is refused within ${HANG_MS} ms`, actual: `gotoSettled had not returned after ${HANG_MS} ms; visit abandoned` }
   if (status === 'crash') return { verdict: 'P1', kind: 'crash', severity: 'P1', reason: 'crash',
     expected: 'screen renders or is refused cleanly', actual: 'page error or 5xx' }
   if ((status === 'stuck' && served === 'refused') || status === 'unhandled403') {
@@ -145,12 +152,28 @@ async function ensureSignedIn(page, key, when) {
   return true
 }
 
+// No trace: a failed multi-hour test produced a 600 MB+ trace whose saving wedged Playwright for
+// 17 h (run 2). Screenshots are the evidence.
+test.use({ trace: 'off' })
+
 for (const u of users) {
   test.describe(`visibility: ${u.key}`, () => {
     test.use({ storageState: stateFile(u.key) })
 
     test(`every screen for ${u.key} (${u.role})`, async ({ page }) => {
-      test.setTimeout(4 * 60 * 60_000)
+      test.setTimeout(USER_TIMEOUT_MS)
+      // gotoSettled with a hard stop; a hung visit is abandoned (page sent to about:blank).
+      const visitOnce = async route => {
+        let timer
+        const go = gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+        const hang = new Promise(res => { timer = setTimeout(() => res(null), HANG_MS) })
+        const r = await Promise.race([go, hang])
+        clearTimeout(timer)
+        if (r) return r
+        go.catch(() => {})
+        await page.goto('about:blank', { timeout: 30_000 }).catch(() => {})
+        return { ms: HANG_MS, status: 'hang', consoleErrors: [], apiErrors: [], finalUrl: route.split('?')[0] }
+      }
       const t0 = Date.now()
       const { routes, skipped } = sweepRoutes(reference(branchLetter(u)))
       const list = routes.filter(r => !onlyRoutes.length || onlyRoutes.some(p => r.route === p || r.route.startsWith(p + '/')))
@@ -176,13 +199,13 @@ for (const u of users) {
       for (const { route } of list) {
         if (await ensureSignedIn(page, u.key, `before ${route}`)) relogins++
         visit++; seen = []
-        let r = await gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+        let r = await visitOnce(route)
         // Landed on /login: the session lapsed mid-visit. Sign in again and visit once more; a
         // second /login is a lost session (throws), never a "refused" row.
         if (/^\/login\/?$/.test(r.finalUrl) && route !== '/login') {
           if (!(await ensureSignedIn(page, u.key, `after ${route}`))) throw new Error(`${u.key}: ${route} sent a signed-in user to /login; this run does not count`)
           relogins++; visit++; seen = []
-          r = await gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+          r = await visitOnce(route)
           if (/^\/login\/?$/.test(r.finalUrl)) throw new Error(`${u.key}: session lost again on ${route}; this run does not count`)
         }
         const text = await page.locator('main, #root').first().innerText().catch(() => '')
@@ -199,7 +222,7 @@ for (const u of users) {
           if (pageErrs.length && pageErrs.every(e => /status code 40[13]\b/.test(e))) status = 'unhandled403'
         }
         let evidence
-        if (!['ok', 'slow', 'refused'].includes(status)) evidence = await shot(page, u.key, route)
+        if (!['ok', 'slow', 'refused', 'hang'].includes(status)) evidence = await shot(page, u.key, route)
         raw.push({ route, r, status, apis: seen, evidence })
       }
 
@@ -250,7 +273,7 @@ for (const u of users) {
                     expected: j.expected, actual: clean(detail), ...(evidence ? { evidence } : {}) })
         }
         // Slow is reported on its own, on top of any other verdict.
-        if (r.status === 'slow' || r.ms > SLOW_MS) {
+        if (status !== 'hang' && (r.status === 'slow' || r.ms > SLOW_MS)) {
           finding({ ws: 'W2', key: u.key, route, kind: 'slow', severity: 'P3',
                     expected: `settles within ${SLOW_MS} ms`,
                     actual: r.ms >= CAP_MS - 1000 ? `not settled after ${r.ms} ms` : `${r.ms} ms` })
