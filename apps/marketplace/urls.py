@@ -17,6 +17,8 @@ urlpatterns = [
     path('orders/<int:pk>/accept/', views.OrderAccept.as_view(), name='marketplace-order-accept'),
     path('orders/<int:pk>/reject/', views.OrderReject.as_view(), name='marketplace-order-reject'),
     path('orders/<int:pk>/status/', views.OrderStatus.as_view(), name='marketplace-order-status'),
+    path('settlements/', views.SettlementListCreate.as_view(), name='marketplace-settlements'),
+    path('settlements/<int:pk>/', views.SettlementDetail.as_view(), name='marketplace-settlement'),
     path('push-log/', views.PushLogList.as_view(), name='marketplace-push-log'),
     path('webhooks/<slug:channel_code>/', views.WebhookView.as_view(), name='marketplace-webhook'),
 ]

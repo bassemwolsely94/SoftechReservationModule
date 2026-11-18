@@ -744,3 +744,110 @@ class MarketplaceMiddlewareTests(TestCase):
         self.assertEqual(required('/api/marketplace/channels/', 'GET'), ('marketplace', ('view',)))
         self.assertEqual(required('/api/marketplace/orders/manual/', 'POST')[0], 'marketplace')
         self.assertIn('create', required('/api/marketplace/orders/manual/', 'POST')[1])
+
+
+class MarketplaceSettlementTests(TestCase):
+    """Task 7: settlement file import + matching."""
+
+    def setUp(self):
+        from datetime import date
+        self.today = date.today()
+        self.branch = make_branch()
+        self.channel = MarketplaceChannel.objects.create(code='st_test', name='منصة', adapter='manual')
+        self.store = ChannelStore.objects.create(channel=self.channel, branch=self.branch)
+        self.cmap = {'external_id': 'order', 'gross': 'gross', 'commission': 'comm',
+                     'delivery_fee': 'fee', 'net': 'net'}
+
+    def _order(self, ext, total, status='delivered'):
+        return ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
+                                            external_id=ext, platform_total=Decimal(total), status=status)
+
+    def _file(self, rows, name='payout.csv'):
+        import io
+        text = 'order,gross,comm,fee,net\n' + ''.join(','.join(f'"{c}"' for c in r) + '\n' for r in rows)
+        f = io.BytesIO(text.encode('utf-8-sig'))
+        f.name = name
+        return f
+
+    def _run(self, rows, **kw):
+        from apps.marketplace import settlement
+        batch = settlement.import_csv(self.channel, self._file(rows), self.cmap, None,
+                                      period_from=self.today, period_to=self.today)
+        return batch, settlement.match(batch)
+
+    def test_unmatched_and_mismatch_become_exceptions(self):
+        self._order('A1', '100')
+        batch, counts = self._run([('A1', '90.00', '5', '0', '85'), ('ZZ', '10', '1', '0', '9')])
+        by = {l.external_id: l for l in batch.lines.all()}
+        self.assertEqual(by['A1'].match_status, 'amount_mismatch')
+        self.assertEqual(by['ZZ'].match_status, 'unmatched')
+        self.assertIsNone(by['ZZ'].order)
+        self.assertEqual(counts['amount_mismatch'], 1)
+        self.assertEqual(counts['unmatched'], 1)
+
+    def test_matched_within_half_pound(self):
+        self._order('B1', '100.00')
+        self._order('B2', '100.00')
+        self._order('B3', '1234.50')
+        batch, counts = self._run([('B1', '99.50', '0', '0', '0'),
+                                   ('B2', '100.51', '0', '0', '0'),
+                                   ('B3', '1,234.50', '0', '0', '0')])
+        by = {l.external_id: l for l in batch.lines.all()}
+        self.assertEqual(by['B1'].match_status, 'matched')       # 99.50 vs 100: diff 0.50
+        self.assertEqual(by['B2'].match_status, 'amount_mismatch')  # 0.51 off
+        self.assertEqual(by['B3'].match_status, 'matched')       # thousands separator
+        self.assertEqual(counts['matched'], 2)
+
+    def test_delivered_order_missing_from_file_flagged(self):
+        from apps.marketplace import settlement
+        self._order('C1', '50')
+        self._order('C2', '60')
+        self._order('C3', '70', status='accepted')
+        batch, counts = self._run([('C1', '50', '0', '0', '0')])
+        missing = list(batch.lines.filter(match_status='not_in_file'))
+        self.assertEqual([l.external_id for l in missing], ['C2'])
+        self.assertEqual(counts['not_in_file'], 1)
+        # re-runnable: no duplicates, orders untouched
+        settlement.match(batch)
+        self.assertEqual(batch.lines.filter(match_status='not_in_file').count(), 1)
+        self.assertEqual(ExternalOrder.objects.get(external_id='C2').status, 'delivered')
+
+    def test_bad_amount_does_not_crash_and_arabic_digits(self):
+        self._order('D1', '12')
+        batch, _ = self._run([('D1', '١٢', '0', '0', '0'), ('D2', 'abc', '0', '0', '0')])
+        by = {l.external_id: l for l in batch.lines.all()}
+        self.assertEqual(by['D1'].match_status, 'matched')
+        self.assertEqual(by['D2'].match_status, 'unmatched')
+        self.assertTrue(by['D2'].note)
+
+    def test_rejects_bad_extension_and_big_file(self):
+        from apps.marketplace import settlement
+        with self.assertRaises(ValueError):
+            settlement.import_csv(self.channel, self._file([], 'x.pdf'), self.cmap, None)
+        with self.assertRaises(ValueError):
+            settlement.import_csv(self.channel, self._file([('a',) * 5] * 1, 'x.csv'), {}, None)
+
+    @override_settings(MARKETPLACE_ENABLED=True)
+    def test_api_upload_and_read(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        import json
+        _, _, client = make_admin('st_admin')
+        self._order('E1', '40')
+        f = self._file([('E1', '40', '0', '0', '0'), ('E9', '5', '0', '0', '0')])
+        up = SimpleUploadedFile('payout.csv', f.read(), content_type='text/csv')
+        r = client.post('/api/marketplace/settlements/', {
+            'channel': self.channel.id, 'file': up, 'column_map': json.dumps(self.cmap),
+            'period_from': self.today.isoformat(), 'period_to': self.today.isoformat()}, format='multipart')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()['match']['matched'], 1)
+        bid = r.json()['id']
+        self.assertEqual(client.get('/api/marketplace/settlements/').status_code, 200)
+        d = client.get(f'/api/marketplace/settlements/{bid}/?status=unmatched').json()
+        self.assertEqual([l['external_id'] for l in d['lines']], ['E9'])
+        with override_settings(MARKETPLACE_ENABLED=False):
+            self.assertEqual(client.get('/api/marketplace/settlements/').status_code, 404)
+
+    def test_middleware_settlement_post_is_edit(self):
+        from core.middleware.module_access import required
+        self.assertEqual(required('/api/marketplace/settlements/', 'POST'), ('marketplace', ('edit',)))
+        self.assertEqual(required('/api/marketplace/settlements/', 'GET'), ('marketplace', ('view',)))

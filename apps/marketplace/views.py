@@ -12,6 +12,8 @@ apps/marketplace/views.py — /api/marketplace/ (doc 38). MARKETPLACE_ENABLED of
   GET       orders/<id>/              lines, problems, events, linked POS draft
   POST      orders/manual/            manual intake through the manual adapter (create)
   POST      orders/<id>/accept/ | reject/ {reason} | status/ {to_status, note}   (create)
+  POST      settlements/              multipart: channel, file (.csv/.xlsx), column_map (JSON), period_from/to (edit)
+  GET       settlements/ · settlements/<id>/?status=   (view)
   GET       push-log/                 ?channel= (view)
   POST      webhooks/<channel_code>/  platform entry: no staff session; own gate (flag + active channel +
                                       adapter signature). Exempt from the RBAC middleware (module_access).
@@ -38,12 +40,13 @@ from core import branch_scope
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by
 
-from . import intake, push
+from . import intake, push, settlement
 from .access import enabled
 from .adapters import REGISTRY, get_adapter
-from .models import ChannelListing, ChannelStore, ExternalOrder, MarketplaceChannel, PushLog
+from .models import SettlementBatch, ChannelListing, ChannelStore, ExternalOrder, MarketplaceChannel, PushLog
 from .serializers import (ChannelSerializer, ListingSerializer, OrderDetailSerializer, OrderListSerializer,
-                          PushLogSerializer, StoreSerializer)
+                          PushLogSerializer, SettlementBatchSerializer, SettlementLineSerializer,
+                          StoreSerializer)
 
 logger = logging.getLogger('elrezeiky.marketplace')
 
@@ -417,6 +420,62 @@ class PushLogList(_Gate, generics.ListAPIView):
         if ch:
             qs = qs.filter(channel_id=ch)
         return qs.order_by(*explicit_order_by(p.get('ordering'), PUSHLOG_ORDERING, ('-at', '-id')))
+
+
+# ── settlements ──────────────────────────────────────────────────────────────────────────────────
+# Settlement data is company-level for a channel (a payout covers every branch's orders and has no branch of
+# its own), so it is visible to every holder of marketplace `view`; uploading needs `edit` (the middleware maps
+# the POST the same way). CLAUDE.md security rule 2.
+
+class SettlementListCreate(_Gate, generics.ListAPIView):
+    permission_classes = [IsAuthenticated, EDIT_WRITES]
+    serializer_class = SettlementBatchSerializer
+
+    def get_queryset(self):
+        qs = SettlementBatch.objects.select_related('channel', 'uploaded_by')
+        ch = _int(self.request.query_params.get('channel'))
+        return qs.filter(channel_id=ch) if ch else qs
+
+    def post(self, request):
+        import json
+        d = request.data
+        channel = get_object_or_404(MarketplaceChannel, pk=_int(d.get('channel')) or 0)
+        upload = request.FILES.get('file')
+        if upload is None:
+            return Response({'detail': 'الملف مطلوب'}, status=400)
+        try:
+            cmap = json.loads(d.get('column_map') or '{}')
+            if not isinstance(cmap, dict):
+                raise ValueError
+            frm, to = _date(d.get('period_from')), _date(d.get('period_to'))
+        except (ValueError, TypeError):
+            return Response({'detail': 'بيانات غير صحيحة'}, status=400)
+        try:
+            batch = settlement.import_csv(channel, upload, cmap, _profile(request), frm, to)
+        except ValueError as exc:
+            return Response({'detail': 'تعذر قراءة الملف', 'code': str(exc)}, status=400)
+        counts = settlement.match(batch, user=_profile(request))
+        data = SettlementBatchSerializer(batch).data
+        data['match'] = counts
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+def _date(value):
+    from datetime import date
+    return date.fromisoformat(value) if value else None
+
+
+class SettlementDetail(_Gate, APIView):
+    permission_classes = [IsAuthenticated, EDIT_WRITES]
+
+    def get(self, request, pk):
+        batch = get_object_or_404(SettlementBatch.objects.select_related('channel', 'uploaded_by'), pk=pk)
+        lines = batch.lines.all()
+        if request.query_params.get('status'):
+            lines = lines.filter(match_status=request.query_params['status'])
+        data = SettlementBatchSerializer(batch).data
+        data['lines'] = SettlementLineSerializer(lines, many=True).data
+        return Response(data)
 
 
 # ── platform webhook ─────────────────────────────────────────────────────────────────────────────

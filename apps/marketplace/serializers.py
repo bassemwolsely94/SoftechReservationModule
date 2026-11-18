@@ -11,7 +11,7 @@ from apps.customers.access import mask, record_phone
 
 from .availability import platform_price, sellable_qty
 from .eligibility import listing_problem
-from .models import (ChannelListing, ChannelStore, ExternalOrder, ExternalOrderEvent, ExternalOrderLine,
+from .models import (SettlementBatch, SettlementLine, ChannelListing, ChannelStore, ExternalOrder, ExternalOrderEvent, ExternalOrderLine,
                      MarketplaceChannel, PushLog)
 
 
@@ -160,3 +160,30 @@ class PushLogSerializer(serializers.ModelSerializer):
         model = PushLog
         fields = ['id', 'channel', 'channel_name', 'store', 'branch', 'kind', 'kind_label', 'dry_run', 'payload',
                   'response', 'ok', 'at']
+
+
+class SettlementLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SettlementLine
+        fields = ['id', 'external_id', 'gross', 'commission', 'delivery_fee', 'net', 'order', 'match_status', 'note']
+
+
+class SettlementBatchSerializer(serializers.ModelSerializer):
+    channel_name = serializers.CharField(source='channel.name', read_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+    counts = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SettlementBatch
+        fields = ['id', 'channel', 'channel_name', 'period_from', 'period_to', 'file_name', 'uploaded_by_name',
+                  'uploaded_at', 'column_map', 'counts']
+
+    def get_uploaded_by_name(self, obj):
+        return getattr(obj.uploaded_by, 'full_name', '') if obj.uploaded_by_id else ''
+
+    def get_counts(self, obj):
+        from django.db.models import Count
+        rows = obj.lines.values('match_status').annotate(n=Count('id'))
+        out = {k: 0 for k, _ in SettlementLine.MATCH_CHOICES}
+        out.update({r['match_status']: r['n'] for r in rows})
+        return out

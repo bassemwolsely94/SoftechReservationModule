@@ -298,7 +298,7 @@ def required(path, method):
     if prefix == 'marketplace' and method not in ('GET', 'HEAD', 'OPTIONS'):
         if parts[3:4] == ['listings'] and parts[5:6] in (['approve'], ['unapprove']):
             return 'marketplace', ('approve',)
-        if parts[3:4] in (['channels'], ['stores']):
+        if parts[3:4] in (['channels'], ['stores'], ['settlements']):
             return 'marketplace', ('edit',)
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
