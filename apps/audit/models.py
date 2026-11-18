@@ -225,6 +225,10 @@ class AuditLog(models.Model):
         ('rpa_portal_resolved', 'روبوت مواقع الموردين — حل'),
         ('rpa_portal_code_learnt', 'روبوت مواقع الموردين — تعلّم كود'),
         ('rpa_portal_account_changed', 'روبوت مواقع الموردين — تغيير حساب'),
+        ('rpa_portal_changed', 'روبوت مواقع الموردين — تغيير إعدادات موقع'),
+        ('rpa_portal_line_picked', 'روبوت مواقع الموردين — اختيار مورد لسطر'),
+        ('rpa_portal_job_done', 'روبوت مواقع الموردين — انتهاء مهمة'),
+        ('rpa_portal_buylist_closed', 'روبوت مواقع الموردين — إغلاق قائمة شراء'),
         ('rpa_recipe_edited',           'روبوت الإدخال — تعديل مسودة وصفة'),
         ('rpa_screen_changed',          'روبوت الإدخال — تفعيل أو إيقاف شاشة'),
 

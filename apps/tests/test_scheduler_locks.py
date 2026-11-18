@@ -151,6 +151,8 @@ SCHEDULER_JOB_GUARDS = {
         'pg_try_advisory_lock around the send loop + per-task select_for_update / IntegrityError claim on RefillReminder in _send_one; customer WhatsApp'),
     'rpa_portal_expire_leases': ('row_lock', 'apps.rpa.portal.queue.expire_leases', 'select_for_update(skip_locked=True)',
         'each held basket / open read is taken under a skip_locked row lock and moved once (needs_person / timeout); a second run finds nothing past its lease; local DB only, no sends, no SOFTECH'),
+    'rpa_portal_history_check': ('row_lock', 'apps.rpa.portal.queue.daily_history_check', 'select_for_update(skip_locked=True)',
+        'each stuck basket is taken under a skip_locked row lock; request_history keeps one open read per basket, so a second run queues nothing; local DB only, no sends, no SOFTECH (the robot reads the portal later)'),
     'phone_alerts_tick': ('row_lock', 'apps.notifications.phone_alerts.jobs._process', 'select_for_update(skip_locked=True)',
         'each alert decided under a skip_locked row lock; reminder + first send claimed before delivery; staff WhatsApp/SMS'),
     'morning_brief': ('once_per_period_check', 'apps.insights.brief.send_all', 'created_at__gte=start, created_at__lt=end',

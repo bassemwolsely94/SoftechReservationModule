@@ -73,6 +73,11 @@ class RunConflict(Exception):
     """The run is not this device's, or no longer open (409)."""
 
 
+class PlacedOrderCancel(QueueError):
+    """Cancelling a basket whose order was placed on the site needs an explicit, reasoned
+    confirmation (409): it drops the placed order's record and reopens its items."""
+
+
 # ── small helpers ────────────────────────────────────────────────────────────────────────────
 
 def _audit(action, obj, *, user, old=None, new=None, note=''):
@@ -240,6 +245,64 @@ def request_history(basket):
         return open_run
     return PortalRun.objects.create(basket=basket, kind='history', device=None, mode='dry_run',
                                     started_at=timezone.now())
+
+
+# ── what the staff screen shows (the rules live here, the screen only displays them) ─────────
+
+def needs_person(basket) -> bool:
+    """A person must look at this basket: it is needs_person, or it was recorded while a reason
+    stayed on it (an Order History row it could not account for, a found order linked after)."""
+    return basket.status == 'needs_person' or (basket.status == 'recorded' and bool(basket.needs_person_reason))
+
+
+def needs_person_q(prefix=''):
+    """needs_person() as a filter; prefix e.g. 'baskets__' when filtering jobs."""
+    from django.db.models import Q
+    return (Q(**{f'{prefix}status': 'needs_person'})
+            | (Q(**{f'{prefix}status': 'recorded'}) & ~Q(**{f'{prefix}needs_person_reason': ''})))
+
+
+def discovery_state(job) -> dict:
+    """How a job's code discovery stands. The queue stops offering a job's discovery once
+    MAX_FAILED_READS reads failed (_claim_discovery): from then on a person must act (confirm the
+    codes by hand, mark «none», or cancel), so needs_person is True while codes are still missing."""
+    runs = PortalRun.objects.filter(kind='discovery', discovery_job=job)
+    ok = runs.filter(outcome='discovery_ok').exists()
+    failed = runs.filter(finished_at__isnull=False).exclude(outcome='discovery_ok').count()
+    missing = PortalLine.objects.filter(basket__job=job, basket__status='pending', supplier_key='',
+                                        status='pending').count()
+    return {'failed_reads': failed, 'max_failed_reads': MAX_FAILED_READS, 'read_ok': ok,
+            'reading': runs.filter(finished_at__isnull=True).exists(), 'missing_codes': missing,
+            'needs_person': bool(missing) and not ok and failed >= MAX_FAILED_READS}
+
+
+HISTORY_SETTLED = ('history_none', 'history_found')
+
+
+def daily_history_check() -> int:
+    """Scheduler (daily): queue an Order History read for every needs_person basket that may have
+    ordered and has no read since it got stuck, or whose last read failed (timeout / error...).
+    Rows another worker holds are skipped; request_history is itself one-open-read-per-basket.
+
+    awaiting_submit baskets are not read here: a device holds them under a lease (the person is
+    at the Submit screen), and expire_leases sends a lapsed one to needs_person, which queues its
+    read at once. Returns how many reads were queued."""
+    count = 0
+    with transaction.atomic():
+        for basket in (PortalBasket.objects.select_for_update(skip_locked=True)
+                       .filter(status='needs_person').order_by('pk')):
+            if not may_have_ordered(basket):
+                continue
+            reads = PortalRun.objects.filter(basket=basket, kind='history')
+            if reads.filter(finished_at__isnull=True).exists():
+                continue
+            if basket.needs_person_at is not None:
+                reads = reads.filter(started_at__gte=basket.needs_person_at)
+            if reads.filter(outcome__in=HISTORY_SETTLED).exists():
+                continue
+            request_history(basket)
+            count += 1
+    return count
 
 
 # ── claim ────────────────────────────────────────────────────────────────────────────────────
@@ -592,9 +655,15 @@ def _history_lines_for(basket, ref):
     return []
 
 
-def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_lines=None):
+def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_lines=None,
+            confirm_placed_order_cancel=False, reason=''):
     """retry → ready (only when no order can have been placed, see the module docstring);
-    link_order → submitted + record_order; cancel → cancelled. Needs rpa.edit."""
+    link_order → submitted + record_order; cancel → cancelled. Needs rpa.edit.
+
+    A basket with a portal_ref had its order placed on the site (e.g. the need check failed after
+    the order was read). Cancelling it drops that order's record and hands its items back to the
+    buyer, who could then order them a second time: it is refused (PlacedOrderCancel) unless
+    confirm_placed_order_cancel is True AND a reason is written; both go in the audit row."""
     from apps.rpa.portal import recording
     if not staff.can_do('rpa', 'edit'):
         raise PermissionDenied('لا تملك صلاحية حل سلال الروبوت')
@@ -607,6 +676,9 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
             raise QueueError('السلة لا تنتظر قرار موظف')
         old = {'status': b.status, 'needs_person_reason': b.needs_person_reason, 'portal_ref': b.portal_ref}
         new = {'action': action, 'confirm_none': bool(confirm_none)}
+        reason = str(reason or '').strip()[:255]
+        if reason:
+            new['reason'] = reason
         if action == 'retry':
             if b.submitted_seen_at or b.portal_ref:
                 raise QueueError('ظهر رقم طلب لهذه السلة — اربطها بالطلب أو ألغها، لا تُعاد')
@@ -634,6 +706,13 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
             new['order_ref'] = ref
             b = recording.record_order(b, order_ref=ref, history_lines=_clean_history(lines), staff=staff)
         else:
+            if b.portal_ref:
+                if not (confirm_placed_order_cancel is True and reason):
+                    raise PlacedOrderCancel(
+                        f'هذه السلة طُلبت فعلاً من الموقع (رقم الطلب {b.portal_ref}) — الإلغاء يمسح سجل الطلب '
+                        'ويعيد الأصناف للشراء مرة ثانية. اربطها بالطلب، أو أكّد الإلغاء واكتب السبب')
+                new['confirmed_placed_order_cancel'] = True
+                new['cancelled_portal_ref'] = b.portal_ref
             b.status = 'cancelled'
             b.lease_until = None
             b.save(update_fields=['status', 'lease_until'])

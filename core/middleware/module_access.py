@@ -298,6 +298,16 @@ def required(path, method):
     if prefix == 'pos-orders' and len(parts) > 3 and parts[3] == 'referral-stats':
         return 'analytics', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _EXPORT_POST)
     safe = method in ('GET', 'HEAD', 'OPTIONS')
+    # Supplier-portal robot, staff API (apps/rpa/portal/views.py): writes ask exactly what the views
+    # ask — settling a basket and confirming a discovered supplier code = rpa edit; the portal and
+    # account settings (the live switch) are the admin's = settings edit; the rest = rpa create.
+    if prefix == 'rpa' and parts[3:4] == ['portal'] and not safe:
+        if parts[4:5] in (['accounts'], ['portals']):
+            return 'settings', ('edit',)
+        if parts[4:5] == ['discovery'] or (parts[4:5] == ['baskets'] and parts[6:7] in (['resolve'],
+                                                                                        ['history-check'])):
+            return 'rpa', ('edit',)
+        return 'rpa', ('create',)
     # General Ledger (finance-gl): its own `ledger` module, not `finance` — the accountant holds
     # ledger create/approve but only finance view. The views check the exact ledger action.
     # Writes need exactly what the view asks (apps/finance/gl/views.py): chart of accounts (PATCH,

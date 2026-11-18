@@ -29,6 +29,16 @@ def assert_line_not_frozen(line):
         raise BuyListError('السطر داخل مهمة معتمدة — لا يمكن تعديله')
 
 
+def frozen_buyline_ids(lines) -> set:
+    """The same rule as assert_line_not_frozen, for a whole list at once (the buy-list screen)."""
+    by_pk = {ln.pk: ln.chosen_supplier for ln in lines if ln.chosen_supplier}
+    if not by_pk:
+        return set()
+    rows = PortalLine.objects.filter(buyline_id__in=list(by_pk), basket__job__status='approved').values_list(
+        'buyline_id', 'basket__job__portal__supplier_code')
+    return {pk for pk, code in rows if by_pk.get(pk) == code}
+
+
 def _job_lines(job):
     return list(BuyListLine.objects.select_related('item').filter(
         buylist=job.buylist, chosen_supplier=str(job.portal.supplier_code),

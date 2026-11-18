@@ -153,9 +153,36 @@ def pick(line, supplier_code, *, staff):
         raise BuyListError('القائمة مغلقة')
     from apps.rpa.portal.jobs import assert_line_not_frozen
     assert_line_not_frozen(line)
-    line.chosen_supplier = str(supplier_code)
+    supplier_code = str(supplier_code or '').strip()[:120]
+    if not supplier_code:
+        raise BuyListError('اختر المورد')
+    before = line.chosen_supplier
+    line.chosen_supplier = supplier_code
     line.save(update_fields=['chosen_supplier'])
+    try:
+        AuditLog.log('rpa_portal_line_picked', user=staff, obj=line,
+                     old_data={'chosen_supplier': before}, new_data={'chosen_supplier': supplier_code},
+                     note=f'buy list {line.buylist_id} line {line.seq}: {before or "-"} -> {supplier_code}')
+    except Exception:  # audit is non-fatal, as everywhere in the project
+        pass
     return line
+
+
+def rows_from_sheet(parsed):
+    """Rows of an uploaded buy-list sheet (apps.rpa.sheet.parse_issue_sheet output) as
+    ([{'item_code', 'qty'}], errors). A quantity that is not a number is an error, never guessed."""
+    rows, errors = [], []
+    for r in parsed:
+        code = str(r.get('itemcode') or '').strip()
+        try:
+            qty = float(str(r.get('qty') or '').strip())
+        except ValueError:
+            qty = None
+        if not code or qty is None or not math.isfinite(qty):
+            errors.append({'item_code': code, 'row_no': r.get('row_no'), 'error': 'كمية غير مفهومة'})
+            continue
+        rows.append({'item_code': code, 'qty': qty})
+    return rows, errors
 
 
 def apply_result(line, *, supplier_code, accepted, basket_id):

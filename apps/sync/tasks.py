@@ -2311,6 +2311,17 @@ def _run_portal_expire_leases():
         logger.error('[APScheduler] portal lease expiry failed: %s', type(exc).__name__)
 
 
+def _run_portal_history_check():
+    """Supplier-portal robot: queue an Order History read for stuck baskets that may have ordered."""
+    try:
+        from apps.rpa.portal.queue import daily_history_check
+        n = daily_history_check()
+        if n:
+            logger.info('[APScheduler] portal Order History reads queued: %s', n)
+    except Exception as exc:
+        logger.error('[APScheduler] portal history check failed: %s', type(exc).__name__)
+
+
 def _run_segment_customers():
     """Wrapper for APScheduler — calls segment_customers management command."""
     try:
@@ -3964,6 +3975,12 @@ def start_scheduler():
     _scheduler.add_job(
         _run_portal_expire_leases, 'interval', minutes=5, id='rpa_portal_expire_leases',
         replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=300,
+    )
+    # Supplier-portal robot: daily 07:40, an Order History read for every stuck basket that may have
+    # ordered and was not read since (or whose read failed). Local DB only; the robot does the read.
+    _scheduler.add_job(
+        _run_portal_history_check, 'cron', hour=7, minute=40, id='rpa_portal_history_check',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
     )
     # Dead-stock list (P-27): after each successful engine run (checked every 30 min, PG only).
     _scheduler.add_job(
