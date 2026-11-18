@@ -8,7 +8,7 @@ from django.core.exceptions import EmptyResultSet
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import F, Func, IntegerField, Value
-from .models import Category, Item, ItemStock, exclude_unsellable, unsellable_q
+from .models import Category, Item, ItemStock, exclude_unsellable, sellable_qty_subquery, unsellable_q
 from .serializers import (CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer,
                           engine_tier_fields)
 from .wildcard import WildcardSearchFilter
@@ -299,13 +299,14 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         list filter EXCEPT search / ordering (DjangoFilterBackend fields, in_stock, the
         operational filters), so ENGINE_LIST_CAP cuts after the filters. None when no filter
         narrows it — the engine's own default base, the exact queries as without filters.
-        in_stock (a SUM … HAVING) goes in as one id sub-select, so the engine's own tier
-        queries stay un-grouped."""
+        in_stock goes in as the per-row sellable SUM (catalog.models.sellable_qty_subquery),
+        so the engine's tier queries stay un-grouped and only their own candidates are summed
+        — the old whole-table SUM … HAVING id sub-select cost 0.4–0.7 s per tier (2026-11-17)."""
         plain = Item.objects.filter(is_active=True)
         qs = DjangoFilterBackend().filter_queryset(
-            self.request, self._item_filters(plain, for_ordering=False), self)
+            self.request, apply_item_operational_filters(plain, self.request.query_params), self)
         if self.request.query_params.get('in_stock') == 'true':
-            return Item.objects.filter(id__in=qs.order_by().values('id'))
+            return qs.alias(_sellable_qty=sellable_qty_subquery()).filter(_sellable_qty__gt=0)
         try:
             if str(qs.order_by().query) == str(plain.order_by().query):
                 return None
@@ -318,6 +319,12 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         from django.db.models import Sum, Value, DecimalField
         from django.db.models.functions import Coalesce
         p = self.request.query_params
+
+        # rank=engine, not sorted by stock: the page is `id IN (engine ids)`, so «متوفر» is the
+        # per-row sellable SUM (the same rule) instead of grouping the page query + its count
+        if p.get('in_stock') == 'true' and not for_ordering and engine_search_text(self.request):
+            return apply_item_operational_filters(
+                qs.alias(_sellable_qty=sellable_qty_subquery()).filter(_sellable_qty__gt=0), p)
 
         # Annotate total_stock when ordering by it, or when filtering by in_stock
         needs_stock_annotation = p.get('in_stock') == 'true' or for_ordering
@@ -481,6 +488,13 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
             if ing:
                 from apps.catalog.wildcard import ingredient_names
                 ctx['ingredient_names'] = ingredient_names(q, ing)
+        # rank=engine + `branch=<pk>`: rows carry qty_at_branch (the item box's «مخزون: n»).
+        # Same access as softech-search's branch_id (any user of the list); a non-integer is ignored.
+        if engine_search_text(self.request) is not None:
+            try:
+                ctx['stock_branch'] = int(self.request.query_params.get('branch', ''))
+            except (TypeError, ValueError):
+                pass
         return ctx
 
     @action(detail=True, methods=['get'])
@@ -814,7 +828,17 @@ def add_bundle_item(request, bundle_pk):
     bundle = get_object_or_404(ProductBundle, pk=bundle_pk)
     ser = BundleItemSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
-    ser.save(bundle=bundle)
+    # (bundle, item) is unique: an existing member is a 400, never an IntegrityError 500
+    duplicate = DRFResponse({'detail': 'الصنف موجود بالفعل في الباقة'},
+                            status=status.HTTP_400_BAD_REQUEST)
+    if BundleItem.objects.filter(bundle=bundle, item=ser.validated_data['item']).exists():
+        return duplicate
+    from django.db import IntegrityError, transaction
+    try:
+        with transaction.atomic():           # a racing second add still lands here, not in a 500
+            ser.save(bundle=bundle)
+    except IntegrityError:
+        return duplicate
     return DRFResponse(ser.data, status=status.HTTP_201_CREATED)
 
 

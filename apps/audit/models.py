@@ -200,6 +200,21 @@ class AuditLog(models.Model):
         ('branch_order_changed',         'فرع — تغيير الترتيب'),
         # SOFTECH code maps — owner edits a channel / item-category meaning (apps/config/code_maps.py)
         ('code_map_changed',             'ترميزات SOFTECH — تعديل'),
+        # SOFTECH screen RPA (apps/rpa)
+        ('rpa_job_uploaded',            'روبوت الإدخال — رفع مهمة'),
+        ('rpa_job_approved',            'روبوت الإدخال — اعتماد مهمة'),
+        ('rpa_job_cancelled',           'روبوت الإدخال — إلغاء مهمة'),
+        ('rpa_recipe_imported',         'روبوت الإدخال — استيراد وصفة'),
+        ('rpa_recipe_approved',         'روبوت الإدخال — اعتماد وصفة'),
+        ('rpa_device_issued',           'روبوت الإدخال — إصدار جهاز'),
+        ('rpa_device_revoked',          'روبوت الإدخال — إلغاء جهاز'),
+        ('rpa_document_claimed',        'روبوت الإدخال — استلام مستند'),
+        ('rpa_run_reported',            'روبوت الإدخال — تقرير تشغيل'),
+        ('rpa_document_needs_person',   'روبوت الإدخال — مستند يحتاج موظف'),
+        ('rpa_document_resolved',       'روبوت الإدخال — حل مستند'),
+        ('rpa_document_verified',       'روبوت الإدخال — التحقق من مستند'),
+        ('rpa_recipe_edited',           'روبوت الإدخال — تعديل مسودة وصفة'),
+        ('rpa_screen_changed',          'روبوت الإدخال — تفعيل أو إيقاف شاشة'),
 
     ]
 

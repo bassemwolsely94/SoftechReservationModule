@@ -549,7 +549,8 @@ SCREENS = [
             T('حدد عدة طلبات ثم «تعيين إلى…» لموظف أو «إرسال للمشتريات».', 'Select several requests, then "Assign to…" an employee or "Send to purchasing".'),
             T('اضغط أي طلب لفتح تفاصيله ومتابعته.', 'Click a request to open and follow it.'),
         ],
-        'tips': [T('موظف الفرع بيشوف طلبات فرعه (وأي فرع إضافي متاح له) بس، ومينفعش يسجّل طلب على فرع تاني. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's requests (and any extra branch they are given) only, and cannot record a request for another branch. Supervisors and the quality manager see every branch."),
+        'tips': [T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.'),
+                 T('موظف الفرع بيشوف طلبات فرعه (وأي فرع إضافي متاح له) بس، ومينفعش يسجّل طلب على فرع تاني. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's requests (and any extra branch they are given) only, and cannot record a request for another branch. Supervisors and the quality manager see every branch."),
                  
             T('علامة «تجاوز» تعني أن الطلب تخطى زمن SLA — عالجه فوراً.', 'The "breached" mark means the request passed its SLA time — handle it now.'),
             T('سجّل الطلب حتى لو العميل سيمشي؛ الطلب المسجّل باسم عميل حقيقي هو «خسارة مؤكدة» وهي أقوى إشارة للمشتريات.',
@@ -689,8 +690,8 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلترا الأولوية والفرع يقبلان أكثر من اختيار معاً', 'Priority and branch filters take several choices at once'),
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث بتفضى بعد كل صنف وتفضل جاهزة للصنف اللي بعده', 'The search box clears after each item and stays ready for the next one'),
     },
     {
         'key': 'demand.detail',
@@ -1108,6 +1109,7 @@ SCREENS = [
             T('ابحث عن الصنف وأضفه، أو اكتب اسم صنف غير مكوَّد ثم «إضافة».', 'Search and add the item, or type an uncoded item name then "Add".'),
             T('الفرع يُختار تلقائياً (فرعك). حدد الأولوية والمصدر ثم «تسجيل الطلب».', 'The branch defaults to yours. Set priority and source, then "Record request".'),
         ],
+        'tips': [T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.')],
         'tour': [
             {'target': 'demand-mobile-new-customer', 'label': T('👤 العميل', '👤 Customer'),
              'text': T('رقم الهاتف إجباري والاسم اختياري.', 'The phone is required and the name is optional.'),
@@ -1157,8 +1159,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث بتفضى بعد كل صنف وتفضل جاهزة للصنف اللي بعده', 'The search box clears after each item and stays ready for the next one'),
     },
     {
         'key': 'demand.mobile_detail',

@@ -98,7 +98,7 @@ export default function MobileNewTransferPage() {
       {/* Items */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4" data-tour="transfers-new-items">
         <h2 className="font-semibold text-gray-700 text-sm mb-2.5">💊 الأصناف *</h2>
-        <ItemSearchWidget selected={null} onSelect={addLine} onClear={() => {}}
+        <ItemSearchWidget mode="list" selected={null} onSelect={addLine} onClear={() => {}}
           placeholder="ابحث وأضف صنفاً..." />
         {lines.length > 0 && (
           <div className="mt-3 space-y-2">

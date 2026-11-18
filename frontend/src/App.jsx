@@ -75,6 +75,7 @@ const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
 const PermissionsMatrixPage = lazy(() => import('./pages/PermissionsMatrixPage'))
 const PickZonesPage = lazy(() => import('./pages/PickZonesPage'))
 const CodeMapsPage = lazy(() => import('./pages/CodeMapsPage'))
+const RpaPage = lazy(() => import('./pages/RpaPage'))
 const PhoneAlertsPage = lazy(() => import('./pages/PhoneAlertsPage'))
 const ErpPermissionsPage = lazy(() => import('./pages/ErpPermissionsPage'))
 const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
@@ -85,6 +86,7 @@ import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
 import PageSuspense from './components/PageSuspense'
+import ItemSearchHotkeyProvider from './components/ItemSearchHotkeyProvider'
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'))
 const HelpManualPage = lazy(() => import('./pages/HelpManualPage'))
 const MobilePOSOrderPage = lazy(() => import('./pages/mobile/MobilePOSOrderPage'))
@@ -286,6 +288,7 @@ export default function App() {
       <BrowserRouter>
         {/* pages load on demand; routes outside a layout suspend here */}
         <PageSuspense>
+        <ItemSearchHotkeyProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/notify" element={<NotifyPage />} />
@@ -488,6 +491,8 @@ export default function App() {
             {/* stock-transactions audit (doc 32): management + named branch managers — gated server-side */}
             <Route path="stock-audit"   element={<StockAuditPage />} />
             <Route path="tax-invoicing" element={<TaxInvoicingPage />} />
+            {/* SOFTECH screen robot: gated by the `rpa` module grant (server enforces every action) */}
+            <Route path="rpa" element={<RpaPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />
@@ -605,6 +610,7 @@ export default function App() {
 
           </Route>
         </Routes>
+        </ItemSearchHotkeyProvider>
         </PageSuspense>
       </BrowserRouter>
     </QueryClientProvider>

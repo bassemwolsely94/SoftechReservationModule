@@ -31,6 +31,7 @@ export function useHelpShortcuts() {
   const toggleHints = useHelpStore((s) => s.toggleHints)
   useEffect(() => {
     const onKey = (e) => {
+      if (e.ctrlKey) return   // Ctrl+F1 belongs to ItemSearchHotkeyProvider
       if (e.key === 'F1' && e.shiftKey) { e.preventDefault(); window.dispatchEvent(new Event('help:show-me')); return }
       if (e.key === 'F1' && e.altKey) { e.preventDefault(); toggleHints(); return }
       if (e.key === 'F1') { e.preventDefault(); toggle() }

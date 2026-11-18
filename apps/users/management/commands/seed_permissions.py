@@ -44,6 +44,7 @@ ALL_MODULES = [
     'hr_attendance', # الحضور والبصمة: no role but admin; everyone else via named grants (apps/hr/attendance/access.py)
     'data_health',   # صحة البيانات: 'view' = Growth + Problems + forced refresh; rules / held files / restore = admin only
     'crews',         # الأطقم: 'view' = list/members/history/unattributed sales, 'edit' = create/change/end rows/archive; admin only by default
+    'rpa',           # روبوت الإدخال (SOFTECH screen RPA): view = see jobs, create = upload / run on my PC, approve = approve jobs + recipes, edit = resolve a needs_person document
     'alerts',        # التنبيهات والإعلانات: 'view' = phone-alert log + policies, 'edit' = change policies/channel, 'create' = publish an announcement (admin + supervisor, owner 2026-11-17)
 ]
 
@@ -331,6 +332,16 @@ for _role, _modules in PERMISSIONS.items():
 DATA_HEALTH_VIEWERS = ('supervisor', 'quality_manager')
 for _role in DATA_HEALTH_VIEWERS:
     PERMISSIONS[_role].setdefault('data_health', {'view'})
+
+# SOFTECH screen RPA (design 2026-11-16): create = upload / run on my PC; approve = approve jobs and
+# recipes; edit = resolve a needs_person document. Everyone else none.
+RPA_GRANTS = {
+    'supervisor':      {'view', 'create', 'approve', 'edit'},
+    'purchasing':      {'view', 'create'},
+    'quality_manager': {'view', 'create', 'approve'},
+}
+for _role, _actions in RPA_GRANTS.items():
+    PERMISSIONS[_role].setdefault('rpa', set(_actions))
 
 
 class Command(BaseCommand):

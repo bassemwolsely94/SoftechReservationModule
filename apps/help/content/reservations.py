@@ -598,8 +598,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('خيار «📲 نبّه على الموبايل» عند تسجيل الحجز، و«تأكيد كحجز» من المبيعات الفائتة يفتح النموذج جاهزاً', 'The "📲 Alert by phone" option when recording a reservation, and "Confirm as reservation" from missed sales opens the form prefilled'),
+        'updated': '2026-11-17',
+        'change_note': T('خانة الصنف: صنف واحد أو صنف ورا صنف أو أكتر من صنف، وCtrl+F1 للخانة اللي كنت فيها', 'Item box: pick one, one after another or several; Ctrl+F1 opens for the box you were in'),
     },
     {
         'key': 'reservations.detail',

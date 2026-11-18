@@ -11,7 +11,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { branchesApi, replacementApi } from '../api/client'
 import useAuthStore from '../store/authStore'
-import ItemSearchInput from '../components/ItemSearchInput'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 import { Chip, errText, money } from './supply/supplyUi'
 
 const SOURCES = [
@@ -209,8 +209,10 @@ export default function ReplacementNewCasePage() {
 
       <section data-tour="replacement-new-extra-items" className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
         <div className="text-sm text-gray-700">إضافة أصناف أخرى (بدون روشتة / من خارج صرفنا)</div>
-        <ItemSearchInput placeholder="ابحث عن الصنف…" onSelect={(it) => it?.item_id && setExtra((x) =>
-          x.some((e) => e.item_id === it.item_id) ? x : [...x, { item_id: it.item_id, name: it.name, price: it.pack_price, qty: 1 }])} />
+        {/* multi: one onSelect(items[]); one functional update adds each new item once (deduped by item_id) */}
+        <ItemSearchWidget mode="multi" placeholder="ابحث عن الصنف…" onSelect={(items) => setExtra((x) =>
+          items.reduce((acc, it) => (!it?.item_id || acc.some((e) => e.item_id === it.item_id) ? acc
+            : [...acc, { item_id: it.item_id, name: it.name, price: it.pack_price, qty: 1 }]), x))} />
         {extra.map((e, i) => (
           <div key={e.item_id} className="flex items-center gap-2 text-sm">
             <span className="flex-1">{e.name}</span>
