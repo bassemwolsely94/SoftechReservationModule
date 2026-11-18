@@ -1,4 +1,3 @@
-/* global __dirname, process */
 // W2 — visibility sweep: every screen × every UAT user (plan Task 6, design §5.2 / §7.1).
 //
 // Routes: every <Route path> in src/App.jsx ∪ navGroups.js items ∪ the mobile /m tabs (routes.js).
