@@ -13,7 +13,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import CustomerWhatsAppPanel from '../components/callcenter/CustomerWhatsAppPanel'
 import SoftPhone from '../components/pbx/SoftPhone'
-import { callCenterApi, branchesApi, followupsApi, itemsApi, recommendationsApi, pbxApi } from '../api/client'
+import { callCenterApi, branchesApi, followupsApi, recommendationsApi, pbxApi } from '../api/client'
 import useScreenPop from '../hooks/useScreenPop'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import useAuthStore from '../store/authStore'
@@ -22,6 +22,7 @@ import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 import StockLookupDrawer from '../components/StockLookupDrawer'
 
 const toLatinDigits = s =>
@@ -818,9 +819,6 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
   const [pendingItems, setPendingItems]   = useState([])   // local-only, pre-save
   const [dbItems, setDbItems]             = useState([])   // persisted
   const [flushing, setFlushing]           = useState(false)
-  const [searchQ, setSearchQ]             = useState('')
-  const [searchRes, setSearchRes]         = useState([])
-  const [searchLoading, setSearchLoading] = useState(false)
   const [showSearch, setShowSearch]       = useState(false)
   const [manualName, setManualName]       = useState('')
   const [showManual, setShowManual]       = useState(false)
@@ -833,7 +831,6 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
   const [converting, setConverting]       = useState(false)
   const [convertResult, setConvertResult] = useState(null)
   const [stockFor, setStockFor]           = useState(null)   // a saved call item → network stock drawer (C01)
-  const searchTimeoutRef = useRef(null)
 
   // Branches for conversion dropdowns
   const { data: branchList = [] } = useQuery({
@@ -891,21 +888,6 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedCallId])
 
-  // ── Item search ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!searchQ.trim() || searchQ.trim().length < 2) { setSearchRes([]); return }
-    clearTimeout(searchTimeoutRef.current)
-    searchTimeoutRef.current = setTimeout(async () => {
-      setSearchLoading(true)
-      try {
-        const { data } = await itemsApi.wildcardSearch(searchQ.trim(), branchId || null)
-        setSearchRes(Array.isArray(data) ? data : data?.results || [])
-      } catch { setSearchRes([]) }
-      finally { setSearchLoading(false) }
-    }, 350)
-    return () => clearTimeout(searchTimeoutRef.current)
-  }, [searchQ, branchId])
-
   const allItems = [
     ...pendingItems.map(i => ({ ...i, _status: 'pending' })),
     ...dbItems.map(i => ({ ...i, _status: i.converted_to !== 'none' ? 'converted' : 'saved' })),
@@ -933,7 +915,6 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       setPendingItems(p => [...p, { ...payload, item: catalogItem, _tempId: Date.now() }])
     }
     if (id) setLastAddedItemId(id)
-    setSearchQ(''); setSearchRes([]); setShowSearch(false)
   }
 
   async function addManualItem() {
@@ -1070,38 +1051,13 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
         </div>
       </div>
 
-      {/* Catalog search */}
+      {/* Catalog search — the shared item box in list mode: each pick adds one line and the box
+          clears for the next (addCatalogItem is the same add the recommendations panel uses) */}
       {showSearch && (
-        <div className="mb-3 relative">
-          <input
-            className="input-field text-sm w-full"
-            placeholder="ابحث باسم الصنف أو الكود... (*نجمة للبحث الشامل)"
-            value={searchQ}
-            onChange={e => setSearchQ(e.target.value)}
-            autoFocus
-          />
-          {searchLoading && (
-            <div className="absolute left-2 top-2 text-xs text-gray-400 animate-pulse">بحث...</div>
-          )}
-          {searchRes.length > 0 && (
-            <div className="absolute z-20 top-full right-0 left-0 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1">
-              {searchRes.slice(0, 15).map(item => (
-                <button data-tour="callcenter-operator-items-result"
-                  key={item.id ?? item.item_id ?? item.softech_id}
-                  onClick={() => addCatalogItem(item)}
-                  className="w-full text-right px-3 py-2 hover:bg-brand-50 text-sm border-b border-gray-50 last:border-0 transition-colors">
-                  <span className="font-semibold text-gray-800 block break-words">{item.name}</span>
-                  <span className="text-xs text-gray-400 font-mono">{item.softech_id}</span>
-                  {item.qty_at_branch != null && (
-                    <span className="text-xs text-green-600 mr-2">مخزون: {item.qty_at_branch}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-          {searchQ.length >= 2 && !searchLoading && searchRes.length === 0 && (
-            <div className="text-xs text-gray-400 text-center py-2">لا نتائج — جرب اسماً مختلفاً</div>
-          )}
+        <div className="mb-3" data-tour="callcenter-operator-items-result">
+          <ItemSearchWidget mode="list" branchId={branchId || null} autoFocus
+            onSelect={addCatalogItem}
+            placeholder="ابحث باسم الصنف أو الكود... (*نجمة للبحث الشامل)" />
         </div>
       )}
 

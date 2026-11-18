@@ -3377,6 +3377,10 @@ export const taxInvoicingApi = {
   codingReopen:    (data)         => api.post('/tax-invoicing/codes/queue/reopen/', data),
   codingSetBrick:  (data)         => api.post('/tax-invoicing/codes/queue/brick/', data),
   codingSuggest:   (data)         => api.post('/tax-invoicing/codes/queue/suggest/', data),
+  // Production code requests (batch S4): prepared from decisions, sent only through the server's gates
+  codingPrepare:   (data)         => api.post('/tax-invoicing/codes/queue/prepare/', data),
+  codingGs1:       (data)         => api.post('/tax-invoicing/codes/queue/gs1/', data),
+  codingProduction: ()            => api.get('/tax-invoicing/codes/production/'),
   etaHolds:        (params = {})  => api.get('/tax-invoicing/codes/eta-holds/', { params }),
   egsSheet:        ()             => api.get('/tax-invoicing/codes/sheet/'),
   egsSheetBuild:   (data = {})    => api.post('/tax-invoicing/codes/sheet/build/', data),

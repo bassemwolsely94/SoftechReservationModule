@@ -325,7 +325,7 @@ def search_ids(query: str, *, limit: int = 8) -> list:
     return [m['item_id'] for m in find_best_matches(query, top_n=limit, min_score=0.75)]
 
 
-def quick_ids(query: str, *, limit: int = 8) -> list:
+def quick_ids(query: str, *, limit: int = 8, within=None) -> list:
     """The catalog search box's `sound` tier (apps/catalog/wildcard.item_search): the same
     sound evidence and order as `search_ids`, from this in-process index alone — no DB
     prefilter, no learned memory (item_search has its own `learned` tier) and no Arabic-name
@@ -334,7 +334,8 @@ def quick_ids(query: str, *, limit: int = 8) -> list:
     Score = the matcher's Arabic score: 0.62 + 0.30 × sound (sound ≥ 0.75, below that there
     is no evidence) + agreement of the typed numbers / form words / descriptors − 0.2 per
     recorded rejection (up to 3); kept when ≥ SOUND_MIN (0.75), like `search_ids`. Ties go to
-    the closer whole name. [] for a Latin query or under 3 characters, like `search_ids`."""
+    the closer whole name. [] for a Latin query or under 3 characters, like `search_ids`.
+    `within`: as `candidates` — only these item ids compete for the `limit` (None = all)."""
     if not re.search(r'[؀-ۿ]', query or '') or len((query or '').strip()) < 3:
         return []
     from types import SimpleNamespace
@@ -343,7 +344,7 @@ def quick_ids(query: str, *, limit: int = 8) -> list:
     from .matching import _arabic_adjust, _normalize
     snd = {}
     ix = index()                      # one snapshot for the candidates and their scores
-    for iid, _s in candidates(query, limit=60, ix=ix):
+    for iid, _s in candidates(query, limit=60, ix=ix, within=within):
         s = sound_score(query, iid, ix=ix)
         if s >= 0.75:
             snd[iid] = s
@@ -387,9 +388,17 @@ def _sim(a: str, b: str) -> float:
     return Levenshtein.normalized_similarity(a, b)
 
 
-def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None) -> list:
+def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None, within=None) -> list:
     """[(item_id, sound score 0..1)] for the line's first name word(s) — by skeleton
-    similarity against every catalog item's brand (and scientific) skeleton. ms-fast."""
+    similarity against every catalog item's brand (and scientific) skeleton. ms-fast.
+    `within` (a frozenset of item ids, or None = the whole catalog): items outside it are
+    dropped BEFORE each lookup keeps its best `limit`, so a filtered item ranked below the
+    whole catalog's cut is still found (the Ctrl+F1 modal's filters).
+    `within` may instead be a callable `keep(ids) -> set of the ids inside` — then each lookup
+    runs over the whole pool (every hit ≥ cutoff, a few hundred at most), ONE `keep` call
+    answers for their union, and each lookup keeps its best `limit` of the kept hits: the same
+    hits in the same order as the frozenset form (extract orders by score, ties by position, in
+    both), without first listing every id of a filter such as «متوفر» (2026-11-17)."""
     from rapidfuzz import process
     from rapidfuzz.distance import Levenshtein
     p = parse_query(text)
@@ -397,6 +406,18 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None) -> 
     if not skels:
         return []
     ix = ix or index()
+    lazy = callable(within)
+    if lazy:
+        narrow = lambda pool: pool
+    elif within is not None:
+        # the index positions inside `within`; each pool becomes {position: skeleton}, so
+        # `extract` still hands back the position as its key
+        sel = [k for k, iid in enumerate(ix['ids']) if iid in within]
+        if not sel:
+            return []
+        narrow = lambda pool: {k: pool[k] for k in sel}
+    else:
+        narrow = lambda pool: pool
     q1 = skels[0]
     q12 = ''.join(skels[:2])
     q123 = ''.join(skels[:3])
@@ -408,11 +429,15 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None) -> 
         pools.append((vkeys[0], ix['vfirst']))   # «هيرو» HR is ambiguous; HIRU = HERO is not
     # each lookup method keeps its own best `limit` — the union is scored by the caller, so
     # many short "STL" products can't crowd out ACETYLCYSTEINE found via the joined words
-    for q, pool in pools:
-        if len(q) < 2:
-            continue
-        for _choice, score, idx in process.extract(q, pool, scorer=Levenshtein.normalized_similarity,
-                                                   limit=limit, score_cutoff=cutoff):
+    found = [process.extract(q, narrow(pool), scorer=Levenshtein.normalized_similarity,
+                             limit=None if lazy else limit, score_cutoff=cutoff)
+             for q, pool in pools if len(q) >= 2]
+    if lazy:
+        union = {ix['ids'][idx] for res in found for _c, _s, idx in res}
+        kept = within(sorted(union)) if union else set()
+        found = [[r for r in res if ix['ids'][r[2]] in kept][:limit] for res in found]
+    for res in found:
+        for _choice, score, idx in res:
             iid = ix['ids'][idx]
             if score > hits.get(iid, 0):
                 hits[iid] = score

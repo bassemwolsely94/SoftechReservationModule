@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 
 const CATS = [
   { value: 'local',    label: 'محلى',   cls: 'bg-green-100 text-green-700' },
@@ -78,8 +79,9 @@ export default function InsuranceItemOverridesPage() {
     setLookup(null); setShowForm(true)
   }
 
-  const doLookup = async () => {
-    const code = (form.item_code || '').trim()
+  // `codeArg`: a code picked from the item box (the input's blur / the button pass an event → ignored)
+  const doLookup = async (codeArg) => {
+    const code = ((typeof codeArg === 'string' ? codeArg : form.item_code) || '').trim()
     if (!code) return
     try {
       const { data } = await insuranceApi.itemOverrideLookup(code)
@@ -243,6 +245,14 @@ export default function InsuranceItemOverridesPage() {
                     onBlur={doLookup} placeholder="مثال: 128331" />
                   <Btn variant="secondary" onClick={doLookup} disabled={!!editId} data-tour="insurance-item-overrides-lookup">بحث بالكتالوج</Btn>
                 </div>
+                {!editId && (
+                  <div className="mt-2">
+                    {/* or find it by name: a pick fills the code and runs the same catalog lookup */}
+                    <ItemSearchWidget mode="single" placeholder="أو ابحث بالاسم…"
+                      onSelect={(it) => { if (!it?.softech_id) return
+                        setForm(f => ({ ...f, item_code: it.softech_id })); doLookup(it.softech_id) }} />
+                  </div>
+                )}
                 {lookup && (
                   <p className="mt-1 text-xs">
                     {lookup.found

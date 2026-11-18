@@ -235,7 +235,8 @@ SCREENS = [
             T('لصرف قسيمة: تبويب «استرداد» أو زر «استرداد» بجانب القسيمة.', 'To redeem: the "Redeem" tab or the "Redeem" button next to the voucher.'),
             {'text': T('لإنشاء قسيمة: تبويب «القسائم» ← «قسيمة جديدة».', 'To create one: the "Vouchers" tab → "New voucher".'), 'roles': ['admin', 'supervisor', 'purchasing']},
         ],
-        'tips': [T('أرقام العملاء في التوزيع والاستخدام بتظهر مخفية لموظفي الفروع؛ رمز التحقق بيتبعت على الرقم اللي اتكتب وقت الاستخدام.', 'Customer numbers in assignments and redemptions show hidden to branch staff; the one-time code goes to the number typed at redemption.'),
+        'tips': [T('تقدر تضيف كذا صنف مرة واحدة: Ctrl+مسافة يعلّم الصنف المظلّل ثم Enter، أو Ctrl+F1 وعلّم الأصناف ثم «إضافة المحدد».', 'Add several items at once: Ctrl+Space ticks the highlighted row, then Enter; or Ctrl+F1, tick the rows, then «Add selected».'),
+                 T('أرقام العملاء في التوزيع والاستخدام بتظهر مخفية لموظفي الفروع؛ رمز التحقق بيتبعت على الرقم اللي اتكتب وقت الاستخدام.', 'Customer numbers in assignments and redemptions show hidden to branch staff; the one-time code goes to the number typed at redemption.'),
                  
             T('لا تطلب من العميل إرسال الرمز في رسالة؛ يقرأه لك فقط.', 'Do not ask the customer to forward the code in a message; they only read it to you.'),
             T('القسيمة الخاصة تُستخدم فقط من العميل المحدد عليها.', 'A private voucher can only be used by the customer it is set for.'),
@@ -409,8 +410,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الحالة والنوع والفئة وفروع «بدون سريال» تقبل الآن أكثر من اختيار معاً', 'Status, type, category and the "Without serial" branch filters now take several choices at once'),
+        'updated': '2026-11-17',
+        'change_note': T('إضافة كذا صنف مرة واحدة: Ctrl+مسافة أو Ctrl+F1 ثم «إضافة المحدد»', 'Add several items at once: Ctrl+Space, or Ctrl+F1 then «Add selected»'),
     },
     {
         'key': 'vouchers.mobile',

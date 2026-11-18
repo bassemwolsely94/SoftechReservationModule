@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { replacementApi } from '../../api/client'
-import ItemSearchInput from '../../components/ItemSearchInput'
+import ItemSearchWidget from '../../components/ItemSearchWidget'
 import { Chip, errText, money } from '../supply/supplyUi'
 import SortTh from '../../components/SortTh'
 import useSortableRows from '../../hooks/useSortableRows'
@@ -385,8 +385,10 @@ export default function WorkflowPanel({ c }) {
                   <option value="delivery">توصيل للمنزل</option>
                 </select>
                 <div className="flex-1 min-w-[240px]">
-                  <ItemSearchInput placeholder="أضف منتجاً…" onSelect={(it) => it?.item_id &&
-                    setBasket((b) => (b.some((x) => x.item_id === it.item_id) ? b : [...b, { item_id: it.item_id, name: it.name, price: it.pack_price, qty: 1 }]))} />
+                  {/* multi: one onSelect(items[]); one functional update adds each new item once (deduped by item_id) */}
+                  <ItemSearchWidget mode="multi" placeholder="أضف منتجاً…" onSelect={(items) =>
+                    setBasket((b) => items.reduce((acc, it) => (!it?.item_id || acc.some((x) => x.item_id === it.item_id) ? acc
+                      : [...acc, { item_id: it.item_id, name: it.name, price: it.pack_price, qty: 1 }]), b))} />
                 </div>
               </div>
               {basket.map((b, i) => (
