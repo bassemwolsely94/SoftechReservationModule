@@ -23,7 +23,7 @@ they carry their own (PortalRun.lease_until). Nothing here writes SOFTECH.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.core.exceptions import PermissionDenied
 from django.db import connection, transaction
@@ -50,8 +50,16 @@ HOLDING = ('in_progress', 'awaiting_submit')       # a device holds the basket u
 # none (expired) and login_required_timeout, since a login page can appear mid-run with the cart
 # full (spec §6.6) - may have left the robot on the review page with Submit on screen.
 PRE_CART = ('cart_not_empty', 'wrong_account')
-# a fill report whose own outcome was past the cart, but from the wrong account: not PRE_CART
+# a fill report whose own outcome was past the cart, but from the wrong account: not PRE_CART.
+# The driver may also report it itself (plan driver contract, ruling R10).
 WRONG_ACCOUNT_LATE = 'wrong_account_late'
+CART_NOT_EMPTY_LATE = 'cart_not_empty_late'
+LATE_OUTCOMES = (WRONG_ACCOUNT_LATE, CART_NOT_EMPTY_LATE)
+# defense in depth (R10): a "pre-cart" report whose steps or lines show a line was added is late.
+# Step labels are the driver methods that put a line in the cart (plan Task 9 PortalWebDriver).
+ADD_LINE_STEPS = ('add_line', 'set_qty')
+# R9: an Order History read starts at local midnight of (window start - 2 h), in settings.TIME_ZONE
+HISTORY_MARGIN = timedelta(hours=2)
 ACTIONS = ('retry', 'link_order', 'cancel')
 _LINE_STATUSES = {v for v, _ in PortalLine.STATUS}
 
@@ -184,6 +192,33 @@ def _counted_fill_runs(basket):
     return runs.exclude(outcome__in=PRE_CART, finished_at__isnull=False)
 
 
+def _touched_cart(payload) -> bool:
+    """True when the report shows any line was added: an add_line / set_qty step, or a line with a
+    non-zero accepted or added quantity."""
+    for s in payload.get('steps') if isinstance(payload.get('steps'), list) else []:
+        if isinstance(s, dict) and str(s.get('label', '')).strip().lower() in ADD_LINE_STEPS:
+            return True
+    for ln in payload.get('lines') if isinstance(payload.get('lines'), list) else []:
+        if not isinstance(ln, dict):
+            continue
+        for key in ('accepted_qty', 'added_qty'):
+            try:
+                if int(ln.get(key) or 0) != 0:
+                    return True
+            except (TypeError, ValueError):
+                return True          # an unreadable quantity proves nothing: assume touched
+    return False
+
+
+def history_since(window_start):
+    """R9: local midnight (settings.TIME_ZONE) of window_start - 2 h. Deterministic: the same start
+    always gives the same since. The margin covers clock skew between our server and the portal and
+    a portal that lists orders by date only."""
+    local = timezone.localtime(window_start - HISTORY_MARGIN)
+    tz = timezone.get_current_timezone()
+    return datetime.combine(local.date(), time(0, 0), tzinfo=tz)
+
+
 def order_window_start(basket):
     """Where an Order History read must start: the earliest fill run that may have ordered since
     the last retry (any fill run of that period when none is live, e.g. an unexpected Submit
@@ -255,7 +290,8 @@ def _claim_history(device, jobs, now, plans):
     if run is None:
         return None
     try:
-        plan = plans.history_plan(run.basket, since=order_window_start(run.basket))
+        start = order_window_start(run.basket)
+        plan = plans.history_plan(run.basket, since=history_since(start) if start else None)
     except plans.PlanError:          # no window: a read could not prove anything - a person decides
         _close(run, 'error', now, [{'i': None, 'label': 'order_history', 'at': now.isoformat(),
                                     'ok': False, 'note': 'no order window'}])
@@ -367,6 +403,8 @@ def report(run, device, payload):
         if wrong_identity and outcome != 'submit_seen':     # a Submit sighting is never thrown away
             outcome = ('wrong_account' if run.kind != 'fill' or outcome in PRE_CART
                        else WRONG_ACCOUNT_LATE)
+        if run.kind == 'fill' and outcome in PRE_CART and _touched_cart(payload):
+            outcome = WRONG_ACCOUNT_LATE if outcome == 'wrong_account' else CART_NOT_EMPTY_LATE
         credit = _save_credit(account, payload.get('credit'), now)
         steps = _clean_steps(payload.get('steps'))
         if late_sighting:
@@ -510,7 +548,7 @@ def _report_fill(basket, run, outcome, payload, device, now, *, wrong_identity=F
             _needs_person(basket, 'record_failed', user=user, now=now)
         basket.refresh_from_db()
         return basket
-    outcome = outcome if outcome in PERSON_OUTCOMES + (WRONG_ACCOUNT_LATE,) else 'error'
+    outcome = outcome if outcome in PERSON_OUTCOMES + LATE_OUTCOMES else 'error'
     _close(run, outcome, now)
     _needs_person(basket, outcome, user=user, now=now)
     return basket

@@ -322,8 +322,8 @@ class QueueTests(_World, TestCase):
         claim = queue.claim_next(self.dev)
         hrun = PortalRun.objects.get(pk=claim['run_id'])
         self.assertEqual(hrun.kind, 'history')
-        # the read starts where the robot may first have reached the cart
-        self.assertEqual(claim['plan']['since'], run.started_at.isoformat())
+        # the read starts where the robot may first have reached the cart (with the R9 margin)
+        self.assertEqual(claim['plan']['since'], queue.history_since(run.started_at).isoformat())
         queue.report(hrun, self.dev, {'outcome': 'history_none'})
         b = queue.resolve(b, staff=self.boss, action='retry')
         self.assertEqual(b.status, 'ready')
@@ -358,9 +358,51 @@ class QueueTests(_World, TestCase):
                 queue.resolve(b, staff=self.boss, action='retry')
             claim = queue.claim_next(self.dev)
             self.assertEqual((claim['plan']['kind'], claim['plan']['basket_id']), ('history', b.pk))
-            self.assertEqual(claim['plan']['since'], run.started_at.isoformat())
+            self.assertEqual(claim['plan']['since'], queue.history_since(run.started_at).isoformat())
             PortalRun.objects.filter(pk=claim['run_id']).update(finished_at=timezone.now(), outcome='error')
             PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
+
+    def test_pre_cart_outcome_with_added_line_is_gated(self):
+        cases = [
+            ({'outcome': 'cart_not_empty', 'steps': [{'label': 'add_line', 'ok': True}]}, 'cart_not_empty_late'),
+            ({'outcome': 'wrong_account', 'lines': [{'line_id': 1, 'accepted_qty': 3}]}, 'wrong_account_late'),
+            ({'outcome': 'wrong_account', 'lines': [{'line_id': 1, 'added_qty': 2}]}, 'wrong_account_late'),
+        ]
+        for payload, reason in cases:
+            run = self._live_run()
+            b = queue.report(run, self.dev, payload)
+            self.assertEqual(b.needs_person_reason, reason)
+            with self.assertRaises(queue.QueueError, msg=reason):
+                queue.resolve(b, staff=self.boss, action='retry')
+            self.assertTrue(PortalRun.objects.filter(basket=b, kind='history', finished_at__isnull=True).exists())
+            PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
+        # zero quantities and other steps are still "nothing touched"
+        run = self._live_run()
+        b = queue.report(run, self.dev, {'outcome': 'cart_not_empty', 'steps': [{'label': 'cart'}],
+                                         'lines': [{'line_id': 1, 'accepted_qty': 0}]})
+        self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready')
+
+    def test_driver_reported_wrong_account_late_is_gated(self):
+        run = self._live_run()
+        b = queue.report(run, self.dev, {'outcome': 'wrong_account_late'})
+        self.assertEqual((b.status, b.needs_person_reason), ('needs_person', 'wrong_account_late'))
+        self.assertEqual(PortalRun.objects.get(pk=run.pk).outcome, 'wrong_account_late')
+        with self.assertRaises(queue.QueueError):
+            queue.resolve(b, staff=self.boss, action='retry')
+        self.assertEqual(queue.claim_next(self.dev)['plan']['kind'], 'history')
+
+    def test_history_since_is_local_midnight_before_a_two_hour_margin(self):
+        import zoneinfo
+        from datetime import datetime
+        cairo = zoneinfo.ZoneInfo('Africa/Cairo')
+        with override_settings(TIME_ZONE='Africa/Cairo'):
+            just_after_midnight = datetime(2026, 11, 17, 0, 30, tzinfo=cairo)
+            self.assertEqual(queue.history_since(just_after_midnight), datetime(2026, 11, 16, 0, 0, tzinfo=cairo))
+            midday = datetime(2026, 11, 17, 12, 0, tzinfo=cairo)
+            self.assertEqual(queue.history_since(midday), datetime(2026, 11, 17, 0, 0, tzinfo=cairo))
+            # the same instant given in UTC gives the same answer
+            self.assertEqual(queue.history_since(midday.astimezone(zoneinfo.ZoneInfo('UTC'))),
+                             datetime(2026, 11, 17, 0, 0, tzinfo=cairo))
 
     def test_history_read_without_window_is_not_handed_out(self):
         _, (b,) = self.make_job(statuses=('needs_person',))
