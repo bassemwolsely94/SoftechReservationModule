@@ -71,6 +71,7 @@ const CrewsPage = lazy(() => import('./pages/CrewsPage'))
 const DataHealthPage = lazy(() => import('./pages/DataHealthPage'))
 const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
 const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
+const MarketplacePage = lazy(() => import('./pages/MarketplacePage'))
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
 const PermissionsMatrixPage = lazy(() => import('./pages/PermissionsMatrixPage'))
 const PickZonesPage = lazy(() => import('./pages/PickZonesPage'))
@@ -452,6 +453,7 @@ export default function App() {
             <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
             <Route path="usage-print"           element={<UsagePrintPage />} />
+            <Route path="marketplace"           element={<MarketplacePage />} />
             <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']} module="pos"><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />

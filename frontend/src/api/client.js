@@ -3175,6 +3175,40 @@ export const usagePrintApi = {
   saveSettings: (data)          => api.put('/usage-print/settings/', data),
 }
 
+// Marketplace / delivery-app channels (doc 38) — flag + RBAC enforced server-side (apps/marketplace/access.py).
+// Nothing here writes to SOFTECH; accepting an order only creates a POS draft.
+export const marketplaceApi = {
+  channels:      (params = {})  => api.get('/marketplace/channels/', { params }),
+  createChannel: (data)         => api.post('/marketplace/channels/', data),
+  updateChannel: (id, data)     => api.patch(`/marketplace/channels/${id}/`, data),
+  pushStock:     (id)           => api.post(`/marketplace/channels/${id}/push-stock/`),
+  stores:        (params = {})  => api.get('/marketplace/stores/', { params }),
+  createStore:   (data)         => api.post('/marketplace/stores/', data),
+  updateStore:   (id, data)     => api.patch(`/marketplace/stores/${id}/`, data),
+  listings:      (params = {})  => api.get('/marketplace/listings/', { params }),
+  createListing: (data)         => api.post('/marketplace/listings/', data),
+  approve:       (id, data = {}) => api.post(`/marketplace/listings/${id}/approve/`, data),
+  unapprove:     (id)           => api.post(`/marketplace/listings/${id}/unapprove/`),
+  orders:        (params = {})  => api.get('/marketplace/orders/', { params }),
+  order:         (id)           => api.get(`/marketplace/orders/${id}/`),
+  manualOrder:   (data)         => api.post('/marketplace/orders/manual/', data),
+  accept:        (id)           => api.post(`/marketplace/orders/${id}/accept/`),
+  reject:        (id, reason)   => api.post(`/marketplace/orders/${id}/reject/`, { reason }),
+  setStatus:     (id, to_status, note = '') => api.post(`/marketplace/orders/${id}/status/`, { to_status, note }),
+  pushLog:       (params = {})  => api.get('/marketplace/push-log/', { params }),
+  settlements:   (params = {})  => api.get('/marketplace/settlements/', { params }),
+  settlement:    (id, params = {}) => api.get(`/marketplace/settlements/${id}/`, { params }),
+  uploadSettlement: ({ channel, file, period_from, period_to, column_map }) => {
+    const fd = new FormData()
+    fd.append('channel', channel)
+    fd.append('file', file)
+    if (period_from) fd.append('period_from', period_from)
+    if (period_to) fd.append('period_to', period_to)
+    fd.append('column_map', JSON.stringify(column_map || {}))
+    return api.post('/marketplace/settlements/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+}
+
 export const stockAuditApi = {
   me:           ()              => api.get('/stock-audit/me/'),
   summary:      (params = {})   => api.get('/stock-audit/summary/', { params }),

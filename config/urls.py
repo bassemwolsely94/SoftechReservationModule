@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/data-health/', include('apps.data_lifecycle.urls')),
     path('api/rpa/', include('apps.rpa.urls')),   # روبوت الإدخال; RBAC module rpa
     path('api/crews/', include('apps.crews.urls')),   # الأطقم; RBAC module crews (view / edit)
+    path('api/marketplace/', include('apps.marketplace.urls')),   # doc 38 channels; flag + RBAC marketplace; webhooks own gate
     path('api/followups/', include('apps.followups.urls')),
     path('api/callcenter/', include('apps.callcenter.urls')),
     path('api/audit/',     include('apps.audit.urls')),

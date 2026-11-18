@@ -40,6 +40,10 @@ def branch_linked_models():
     return out
 
 
+# Models unique per (parent, branch) — e.g. one platform store per channel and branch: a second row for
+# the same branch is refused, so a dependant (marketplace.ExternalOrder) reuses the one already in it.
+REUSE_BRANCH_ROW = {'marketplace.ChannelStore'}
+
 PHONE_KEYS = ('phone', 'mobile', 'wa_id', 'caller_number', 'caller_id')
 
 
@@ -114,6 +118,8 @@ class Planter:
         if rel in self.neutral:
             return self.neutral[rel]
         obj = self.build(rel, marked=False)
+        if obj is None and rel._meta.label in REUSE_BRANCH_ROW:
+            obj = rel._default_manager.filter(branch=self.branch).first()
         if obj is not None:
             self.neutral[rel] = obj
         return obj

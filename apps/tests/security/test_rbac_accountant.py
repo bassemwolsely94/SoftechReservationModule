@@ -47,10 +47,11 @@ class AccountantMatrixTests(TestCase):
         # (data_health: users 0055 seeds its accountant row; tax_invoicing: its own migration 0002;
         # crews: users 0057 seeds an explicit denial row for every role but admin;
         # rpa: users 0058 seeds an explicit row for every role and action, accountant denied;
-        # alerts: users 0059 seeds admin + supervisor grants and a denial row for every other role).
+        # marketplace: users 0059 does the same;
+        # alerts: users 0060 seeds admin + supervisor grants and a denial row for every other role).
         later = importlib.import_module('apps.users.migrations.0055_data_health_module')
         self.assertIn('accountant', later.ROLES)
-        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing', 'crews', 'rpa', 'alerts'},
+        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing', 'crews', 'rpa', 'marketplace', 'alerts'},
                          set(ALL_MODULES))
         from apps.users.models import RoleModuleAccess
         self.assertEqual(RoleModuleAccess.objects.filter(role='accountant', module='tax_invoicing').count(), len(ALL_ACTIONS))
