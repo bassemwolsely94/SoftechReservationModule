@@ -392,6 +392,8 @@ class FixRoundTests(_Base):
         self.assertIn('detail', r.data)
         # in scope: the id is still returned
         again = self.adm_c.post('/api/rpa/jobs/', dict(data, branch=self.b.id, file=self._file()), format='multipart')
+        self.assertEqual(again.status_code, 400, again.content)
+        self.assertIn('job_id', again.data, again.content)   # CI once lacked it: keep the body in the message
         self.assertEqual(str(again.data['job_id']), str(first.data['id']))
 
 

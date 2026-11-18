@@ -2690,6 +2690,17 @@ def _run_eta_history_topup():
             logger.warning('[APScheduler] ETA history top-up %s: %s', system, exc)
 
 
+def _run_gpc_ai_suggest():
+    """AI GPC brick proposals for uncoded items (batch S2), biggest uncoded value first. Behind
+    TAX_GPC_AI_ENABLED; sends item names only, never prices or customers; a person confirms every brick."""
+    from apps.tax_invoicing import gpc_ai
+    try:
+        counts = gpc_ai.run()
+        logger.info('[APScheduler] GPC AI suggestions: %s', counts)
+    except Exception as exc:
+        logger.warning('[APScheduler] GPC AI suggestions: %s', type(exc).__name__)
+
+
 def _run_eta_recon_daily():
     """SOFTECH ↔ ETA receipts reconciliation (doc 36 §history, phase 3): learn device→branch, recompute the last
     35 days, for each system whose ETA history is on. Reads SOFTECH (HQ) and the local ETA copy only."""
@@ -4019,6 +4030,11 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_eta_recon_daily, 'cron', hour=5, minute=15, id='eta_recon_daily',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # AI GPC brick proposals for the ETA coding queue (switch TAX_GPC_AI_ENABLED, default off).
+    _scheduler.add_job(
+        _run_gpc_ai_suggest, 'cron', hour=2, minute=30, id='gpc_ai_suggest',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # HR attendance health (every 30 min): silent machine/agent, clock drift, falling log count.

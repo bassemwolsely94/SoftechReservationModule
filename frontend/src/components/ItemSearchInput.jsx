@@ -24,6 +24,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { itemsApi } from '../api/client'
 import Highlight from './Highlight'
+import SearchTierChip from './SearchTierChip'
 
 const DEBOUNCE_MS = 300
 
@@ -205,18 +206,7 @@ export default function ItemSearchInput({
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-gray-900 break-words">
                     <Highlight text={item.name} query={value} />
-                    {item.learned && (
-                      <span className="ms-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800"
-                        title="أكّد شخصٌ هذا الصنف لهذا الاسم من قبل">من الذاكرة</span>
-                    )}
-                    {item.sound && !item.learned && (
-                      <span className="ms-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-800"
-                        title="الاسم العربي المكتوب يُنطق مثل اسم هذا الصنف">بالنطق</span>
-                    )}
-                    {item.approx && (
-                      <span className="ms-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800"
-                        title="لا يوجد صنف يطابق ما كُتب بالضبط — هذه أقرب الأصناف (خطأ إملائي محتمل)">تقريبي</span>
-                    )}
+                    <SearchTierChip row={item} />
                   </div>
                   {item.name_scientific && (
                     <div className="text-xs text-gray-500 break-words italic"><Highlight text={item.name_scientific} query={value} /></div>

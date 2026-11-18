@@ -8,7 +8,6 @@ import json
 import re
 import zipfile
 from datetime import timedelta
-from xml.etree.ElementTree import ParseError
 
 from django.db.models import Count
 from django.utils import timezone
@@ -50,8 +49,9 @@ RECIPE_SORT_KEYS = {'id': 'id', 'screen': 'screen__title_ar', 'version': 'versio
 DEVICE_SORT_KEYS = {'id': 'id', 'label': 'label', 'created_at': 'created_at', 'last_seen_at': 'last_seen_at',
                     'revoked_at': 'revoked_at'}
 # Errors a bad upload can raise while being parsed; anything else is a real fault and must surface as a 500.
-# A zip-valid but corrupt .xlsx makes openpyxl raise KeyError (missing part) or an XML ParseError.
-PARSE_ERRORS = (ValueError, InvalidFileException, zipfile.BadZipFile, csv.Error, KeyError, ParseError)
+# A zip-valid but corrupt .xlsx makes openpyxl raise KeyError (missing part) or an XML ParseError,
+# which is a SyntaxError subclass (caught as SyntaxError so no stdlib XML parser is imported here).
+PARSE_ERRORS = (ValueError, InvalidFileException, zipfile.BadZipFile, csv.Error, KeyError, SyntaxError)
 
 RPA = matrix_permission('rpa')
 RPA_APPROVE = matrix_permission('rpa', post=('approve',))

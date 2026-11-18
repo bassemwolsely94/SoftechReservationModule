@@ -93,7 +93,7 @@ class RpaDevice(models.Model):
     last_seen_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     # why the last claim handed nothing out although work may wait (e.g. SOFTECH unreachable); '' = fine
-    last_claim_error = models.CharField(max_length=255, blank=True, default='')
+    last_claim_error = models.CharField(max_length=255, blank=True, default='', db_default='')
     last_claim_error_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):

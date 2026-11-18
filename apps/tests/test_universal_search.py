@@ -85,6 +85,16 @@ class UniversalSearchTests(TestCase):
             if i['softech_id'] == 'P1001':
                 self.assertFalse(i['exact'], 'partial code must not resolve as exact identity')
 
+    def test_digit_fragment_never_reaches_items_through_search_name(self):
+        # search_name holds the code and barcode too: «690» is inside code 106901 and barcode
+        # 6221069001, but a digit query must not find the item through search_name (the digit
+        # guard) — Ctrl+K codes are exact only
+        it = _item('Calcium Plus', '106901', barcode='6221069001')
+        self.assertIn('690', it.search_name)
+        r = self.client_.get(URL, {'q': '690'})
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('106901', [i['softech_id'] for i in r.data['results']['items']])
+
     def test_item_carries_safety_flags(self):
         r = self.client_.get(URL, {'q': 'zinc'})
         hit = next(i for i in r.data['results']['items'] if i['softech_id'] == 'Z2002')

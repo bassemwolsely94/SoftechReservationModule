@@ -144,7 +144,7 @@ function CreateModal({ onClose, onCreated }) {
 
   const createMutation = useMutation({
     mutationFn: (data) => pricingApprovalsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries(['pricing-approvals']); qc.invalidateQueries(['pricing-sla']); onCreated() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pricing-approvals'] }); qc.invalidateQueries({ queryKey: ['pricing-sla'] }); onCreated() },
     onError: (err) => {
       const d = err?.response?.data
       setError(d?.new_values?.[0] || d?.detail || JSON.stringify(d) || 'حدث خطأ')
@@ -330,9 +330,9 @@ function ReviewModal({ request, action, approverInfo, onClose, onDone }) {
         ? pricingApprovalsApi.approve(request.id, notes)
         : pricingApprovalsApi.reject(request.id, notes),
     onSuccess: () => {
-      qc.invalidateQueries(['pricing-approvals'])
-      qc.invalidateQueries(['pricing-sla'])
-      qc.invalidateQueries(['branch-health'])
+      qc.invalidateQueries({ queryKey: ['pricing-approvals'] })
+      qc.invalidateQueries({ queryKey: ['pricing-sla'] })
+      qc.invalidateQueries({ queryKey: ['branch-health'] })
       onDone()
     },
     onError: (err) => {
@@ -444,7 +444,7 @@ export default function PricingApprovalsPage() {
 
   const rollback = useMutation({
     mutationFn: (id) => pricingApprovalsApi.rollback(id),
-    onSuccess: () => { qc.invalidateQueries(['pricing-approvals']); qc.invalidateQueries(['pricing-sla']); setTab('requests'); setStatusFilter('pending') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pricing-approvals'] }); qc.invalidateQueries({ queryKey: ['pricing-sla'] }); setTab('requests'); setStatusFilter('pending') },
   })
 
   const { user } = useAuthStore()

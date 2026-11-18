@@ -721,8 +721,8 @@ function ChangeStatusModal({ reservation, onClose, onSuccess }) {
   const mutation = useMutation({
     mutationFn: () => reservationsApi.changeStatus(reservation.id, newStatus, sendNote),
     onSuccess: () => {
-      qc.invalidateQueries(['reservation', String(reservation.id)])
-      qc.invalidateQueries(['reservations-kanban'])
+      qc.invalidateQueries({ queryKey: ['reservation', String(reservation.id)] })
+      qc.invalidateQueries({ queryKey: ['reservations-kanban'] })
       onSuccess?.()
       onClose()
     },
@@ -1510,8 +1510,8 @@ export default function ReservationDetailPage() {
   }, [r?.activities?.length])
 
   const invalidate = () => {
-    qc.invalidateQueries(['reservation', id])
-    qc.invalidateQueries(['reservations-kanban'])
+    qc.invalidateQueries({ queryKey: ['reservation', id] })
+    qc.invalidateQueries({ queryKey: ['reservations-kanban'] })
   }
   // role quick buttons: a status change shows its error; a cancel asks for the reason first
   const [quickCancel, setQuickCancel] = useState(null)      // { reason, text } while asking

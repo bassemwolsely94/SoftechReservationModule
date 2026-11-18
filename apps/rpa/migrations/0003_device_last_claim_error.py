@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='rpadevice',
             name='last_claim_error',
-            field=models.CharField(blank=True, default='', max_length=255),
+            field=models.CharField(blank=True, db_default='', default='', max_length=255),
         ),
         migrations.AddField(
             model_name='rpadevice',

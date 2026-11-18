@@ -16,7 +16,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { productsApi, itemsApi, pickZonesApi } from '../api/client'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import useHelpTab from '../help/useHelpTab'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 
@@ -649,7 +649,7 @@ export default function ProductCatalogPage() {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['product-catalog', apiParams],
     queryFn: () => productsApi.list(apiParams).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
     enabled: viewTab !== 'bundles',
   })
 

@@ -55,7 +55,7 @@ export default function InsightsPanel() {
   })
   const savePolicy = useMutation({
     mutationFn: (d) => pricingApprovalsApi.policySet(d),
-    onSuccess: () => qc.invalidateQueries(['repl-policy']),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['repl-policy'] }),
   })
 
   return (

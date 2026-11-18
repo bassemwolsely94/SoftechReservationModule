@@ -58,7 +58,7 @@ export default function ReplicationAuditPanel() {
   const runScan = useMutation({
     mutationFn: () => pricingApprovalsApi.runScan(days),
     onSuccess: (r) => {
-      qc.invalidateQueries(['repl-scans']); setActiveScan(r.data.id)
+      qc.invalidateQueries({ queryKey: ['repl-scans'] }); setActiveScan(r.data.id)
       showToast('info', `اكتمل الفحص #${r.data.id}: ${r.data.items_with_gaps} صنف بها فجوات من ${r.data.items_checked} مفحوص`)
     },
   })
@@ -66,7 +66,7 @@ export default function ReplicationAuditPanel() {
   const repair = useMutation({
     mutationFn: (body) => pricingApprovalsApi.repair(body),
     onSuccess: (r) => {
-      qc.invalidateQueries(['repl-scan', activeScan]); setSelected(new Set())
+      qc.invalidateQueries({ queryKey: ['repl-scan', activeScan] }); setSelected(new Set())
       const d = r.data || {}
       const requeued = d.items_repaired_attempted ?? 0
       const confirmed = d.gaps_confirmed_repaired ?? 0

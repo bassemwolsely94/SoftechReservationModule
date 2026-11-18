@@ -225,8 +225,8 @@ function ReviewModal({ flag, onClose, onSaved }) {
     setSaving(true)
     try {
       await auditApi.reviewFlag(flag.id, { status: newStatus, note })
-      qc.invalidateQueries(['abuse-flags'])
-      qc.invalidateQueries(['flag-summary'])
+      qc.invalidateQueries({ queryKey: ['abuse-flags'] })
+      qc.invalidateQueries({ queryKey: ['flag-summary'] })
       onSaved()
       onClose()
     } catch { } finally { setSaving(false) }
@@ -328,8 +328,8 @@ function AbuseFlagsTab() {
     try {
       const { data } = await auditApi.runDetection(24)
       alert(`تم الفحص — ${data.total} إشارة جديدة`)
-      qc.invalidateQueries(['abuse-flags'])
-      qc.invalidateQueries(['flag-summary'])
+      qc.invalidateQueries({ queryKey: ['abuse-flags'] })
+      qc.invalidateQueries({ queryKey: ['flag-summary'] })
     } catch { } finally { setScanning(false) }
   }
 

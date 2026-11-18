@@ -2,10 +2,15 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
+from django.core.exceptions import EmptyResultSet
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
+from django.db.models import F, Func, IntegerField, Value
 from .models import Category, Item, ItemStock, exclude_unsellable, unsellable_q
-from .serializers import CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer
+from .serializers import (CategorySerializer, ItemSerializer, ItemStockSerializer, ItemSearchSerializer,
+                          engine_tier_fields)
 from .wildcard import WildcardSearchFilter
 from core.errors import public_error
 from core.permissions import RouteModulePermission  # round 2, D6
@@ -182,11 +187,89 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Category.objects.all().order_by('name')
 
 
+# ── /api/items/?search=…&rank=engine (S2): the item list in the search engine's order ──
+# Most engine rows one list request ranks (item_search limit). The list's other filters run
+# INSIDE the engine (item_search `base`), so the cap cuts after them. Real catalog 2026-11-16,
+# fold indexes on, page_size=10: p95 ≤ 67 ms per query, «tab» (a full 500-row set) 64 ms.
+ENGINE_LIST_CAP = 500
+# The dropdown picker (page 1, page_size ≤ PICKER_PAGE_SIZE) shows 10 rows and no count: it
+# ranks only the engine's name window (wildcard.NAME_WINDOW = 60) — far cheaper than 500.
+PICKER_PAGE_SIZE = 10
+
+
+def engine_list_cap(request) -> int:
+    """item_search `limit` for this rank=engine request: the name window for the dropdown
+    (page 1, page_size ≤ 10 — its `count` is then capped too, the dropdown shows none), else
+    ENGINE_LIST_CAP (the Ctrl+F1 modal, deeper pages)."""
+    from .wildcard import NAME_WINDOW
+    p = request.query_params
+    try:
+        size = int(p.get('page_size') or 0)
+    except (TypeError, ValueError):
+        size = 0
+    if p.get('page', '1') in ('', '1') and 0 < size <= PICKER_PAGE_SIZE:
+        return NAME_WINDOW
+    return ENGINE_LIST_CAP
+
+
+def engine_search_text(request):
+    """The search text when this list request asks for the engine order — `rank=engine` and a
+    `search` with at least one non-wildcard character — else None (the plain list)."""
+    from .wildcard import parse
+    p = request.query_params
+    if p.get('rank') != 'engine':
+        return None
+    q = (p.get('search') or '').strip()
+    return q if parse(q)['segments'] else None
+
+
+class ItemListPagination(PageNumberPagination):
+    """The global page size; `page_size` is read only on the engine path (`rank=engine`), so
+    every other caller of /api/items/ pages exactly as before."""
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+    def get_page_size(self, request):
+        if engine_search_text(request) is None:
+            return self.page_size
+        return super().get_page_size(request)
+
+
+class ItemListSearchFilter(WildcardSearchFilter):
+    """The plain wildcard search — or, with `rank=engine`, the engine's set (item_search) in
+    the engine's order. The other filters have already run; a valid `ordering` sorts within
+    the engine set instead (OrderingFilter ran before this backend)."""
+
+    def filter_queryset(self, request, queryset, view):
+        q = engine_search_text(request)
+        if q is None:
+            return super().filter_queryset(request, queryset, view)
+        ids = [i for i, _ in view.engine_tiers(q, base=view.engine_base())]
+        qs = queryset.filter(id__in=ids)
+        if ids and not self._ordering_sent(request, queryset, view):
+            # the engine's position: array_position(ARRAY[ids], id) — one bound array; a
+            # CASE WHEN per id costs ≈45 ms of SQL compiling at 500 ids (measured 2026-11-16)
+            qs = qs.order_by(Func(Value(ids, output_field=ArrayField(models.BigIntegerField())),
+                                  F('id'), function='array_position', output_field=IntegerField()))
+        elif ids:
+            # equal sort values (same price…) must page stably: `id` is the final tiebreak
+            qs = qs.order_by(*qs.query.order_by, 'id')
+        return qs
+
+    @staticmethod
+    def _ordering_sent(request, queryset, view) -> bool:
+        of = filters.OrderingFilter()
+        raw = request.query_params.get(of.ordering_param, '')
+        fields = [f.strip() for f in raw.split(',') if f.strip()]
+        return bool(fields and of.remove_invalid_fields(queryset, fields, view, request))
+
+
 class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, RouteModulePermission]
+    pagination_class = ItemListPagination
     # search runs AFTER ordering: its rank (literal text → pattern → any word order) leads,
-    # the chosen sort column orders within each rank
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, WildcardSearchFilter]
+    # the chosen sort column orders within each rank. rank=engine: ItemListSearchFilter.
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, ItemListSearchFilter]
     filterset_fields = ['category', 'requires_fridge', 'medicine_type',
                         'insurance_type', 'item_level', 'is_fast_moving',
                         'has_points', 'is_stockable', 'batch_required',
@@ -202,19 +285,42 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        from django.db.models import Sum, Value, DecimalField
-        from django.db.models.functions import Coalesce
         qs = Item.objects.filter(is_active=True).prefetch_related(
             'stock_levels__branch', 'category', 'barcodes'
-        ).distinct()  # distinct() required: joining ItemBarcode can produce duplicate rows
+        )
+        if engine_search_text(self.request) is None:
+            qs = qs.distinct()  # distinct() required: joining ItemBarcode can produce duplicate rows
+        # (rank=engine: the search is `id IN (engine ids)` — no barcode join, no duplicates)
+        stock_order = 'total_stock' in self.request.query_params.get('ordering', '')
+        return self._item_filters(qs, for_ordering=stock_order)
+
+    def engine_base(self):
+        """rank=engine: the Items the engine searches inside — the active catalog with every
+        list filter EXCEPT search / ordering (DjangoFilterBackend fields, in_stock, the
+        operational filters), so ENGINE_LIST_CAP cuts after the filters. None when no filter
+        narrows it — the engine's own default base, the exact queries as without filters.
+        in_stock (a SUM … HAVING) goes in as one id sub-select, so the engine's own tier
+        queries stay un-grouped."""
+        plain = Item.objects.filter(is_active=True)
+        qs = DjangoFilterBackend().filter_queryset(
+            self.request, self._item_filters(plain, for_ordering=False), self)
+        if self.request.query_params.get('in_stock') == 'true':
+            return Item.objects.filter(id__in=qs.order_by().values('id'))
+        try:
+            if str(qs.order_by().query) == str(plain.order_by().query):
+                return None
+        except EmptyResultSet:      # a filter that can match nothing: the engine finds nothing
+            pass
+        return qs
+
+    def _item_filters(self, qs, *, for_ordering):
+        """in_stock + the operational filters (shared by the list and the engine base)."""
+        from django.db.models import Sum, Value, DecimalField
+        from django.db.models.functions import Coalesce
         p = self.request.query_params
 
         # Annotate total_stock when ordering by it, or when filtering by in_stock
-        ordering_param = p.get('ordering', '')
-        needs_stock_annotation = (
-            p.get('in_stock') == 'true'
-            or 'total_stock' in ordering_param
-        )
+        needs_stock_annotation = p.get('in_stock') == 'true' or for_ordering
         if needs_stock_annotation:
             qs = qs.annotate(
                 total_stock=Coalesce(
@@ -357,6 +463,26 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
             return ItemSearchSerializer
         return ItemSerializer
 
+    def engine_tiers(self, q, base=None):
+        """wildcard.item_search for this request, once: [(item_id, tier)] best first, inside
+        `base` (engine_base: the list's other filters), capped by engine_list_cap."""
+        if getattr(self, '_engine', None) is None:
+            from apps.catalog.wildcard import item_search
+            self._engine = (q, item_search(q, limit=engine_list_cap(self.request), base=base))
+        return self._engine[1]
+
+    def get_serializer_context(self):
+        """rank=engine: the rows' tiers and matched ingredient names (ItemSearchSerializer)."""
+        ctx = super().get_serializer_context()
+        if getattr(self, '_engine', None) is not None:
+            q, tiers = self._engine
+            ctx['engine_tiers'] = dict(tiers)
+            ing = [i for i, t in tiers if t == 'ingredient']
+            if ing:
+                from apps.catalog.wildcard import ingredient_names
+                ctx['ingredient_names'] = ingredient_names(q, ing)
+        return ctx
+
     @action(detail=True, methods=['get'])
     def stock(self, request, pk=None):
         """
@@ -402,27 +528,27 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         """
         GET /api/items/softech-search/?q=panadol
         GET /api/items/softech-search/?q=pan*500      (wildcard)
-        GET /api/items/softech-search/?q=سكر          (Arabic disease term → expands to drug names)
-        GET /api/items/softech-search/?q=metformin     (active ingredient)
+        GET /api/items/softech-search/?q=metformin     (active ingredient, after the brands)
         GET /api/items/softech-search/?q=A10BA02       (ATC code)
 
         Search rules = apps/catalog/wildcard.py (the same in every search box):
           * and % = any characters (vol*ren*50*tab* = vol%ren%50%tab), always "contains",
-          parts in the order typed, space literal. Ranked: exact code/barcode, learned
-          memory, literal text, pattern, any word order, Arabic by sound; nothing found →
-          typo-tolerant rows flagged approx «تقريبي».
+          parts in the order typed, space literal. Tiers (wildcard.item_search): exact
+          code/barcode (+ code prefix, tier code_prefix), learned memory, the name starts / a word starts /
+          contains / any word order (each with literal text first), synonyms (syp → SYRUP),
+          Arabic by sound, active ingredient; nothing found → typo-tolerant rows flagged approx
+          «تقريبي»; digits inside a code last (never with code_prefix=0).
 
-        Disease / symptom expansion:
-          Arabic and English disease terms (سكر, ضغط, diabetes, hypertension…) are
-          automatically expanded to matching drug names via the chronic module's
-          ActiveIngredient.chronic_class mapping. Results are ranked: exact name
-          matches first, then ingredient/disease matches.
+        No disease / symptom expansion: a picker finds ITEMS (name, code, active ingredient);
+        «سكر» finds what is named سكر. Disease → drug is the drug assistant's job.
 
         PG catalog first; SOFTECH live only when PG has nothing (new, unsynced items).
         Returns name, code, scientific name, barcode, public price, and per-branch stock.
 
         Optional params:
           branch_id — if provided, includes qty_at_branch in each result
+          limit — rows to return (default 50, max 50)
+          code_prefix=0 — exact codes only (forced by no_live=1, the POS)
         """
         q = (request.query_params.get('q') or '').strip()
         if len(q) < 2:
@@ -435,31 +561,27 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
         # ── ONE search behaviour for the whole system (apps/catalog/wildcard.py) ──
         # * and % = any characters, parts in the order typed, space literal; ranked:
-        # exact code/barcode → learned memory → literal text → wildcard in order → any word
+        # exact code/barcode → learned memory → name starts / word / contains → any word
         # order → Arabic by sound → (nothing found) typo-tolerant «تقريبي».
         # PG first (mirrors SOFTECH, and its prices are preferred anyway); SOFTECH live is
         # only asked when PG finds nothing — behind a breaker so a down server 100 never
         # makes the box hang for a minute per keystroke.
         from apps.catalog.wildcard import item_search, parse
-        tiers = item_search(q, limit=50)
-        results = _search_rows(tiers, branch_id)
-        # no_live=1 (the POS) → never read SOFTECH live during a sale; PG catalog only.
+        try:
+            limit = max(1, min(50, int(request.query_params.get('limit', 50))))
+        except (TypeError, ValueError):
+            limit = 50
+        # no_live=1 (the POS) → never read SOFTECH live during a sale; PG catalog only, and
+        # codes stay exact (no prefix / fragment matching in the middle of a sale).
         no_live = request.query_params.get('no_live') == '1'
+        code_prefix = not (no_live or request.query_params.get('code_prefix') == '0')
+        tiers = item_search(q, limit=limit, code_prefix=code_prefix)
+        results = _search_rows(tiers, branch_id, q)
         if not no_live and not any(r.get('tier') != 'approx' for r in results):
             live = _softech_live_search('%' + '%'.join(parse(q)['segments']).lower() + '%', branch_id)
             if live:
                 have = {r['softech_id'] for r in results}
                 results = [r for r in live if r['softech_id'] not in have] + results
-
-        # ── Disease/ingredient expansion — only when results are sparse ────────
-        if len(results) < 3:
-            expanded = _expand_disease_query(q)
-            if expanded:
-                already_ids = {r['softech_id'] for r in results}
-                for exp_r in expanded:
-                    if exp_r['softech_id'] not in already_ids:
-                        results.append(exp_r)
-                        already_ids.add(exp_r['softech_id'])
 
         if request.query_params.get('network') == '1':
             from apps.catalog.pos_search import enrich_rows, stock_as_of
@@ -471,13 +593,19 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
 
 # ── Item search rows (shared by softech_search) ───────────────────────────────
 
-def _search_rows(tiers, branch_id) -> list:
+def _search_rows(tiers, branch_id, q='') -> list:
     """[(item_id, tier)] from wildcard.item_search → softech-search result dicts, same
-    order. Flags for the picker chips: learned «من الذاكرة», sound «بالنطق», approx «تقريبي»."""
+    order. Flags for the picker chips: learned «من الذاكرة», sound «بالنطق», approx «تقريبي»,
+    ingredient «المادة الفعالة» (+ ingredient_name), code_prefix «بداية الكود», code_part,
+    synonym. `id` = item_id."""
     if not tiers:
         return []
     ids = [i for i, _ in tiers]
     items = {i.id: i for i in Item.objects.filter(id__in=ids)}
+    ing = {}
+    if q and any(t == 'ingredient' for _, t in tiers):
+        from apps.catalog.wildcard import ingredient_names
+        ing = ingredient_names(q, [i for i, t in tiers if t == 'ingredient'])
     stock = {}
     if branch_id:
         from django.db.models import Sum as _Sum
@@ -494,12 +622,11 @@ def _search_rows(tiers, branch_id) -> list:
             'name_scientific': item.name_scientific, 'barcode': item.barcode,
             'pack_price': float(item.pack_price), 'unit_price': float(item.unit_price),
             'requires_fridge': item.requires_fridge, 'medicine_type': item.medicine_type,
-            'source': 'pg_catalog', 'item_id': item.id, 'tier': tier,
+            'source': 'pg_catalog', 'item_id': item.id, 'id': item.id,
             'qty_at_branch': stock.get(item.id, 0.0) if branch_id else None,
         }
         row.update(_unit_fields(item))
-        if tier in ('learned', 'sound', 'approx'):
-            row[tier] = True
+        row.update(engine_tier_fields(tier, ing.get(item.id, '')))
         rows.append(row)
     return rows
 
@@ -556,7 +683,7 @@ def _softech_live_search(like_q: str, branch_id) -> list:
             'unit_price': float(row[6]) if row[6] is not None else 0.0,
             'requires_fridge': bool(row[9]) if row[9] else False,
             'medicine_type': str(row[10]).strip() if row[10] else '',
-            'source': 'softech', 'item_id': None, 'tier': 'ordered',
+            'source': 'softech', 'item_id': None, 'id': None, 'tier': 'contains',
         })
     # Same pattern again within a few minutes (typing, paging, a colleague) is answered
     # from here instead of another login + items scan (doc 30 F10). Misses expire sooner
@@ -574,156 +701,9 @@ def _finish_live_rows(out, branch_id):
         r['qty_at_branch'] = 0.0 if branch_id else None
         it = pg.get(r['softech_id'])
         r['item_id'] = it.id if it else None
+        r['id'] = r['item_id']
         r.update(_unit_fields(it))
     return out
-
-
-# ── Disease / ingredient query expansion ──────────────────────────────────────
-
-# Arabic → chronic_class mapping (covers common misspellings & synonyms)
-_ARABIC_DISEASE_MAP = {
-    'سكر':        'diabetes',
-    'سكري':       'diabetes',
-    'السكر':      'diabetes',
-    'ضغط':        'hypertension',
-    'ضغط الدم':   'hypertension',
-    'قلب':        'cardiovascular',
-    'كوليسترول':  'cholesterol',
-    'دهون':       'cholesterol',
-    'غدة':        'thyroid',
-    'غدة درقية':  'thyroid',
-    'ربو':        'asthma',
-    'نفسي':       'depression',
-    'اكتئاب':     'depression',
-    'صرع':        'epilepsy',
-    'عظام':       'osteoporosis',
-    'هشاشة':      'osteoporosis',
-    'كلى':        'renal',
-    'تخثر':       'anticoagulant',
-}
-_ENGLISH_DISEASE_MAP = {
-    'diabetes':     'diabetes',
-    'hypertension': 'hypertension',
-    'blood pressure': 'hypertension',
-    'heart':        'cardiovascular',
-    'cholesterol':  'cholesterol',
-    'thyroid':      'thyroid',
-    'asthma':       'asthma',
-    'depression':   'depression',
-    'epilepsy':     'epilepsy',
-    'seizure':      'epilepsy',
-    'osteoporosis': 'osteoporosis',
-    'renal':        'renal',
-    'kidney':       'renal',
-    'anticoagulant': 'anticoagulant',
-    'blood thinner': 'anticoagulant',
-}
-
-
-def _expand_disease_query(q: str) -> list:
-    """
-    If the query looks like a disease/condition term (Arabic or English),
-    return items that belong to that chronic_class via ItemIngredientMap.
-    Returns a list of result dicts (same shape as softech_search results).
-    """
-    q_lower = q.strip().lower()
-
-    # Find matching chronic_class
-    chronic_class = (
-        _ARABIC_DISEASE_MAP.get(q_lower)
-        or _ENGLISH_DISEASE_MAP.get(q_lower)
-    )
-
-    if not chronic_class:
-        # Try partial Arabic match
-        for term, cls in _ARABIC_DISEASE_MAP.items():
-            if term in q_lower or q_lower in term:
-                chronic_class = cls
-                break
-
-    if not chronic_class:
-        # Try ATC code prefix match (e.g. "A10" → diabetes)
-        try:
-            from apps.chronic.models import ActiveIngredient
-            ai = ActiveIngredient.objects.filter(
-                atc_code__istartswith=q_lower.upper()
-            ).first()
-            if ai and ai.chronic_class:
-                chronic_class = ai.chronic_class
-        except Exception:
-            pass
-
-    if not chronic_class:
-        # Try active ingredient name match
-        try:
-            from apps.chronic.models import ItemIngredientMap
-            maps = ItemIngredientMap.objects.filter(
-                active_ingredient__name__icontains=q_lower,
-            ).select_related('item', 'active_ingredient')[:20]
-            results = []
-            for m in maps:
-                item = m.item
-                if item.is_active:
-                    results.append({
-                        'softech_id':      item.softech_id,
-                        'name':            item.name,
-                        'name_scientific': item.name_scientific,
-                        'barcode':         item.barcode,
-                        'pack_price':      float(item.pack_price),
-                        'unit_price':      float(item.unit_price),
-                        'requires_fridge': item.requires_fridge,
-                        'medicine_type':   item.medicine_type,
-                        'source':          'ingredient_search',
-                        'item_id':         item.id,
-                        'qty_at_branch':   None,
-                        'match_type':      'ingredient',
-                        **_unit_fields(item),
-                        'ingredient':      m.active_ingredient.name,
-                    })
-            return results
-        except Exception:
-            return []
-
-    # Found a chronic_class — find all items mapped to it
-    try:
-        from apps.chronic.models import ItemIngredientMap
-        maps = (
-            ItemIngredientMap.objects
-            .filter(
-                active_ingredient__chronic_class=chronic_class,
-                active_ingredient__is_chronic=True,
-                item__is_active=True,
-            )
-            .select_related('item', 'active_ingredient')
-            .order_by('item__name')[:30]
-        )
-        results = []
-        seen = set()
-        for m in maps:
-            item = m.item
-            if item.pk in seen:
-                continue
-            seen.add(item.pk)
-            results.append({
-                'softech_id':      item.softech_id,
-                'name':            item.name,
-                'name_scientific': item.name_scientific,
-                'barcode':         item.barcode,
-                'pack_price':      float(item.pack_price),
-                'unit_price':      float(item.unit_price),
-                'requires_fridge': item.requires_fridge,
-                'medicine_type':   item.medicine_type,
-                'source':          'disease_search',
-                'item_id':         item.id,
-                'qty_at_branch':   None,
-                'match_type':      'disease',
-                **_unit_fields(item),
-                'chronic_class':   chronic_class,
-                'ingredient':      m.active_ingredient.name,
-            })
-        return results
-    except Exception:
-        return []
 
 
 # ── Variant Groups API ─────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { pricingApprovalsApi } from '../api/client'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
@@ -143,7 +143,7 @@ export default function DiscountAlignmentPage() {
       only_misaligned: onlyMis ? '1' : '0',
       include_inactive: inclInactive ? '1' : undefined, limit: 3000,
     }).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
   const { data: tiers } = useQuery({
     queryKey: ['alignment-tiers'],
@@ -179,7 +179,7 @@ export default function DiscountAlignmentPage() {
     onSuccess: (res) => {
       alert(`تم التطبيق: ${res.applied} نجح · ${res.failed} فشل.\n${res.note || ''}`)
       clearSel()
-      qc.invalidateQueries(['discount-alignment'])
+      qc.invalidateQueries({ queryKey: ['discount-alignment'] })
     },
     onError: (err) => alert(err?.response?.data?.detail || 'فشل التطبيق'),
   })
@@ -263,7 +263,7 @@ export default function DiscountAlignmentPage() {
       {showCreate && (
         <CreateTierModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => { qc.invalidateQueries(['alignment-tiers']); qc.invalidateQueries(['discount-alignment']) }}
+          onCreated={() => { qc.invalidateQueries({ queryKey: ['alignment-tiers'] }); qc.invalidateQueries({ queryKey: ['discount-alignment'] }) }}
         />
       )}
 

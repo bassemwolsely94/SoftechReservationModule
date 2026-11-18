@@ -62,6 +62,7 @@ class Migration(migrations.Migration):
                 ('branch', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='rpa_jobs', to='branches.branch')),
                 ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='rpa_jobs_created', to='users.staffprofile')),
                 ('target_branch', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='rpa_jobs_received', to='branches.branch')),
+                ('screen', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='jobs', to='rpa.rpascreen')),
             ],
             options={
                 'ordering': ['-created_at'],
@@ -144,11 +145,6 @@ class Migration(migrations.Migration):
                 ('document', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='runs', to='rpa.rpadocument')),
                 ('recipe', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='runs', to='rpa.rparecipe')),
             ],
-        ),
-        migrations.AddField(
-            model_name='rpajob',
-            name='screen',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='jobs', to='rpa.rpascreen'),
         ),
         migrations.CreateModel(
             name='RpaScreenshot',
