@@ -449,7 +449,29 @@ class SalesTargetCrewApiTests(_Base):
     def test_crew_target_carries_no_branch_rep_or_category(self):
         from apps.branches.models import Branch
         br = Branch.objects.create(softech_branch_id='971', code='971', name='B')
-        for extra in ({'branch': br.id}, {'softech_user': 'P1'}):
+        from apps.catalog.models import Category
+        cat = Category.objects.create(softech_id='CAT-CREW', name='c')
+        for extra in ({'branch': br.id}, {'softech_user': 'P1'}, {'category': cat.id}):
             r = self.admin.post(f'{API}targets/', {**self.body, **extra}, format='json')
             self.assertEqual(r.status_code, 400, extra)
         self.assertFalse(SalesTarget.objects.exists())
+
+    def test_crew_target_only_on_metrics_the_crew_has(self):
+        for metric in ('net_revenue', 'orders', 'cash', 'credit'):
+            r = self.admin.post(f'{API}targets/', {**self.body, 'metric': metric}, format='json')
+            self.assertEqual(r.status_code, 400, metric)
+            self.assertIn('metric', r.json(), metric)
+        self.assertFalse(SalesTarget.objects.exists())
+        r = self.admin.post(f'{API}targets/', {**self.body, 'metric': 'cash_delivery'}, format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_patch_crew_target_metric_outside_crew_set_refused(self):
+        tid = self.admin.post(f'{API}targets/', self.body, format='json').json()['id']
+        r = self.admin.patch(f'{API}targets/{tid}/', {'metric': 'net_revenue'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_patch_crew_target_to_branch_scope_with_crew_still_set_refused(self):
+        tid = self.admin.post(f'{API}targets/', self.body, format='json').json()['id']
+        r = self.admin.patch(f'{API}targets/{tid}/', {'scope_type': 'branch'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(SalesTarget.objects.get(pk=tid).scope_type, 'crew')

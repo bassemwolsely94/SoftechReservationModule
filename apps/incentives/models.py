@@ -564,6 +564,10 @@ class SalesTarget(models.Model):
     }
     # Metrics with no PurchaseHistory source — actuals read from KpiActualRollup (CDR).
     ROLLUP_ONLY_METRICS = {'call_count'}
+    # The call-center crew's board metrics (build_crew_rollups) — a crew target may only name
+    # one of these; any other metric would read 0 forever (crews piece 2b Part B).
+    CREW_METRICS = ('cash_delivery', 'gross_profit', 'beauty', 'customer_count', 'pic_count',
+                    'call_count')
 
     label        = models.CharField(max_length=120, blank=True, verbose_name='الاسم')
     scope_type   = models.CharField(max_length=12, choices=SCOPE_CHOICES, default=SCOPE_BRANCH)

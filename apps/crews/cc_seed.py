@@ -3,7 +3,8 @@ apps/crews/cc_seed.py
 
 Seeds the call-center crew «الكول سنتر» from CallCenterConfig (piece 2b). One dated, open-ended
 manual include row per SOFTECH usercode and per PBX extension, starting the first day of the
-earliest month with a CC KpiActualRollup so history resolves. Active PBX extensions typed «agent»
+earliest month with a CC KpiActualRollup so history resolves (after the switch: the crew's own
+earliest rollup month, then its seed rows' start — see seed_start). Active PBX extensions typed «agent»
 that CallCenterConfig does not list join too, dated with the seed (owner ruling C, 2026-11-18;
 opt out with include_pbx_agent_extensions=False). The rows are written directly (not through
 services.add_manual, whose month floor refuses past dates) and the seed is audited.
@@ -39,15 +40,36 @@ def _find_crew():
     return crew
 
 
-def seed_start() -> date:
+def seed_start(crew=None, seed_floor=None) -> date:
+    """First day of the call-center history, in order: (a) the earliest legacy CC-branch rollup
+    month; (b) after the switch moved those rows, the crew's own earliest rollup month; (c) the
+    earliest valid_from of the crew's seed rows (``seed_floor`` when reseed already deleted them);
+    (d) the first of this month. A --reseed after the switch therefore never re-dates history."""
     from apps.crews.cc_legacy import legacy_cc_branch
     from apps.forecasting.models import KpiActualRollup
+
+    def first_month(qs):
+        first = qs.order_by('year', 'month').values_list('year', 'month').first()
+        return date(first[0], first[1], 1) if first else None
+
     cc = legacy_cc_branch()
     if cc is not None:
-        first = (KpiActualRollup.objects.filter(branch=cc).order_by('year', 'month')
-                 .values_list('year', 'month').first())
-        if first:
-            return date(first[0], first[1], 1)
+        found = first_month(KpiActualRollup.objects.filter(branch=cc))
+        if found:
+            return found
+    if crew is None:
+        crew = Crew.objects.filter(name=CC_CREW_NAME, is_archived=False, type='call_center').first()
+    if crew is not None:
+        found = first_month(KpiActualRollup.objects.filter(crew=crew))
+        if found:
+            return found
+        rows = (crew.manual_members.filter(reason=SEED_REASON).order_by('valid_from')
+                .values_list('valid_from', flat=True).first())
+        floors = [d for d in (rows, seed_floor) if d]
+        if floors:
+            return min(floors)
+    elif seed_floor:
+        return seed_floor
     return timezone.localdate().replace(day=1)
 
 
@@ -105,10 +127,10 @@ def _existing(crew, item) -> bool:
 
 @transaction.atomic
 def seed(user=None, include_pbx_agent_extensions=True, dry_run=False, _action='crew_cc_seeded',
-         _old=None) -> dict:
+         _old=None, _seed_floor=None) -> dict:
     plan = seed_plan(include_pbx_agent_extensions)
-    start = seed_start()
     crew = _find_crew()
+    start = seed_start(crew, _seed_floor)
     created, skipped = [], []
     if dry_run:
         for item in plan:
@@ -152,8 +174,10 @@ def reseed(user=None, **kw) -> dict:
     build_crew_rollups refreshes them."""
     crew = _find_crew()
     old = {'deleted_rows': []}
+    floor = None
     if crew is not None:
         rows = list(crew.manual_members.filter(reason=SEED_REASON))
         old['deleted_rows'] = [_row_snapshot(r) for r in rows]
+        floor = min((r.valid_from for r in rows if r.valid_from), default=None)
         CrewManualMember.objects.filter(pk__in=[r.pk for r in rows]).delete()
-    return seed(user=user, _action='crew_cc_reseeded', _old=old, **kw)
+    return seed(user=user, _action='crew_cc_reseeded', _old=old, _seed_floor=floor, **kw)

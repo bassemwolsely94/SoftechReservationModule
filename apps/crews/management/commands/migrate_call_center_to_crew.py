@@ -13,6 +13,8 @@ October 2026 marked), the forecast rows count and the branch kind change.
 --apply runs in one transaction and requires --confirm-months equal to the planned month count;
 with --plan (the reviewed dry run's JSON) it also refuses when any month x metric figure differs.
 --user puts that staff member on every audit row (default: none).
+Run the dry run and --apply straight after `migrate`: between them the board's call-center block,
+crew targets and the chain call_count read the crew while the history is still on CC (0 / short).
 Run --apply while the scheduler's KPI refresh is quiet (not right after a sales sync): the
 transaction re-reads ~28 months of SOFTECH returns and the CDR before it writes.
 A second run reports 0 months and «nothing to move». No SOFTECH writes.

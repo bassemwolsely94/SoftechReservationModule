@@ -315,6 +315,12 @@ class SalesTargetSerializer(serializers.ModelSerializer):
             if branch is not None or user or cat is not None:
                 raise serializers.ValidationError(
                     {'scope_type': 'هدف الطاقم لا يحمل فرعًا ولا كود مندوب ولا فئة'})
+            metric = data.get('metric', getattr(inst, 'metric', SalesTarget.METRIC_REVENUE))
+            if metric not in SalesTarget.CREW_METRICS:
+                labels = dict(SalesTarget.METRIC_CHOICES)
+                allowed = '، '.join(f'«{labels[m]}»' for m in SalesTarget.CREW_METRICS)
+                raise serializers.ValidationError(
+                    {'metric': f'هدف الطاقم يكون على أحد مقاييس الطاقم فقط: {allowed}'})
         elif crew is not None:
             raise serializers.ValidationError({'crew': 'الطاقم يُحدَّد لمستهدف من نوع «طاقم» فقط'})
         return data

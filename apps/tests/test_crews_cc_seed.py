@@ -81,6 +81,26 @@ class CcSeedTests(TestCase):
         self.assertEqual(KpiActualRollup.objects.filter(crew=crew).count(), 1)
         self.assertEqual(Crew.objects.filter(name=cc_seed.CC_CREW_NAME).count(), 1)
 
+    def test_reseed_keeps_start_from_crew_rollups_after_switch(self):
+        cc = cc_with_rollup()
+        cc_seed.seed()
+        crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
+        KpiActualRollup.objects.filter(branch=cc).update(branch=None, crew=crew)   # the switch
+        res = cc_seed.reseed()
+        self.assertEqual(res['start'], date(2024, 8, 1))
+        self.assertEqual(set(crew.manual_members.values_list('valid_from', flat=True)),
+                         {date(2024, 8, 1)})
+
+    def test_reseed_keeps_start_from_existing_seed_rows(self):
+        cc = cc_with_rollup()
+        cc_seed.seed()
+        KpiActualRollup.objects.filter(branch=cc).delete()      # no rollups anywhere
+        res = cc_seed.reseed()
+        self.assertEqual(res['start'], date(2024, 8, 1))
+        crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
+        self.assertEqual(set(crew.manual_members.values_list('valid_from', flat=True)),
+                         {date(2024, 8, 1)})
+
     def test_dry_run_writes_nothing(self):
         res = cc_seed.seed(dry_run=True)
         self.assertEqual(len(res['created']), 6)

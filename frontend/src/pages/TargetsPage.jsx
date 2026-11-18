@@ -15,6 +15,16 @@ const PACE = {
   missed: { label: 'لم يتحقق', cls: 'bg-red-100 text-red-700' },
 }
 const fmt = n => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+// The call-center crew's board metrics — the only ones a crew target may name
+// (SalesTarget.CREW_METRICS; the server refuses any other).
+const CREW_METRICS = [
+  ['cash_delivery', 'نقدى + توصيل'],
+  ['gross_profit', 'معامل الربحية'],
+  ['beauty', 'التجميل'],
+  ['customer_count', 'عدد العملاء'],
+  ['pic_count', 'عدد العملاء (PIC)'],
+  ['call_count', 'عدد المكالمات'],
+]
 
 export default function TargetsPage() {
   const qc = useQueryClient()
@@ -131,22 +141,21 @@ function TargetForm({ onDone }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 grid gap-2 md:grid-cols-3" data-tour="analytics-targets-form">
       <input className="input-field" placeholder="اسم الهدف" value={f.label} onChange={e => set('label', e.target.value)} />
-      <select className="input-field" value={f.scope_type} onChange={e => setF(s => ({ ...s, scope_type: e.target.value, metric: 'net_revenue' }))} data-tour="analytics-targets-scope">
+      <select className="input-field" value={f.scope_type} onChange={e => setF(s => ({ ...s, scope_type: e.target.value, metric: e.target.value === 'crew' ? 'cash_delivery' : 'net_revenue' }))} data-tour="analytics-targets-scope">
         <option value="chain">الشبكة كاملة</option>
         <option value="branch">فرع</option>
         <option value="salesperson">مندوب</option>
         <option value="crew">طاقم</option>
       </select>
       <select className="input-field" value={f.metric} onChange={e => set('metric', e.target.value)} data-tour="analytics-targets-metric">
-        <option value="net_revenue">صافي المبيعات</option>
-        {f.scope_type === 'crew' ? (
-          <>
-            <option value="cash_delivery">نقدى + توصيل</option>
-            <option value="gross_profit">معامل الربحية</option>
-            <option value="beauty">التجميل</option>
-            <option value="call_count">عدد المكالمات</option>
-          </>
-        ) : <option value="orders">عدد الفواتير</option>}
+        {f.scope_type === 'crew'
+          ? CREW_METRICS.map(([v, l]) => <option key={v} value={v}>{l}</option>)
+          : (
+            <>
+              <option value="net_revenue">صافي المبيعات</option>
+              <option value="orders">عدد الفواتير</option>
+            </>
+          )}
       </select>
       {f.scope_type === 'branch' && (
         <select className="input-field" value={f.branch} onChange={e => set('branch', e.target.value)}>

@@ -229,6 +229,16 @@ class ApplyTests(_Base):
         self.assertEqual(t.actual_value(), 3.0)
 
 
+    def test_reseed_after_switch_keeps_history_start(self):
+        self.store(call_count=99)
+        self.apply(months=1)
+        crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
+        start = set(crew.manual_members.values_list('valid_from', flat=True))
+        self.assertEqual(start, {date(2026, 6, 1)})
+        self.assertEqual(cc_seed.reseed()['start'], date(2026, 6, 1))
+        self.assertEqual(set(crew.manual_members.values_list('valid_from', flat=True)), start)
+
+
 class CommandTests(_Base):
     def run_cmd(self, *args):
         out = io.StringIO()

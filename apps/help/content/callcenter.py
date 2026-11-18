@@ -714,8 +714,8 @@ SCREENS = [
                  '• Purpose: reservation, delivery, complaint, etc.\n• Status: answered, no answer, busy, voicemail, call back.\n• Direction: inbound, outbound, WhatsApp.\nE.g. "Complaint" + "No answer" shows complaints that need a callback.\n• Tick several in one filter: "No answer" + "Busy" = every call that did not get through.')},
         ],
         'updated': '2026-11-18',
-        'change_note': T('تبويب «أداء المندوبين»: قائمة الموظفين هي أيضاً طاقم «الكول سنتر»',
-                         'The "Agent performance" tab: the agents list is also the crew «الكول سنتر»'),
+        'change_note': T('طاقم «الكول سنتر» بقى مصدر أرقام الكول سنتر وأهدافه (لوحة المؤشرات والمستهدفات والتنبؤات)؛ قائمة «أداء المندوبين» هي نفس الطاقم',
+                         'The crew «الكول سنتر» is now the source of the call-center figures and targets (KPI board, targets, forecasts); the "Agent performance" list is that crew'),
     },
     {
         'key': 'callcenter.callbacks',

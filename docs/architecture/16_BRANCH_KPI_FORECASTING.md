@@ -76,7 +76,9 @@
   below is read only by the one-shot switch tools (`apps/crews/cc_legacy.py`), which re-point its
   rows to the crew and close it — plan `docs/superpowers/plans/2026-11-18-crews-piece2b-part-b-switch.md`.
   The switch is `migrate_call_center_to_crew` (`apps/crews/cc_switch.py`), run ONCE on the office
-  DB after merge: dry run (per month × metric «stored → new (crew|stored)», moving targets with
+  DB after merge, straight after `migrate` (between the two the board's call-center block, crew
+  targets and the chain `call_count` read the crew while the history is still on CC, so they show
+  0 / short): dry run (per month × metric «stored → new (crew|stored)», moving targets with
   attainment before/after, October 2026 marked, forecast count, CC kind change; `--out plan.json`),
   then `--apply --confirm-months N --plan plan.json --user <username>` (refused when any month ×
   metric figure differs from the reviewed plan). Run the apply while the scheduler's KPI refresh is
@@ -86,7 +88,10 @@
   from the crew rule (a metric the crew cannot compute that month keeps its stored value), re-point
   the CC rows in place, move `SalesTarget` / `ForecastResult`, CC kind → `closed`; audited
   (`cc_crew_history_rebuilt` per month, `cc_targets_moved_to_crew`, `cc_forecasts_moved_to_crew`,
-  `cc_branch_closed`). A second run reports 0 months, nothing to move.
+  `cc_branch_closed`). A second run reports 0 months, nothing to move. A crew target may only
+  name the crew's board metrics (`SalesTarget.CREW_METRICS`: cash_delivery, gross_profit, beauty,
+  customer_count, pic_count, call_count). `seed_call_center_crew --reseed` after the switch keeps
+  the seed's start: the crew's own earliest rollup month, then its seed rows' earliest valid_from.
   The Phase 5 text below is the history of how the call-center figures were first decoded.
 - **Phase 5 (call center):** decoded from the owner's Call-Center-KPIs workbook + CDR CSVs.
   **Sales/profit/beauty/orders** = `PurchaseHistory` where `softech_user ∈ {62,63,64}` (all
