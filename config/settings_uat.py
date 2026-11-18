@@ -47,7 +47,9 @@ for _k in ('SYBASE_HOST', 'SOFTECH_DEV_HOST', 'SOFTECH_TEST_HOST', 'SOFTECH_PROD
     os.environ.pop(_k, None)
 
 from config.settings import *  # noqa: E402,F401,F403 — this module extends the real settings
-from config import settings as _base  # noqa: E402
+from config import settings as _base
+from config.settings import BASE_DIR, DATABASES, LOGGING, MIDDLEWARE, REST_FRAMEWORK
+from config.writers import WRITER_FLAGS  # only reads django.conf lazily
 
 if _base._RUNNING_TESTS:  # pragma: no cover — guard against `manage.py test --settings=…uat`
     raise RuntimeError('config.settings_uat is for the UAT copy only; use config.settings for manage.py test')
@@ -67,7 +69,6 @@ for _name in [n for n in dir(_base) if n.isupper()]:
     if _name.endswith(('_WRITE_ENABLED', '_WRITER_ENABLED', '_POSTING_ENABLED', '_SEND_ENABLED',
                        '_AUTO_APPROVE', '_AUTO_APPROVE_ENABLED', '_AUTO_TOPUP_ENABLED')):
         globals()[_name] = False
-from config.writers import WRITER_FLAGS  # noqa: E402 — only reads django.conf lazily
 
 for _name in WRITER_FLAGS:
     globals()[_name] = False
@@ -78,8 +79,8 @@ REPLACEMENT_POSTING_ENABLED = False
 POS_LIVE_PRICING = False
 
 # ── 3. its own database ──────────────────────────────────────────────────────
-DATABASES['default']['NAME'] = _DB  # noqa: F405
-DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}  # noqa: F405
+DATABASES['default']['NAME'] = _DB
+DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
 
 # ── 4. no outbound sends ─────────────────────────────────────────────────────
 WHATSAPP_TOKEN = WHATSAPP_PHONE_NUMBER_ID = WHATSAPP_APP_SECRET = ''
@@ -100,12 +101,12 @@ CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}
 
 # ── 5. production-like access, many test logins ──────────────────────────────
 RBAC_ENFORCEMENT = 'enforce'
-REST_FRAMEWORK = {**REST_FRAMEWORK,  # noqa: F405
-                  'DEFAULT_THROTTLE_RATES': {**REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], 'login': '1000/min'}}  # noqa: F405
+REST_FRAMEWORK = {**REST_FRAMEWORK,
+                  'DEFAULT_THROTTLE_RATES': {**REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], 'login': '1000/min'}}
 
 # ── 6. every response names the copy (frontend/uat/lib/guard.js checks it before any login) ──
-MIDDLEWARE = [*MIDDLEWARE, 'config.uat_marker.UatCopyMarker']  # noqa: F405
+MIDDLEWARE = [*MIDDLEWARE, 'config.uat_marker.UatCopyMarker']
 
 # ── 7. its own log file ──────────────────────────────────────────────────────
-os.makedirs(BASE_DIR / 'logs', exist_ok=True)  # noqa: F405
-LOGGING['handlers']['file']['filename'] = BASE_DIR / 'logs' / 'uat.log'  # noqa: F405
+os.makedirs(BASE_DIR / 'logs', exist_ok=True)
+LOGGING['handlers']['file']['filename'] = BASE_DIR / 'logs' / 'uat.log'

@@ -30,7 +30,8 @@ from django.utils import timezone
 
 from apps.users.roles import ROLE_KEYS, ROLES
 
-TWIN_ROLES = [r.key for r in ROLES if not r.all_branches]   # branch-scoped roles (role registry)
+# Branch-scoped roles (one branch, not all): from apps/users/roles.py, never a literal list.
+TWIN_ROLES = [r.key for r in ROLES if not r.all_branches]
 DEFAULT_OUT = Path(settings.BASE_DIR) / 'frontend' / 'uat' / '.uat-users.json'
 
 
@@ -153,7 +154,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _mfa_enforcement_off():
-        # Delete, do not set to false: apps/users/mfa.py reads any row as "on" (finding B-01).
+        # Delete the row: no row = enforcement off, whatever type a hand-made row was given
+        # (finding B-01 is fixed in apps/users/mfa.py; deleting stays the simplest sure way).
         from apps.config.models import SystemSetting
         SystemSetting.objects.filter(key='security.mfa_enforced').delete()
 
