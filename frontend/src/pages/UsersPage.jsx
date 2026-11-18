@@ -58,7 +58,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
         ...form,
         branch: form.branch ? Number(form.branch) : null,
       })
-      qc.invalidateQueries(['staff-list'])
+      qc.invalidateQueries({ queryKey: ['staff-list'] })
       onSaved()
     } catch (e) {
       const d = e.response?.data
@@ -431,7 +431,7 @@ export default function UsersPage() {
           branches={branches}
           onClose={() => setEditId(null)}
           onSaved={() => {
-            qc.invalidateQueries(['staff-list'])
+            qc.invalidateQueries({ queryKey: ['staff-list'] })
             setEditId(null)
           }}
         />

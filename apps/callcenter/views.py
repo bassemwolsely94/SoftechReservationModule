@@ -820,7 +820,12 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
         notes    = request.data.get('notes', '')
         priority = request.data.get('priority', 'normal')
-        channel  = request.data.get('channel', 'pickup')
+        # The form's «القناة» is pickup / home_delivery = how the customer gets it (fulfillment_method).
+        # Reservation.channel is the POS sale type (cash_sales / home_delivery / contract_sales); writing
+        # 'pickup' into it stored a value outside its choices (full audit C01).
+        delivery = request.data.get('channel') in ('home_delivery', 'delivery')
+        channel     = 'home_delivery' if delivery else 'cash_sales'
+        fulfillment = 'delivery' if delivery else 'pickup'
         item_ids = request.data.get('item_ids')  # optional filter
 
         qs = call.items.filter(converted_to='none')
@@ -849,6 +854,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
                     notes               = combined_notes,
                     priority            = priority,
                     channel             = channel,
+                    fulfillment_method  = fulfillment,
                     order_source        = 'cc_call',
                     status              = 'pending',
                     created_by          = profile,

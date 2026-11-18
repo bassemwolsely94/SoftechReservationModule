@@ -11,6 +11,7 @@ describe('SearchTierChip', () => {
     [{ sound: true }, 'بالنطق'],
     [{ approx: true }, 'تقريبي'],
     [{ code_part: true }, 'جزء من الكود'],
+    [{ code_prefix: true }, 'بداية الكود'],
   ])('renders the label for %j', (row, label) => {
     render(<SearchTierChip row={row} />)
     expect(screen.getByText(label)).toBeTruthy()
@@ -24,6 +25,15 @@ describe('SearchTierChip', () => {
   it('gives synonym no chip', () => {
     const { container } = render(<SearchTierChip row={{ synonym: true }} />)
     expect(container.firstChild).toBeNull()
+  })
+
+  it('ranks code_prefix just before code_part, below approx', () => {
+    render(<SearchTierChip row={{ code_prefix: true, code_part: true }} />)
+    expect(screen.getByText('بداية الكود')).toBeTruthy()
+    expect(screen.queryByText('جزء من الكود')).toBeNull()
+    cleanup()
+    render(<SearchTierChip row={{ approx: true, code_prefix: true }} />)
+    expect(screen.getByText('تقريبي')).toBeTruthy()
   })
 
   it('shows only the highest-priority chip', () => {

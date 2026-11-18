@@ -3,10 +3,14 @@
  * sales first; the owner decides per item «كوّد» or «استبعد». Display only: the server pre-marks each item from where
  * it was bought, prefills the VAT rate and flags doubtful ones, applies each decision and audits it. A flagged rate is
  * chosen here (0 / 14) and the item is decided on its own; the server skips flagged items in a bulk "code".
+ * Batch S2: «الفئة (GPC)» shows each item's suggested brick and where it came from; a person confirms it. The picker is
+ * an inline search box; an AI suggestion that is not high-confidence is decided one item at a time.
+ * Batch S3: «ملف أكواد الإيصالات (المحصّل)» (EgsSheetPanel) builds and downloads the Invoicer file's versions.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
+import EgsSheetPanel from './EgsSheetPanel'
 import SortTh from '../../components/SortTh'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useServerSort from '../../hooks/useServerSort'
@@ -33,6 +37,15 @@ const VAT_WHY = {
   odd_rate: 'نسبة غير 0 أو 14 — اختر النسبة', zero_for_type: 'صفر لنوع يُتوقع أن يخضع — تأكد',
   taxed_medicine: 'دواء بنسبة 14 — تأكد',
 }
+// where a row's brick came from (the server decides; this only labels it)
+const BRICK_SOURCE = {
+  decisions: 'من قرارات سابقة', eta: 'من أكواد المصلحة', sheet: 'من ملف الشركة', medicine: 'دواء', ai: 'اقتراح ذكي',
+  person: 'اختيار يدوي',
+}
+const CONFIDENCE = { high: 'عالية', medium: 'متوسطة', low: 'منخفضة' }
+const SUGGEST_MAX = 5      // each AI call can take tens of seconds (server: views.SUGGEST_MAX)
+const needsBrickCheck = r => r.brick_source === 'ai' && r.brick_confidence !== 'high'
+const brickLabel = b => `${b.name_ar || b.name_en || b.name || ''}`.trim()
 const KEYS_HINT = '⌨ ↑↓ تنقل · مسافة تحديد · Enter قبول المقترح · C كوّد · K استبعد · M التفاصيل · Ctrl+A تحديد الكل'
 
 const sourcesText = s => Object.entries(s || {}).sort((a, b) => b[1] - a[1])
@@ -49,6 +62,97 @@ function useReloadOnError() {
 const BUTTON_KEYS = new Set(['Enter', 'NumpadEnter', 'Space', 'KeyC', 'KeyK', 'KeyM'])
 const isTyping = t => t && (t.isContentEditable || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA'
   || (t.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(t.type)))
+
+function useDebounced(value, ms = 300) {
+  const [v, setV] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return v
+}
+
+/** Inline brick search (no modal): ↑↓ move, Enter picks, Esc closes. Its keys never reach the grid. */
+function BrickPicker({ row, onPick, onClose, onAsk, asking }) {
+  const [text, setText] = useState('')
+  const [hi, setHi] = useState(0)
+  const q = useDebounced(text.trim())
+  const list = useQuery({ queryKey: ['tax-invoicing', 'gpc', q], queryFn: () => taxInvoicingApi.codeGpc({ q }).then(r => r.data) })
+  const found = list.data?.rows || []
+  const second = row.brick_second && !q ? [{ code: row.brick_second, name_ar: row.brick_second_name, second: true }] : []
+  const options = [...second, ...found.filter(b => !second.some(x => x.code === b.code))]
+  useEffect(() => { setHi(0) }, [q])
+  const onKeyDown = e => {
+    e.stopPropagation()
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi(i => Math.min(options.length - 1, i + 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(i => Math.max(0, i - 1)) }
+    else if (e.key === 'Enter') {
+      e.preventDefault()
+      // the list may still be the one for an earlier search: wait for the results of what was typed
+      if (text.trim() === q && !list.isFetching && options[hi]) onPick(options[hi])
+    }
+    else if (e.key === 'Escape') { e.preventDefault(); onClose() }
+  }
+  return (
+    <div className="mt-1 w-64 space-y-1">
+      <input autoFocus className={`${INPUT} w-full`} aria-label={`بحث فئة ${row.itemcode}`} placeholder="كود أو اسم الفئة"
+        value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} />
+      {list.data && !list.data.loaded && <div className="text-[11px] text-amber-700">قائمة GPC لم تُحمّل بعد</div>}
+      <ul role="listbox" aria-label={`فئات ${row.itemcode}`} className="max-h-48 overflow-y-auto border border-gray-200 rounded-md bg-white">
+        {options.map((b, i) => (
+          <li key={b.code} role="option" aria-selected={i === hi}>
+            <button type="button" onMouseEnter={() => setHi(i)} onClick={() => onPick(b)}
+              className={`w-full text-right px-2 py-1 text-xs ${i === hi ? 'bg-primary/10' : ''}`}>
+              <span dir="ltr" className="font-mono">{b.code}</span> {brickLabel(b)}
+              {b.second && <span className="text-gray-400"> · بديل مقترح</span>}
+            </button>
+          </li>
+        ))}
+        {!options.length && <li className="px-2 py-1 text-xs text-gray-400">{list.isFetching ? '…' : 'لا نتائج'}</li>}
+      </ul>
+      <div className="flex gap-2 text-[11px]">
+        {onAsk && <button type="button" className="text-primary disabled:opacity-50" disabled={asking} onClick={onAsk}>اقترح مرة أخرى</button>}
+        <button type="button" className="text-gray-500" onClick={onClose}>إغلاق</button>
+      </div>
+    </div>
+  )
+}
+
+/** The «الفئة (GPC)» cell: the brick (picked here, else the server's), where it came from, and the picker. */
+function BrickCell({ row, picked, canDecide, open, onToggle, onPick, onAsk, asking }) {
+  const code = picked?.code || row.brick
+  const name = picked ? brickLabel(picked) : row.brick_name
+  const source = picked ? 'person' : row.brick_source
+  const editable = canDecide && (!row.decision || row.decision === 'code')
+  const missing = row.decision === 'code' && !row.brick_confirmed
+  return (
+    <div className="space-y-0.5">
+      {code ? (
+        <div><span dir="ltr" className="font-mono text-xs">{code}</span> <span className="text-xs">{name}</span></div>
+      ) : <span className="text-gray-400 text-xs">بلا فئة</span>}
+      <div className="flex flex-wrap items-center gap-1">
+        {source && code && (
+          <Badge tone={source === 'ai' ? 'bg-violet-50 text-violet-700 border-violet-200' : undefined}>
+            {BRICK_SOURCE[source] || source}{source === 'ai' && row.brick_confidence ? ` · ${CONFIDENCE[row.brick_confidence] || row.brick_confidence}` : ''}
+          </Badge>
+        )}
+        {missing && <Badge tone="bg-red-50 text-red-700 border-red-200">تحتاج فئة</Badge>}
+        {editable && (
+          <button type="button" className="text-[11px] text-primary" aria-label={`اختيار فئة ${row.itemcode}`} onClick={onToggle}>
+            {open ? 'إغلاق' : code ? 'تغيير' : 'اختر فئة'}
+          </button>
+        )}
+      </div>
+      {!picked && row.brick_reason && (
+        <div className="text-[11px] text-gray-500 truncate max-w-[220px]" title={row.brick_reason}>{row.brick_reason}</div>
+      )}
+      {row.own_brick && row.own_brick !== code && (
+        <div className="text-[11px] text-gray-500">في ملف الشركة: <span dir="ltr" className="font-mono">{row.own_brick}</span> {row.own_brick_name}</div>
+      )}
+      {open && <BrickPicker row={row} onPick={onPick} onClose={onToggle} onAsk={row.decision ? null : onAsk} asking={asking} />}
+    </div>
+  )
+}
 
 function Reopen({ row, onDone }) {
   const [reason, setReason] = useState('')
@@ -118,6 +222,8 @@ export default function QueueTab({ me }) {
   // a new page, sort or filter shows other rows: the ticks go with the old ones
   const setPage = v => { setPageRaw(v); setPicked([]) }
   const [rates, setRates] = useState({})
+  const [bricks, setBricks] = useState({})       // itemcode → brick picked here for an undecided row
+  const [picker, setPicker] = useState(null)     // itemcode whose brick picker is open
   const [open, setOpen] = useState(null)
   const [note, setNote] = useState('')
   const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: SORT, defaultOrdering: '-value' })
@@ -132,21 +238,45 @@ export default function QueueTab({ me }) {
   const selection = row => (picked.length ? rows.filter(r => picked.includes(r.itemcode)) : row ? [row] : []).filter(r => !r.decision)
   const chosen = selection(null)
   const rateOf = r => (r.vat_flagged ? rates[r.itemcode] : r.vat_rate)
-  // a flagged row is decided on its own, with the rate chosen for it
-  const codeBlock = list => {
+  // a flagged row, or one whose brick is an AI suggestion that is not high-confidence, is decided on its own.
+  // `bulk`: the action started from several rows (a one-row group of a multi-row Enter is still bulk)
+  const codeBlock = (list, bulk = list.length > 1) => {
     if (!list.length) return 'اختر صنفاً'
-    if (list.length > 1 && list.some(r => r.vat_flagged)) return 'في المختار صنف نسبته تحتاج تأكيداً — قرره وحده'
+    if (bulk && list.some(r => r.vat_flagged)) return 'في المختار صنف نسبته تحتاج تأكيداً — قرره وحده'
+    if (bulk && list.some(needsBrickCheck)) return 'في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده'
+    if (bulk && list.some(r => bricks[r.itemcode])) return 'في المختار صنف اخترت فئته بنفسك — قرره وحده'
     if (list.length === 1 && list[0].vat_flagged && !rateOf(list[0])) return 'اختر نسبة الضريبة أولاً'
+    if (list.length === 1 && !bricks[list[0].itemcode] && !list[0].brick) return 'اختر فئة GPC أولاً'
     return ''
   }
   const payload = (list, decision) => {
     const body = { itemcodes: list.map(r => r.itemcode), decision }
-    if (decision === 'code' && list.length === 1) body.vat_rate = rateOf(list[0])
+    if (decision === 'code' && list.length === 1) {
+      body.vat_rate = rateOf(list[0])
+      // the brick the person sees, so the server never saves a suggestion recomputed after they looked
+      const brick = bricks[list[0].itemcode]?.code || list[0].brick
+      if (brick) body.brick = brick
+    }
     return body
+  }
+  const pickBrick = (r, b) => {
+    setPicker(null)
+    if (r.decision === 'code') {
+      act.run(guard(() => taxInvoicingApi.codingSetBrick({ itemcode: r.itemcode, brick: b.code })), `سُجلت الفئة ${b.code} للصنف ${r.itemcode}`)
+    } else {
+      setBricks(x => ({ ...x, [r.itemcode]: b }))
+    }
+  }
+  const askBlock = list => (!list.length ? 'اختر صنفاً' : list.length > SUGGEST_MAX ? `${SUGGEST_MAX} صنف على الأكثر في المرة` : '')
+  const ask = list => {
+    if (!canDecide || act.pending || askBlock(list)) return
+    act.run(() => taxInvoicingApi.codingSuggest({ itemcodes: list.map(r => r.itemcode) }), d => `سُئل عن ${fmtInt(d.asked.length)}${d.skipped.length
+      ? ` — تُرك ${fmtInt(d.skipped.length)}: ${d.skipped.slice(0, 3).map(s => `${s.itemcode} (${s.why})`).join('، ')}` : ''}${d.stopped === 'provider'
+      ? ' — توقف السؤال: مزود الذكاء الاصطناعي لا يرد، حاول لاحقاً' : ''}`)
   }
   const summary = d => `قُرر ${fmtInt(d.decided.length)}${d.skipped.length
     ? ` — تُرك ${fmtInt(d.skipped.length)}: ${d.skipped.slice(0, 3).map(s => `${s.itemcode} (${s.why})`).join('، ')}` : ''}`
-  const done = () => { setPicked([]); setNote('') }
+  const done = () => { setPicked([]); setNote(''); setBricks({}) }
 
   const decide = (decision, list) => {
     if (!canDecide || act.pending) return
@@ -161,7 +291,7 @@ export default function QueueTab({ me }) {
     if (!marked.length) return 'لا مقترح في المختار'
     const codes = marked.filter(r => r.premark === 'code')
     if (list.length > 1 && list.some(r => r.vat_flagged)) return codeBlock(list)
-    return codes.length ? codeBlock(codes) : ''
+    return codes.length ? codeBlock(codes, list.length > 1) : ''
   }
   const accept = list => {
     if (!canDecide || act.pending) return
@@ -230,6 +360,8 @@ export default function QueueTab({ me }) {
                 <Btn variant="success" disabled={act.pending || !!codeBlock(chosen)} title={codeBlock(chosen)}
                   onClick={() => decide('code', chosen)}>كوّد</Btn>
                 <Btn disabled={act.pending || !chosen.length} onClick={() => decide('keep_out', chosen)}>استبعد</Btn>
+                <Btn disabled={act.pending || !!askBlock(chosen)} title={askBlock(chosen) || 'يسأل الذكاء الاصطناعي عن فئة المختار — اقتراح فقط'}
+                  onClick={() => ask(chosen)}>اقترح مرة أخرى</Btn>
               </>
             )}
           </>
@@ -266,12 +398,13 @@ export default function QueueTab({ me }) {
                     <th className={TH}>المصدر</th>
                     <SortTh {...headerProps('premark')} className={TH}>المقترح</SortTh>
                     <th className={TH}>الضريبة</th>
+                    <th className={TH} data-tour="tax-invoicing-queue-brick">الفئة (GPC)</th>
                     <th className={TH}>القرار</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 && (
-                    <tr><td colSpan={8} className="py-8 text-center text-gray-400">✅ لا أصناف في الطابور بهذه الفلاتر</td></tr>
+                    <tr><td colSpan={9} className="py-8 text-center text-gray-400">✅ لا أصناف في الطابور بهذه الفلاتر</td></tr>
                   )}
                   {rows.map(r => {
                     const rp = kb.rowProps(r)
@@ -279,7 +412,7 @@ export default function QueueTab({ me }) {
                     const dec = DECISION[r.decision]
                     return [
                       <tr key={r.itemcode} {...rp}
-                        onClick={e => { if (!e.target.closest('button,a,input,select,textarea,label')) setOpen(o => (o === r.itemcode ? null : r.itemcode)) }}
+                        onClick={e => { if (!e.target.closest('button,a,input,select,textarea,label,[role=listbox]')) setOpen(o => (o === r.itemcode ? null : r.itemcode)) }}
                         className={`border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${picked.includes(r.itemcode) ? 'bg-primary/5' : ''} ${rp.className}`}>
                         {canDecide && (
                           <td className={TD}>
@@ -315,6 +448,12 @@ export default function QueueTab({ me }) {
                             </span>
                           )}
                         </td>
+                        <td className={`${TD} max-w-[260px]`}>
+                          <BrickCell row={r} picked={r.decision ? null : bricks[r.itemcode]} canDecide={canDecide}
+                            open={picker === r.itemcode} asking={act.pending}
+                            onToggle={() => setPicker(x => (x === r.itemcode ? null : r.itemcode))}
+                            onPick={b => pickBrick(r, b)} onAsk={() => ask([r])} />
+                        </td>
                         <td className={`${TD} whitespace-nowrap`}>
                           {dec ? (
                             <>
@@ -332,7 +471,7 @@ export default function QueueTab({ me }) {
                       </tr>,
                       open === r.itemcode && (
                         <tr key={`${r.itemcode}-open`} className="bg-gray-50/60 border-b border-gray-100">
-                          <td colSpan={8} className="px-3 py-3"><Details row={r} canDecide={canDecide} /></td>
+                          <td colSpan={9} className="px-3 py-3"><Details row={r} canDecide={canDecide} /></td>
                         </tr>
                       ),
                     ]
@@ -351,6 +490,7 @@ export default function QueueTab({ me }) {
         {note && <div role="status" className="text-xs text-amber-700 mt-2">{note}</div>}
         <div className="mt-2"><ActionMsg msg={act.msg} /></div>
       </Section>
+      <EgsSheetPanel />
       <EtaHolds />
     </div>
   )

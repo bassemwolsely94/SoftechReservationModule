@@ -187,7 +187,7 @@ function EnrichmentSection({ data, softech_id }) {
     )),
     onSuccess: () => {
       setDirty(false); setForm(null)
-      qc.invalidateQueries(['item-intel', softech_id])
+      qc.invalidateQueries({ queryKey: ['item-intel', softech_id] })
       toast.success('تم الحفظ', 'تم تحديث بيانات الإثراء')
     },
     onError: (e) => toast.error('تعذّر الحفظ', errMsg(e)),
@@ -279,7 +279,7 @@ function ContentSection({ data, softech_id }) {
       setDirty(false)
       setCForm(null)
       setAForm(null)
-      qc.invalidateQueries(['item-intel', softech_id])
+      qc.invalidateQueries({ queryKey: ['item-intel', softech_id] })
       toast.success('تم الحفظ', 'تم تحديث المحتوى والخصائص')
     } catch (e) {
       toast.error('تعذّر الحفظ', errMsg(e))
@@ -420,7 +420,7 @@ function ClinicalSection({ data, softech_id }) {
       is_primary: ingredients.length === 0,
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['item-intel', softech_id]); setSearchQ(''); setSearchRes([])
+      qc.invalidateQueries({ queryKey: ['item-intel', softech_id] }); setSearchQ(''); setSearchRes([])
       toast.success('تمت الإضافة', 'تم ربط المادة الفعّالة بالصنف')
     },
     onError: (e) => toast.error('تعذّرت الإضافة', errMsg(e, 'فشل ربط المادة الفعّالة')),
@@ -429,7 +429,7 @@ function ClinicalSection({ data, softech_id }) {
   const delMut = useMutation({
     mutationFn: (map_id) => itemsApi.deleteIngredient(softech_id, map_id),
     onSuccess: () => {
-      qc.invalidateQueries(['item-intel', softech_id])
+      qc.invalidateQueries({ queryKey: ['item-intel', softech_id] })
       toast.success('تم الحذف', 'تم إزالة المادة الفعّالة')
     },
     onError: (e) => toast.error('تعذّر الحذف', errMsg(e)),

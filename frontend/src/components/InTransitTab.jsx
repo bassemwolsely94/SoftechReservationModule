@@ -236,17 +236,17 @@ function DetailPanel({ transit, onClose, onAction }) {
 
   const markReceived = useMutation({
     mutationFn: (note) => transitsApi.markReceived(transit.id, { note }),
-    onSuccess: () => { qc.invalidateQueries(['in-transit']); onAction('received') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['in-transit'] }); onAction('received') },
   })
 
   const addNote = useMutation({
     mutationFn: () => transitsApi.addNote(transit.id, noteText),
-    onSuccess: () => { qc.invalidateQueries(['in-transit']); setNoteText('') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['in-transit'] }); setNoteText('') },
   })
 
   const forceClose = useMutation({
     mutationFn: () => transitsApi.forceClose(transit.id, closeReason),
-    onSuccess: () => { qc.invalidateQueries(['in-transit']); onAction('force_closed') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['in-transit'] }); onAction('force_closed') },
   })
 
   const p = PRIORITY[transit.priority] || PRIORITY.green
@@ -1128,8 +1128,8 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
   const syncMutation = useMutation({
     mutationFn: transitsApi.sync,
     onSuccess: () => {
-      qc.invalidateQueries(['in-transit'])
-      qc.invalidateQueries(['transit-dashboard'])
+      qc.invalidateQueries({ queryKey: ['in-transit'] })
+      qc.invalidateQueries({ queryKey: ['transit-dashboard'] })
       showToast('بدأت المزامنة مع SOFTECH')
     },
   })
@@ -1288,8 +1288,8 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
           onClose={() => setSelected(null)}
           onAction={(action) => {
             setSelected(null)
-            qc.invalidateQueries(['in-transit'])
-            qc.invalidateQueries(['transit-dashboard'])
+            qc.invalidateQueries({ queryKey: ['in-transit'] })
+            qc.invalidateQueries({ queryKey: ['transit-dashboard'] })
             const msgs = {
               received:     '✅ تم تسجيل الاستلام',
               force_closed: '🔒 تم الإغلاق القسري',

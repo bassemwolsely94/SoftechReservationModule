@@ -1263,7 +1263,7 @@ export default function TransferDetailPage() {
     refetchInterval: 60_000,
   })
 
-  const invalidate = () => qc.invalidateQueries(['transfer', id])
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['transfer', id] })
 
   const handleDeleteMessage = async (messageId) => {
     if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
@@ -1290,7 +1290,7 @@ export default function TransferDetailPage() {
       }
       await actionMap[actionName]?.()
       invalidate()
-      qc.invalidateQueries(['transfers'])
+      qc.invalidateQueries({ queryKey: ['transfers'] })
     } catch (e) {
       alert(e.response?.data?.detail || 'حدث خطأ')
     } finally { setActionLoading(false) }

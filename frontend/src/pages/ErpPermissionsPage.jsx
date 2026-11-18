@@ -32,15 +32,15 @@ export default function ErpPermissionsPage() {
 
   const addMap = useMutation({
     mutationFn: (d) => usersApi.erpMapAdd(d),
-    onSuccess: () => { qc.invalidateQueries(['erp-map']); qc.invalidateQueries(['erp-groups']); setNewMap({ system: '', module: 'catalog', note: '' }) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['erp-map'] }); qc.invalidateQueries({ queryKey: ['erp-groups'] }); setNewMap({ system: '', module: 'catalog', note: '' }) },
   })
   const delMap = useMutation({
     mutationFn: (id) => usersApi.erpMapDelete(id),
-    onSuccess: () => { qc.invalidateQueries(['erp-map']); qc.invalidateQueries(['erp-groups']) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['erp-map'] }); qc.invalidateQueries({ queryKey: ['erp-groups'] }) },
   })
   const rebuild = useMutation({
     mutationFn: () => usersApi.erpRebuild(),
-    onSuccess: () => { qc.invalidateQueries(['erp-groups']); qc.invalidateQueries(['erp-map']) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['erp-groups'] }); qc.invalidateQueries({ queryKey: ['erp-map'] }) },
   })
 
   const { sorted: sortedSystems, headerProps: sysHeader } = useSortableRows(systems || [], {

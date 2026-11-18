@@ -14,7 +14,7 @@ export default function ImportModal({ onClose }) {
       fd.append('file', file)
       return pricingApprovalsApi.import(fd)
     },
-    onSuccess: (r) => { setResult(r.data); qc.invalidateQueries(['pricing-approvals']); qc.invalidateQueries(['pricing-sla']) },
+    onSuccess: (r) => { setResult(r.data); qc.invalidateQueries({ queryKey: ['pricing-approvals'] }); qc.invalidateQueries({ queryKey: ['pricing-sla'] }) },
     onError: (e) => setResult({ error: e?.response?.data?.detail || 'فشل الرفع' }),
   })
 

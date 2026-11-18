@@ -183,7 +183,7 @@ export default function CustomerLocationsPanel({ customerId, readonly = false })
     enabled: !!customerId,
   })
 
-  const invalidate = () => qc.invalidateQueries(['customer-locations', customerId])
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['customer-locations', customerId] })
 
   async function handleAdd(form) {
     setSaving(true)
