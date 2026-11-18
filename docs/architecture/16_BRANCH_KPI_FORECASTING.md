@@ -75,6 +75,14 @@
   analytics branches' rows plus the live call-center crews' rows, each once. The fake `CC` branch
   below is read only by the one-shot switch tools (`apps/crews/cc_legacy.py`), which re-point its
   rows to the crew and close it — plan `docs/superpowers/plans/2026-11-18-crews-piece2b-part-b-switch.md`.
+  The switch is `migrate_call_center_to_crew` (`apps/crews/cc_switch.py`), run ONCE on the office
+  DB after merge: dry run (per month × metric «stored → new (crew|stored)», moving targets with
+  attainment before/after, October 2026 marked, forecast count, CC kind change; `--out plan.json`),
+  then `--apply --confirm-months N`. One transaction: seed the crew if absent, rebuild every CC month
+  from the crew rule (a metric the crew cannot compute that month keeps its stored value), re-point
+  the CC rows in place, move `SalesTarget` / `ForecastResult`, CC kind → `closed`; audited
+  (`cc_crew_history_rebuilt` per month, `cc_targets_moved_to_crew`, `cc_forecasts_moved_to_crew`,
+  `cc_branch_closed`). A second run reports 0 months, nothing to move.
   The Phase 5 text below is the history of how the call-center figures were first decoded.
 - **Phase 5 (call center):** decoded from the owner's Call-Center-KPIs workbook + CDR CSVs.
   **Sales/profit/beauty/orders** = `PurchaseHistory` where `softech_user ∈ {62,63,64}` (all
