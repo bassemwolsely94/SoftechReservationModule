@@ -45,6 +45,8 @@ NOTE_RETURNS_UNREACHABLE = 'returns_unreachable'
 NOTE_RETURNS_NOT_DEDUCTED = 'returns_not_deducted'  # returns=False (--no-returns): gross figures
 NOTE_CDR_UNAVAILABLE = 'cdr_unavailable'        # no CDR configured and no CSV given
 NOTE_CDR_UNREACHABLE = 'cdr_unreachable'        # configured, but the pull failed
+NOTE_CDR_EMPTY = 'cdr_empty'                    # CDR has no row for the crew's extensions while
+                                                # the stored call_count > 0 (guard_empty_cdr)
 
 
 def _spans(ids, kind) -> list:
@@ -105,9 +107,8 @@ def compute_sales(year: int, month: int, spans, resolver: KpiResolver | None = N
     }
 
 
-def count_calls_spans(rows, spans) -> int:
-    """count_calls over the rows whose src is a span's extension and whose call day
-    (calldate[:10]) is inside that span."""
+def _span_rows(rows, spans):
+    """(rows whose src is a span's extension and whose call day is inside that span, extensions)."""
     by_ext = {}
     for v, frm, to in spans:
         by_ext.setdefault(str(v), []).append((frm.isoformat(), to.isoformat()))
@@ -118,7 +119,14 @@ def count_calls_spans(rows, spans) -> int:
             day = str(row.get('calldate'))[:10]
             if any(frm <= day <= to for frm, to in windows):
                 kept.append(row)
-    return count_calls(kept, set(by_ext))
+    return kept, set(by_ext)
+
+
+def count_calls_spans(rows, spans) -> int:
+    """count_calls over the rows whose src is a span's extension and whose call day
+    (calldate[:10]) is inside that span."""
+    kept, exts = _span_rows(rows, spans)
+    return count_calls(kept, exts)
 
 
 @dataclass
@@ -128,6 +136,7 @@ class CrewMonth:
     notes: list = field(default_factory=list)
     gross: dict = field(default_factory=dict)          # the five sales metrics before returns
     returns: dict | None = None                        # returns_for_codes result; None = not run/unreachable
+    cdr_matched: int | None = None                     # CDR rows on the crew's extensions; None = no CDR
 
 
 def _by_member(ids) -> dict:
@@ -204,10 +213,15 @@ def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr
     rows = cdr_rows if cdr_rows is not None else _cdr_rows(year, month, notes)
     if rows is not None:
         rows = list(rows)
-        kpis[K.M_CALL_COUNT] = Decimal(count_calls_spans(rows, extensions))
+        kept, exts = _span_rows(rows, extensions)
+        cdr_matched = len(kept)
+        kpis[K.M_CALL_COUNT] = Decimal(count_calls(kept, exts))
         for key, mids in members.items():
             per[key][K.M_CALL_COUNT] = Decimal(count_calls_spans(rows, _spans(mids, 'extension')))
-    return CrewMonth(kpis=kpis, per_member=per, notes=notes, gross=gross, returns=ret_total)
+    else:
+        cdr_matched = None
+    return CrewMonth(kpis=kpis, per_member=per, notes=notes, gross=gross, returns=ret_total,
+                     cdr_matched=cdr_matched)
 
 
 def _months_overlapping(start: date, end: date) -> Q:
@@ -237,7 +251,20 @@ UNAVAILABLE_BY_NOTE = {
     NOTE_CDR_UNREACHABLE: {K.M_CALL_COUNT},
     NOTE_NO_MEMBERS: set(SALES_METRICS) | {K.M_CALL_COUNT},
     NOTE_NO_SELLERS: set(SALES_METRICS),
+    NOTE_CDR_EMPTY: {K.M_CALL_COUNT},
 }
+
+
+def guard_empty_cdr(cm: CrewMonth, stored_calls) -> bool:
+    """The CDR answered but has no row at all for the crew's extensions while the figure already
+    stored (CC row / crew row) is > 0: that is a hole in the CDR, not a month without calls — note
+    'cdr_empty' so call_count keeps the stored value. A stored 0 (or none) stays a computed 0.
+    Returns True when the note was added."""
+    if (cm.cdr_matched == 0 and K.M_CALL_COUNT in cm.kpis and stored_calls is not None
+            and Decimal(str(stored_calls)) > 0 and NOTE_CDR_EMPTY not in cm.notes):
+        cm.notes.append(NOTE_CDR_EMPTY)
+        return True
+    return False
 
 
 def unavailable_metrics(notes) -> set:

@@ -141,6 +141,9 @@ BULK_READ_PATHS = tuple(p.strip() for p in config(
 # enforce on an unsafe setup (access.E003 / E004) runs as log with an ERROR line instead (N3, I5).
 # Not an .env setting: only the test suite turns it off, to exercise enforce without nginx.
 NETWORK_ENFORCE_GUARD = not _RUNNING_TESTS
+# The live Issabel PBX (CDR MySQL) is never reached from a test run: config.issabel reports
+# "not configured" and refuses to connect. ISSABEL_TESTS_ALLOW_LIVE=True for a deliberate run.
+ISSABEL_CDR_LIVE = not _RUNNING_TESTS or config('ISSABEL_TESTS_ALLOW_LIVE', default=False, cast=bool)
 # Seconds the trusted-network list is cached per process; 0 under tests.
 ACCESS_NETWORKS_TTL = config('ACCESS_NETWORKS_TTL', default=0 if _RUNNING_TESTS else 60, cast=float)
 # Proxies in front of Django that APPEND the peer to X-Forwarded-For (nginx proxy_params: 1).

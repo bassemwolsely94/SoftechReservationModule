@@ -14,6 +14,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from unittest import mock
 
+from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
@@ -29,6 +30,8 @@ from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
 from apps.forecasting.models import (CallCenterConfig, ForecastResult, ForecastScenario,
                                      KpiActualRollup as K)
 from apps.incentives.models import SalesTarget
+from apps.users.models import StaffProfile
+from config import issabel
 
 JUNE = (2026, 6)
 TODAY = date(2026, 6, 25)          # the current month = June: one planned month
@@ -230,7 +233,9 @@ class CommandTests(_Base):
     def run_cmd(self, *args):
         out = io.StringIO()
         # never the live PBX: the command's CDR is "not configured" here
-        with mock.patch(RET_PATH, return_value=NO_RET),                 mock.patch('apps.crews.cc_comparison.cdr_configured', return_value=False),                 mock.patch('apps.crews.kpi.cdr_configured', return_value=False):
+        with mock.patch(RET_PATH, return_value=NO_RET), \
+                mock.patch('apps.crews.cc_comparison.cdr_configured', return_value=False), \
+                mock.patch('apps.crews.kpi.cdr_configured', return_value=False):
             call_command('migrate_call_center_to_crew', *args, stdout=out)
         return out.getvalue()
 
@@ -255,3 +260,154 @@ class CommandTests(_Base):
         again = self.run_cmd()
         self.assertIn('nothing to move', again)
         self.assertIn('0 month', again)
+
+    def test_plan_json_must_match_on_apply(self):
+        self.store(cash_delivery=1234, call_count=99)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'plan.json')
+            self.run_cmd('--out', path)
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh)
+            n = str(data['month_count'])
+            bad_path = os.path.join(d, 'bad.json')
+            bad = json.loads(json.dumps(data))
+            bad['months'][0]['metrics'][0]['new'] = '1.00'
+            with open(bad_path, 'w', encoding='utf-8') as fh:
+                json.dump(bad, fh)
+            with self.assertRaisesMessage(CommandError, 'reviewed 1.00'):
+                self.run_cmd('--apply', '--confirm-months', n, '--plan', bad_path)
+            bad = json.loads(json.dumps(data))
+            bad['month_count'] += 1
+            with open(bad_path, 'w', encoding='utf-8') as fh:
+                json.dump(bad, fh)
+            with self.assertRaisesMessage(CommandError, 'month count'):
+                self.run_cmd('--apply', '--confirm-months', n, '--plan', bad_path)
+            self.assertEqual(K.objects.filter(branch=self.cc).count(), 2)      # rolled back
+            self.assertEqual(Crew.objects.count(), 0)
+            self.run_cmd('--apply', '--confirm-months', n, '--plan', path)
+        self.assertEqual(K.objects.filter(branch=self.cc).count(), 0)
+
+    def test_user_on_audits(self):
+        self.store(cash_delivery=1234)
+        with self.assertRaisesMessage(CommandError, 'no staff profile'):
+            self.run_cmd('--apply', '--confirm-months', '1', '--user', 'nobody-here')
+        sp = StaffProfile.objects.create(user=User.objects.create(username='owner5'), role='admin')
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'plan.json')
+            self.run_cmd('--out', path)
+            with open(path, encoding='utf-8') as fh:
+                n = str(json.load(fh)['month_count'])
+        self.run_cmd('--apply', '--confirm-months', n, '--user', 'OWNER5')
+        rows = AuditLog.objects.filter(action__in=['cc_crew_history_rebuilt', 'cc_branch_closed',
+                                                   'crew_cc_seeded'])
+        self.assertGreaterEqual(rows.count(), 3)
+        self.assertEqual(set(rows.values_list('user_id', flat=True)), {sp.pk})
+
+    def test_crew_name_taken_is_a_command_error(self):
+        self.store(cash_delivery=1234)
+        Crew.objects.create(name=cc_seed.CC_CREW_NAME, type='custom')
+        with self.assertRaises(CommandError):
+            self.run_cmd()
+        with self.assertRaises(CommandError):
+            self.run_cmd('--apply', '--confirm-months', '1')
+        self.assertEqual(K.objects.filter(branch=self.cc).count(), 1)
+
+
+class CdrEmptyTests(_Base):
+    OTHER = [_cdr('2026-06-02', '77', '01000000001')]          # no row for a crew extension
+
+    def test_switch_keeps_stored_calls_when_cdr_empty(self):
+        self.store(call_count=99)
+        p = self.plan(cdr={JUNE: self.OTHER})
+        calls = self.cell(p, 'call_count')
+        self.assertEqual((calls['new'], calls['source']), ('99.00', 'stored'))
+        self.assertIn('cdr_empty', p['months'][0]['notes'])
+
+    def test_stored_zero_stays_computed_zero(self):
+        self.store(call_count=0)
+        calls = self.cell(self.plan(cdr={JUNE: self.OTHER}), 'call_count')
+        self.assertEqual((calls['new'], calls['source']), ('0.00', 'crew'))
+
+    def build(self, csv_rows):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'cdr.csv')
+            with open(path, 'w', encoding='utf-8', newline='') as fh:
+                fh.write('calldate,src,dst,disposition\n')
+                for r in csv_rows:
+                    fh.write(f"{r['calldate']},{r['src']},{r['dst']},{r['disposition']}\n")
+            with mock.patch(RET_PATH, return_value=NO_RET):
+                call_command('build_crew_rollups', year=2026, month=6, cdr_csv=path,
+                             stdout=io.StringIO())
+
+    def test_build_crew_rollups_keeps_positive_row_on_empty_cdr(self):
+        self.store(call_count=1)                                    # dates the seed from June
+        crew = Crew.objects.get(pk=cc_seed.seed()['crew_id'])
+        row = K.objects.create(crew=crew, year=2026, month=6, metric='call_count', value=50)
+        self.build(self.OTHER)
+        row.refresh_from_db()
+        self.assertEqual(row.value, Decimal('50'))                  # a CDR hole: kept
+        K.objects.filter(pk=row.pk).update(value=0)
+        self.build(self.OTHER)
+        row.refresh_from_db()
+        self.assertEqual(row.value, Decimal('0'))                   # a real zero stays zero
+        self.build(CDR)
+        row.refresh_from_db()
+        self.assertEqual(row.value, Decimal('3'))
+
+
+class MoreApplyPathsTests(_Base):
+    def seeded(self):
+        return Crew.objects.get(pk=cc_seed.seed()['crew_id'])
+
+    def test_update_action_on_existing_crew_row(self):
+        self.store(cash_delivery=1234)
+        crew = self.seeded()
+        pics = K.objects.create(crew=crew, year=2026, month=6, metric='pic_count', value=5)
+        self.assertEqual(self.cell(self.plan(), 'pic_count')['action'], 'update')
+        self.apply(months=1)
+        pics.refresh_from_db()
+        self.assertEqual(pics.value, Decimal('2'))
+
+    def test_repoint_replace_with_stored_source(self):
+        cc_rows = self.store(call_count=99)
+        crew = self.seeded()
+        kept = K.objects.create(crew=crew, year=2026, month=6, metric='call_count', value=7)
+        calls = self.cell(self.plan(cdr={}), 'call_count')
+        self.assertEqual((calls['action'], calls['source'], calls['new']),
+                         ('repoint_replace', 'stored', '99.00'))
+        self.apply(months=1, cdr={})
+        kept.refresh_from_db()
+        self.assertEqual(kept.value, Decimal('99'))
+        self.assertFalse(K.objects.filter(pk=cc_rows['call_count'].pk).exists())
+        a = AuditLog.objects.get(action='cc_crew_history_rebuilt')
+        self.assertEqual(a.extra['source']['call_count'], 'stored')
+        self.assertEqual(a.extra['replaced_crew_rows'], {'call_count': kept.pk})
+
+    def test_forecast_clash_deletes_cc_row(self):
+        self.store(cash_delivery=1234)
+        crew = self.seeded()
+        sc = ForecastScenario.objects.create(name='s', year=2026, month=7)
+        cc_f = ForecastResult.objects.create(scenario=sc, branch=self.cc, scope_key='x', metric='beauty')
+        mine = ForecastResult.objects.create(scenario=sc, crew=crew, scope_key=f'crew:{crew.pk}',
+                                             metric='beauty')
+        other = ForecastResult.objects.create(scenario=sc, branch=self.cc, scope_key='y',
+                                              metric='call_count')
+        self.apply(months=1)
+        self.assertFalse(ForecastResult.objects.filter(pk=cc_f.pk).exists())
+        self.assertTrue(ForecastResult.objects.filter(pk=mine.pk, crew=crew).exists())
+        other.refresh_from_db()
+        self.assertEqual((other.crew_id, other.branch_id, other.scope_key),
+                         (crew.pk, None, f'crew:{crew.pk}'))
+        a = AuditLog.objects.get(action='cc_forecasts_moved_to_crew')
+        self.assertEqual(a.extra['moved'], 1)
+        self.assertEqual([x['id'] for x in a.extra['deleted_clashes']], [cc_f.pk])
+        self.assertEqual(a.extra['deleted_clashes'][0]['kept_crew_row'], mine.pk)
+
+
+class IssabelGuardTests(TestCase):
+    def test_tests_never_reach_the_live_pbx(self):
+        self.assertFalse(issabel.cdr_configured())
+        with self.assertRaises(issabel.CdrNotLive):
+            issabel.get_cdr_connection()
+        with self.assertRaises(issabel.CdrNotLive):
+            issabel.fetch_cdr_rows(date(2026, 6, 1), date(2026, 7, 1))

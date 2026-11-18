@@ -8,9 +8,13 @@ October 2026 marked), the forecast rows count and the branch kind change.
 
   python manage.py migrate_call_center_to_crew                        # dry run
   python manage.py migrate_call_center_to_crew --out plan.json        # + the plan as JSON
-  python manage.py migrate_call_center_to_crew --apply --confirm-months 28
+  python manage.py migrate_call_center_to_crew --apply --confirm-months 28 --plan plan.json       --user <username>
 
---apply runs in one transaction and requires --confirm-months equal to the planned month count.
+--apply runs in one transaction and requires --confirm-months equal to the planned month count;
+with --plan (the reviewed dry run's JSON) it also refuses when any month x metric figure differs.
+--user puts that staff member on every audit row (default: none).
+Run --apply while the scheduler's KPI refresh is quiet (not right after a sales sync): the
+transaction re-reads ~28 months of SOFTECH returns and the CDR before it writes.
 A second run reports 0 months and «nothing to move». No SOFTECH writes.
 """
 import json
@@ -28,15 +32,29 @@ class Command(BaseCommand):
         parser.add_argument('--confirm-months', type=int,
                             help='required with --apply: the month count the dry run printed')
         parser.add_argument('--out', help='write the plan as JSON to this path')
+        parser.add_argument('--plan', help='with --apply: the reviewed dry run JSON (--out); '
+                                           'refuse when any figure differs')
+        parser.add_argument('--user', help='our username of the person running it (audit)')
 
     def handle(self, *args, **o):
         if o['apply'] and o.get('confirm_months') is None:
             raise CommandError('--apply requires --confirm-months N (run the dry run first).')
+        if o.get('plan') and not o['apply']:
+            raise CommandError('--plan is for --apply (the dry run writes it with --out).')
+        user = self._user(o.get('user'))
+        reviewed = None
+        if o.get('plan'):
+            try:
+                with open(o['plan'], encoding='utf-8') as fh:
+                    reviewed = json.load(fh)
+            except (OSError, ValueError) as exc:
+                raise CommandError(f"cannot read --plan {o['plan']}: {exc}")
         try:
             if o['apply']:
-                plan = cc_switch.apply_switch(None, confirm_months=o['confirm_months'])
+                plan = cc_switch.apply_switch(user, confirm_months=o['confirm_months'],
+                                              reviewed_plan=reviewed)
             else:
-                plan = cc_switch.plan_switch()
+                plan = cc_switch.plan_switch(user)
         except (cc_switch.SwitchRefused, cc_seed.CcCrewNameTaken) as exc:
             raise CommandError(str(exc))
         self._print(plan, applied=o['apply'])
@@ -44,6 +62,17 @@ class Command(BaseCommand):
             with open(o['out'], 'w', encoding='utf-8') as fh:
                 json.dump(plan, fh, ensure_ascii=False, indent=2)
             self.stdout.write(f"Plan written to {o['out']}")
+
+    @staticmethod
+    def _user(username):
+        if not username:
+            return None
+        from apps.users.models import StaffProfile
+        user = (StaffProfile.objects.select_related('user')
+                .filter(user__username__iexact=username).first())
+        if user is None:
+            raise CommandError(f'no staff profile for username {username!r}')
+        return user
 
     def _print(self, plan, *, applied):
         w = self.stdout.write

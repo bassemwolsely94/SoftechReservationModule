@@ -14,7 +14,8 @@ the owner's returns rule). Only the crew's own rows are touched; branch rows are
 
 The month's notes (returns_unreachable, cdr_unavailable, ...) are printed — KpiActualRollup has
 no notes column. A metric the notes mark as not computable this run (apps.crews.kpi.unavailable_metrics:
-SOFTECH returns / CDR unreachable, no members / sellers) keeps its stored row untouched — never
+SOFTECH returns / CDR unreachable, no members / sellers, and cdr_empty = the CDR has no row for the
+crew's extensions while the stored call_count > 0) keeps its stored row untouched — never
 deleted, never overwritten with a gross or partial figure — so an unattended refresh cannot lose
 or degrade a number. A stored metric that is neither computed nor unavailable is deleted (no stale
 figure). Logged to stdout only.
@@ -26,7 +27,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.crews.kpi import compute_crew_month, unavailable_metrics
+from apps.crews.kpi import compute_crew_month, guard_empty_cdr, unavailable_metrics
 from apps.crews.models import Crew
 from apps.forecasting.models import KpiActualRollup
 
@@ -65,6 +66,10 @@ class Command(BaseCommand):
             for year, month in periods:
                 res = compute_crew_month(crew, year, month, returns=not o.get('no_returns'),
                                          cdr_rows=cdr_rows, per_member=False)
+                stored_calls = (KpiActualRollup.objects.filter(
+                    crew=crew, year=year, month=month, metric='call_count')
+                    .values_list('value', flat=True).first())
+                guard_empty_cdr(res, stored_calls)      # empty CDR never wipes a stored count
                 unavailable = unavailable_metrics(res.notes)
                 write = {m: v for m, v in res.kpis.items() if m not in unavailable}
                 with transaction.atomic():

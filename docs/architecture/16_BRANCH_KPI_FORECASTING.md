@@ -78,7 +78,11 @@
   The switch is `migrate_call_center_to_crew` (`apps/crews/cc_switch.py`), run ONCE on the office
   DB after merge: dry run (per month × metric «stored → new (crew|stored)», moving targets with
   attainment before/after, October 2026 marked, forecast count, CC kind change; `--out plan.json`),
-  then `--apply --confirm-months N`. One transaction: seed the crew if absent, rebuild every CC month
+  then `--apply --confirm-months N --plan plan.json --user <username>` (refused when any month ×
+  metric figure differs from the reviewed plan). Run the apply while the scheduler's KPI refresh is
+  quiet (not right after a sales sync): the transaction re-reads ~28 months of SOFTECH returns and
+  the CDR before writing. A CDR month with no row for the crew's extensions while the stored
+  `call_count` > 0 keeps the stored count (`cdr_empty`; `build_crew_rollups` too). One transaction: seed the crew if absent, rebuild every CC month
   from the crew rule (a metric the crew cannot compute that month keeps its stored value), re-point
   the CC rows in place, move `SalesTarget` / `ForecastResult`, CC kind → `closed`; audited
   (`cc_crew_history_rebuilt` per month, `cc_targets_moved_to_crew`, `cc_forecasts_moved_to_crew`,

@@ -71,6 +71,10 @@ def _month_plan(crew, y, m, cc_rows, crew_rows, cdr_rows_by_month) -> dict:
     if rows is None:        # [] above only stopped a second fetch: call_count is not computed
         cm.kpis.pop(CALL, None)
         notes.append(cdr_note)
+    stored_calls = cc_rows[CALL].value if CALL in cc_rows else (
+        crew_rows[CALL].value if CALL in crew_rows else None)
+    if crew_kpi.guard_empty_cdr(cm, stored_calls):      # a CDR hole never wipes a stored count
+        notes.append(crew_kpi.NOTE_CDR_EMPTY)
     off = crew_kpi.unavailable_metrics(notes)
     computed = {k: v for k, v in cm.kpis.items() if k in CREW_METRICS and k not in off}
     out = []
@@ -267,10 +271,30 @@ def _close_branch(cc, user):
                  new_data={'kind': Branch.KIND_CLOSED}, extra={'branch_id': cc.pk})
 
 
-def apply_switch(user, *, confirm_months, cdr_rows_by_month=None, today=None,
-                 focus_month=FOCUS_MONTH) -> dict:
+def _figures(plan) -> dict:
+    return {(int(mp['year']), int(mp['month']), r['metric']): r['new']
+            for mp in plan.get('months', []) for r in mp.get('metrics', [])}
+
+
+def plan_differences(reviewed: dict, plan: dict, limit: int = 10) -> list:
+    """Why the plan computed now is not the reviewed one: the month count, or any
+    month x metric whose new figure differs / is missing on one side. [] = identical."""
+    out = []
+    if int(reviewed.get('month_count', -1)) != plan['month_count']:
+        out.append(f"month count: reviewed {reviewed.get('month_count')}, now {plan['month_count']}")
+    a, b = _figures(reviewed), _figures(plan)
+    for key in sorted(set(a) | set(b)):
+        if a.get(key) != b.get(key):
+            y, m, metric = key
+            out.append(f'{y}-{m:02d} {metric}: reviewed {a.get(key)}, now {b.get(key)}')
+    return out[:limit] + ([f'... {len(out) - limit} more'] if len(out) > limit else [])
+
+
+def apply_switch(user, *, confirm_months, reviewed_plan=None, cdr_rows_by_month=None,
+                 today=None, focus_month=FOCUS_MONTH) -> dict:
     """Run the switch in one transaction. confirm_months must equal the planned month count
-    (computed inside the same transaction), otherwise SwitchRefused and nothing is written."""
+    (computed inside the same transaction) and, when reviewed_plan (the dry run's JSON) is given,
+    every month x metric figure must equal it — otherwise SwitchRefused and nothing is written."""
     today = today or timezone.localdate()
     with transaction.atomic():
         cc = legacy_cc_branch()
@@ -283,6 +307,11 @@ def apply_switch(user, *, confirm_months, cdr_rows_by_month=None, today=None,
         if confirm_months is None or int(confirm_months) != plan['month_count']:
             raise SwitchRefused(f'--confirm-months must be {plan["month_count"]} '
                                 f'(the planned month count), got {confirm_months}.')
+        if reviewed_plan is not None:
+            diffs = plan_differences(reviewed_plan, plan)
+            if diffs:
+                raise SwitchRefused('The figures changed since the reviewed plan — run the dry run '
+                                    'again and review it: ' + '; '.join(diffs))
         if plan['nothing_to_move']:
             return plan
         for mp in plan['months']:
