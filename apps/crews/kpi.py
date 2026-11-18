@@ -220,7 +220,29 @@ def _months_overlapping(start: date, end: date) -> Q:
 
 def crew_actual(crew, metric: str, start: date, end: date) -> float:
     """The board figure for a crew (owner ruling D): Σ KpiActualRollup(crew, metric) over the
-    months overlapping [start, end]. A month with no row adds nothing."""
+    calendar months overlapping [start, end] — each overlapping month counts WHOLE (rollups are
+    monthly; a period ending mid-month still gets that month's full figure, as on the board).
+    A month with no row adds nothing."""
     total = (K.objects.filter(_months_overlapping(start, end), crew=crew, metric=metric)
              .aggregate(s=Sum('value'))['s'])
     return float(total or 0)
+
+
+# What a note says could NOT be computed this run — build_crew_rollups and the call-center switch
+# keep the stored figure for these metrics instead of deleting it or overwriting it with a gross /
+# partial value (an unattended refresh must never lose or degrade a stored number).
+UNAVAILABLE_BY_NOTE = {
+    NOTE_RETURNS_UNREACHABLE: {K.M_CASH_DELIVERY, K.M_GROSS_PROFIT},
+    NOTE_CDR_UNAVAILABLE: {K.M_CALL_COUNT},
+    NOTE_CDR_UNREACHABLE: {K.M_CALL_COUNT},
+    NOTE_NO_MEMBERS: set(SALES_METRICS) | {K.M_CALL_COUNT},
+    NOTE_NO_SELLERS: set(SALES_METRICS),
+}
+
+
+def unavailable_metrics(notes) -> set:
+    """The metrics a month's notes mark as not computed (union over the notes)."""
+    out = set()
+    for n in notes or ():
+        out |= UNAVAILABLE_BY_NOTE.get(n, set())
+    return out

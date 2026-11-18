@@ -1797,7 +1797,10 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
 
     @staticmethod
     def _tgt_desc(t):
-        scope = t.branch.code if t.branch_id else (t.softech_user or t.get_scope_type_display())
+        if t.crew_id:
+            scope = t.crew.name
+        else:
+            scope = t.branch.code if t.branch_id else (t.softech_user or t.get_scope_type_display())
         return f'{scope} · {t.get_metric_display()} · {t.period_start:%Y-%m}'
 
     def perform_create(self, serializer):

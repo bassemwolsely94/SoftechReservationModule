@@ -415,8 +415,9 @@ class BuildCrewRollupsCommandTests(_Base):
         self.assertEqual(list(KpiActualRollup.objects.filter(branch__isnull=False)
                               .values_list('id', 'value')), before)
         rows = self._crew_rows(c)
-        self.assertEqual(set(rows), set(FIVE))
-        self.assertEqual(rows['cash_delivery'].value, Decimal('1000.00'))
+        # SOFTECH down: the two money metrics the returns adjust are not computable this run, so
+        # no gross figure is written for them (Task 3 fix: never store a degraded number)
+        self.assertEqual(set(rows), set(FIVE) - {'cash_delivery', 'gross_profit'})
         self.assertTrue(all(r.branch_id is None for r in rows.values()))
         self.assertIn('returns_unreachable', out.getvalue())     # notes go to stdout
         self.assertIn('cdr_unavailable', out.getvalue())
@@ -475,12 +476,17 @@ class BuildCrewRollupsCommandTests(_Base):
         month = crew_kpi.compute_crew_month(c2, 2026, 6, returns=False, cdr_rows=[])
         self.assertNotIn('returns_not_deducted', month.notes)
 
-    def test_rebuild_without_cdr_removes_stale_call_count(self):
+    def test_rebuild_without_cdr_keeps_stored_call_count(self):
+        # an unattended rebuild must never lose a figure it cannot recompute (Task 3 fix)
         c = self._build_with_csv()
+        out = StringIO()
         with mock.patch('apps.crews.kpi.cdr_configured', return_value=False):
             call_command('build_crew_rollups', crew=c.pk, year=2026, month=6, no_returns=True,
-                         stdout=StringIO())
-        self.assertEqual(set(self._crew_rows(c)), set(FIVE))
+                         stdout=out)
+        rows = self._crew_rows(c)
+        self.assertEqual(set(rows), set(FIVE) | {'call_count'})
+        self.assertEqual(rows['call_count'].value, Decimal('2'))
+        self.assertIn('kept stored call_count', out.getvalue())
 
     def test_month_with_nothing_computed_writes_nothing_and_warns(self):
         c = self.crew([('62', '', date(2026, 7, 1), None)])     # no identity in June
@@ -491,8 +497,19 @@ class BuildCrewRollupsCommandTests(_Base):
         call_command('build_crew_rollups', crew=c.pk, year=2026, month=6, stdout=out)
         self.assertIn('nothing computed', out.getvalue())
         self.assertIn('no_members', out.getvalue())
-        self.assertFalse(KpiActualRollup.objects.filter(crew=c).exists())   # stale row removed
+        # no members: nothing is computable, so the stored figure is kept, never deleted
+        self.assertTrue(KpiActualRollup.objects.filter(crew=c, metric='beauty').exists())
+        self.assertIn('kept stored beauty', out.getvalue())
         self.assertTrue(KpiActualRollup.objects.filter(crew=other).exists())  # other crew kept
+
+    def test_metric_neither_computed_nor_unavailable_is_removed(self):
+        self.inv('62', date(2026, 6, 3), 1000, cost=600, phc='P1')
+        c = self.crew([('62', '', SEED_FROM, None)])
+        KpiActualRollup.objects.create(crew=c, year=2026, month=6, metric='old_metric', value=1)
+        with mock.patch('apps.crews.kpi.cdr_configured', return_value=False):
+            call_command('build_crew_rollups', crew=c.pk, year=2026, month=6, no_returns=True,
+                         stdout=StringIO())
+        self.assertNotIn('old_metric', self._crew_rows(c))
 
 
 class KpiRollupCrewConstraintTests(_Base):

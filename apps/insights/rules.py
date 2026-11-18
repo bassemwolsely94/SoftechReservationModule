@@ -185,8 +185,10 @@ class Ctx:
         self.walkin_delivery_channels = [c for c in self.cash_channels if c not in _reg]  # نقدى + توصيل + موظفين + بطاقة
         self.customer_channels = self.resolver.customer_channels
         self.beauty_types = self.resolver.beauty_types
-        # the call-center crew's seller codes on any day of the period (dated membership)
+        # the call-center crew's seller codes on any day of the period (dated membership); the
+        # previous period's comparisons use the codes of THAT period
         self.cc_agents = call_center_seller_codes(start, end)
+        self.cc_agents_prev = call_center_seller_codes(self.prev_start, self.prev_end)
         from apps.forecasting.kpi import analytics_branches
         self.branches = list(analytics_branches().order_by('code'))   # retail only (excl HQ)
         # softech usercode → salesperson name (ERPUser fields are swapped: username=code, user_id=name)
@@ -526,12 +528,13 @@ def rule_branch_zero_delivery(ctx, threshold):
 
 def rule_branch_zero_callcenter(ctx, threshold):
     """Branch had zero call-center (agent) orders while normally active."""
-    if not ctx.cc_agents:
+    if not (ctx.cc_agents or ctx.cc_agents_prev):
         return []
-    def cc_orders(start, end):
-        return dict(_ph(ctx, start, end).filter(doc_code='115', softech_user__in=ctx.cc_agents)
+    def cc_orders(start, end, codes):
+        return dict(_ph(ctx, start, end).filter(doc_code='115', softech_user__in=codes)
                     .values_list('branch_id').annotate(c=Count('id')))
-    cur, prev = cc_orders(ctx.start, ctx.end), cc_orders(ctx.prev_start, ctx.prev_end)
+    cur = cc_orders(ctx.start, ctx.end, ctx.cc_agents)
+    prev = cc_orders(ctx.prev_start, ctx.prev_end, ctx.cc_agents_prev)
     out = []
     for b in ctx.branches:
         if cur.get(b.id, 0) == 0 and prev.get(b.id, 0) > 0:
@@ -3812,7 +3815,7 @@ def rule_rank_movement(ctx, threshold):
     # reps (meaningful only)
     nu = _net_by_user(ctx, ctx.nonexclude); pu = _net_by_user(ctx, ctx.nonexclude, ctx.prev_start, ctx.prev_end)
     nu = {u: v for u, v in nu.items() if v >= 20000 and u not in ctx.cc_agents}
-    up_now = positions(nu); up_prev = positions({u: v for u, v in pu.items() if u not in ctx.cc_agents})
+    up_now = positions(nu); up_prev = positions({u: v for u, v in pu.items() if u not in ctx.cc_agents_prev})
     umv = {u: (up_now[u], up_prev[u], up_prev[u] - up_now[u]) for u in up_now if u in up_prev}
 
     # chain highlight — biggest climbers

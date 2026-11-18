@@ -291,3 +291,18 @@ class SalesTargetSerializer(serializers.ModelSerializer):
             'target_value', 'attainment', 'created_at',
         ]
         read_only_fields = ['created_at']
+
+    CREW_REQUIRED = 'اختر طاقم الكول سنتر'
+
+    def validate(self, data):
+        """A crew target names a live call-center crew; any other scope carries no crew
+        (crews piece 2b Part B — the call center's targets live on the crew)."""
+        inst = self.instance
+        scope = data.get('scope_type', getattr(inst, 'scope_type', SalesTarget.SCOPE_BRANCH))
+        crew = data['crew'] if 'crew' in data else getattr(inst, 'crew', None)
+        if scope == SalesTarget.SCOPE_CREW:
+            if crew is None or crew.is_archived or crew.type != 'call_center':
+                raise serializers.ValidationError({'crew': self.CREW_REQUIRED})
+        elif crew is not None:
+            raise serializers.ValidationError({'crew': 'الطاقم يُحدَّد لمستهدف من نوع «طاقم» فقط'})
+        return data

@@ -21,6 +21,9 @@ The rows that decide staleness are the ones a rebuild rewrites: the retail branc
 (build_kpi_rollups) and the call-center crew's (build_crew_rollups, crews piece 2b Part B —
 before, the crew month froze when sales synced after its build: the October 2026 cause).
 Rows nobody rebuilds (a closed / call-center branch, an archived crew) never pin a month stale.
+A crew's month counts as computed at its LATEST row: build_crew_rollups keeps (does not touch) a
+row it cannot recompute (CDR / SOFTECH unreachable), and that kept row's old computed_at must
+not make the month stale forever.
 """
 import logging
 import threading
@@ -55,21 +58,21 @@ def _month_range(year, month):
 
 def month_status(year, month, now=None):
     """{year, month, computed_at, sales_synced_at, stale, current} for one month."""
-    from django.db.models import Max, Min, Q
+    from django.db.models import Max, Min
     from django.utils import timezone
     from apps.branches.models import Branch
     from apps.customers.models import PurchaseHistory
-    from apps.forecasting.call_center import call_center_crew
+    from apps.forecasting.call_center import call_center_crew_ids
     from apps.forecasting.models import KpiActualRollup
     now = now or timezone.now()
     today = timezone.localdate(now)
     start, end = _month_range(year, month)
-    rebuilt = Q(branch__in=Branch.objects.retail())
-    crew = call_center_crew()
-    if crew is not None:
-        rebuilt |= Q(crew=crew)
-    rollups = KpiActualRollup.objects.filter(rebuilt, year=year, month=month)
-    computed = rollups.aggregate(m=Min('computed_at'))['m']
+    month_rows = KpiActualRollup.objects.filter(year=year, month=month)
+    built = [month_rows.filter(branch__in=Branch.objects.retail()).aggregate(m=Min('computed_at'))['m']]
+    for crew_id in call_center_crew_ids():
+        built.append(month_rows.filter(crew_id=crew_id).aggregate(m=Max('computed_at'))['m'])
+    built = [t for t in built if t is not None]
+    computed = min(built) if built else None
     synced = (PurchaseHistory.objects.filter(invoice_date__gte=start, invoice_date__lt=end)
               .aggregate(m=Max('last_synced'))['m'])
     current = (year, month) == (today.year, today.month)

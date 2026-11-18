@@ -401,3 +401,140 @@ class NoLegacyCcKeyTests(TestCase):
                     line = src.count('\n', 0, mt.start()) + 1
                     hits.append(f'{rel.as_posix()}:{line}')
         self.assertEqual(hits, [])
+
+
+class UnattendedRefreshKeepsFiguresTests(TestCase):
+    """Task 3 review fix: rollup_refresh.rebuild never loses or degrades a stored crew figure it
+    cannot recompute (CDR unconfigured / unreachable, SOFTECH returns unreachable)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from apps.customers.models import Customer, PurchaseHistory
+        cls.b = Branch.objects.create(softech_branch_id='976', code='976', name='UK',
+                                      kind=Branch.KIND_RETAIL)
+        cust = Customer.objects.create(name='ك', softech_pic='PICUK', softech_id='C-UK')
+        PurchaseHistory.objects.create(
+            customer=cust, softech_invoice_id='UK-1', branch=cls.b, doc_code='115',
+            total_amount=Decimal('1000'), invoice_date=_aware(2025, 3, 10), sales_channel='91',
+            sales_person_type='10', softech_user='62')
+        cls.crew = _crew(codes=('62',), exts=('10',))
+
+    def _stored(self):
+        for metric, v in [('call_count', 1639), ('cash_delivery', 900), ('gross_profit', 300)]:
+            _roll(2025, 3, metric, v, crew=self.crew)
+
+    def _rows(self):
+        return {r.metric: r.value for r in K.objects.filter(crew=self.crew, year=2025, month=3)}
+
+    def _rebuild(self):
+        from apps.forecasting import rollup_refresh as RR
+        RR.rebuild([(2025, 3)])
+
+    def _returns_ok(self):
+        return mock.patch('apps.crews.kpi.softech_returns.returns_for_codes',
+                          return_value={'amount': Decimal('100'), 'profit': Decimal('40')})
+
+    def test_cdr_unconfigured_keeps_call_count(self):
+        self._stored()
+        with mock.patch('apps.crews.kpi.cdr_configured', return_value=False), self._returns_ok():
+            self._rebuild()
+        rows = self._rows()
+        self.assertEqual(rows['call_count'], Decimal('1639'))
+        self.assertEqual(rows['cash_delivery'], Decimal('900'))        # 1000 − 100 returns
+        self.assertIn('beauty', rows)
+
+    def test_cdr_fetch_failure_keeps_call_count(self):
+        self._stored()
+        with mock.patch('apps.crews.kpi.cdr_configured', return_value=True), \
+                mock.patch('apps.crews.kpi.fetch_cdr_rows', side_effect=OSError('pbx down')), \
+                self._returns_ok():
+            self._rebuild()
+        self.assertEqual(self._rows()['call_count'], Decimal('1639'))
+
+    def test_returns_unreachable_keeps_stored_money_not_gross(self):
+        self._stored()
+        with mock.patch('apps.crews.kpi.cdr_configured', return_value=False), \
+                mock.patch('apps.crews.kpi.softech_returns.returns_for_codes',
+                           side_effect=OSError('SOFTECH down')):
+            self._rebuild()
+        rows = self._rows()
+        self.assertEqual(rows['cash_delivery'], Decimal('900'))        # not the gross 1000
+        self.assertEqual(rows['gross_profit'], Decimal('300'))
+        self.assertEqual(rows['call_count'], Decimal('1639'))
+
+    def test_kept_row_does_not_pin_the_month_stale(self):
+        from apps.customers.models import PurchaseHistory
+        from apps.forecasting import rollup_refresh as RR
+        self._stored()
+        _roll(2025, 3, 'cash_delivery', 1, branch=self.b)
+        PurchaseHistory.objects.update(last_synced=_aware(2025, 4, 2, 3))
+        K.objects.update(computed_at=_aware(2025, 4, 2, 6))
+        K.objects.filter(metric='call_count').update(computed_at=_aware(2025, 3, 1))   # kept row
+        self.assertFalse(RR.month_status(2025, 3, now=_aware(2025, 4, 3))['stale'])
+
+    def test_unavailable_metrics_by_note(self):
+        from apps.crews.kpi import unavailable_metrics
+        self.assertEqual(unavailable_metrics(['returns_unreachable']),
+                         {'cash_delivery', 'gross_profit'})
+        self.assertEqual(unavailable_metrics(['cdr_unavailable', 'returns_not_deducted']),
+                         {'call_count'})
+        self.assertEqual(unavailable_metrics(['no_members']),
+                         {'cash_delivery', 'gross_profit', 'beauty', 'customer_count', 'pic_count',
+                          'call_count'})
+        self.assertEqual(unavailable_metrics([]), set())
+
+
+class CrewTargetApiTests(TestCase):
+    """Task 3 review fix: a crew target names a live call-center crew; other scopes carry none."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.crew = _crew()
+        cls.job = _crew(name='وظيفي', type_='job')
+        cls.old = _crew(name='قديم')
+        cls.old.is_archived = True
+        cls.old.save()
+        cls.br = Branch.objects.create(softech_branch_id='977', code='977', name='T',
+                                       kind=Branch.KIND_RETAIL)
+
+    def setUp(self):
+        from apps.tests.factories import make_user
+        _, _, self.client = make_user('crew_tgt_admin', role='admin', access_all=True)
+
+    def _post(self, **kw):
+        body = {'metric': 'call_count', 'period_start': '2026-10-01', 'period_end': '2026-10-31',
+                'target_value': 100, **kw}
+        return self.client.post('/api/incentives/targets/', body, format='json')
+
+    def test_crew_scope_needs_a_live_call_center_crew(self):
+        for crew in (None, self.job.pk, self.old.pk):
+            with self.subTest(crew=crew):
+                r = self._post(scope_type='crew', crew=crew)
+                self.assertEqual(r.status_code, 400, r.content)
+                self.assertIn('اختر طاقم الكول سنتر', r.content.decode('utf-8'))
+        r = self._post(scope_type='crew', crew=self.crew.pk)
+        self.assertEqual(r.status_code, 201, r.content)
+        from apps.audit.models import AuditLog
+        log = AuditLog.objects.filter(action='sales_target_created').latest('id')
+        self.assertIn(self.crew.name, log.note)
+
+    def test_other_scopes_carry_no_crew(self):
+        r = self._post(scope_type='branch', branch=self.br.pk, crew=self.crew.pk)
+        self.assertEqual(r.status_code, 400, r.content)
+        r = self._post(scope_type='branch', branch=self.br.pk)
+        self.assertEqual(r.status_code, 201, r.content)
+        tid = r.json()['id']
+        r = self.client.patch(f'/api/incentives/targets/{tid}/', {'crew': self.crew.pk},
+                              format='json')
+        self.assertEqual(r.status_code, 400, r.content)
+
+
+class InsightsPreviousPeriodCodesTests(TestCase):
+    def test_previous_period_uses_its_own_crew_codes(self):
+        from apps.insights.rules import Ctx
+        c = _crew(codes=('62',), frm=date(2026, 6, 1), to=date(2026, 6, 30))
+        CrewManualMember.objects.create(crew=c, mode='include', softech_usercode='63',
+                                        valid_from=date(2026, 7, 1), reason='t')
+        ctx = Ctx('month', date(2026, 7, 1), date(2026, 7, 31))
+        self.assertEqual(sorted(ctx.cc_agents), ['63'])
+        self.assertEqual(sorted(ctx.cc_agents_prev), ['62'])

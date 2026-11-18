@@ -13,9 +13,11 @@ the owner's returns rule). Only the crew's own rows are touched; branch rows are
   python manage.py build_crew_rollups --crew 3 --no-returns
 
 The month's notes (returns_unreachable, cdr_unavailable, ...) are printed — KpiActualRollup has
-no notes column. A metric that could not be computed is not written and the crew's row from an
-earlier run is deleted (no stale figure); a month with nothing computed writes nothing (old rows
-removed) and warns. Logged to stdout only.
+no notes column. A metric the notes mark as not computable this run (apps.crews.kpi.unavailable_metrics:
+SOFTECH returns / CDR unreachable, no members / sellers) keeps its stored row untouched — never
+deleted, never overwritten with a gross or partial figure — so an unattended refresh cannot lose
+or degrade a number. A stored metric that is neither computed nor unavailable is deleted (no stale
+figure). Logged to stdout only.
 """
 import csv
 from datetime import date
@@ -24,7 +26,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.crews.kpi import compute_crew_month
+from apps.crews.kpi import compute_crew_month, unavailable_metrics
 from apps.crews.models import Crew
 from apps.forecasting.models import KpiActualRollup
 
@@ -63,21 +65,28 @@ class Command(BaseCommand):
             for year, month in periods:
                 res = compute_crew_month(crew, year, month, returns=not o.get('no_returns'),
                                          cdr_rows=cdr_rows, per_member=False)
+                unavailable = unavailable_metrics(res.notes)
+                write = {m: v for m, v in res.kpis.items() if m not in unavailable}
                 with transaction.atomic():
-                    # a metric this run could not compute must not survive from an earlier run
-                    stale = KpiActualRollup.objects.filter(
-                        crew=crew, year=year, month=month).exclude(
-                        metric__in=list(res.kpis)).delete()[0]
-                    for metric, value in res.kpis.items():
+                    rows = KpiActualRollup.objects.filter(crew=crew, year=year, month=month)
+                    kept = sorted(rows.filter(metric__in=list(unavailable))
+                                  .values_list('metric', flat=True))
+                    # a metric neither computed nor unavailable must not survive from an earlier run
+                    stale = rows.exclude(metric__in=list(write) + list(unavailable)).delete()[0]
+                    for metric, value in write.items():
                         KpiActualRollup.objects.update_or_create(
                             crew=crew, branch=None, year=year, month=month, metric=metric,
                             defaults={'value': value})
-                if not res.kpis:
+                if kept:
+                    self.stdout.write(
+                        f"  crew {crew.pk} {year}-{month:02d}: kept stored {', '.join(kept)} "
+                        f"(not computable: {','.join(res.notes)})")
+                if not write:
                     self.stdout.write(self.style.WARNING(
                         f"  crew {crew.pk} {year}-{month:02d}: nothing computed, nothing written, "
                         f"{stale} old row(s) removed (notes={','.join(res.notes) or '-'})"))
                     continue
-                k = res.kpis
+                k = write
                 self.stdout.write(
                     f"  crew {crew.pk} {year}-{month:02d}: "
                     f"net_sales={float(k.get('cash_delivery', 0)):,.0f} "
