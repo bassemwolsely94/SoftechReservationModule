@@ -46,7 +46,8 @@ MODULE = {
             {'key': 'delivered', 'label': T('تم التوصيل', 'Delivered'),
              'desc': T('وصل للعميل. نهائي.', 'Reached the customer. Final.')},
             {'key': 'cancelled', 'label': T('ملغى', 'Cancelled'),
-             'desc': T('أُلغي قبل التسليم للمندوب. نهائي.', 'Cancelled before the handover. Final.')},
+             'desc': T('أُلغي قبل التسليم للمندوب بسبب مكتوب. نهائي.',
+                       'Cancelled before the handover, with a written reason. Final.')},
         ],
     }],
     'journeys': [
@@ -123,49 +124,64 @@ SCREENS = [
                        'الأصناف ومشكلة كل صنف (غير معتمد، ممنوع، غير متوفر)، وسجل الحالات. «قبول» يحوّل الطلب لمسودة في '
                        'نقطة البيع على حساب المنصة (بيع آجل) — الكاشير يكمّلها ويسويها؛ لو فيه صنف بمشكلة يُرفض القبول '
                        'ويظهر السبب. «رفض» يحتاج سببًا. بعد القبول حرّك الحالة: تحضير ← جاهز ← سُلِّم للمندوب ← تم التوصيل. '
-                       'رقم العميل يظهر مخفيًا في القائمة.',
+                       '«إلغاء الطلب» يحتاج سبب الإلغاء في الخانة بجانبه؛ لو المسودة لسه ما وصلتش للكاشير تُلغى معه، ولو '
+                       'وصلت يظهر الطلب «يحتاج مراجعة» ⚠ وتُلغى من نقطة البيع أو يُعمل مرتجع. الكمية تفضل محجوزة من المخزون '
+                       'المعروض حتى يسوي الكاشير البيع. رقم العميل يظهر مخفيًا في القائمة.',
                        'Every platform order for your branches with its status, filtered by status and platform. Click an '
                        'order and its details open beside the table: the items and each item’s problem (not approved, '
                        'blocked, out of stock), and the status history. "Accept" turns the order into a POS draft on the '
                        'platform account (a credit sale) — the cashier completes and settles it; if an item has a problem '
                        'accepting is refused and the reason shows. "Reject" needs a reason. After accepting, move the '
-                       'status: preparing → ready → handed over → delivered. The customer number is masked in the list.')},
+                       'status: preparing → ready → handed over → delivered. "Cancel order" needs a reason in the box '
+                       'beside it; a draft that has not reached the cashier is cancelled with it, and if it has, the order '
+                       'shows "Needs review" ⚠ and is cancelled in the POS or returned. The quantity stays held from the '
+                       'listed stock until the cashier settles the sale. The customer number is masked in the list.')},
             {'key': 'manual', 'title': T('✍️ إدخال طلب', '✍️ Enter an order'),
              'body': T('لطلب وصل بالتليفون أو من لوحة المنصة: اختر المنصة والفرع، واكتب رقم الطلب عند المنصة، '
                        'ثم ابحث عن الصنف (نفس بحث النظام، * أو % بين الأجزاء) واكتب الكمية واضغط Enter لإضافته. '
+                       'سعر المنصة يُملأ تلقائيًا من قاعدة سعر المنصة، ولا يُضاف صنف بدون سعر. '
                        'اختر طريقة الدفع ثم «حفظ الطلب». نفس رقم الطلب مرتين لا يُنشئ طلبًا ثانيًا. الطلب يدخل «جديد» '
                        'ويحتاج قبولًا من تبويب الطلبات.',
                        'For an order that came by phone or from the platform’s panel: pick the platform and branch, type '
                        'the platform’s order number, then search the item (the system search, * or % between parts), type '
-                       'the quantity and press Enter to add it. Pick the payment mode, then "Save order". The same order '
+                       'the quantity and press Enter to add it. The platform price fills in from the platform’s price '
+                       'rule, and no line is added without a price. Pick the payment mode, then "Save order". The same order '
                        'number twice never makes a second order. The order starts as "New" and needs accepting on the Orders tab.')},
             {'key': 'listings', 'title': T('🏷️ الأصناف المعروضة', '🏷️ Listed items'),
              'body': T('الأصناف المضافة لكل منصة، والمعتمد منها، والمشكلة والكمية المتاحة في الفرع المختار وسعر المنصة. '
                        'لا يُعرض أي صنف بدون اعتماد مشرف، وأدوية الروشتة لا تُعتمد إلا بقرار صريح لكل صنف. الصنف الممنوع '
-                       'أو المقيد أو الثلاجة (إلا لو مسموح) لا يُباع حتى لو معتمد. ↑↓ للتنقل وEnter لاعتماد الصف أو فك اعتماده.',
+                       'أو المقيد أو الثلاجة (إلا لو مسموح) لا يُباع حتى لو معتمد. عمود «ثلاجة» يظهر لأصناف الثلاجة، '
+                       'و«❄ يسمح» يحدده المشرف فقط (ويعتمد الصنف معه). ↑↓ للتنقل وEnter لاعتماد الصف أو فك اعتماده.',
                        'The items added to each platform, which are approved, and the problem, available quantity in the '
                        'chosen branch and the platform price. No item is listed without a supervisor’s approval, and '
                        'prescription medicines are approved only by an explicit decision per item. A blocked, restricted or '
-                       'fridge item (unless allowed) is not sold even when approved. ↑↓ to move and Enter to approve or '
-                       'unapprove the row.')},
+                       'fridge item (unless allowed) is not sold even when approved. The "Fridge" column shows for fridge '
+                       'items, and "❄ allow" is set by a supervisor only (it approves the item too). ↑↓ to move and Enter '
+                       'to approve or unapprove the row.')},
             {'key': 'channels', 'title': T('🔌 المنصات والفروع', '🔌 Platforms & branches'),
              'body': T('إعداد كل منصة: الاسم، كود حسابها في SOFTECH (كل طلباتها تُسجَّل بيعًا آجلًا عليه)، قاعدة السعر '
-                       '(سعر الرف أو سعر الرف + نسبة)، احتياطي المخزون وأقصى كمية للصنف. تحتها فروع المنصة: كود المتجر عند '
+                       '(سعر الرف = سعر العبوة + ضريبته مقربًا للقرش، أو سعر الرف + نسبة مقربًا لأقرب ربع جنيه)، احتياطي '
+                       'المخزون وأقصى كمية للصنف. كود المنصة لا يتغير بعد وصول طلبات عليها، والفرع المغلق لا يُربط. '
+                       'تحتها فروع المنصة: كود المتجر عند '
                        'المنصة وطريقة التوصيل وتفعيله. «إرسال المخزون» يرسل الكميات المتاحة؛ وطالما مفتاح الإرسال مقفول يظهر '
                        '«تجريبي — لا يُرسل» ولا يخرج شيء. سجل الإرسال تحته.',
                        'Each platform’s setup: name, its SOFTECH account code (all its orders post as a credit sale on it), '
-                       'the price rule (shelf price or shelf price + a percentage), the stock buffer and the most per item. '
+                       'the price rule (shelf price = pack price plus its tax, to the piastre; or shelf price + a '
+                       'percentage, to the nearest quarter pound), the stock buffer and the most per item. The platform '
+                       'code is fixed once orders exist, and a closed branch cannot be linked. '
                        'Below, the platform’s branches: the store code on the platform, the delivery mode and whether it is '
                        'on. "Push stock" sends the available quantities; while the send switch is off it shows "Dry run — '
                        'not sent" and nothing leaves. The push log is below.')},
             {'key': 'settlement', 'title': T('💰 التسويات', '💰 Payouts'),
              'body': T('ارفع ملف التسوية من المنصة (CSV أو Excel) مع الفترة، واكتب اسم عمود كل قيمة في الملف (رقم الطلب، '
                        'الإجمالي، العمولة، التوصيل، الصافي). النظام يطابق كل سطر مع طلباتنا ويعرض العدد: مطابق، غير موجود، '
-                       'اختلاف مبلغ، وطلباتنا غير الموجودة بالملف. اضغط تسوية لعرض أسطرها غير المطابقة.',
+                       'اختلاف مبلغ، وطلباتنا غير الموجودة بالملف. السطر يُعتبر مطابقًا فقط لطلب سُلِّم للمندوب أو تم توصيله؛ '
+                       'غير ذلك يظهر «اختلاف مبلغ» مع حالة الطلب. اضغط تسوية لعرض أسطرها غير المطابقة.',
                        'Upload the platform’s payout file (CSV or Excel) with its period, and type the file’s column name for '
                        'each value (order number, gross, commission, delivery, net). Each line is matched to our orders and '
-                       'the counts show: matched, not found, amount mismatch, and our orders missing from the file. Click a '
-                       'payout to see its unmatched lines.')},
+                       'the counts show: matched, not found, amount mismatch, and our orders missing from the file. A line '
+                       'matches only an order that was handed over or delivered; otherwise it shows as a mismatch with the '
+                       'order’s status. Click a payout to see its unmatched lines.')},
         ],
         'workflows': ['external_order'],
         'tips': [
