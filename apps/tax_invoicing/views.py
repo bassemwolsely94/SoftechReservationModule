@@ -1098,6 +1098,8 @@ def codes(request):
     qs = TaxCodeRequest.objects.select_related('profile', 'prepared_by', 'sent_by')
     if request.query_params.get('status'):
         qs = qs.filter(status=request.query_params['status'])
+    if request.query_params.get('environment'):
+        qs = qs.filter(environment=request.query_params['environment'])
     q = (request.query_params.get('q') or '').strip()
     if q:
         qs = qs.filter(Q(item_code__icontains=q) | Q(code_name__icontains=q) | Q(code_name_ar__icontains=q)
@@ -1194,7 +1196,8 @@ def code_cancel(request, pk):
 @permission_classes([IsAuthenticated, SENDER])
 def codes_send(request):
     try:
-        result = coding.send(_ids(request), request.user, request.data.get('confirm'))
+        result = coding.send(_ids(request), request.user, request.data.get('confirm'),
+                             actor_can_finalize=_can(request, 'finalize'))
     except services.TaxRuleError as exc:
         return _refuse(exc)
     return Response(result)
@@ -1363,6 +1366,50 @@ def codes_queue_brick(request):
         return _refuse(exc)
     return Response({'itemcode': profile.softech_itemcode, 'brick': row.brick, 'brick_source': row.brick_source,
                      'brick_name': gpc.names([row.brick]).get(row.brick, '')})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_queue_prepare(request):
+    """{itemcodes: [..≤200]}: drafts an ETA production code request for each item decided «يُكوَّد» (its confirmed
+    brick and names). Sends nothing. {created: [ids], skipped: [{itemcode, why}]}."""
+    itemcodes = request.data.get('itemcodes')
+    if not isinstance(itemcodes, list):
+        return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        return Response(coding.prepare_from_decisions(itemcodes, request.user))
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, VIEWER])
+def codes_production(request):
+    """The «طلبات الإنتاج» panel's state: the production coding switches, whether the first-request rule applies,
+    whether a production request is with ETA now, the decided items a request can be prepared for (≤200 itemcodes)
+    and the «جرّب GS1» offers {itemcode: gtin}. Reads only; the send itself re-checks every gate."""
+    from . import coding_queue
+    decided = coding_queue.rows(decided='yes')
+    ready = sorted((r for r in decided if r['request_ready']), key=lambda r: (-r['value'], r['itemcode']))
+    return Response({'enabled': writer_allowed(coding.PRODUCTION_FLAG), 'batch_ok': writer_allowed(coding.BATCH_FLAG),
+                     'first_request_pending': coding.first_request_pending(),
+                     'in_flight': TaxCodeRequest.objects.filter(environment=coding.PRODUCTION,
+                                                                status__in=coding.IN_FLIGHT).count(),
+                     'ready': {'count': len(ready), 'itemcodes': [r['itemcode'] for r in ready][:coding.MAX_PER_ACTION]},
+                     'gs1_offers': {r['itemcode']: r['gs1_offer']['gtin'] for r in decided if r['gs1_offer']['available']}})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, EDITOR])
+def codes_queue_gs1(request):
+    """{itemcode}: a person takes the «جرّب GS1» offer after ETA rejected the item's EGS request: drafts one
+    production GS1 request from its barcode. Sends nothing."""
+    try:
+        return Response(coding.prepare_gs1_offer(str(request.data.get('itemcode') or ''), request.user))
+    except TaxItemProfile.DoesNotExist:
+        return Response({'detail': coding.UNKNOWN_ITEM}, status=status.HTTP_404_NOT_FOUND)
+    except services.TaxRuleError as exc:
+        return _refuse(exc)
 
 
 SUGGEST_MAX = 5     # each AI call can take tens of seconds; an outage must not outlive nginx's 600 s

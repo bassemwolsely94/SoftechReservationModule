@@ -39,6 +39,10 @@ PUBLIC_PREFIXES = (
     '/api/whatsapp/webhook/',
     # apps.hr.attendance.agent_views (no staff user; per-agent secret, hashed, constant-time)
     '/api/hr-attendance/agent/',
+    # apps.rpa.agent_views (no staff session: per-device secret X-ElR-RPA-Agent, hashed, constant-time,
+    # via RpaDeviceAuthentication; the request then runs as the device's operator and each view checks
+    # IsAuthenticated + matrix_permission('rpa', post=('create',)) — a missing/bad secret is a 401 there)
+    '/api/rpa/agent/',
 )
 
 # Allowed for GET / HEAD / OPTIONS only; any other method needs a signed-in user.

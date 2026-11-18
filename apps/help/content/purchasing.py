@@ -613,7 +613,8 @@ SCREENS = [
                        '"＋ Generate" makes one request per branch to HQ, one "ready now" request from HQ per branch, and one "after receipt" part per source branch — '
                        'that part (and any HQ forwarding leg of a transfer) is pushed only after HQ has received the branch\'s issue; its expiry starts at that receipt. The plan must be the latest and under 12 hours old. Nothing is written to SOFTECH from here.')},
         ],
-        'tips': [T('دور «مشاهد» المرتبط بفرع بيشوف حالات فرعه والحالات العامة للشبكة بس.', 'A branch-bound "viewer" sees their own branch\'s cases and the network-wide cases only.'),
+        'tips': [T('صندوق الإتاحة — «إضافة صنف آخر لهذا السطر»: Ctrl+مسافة يعلّم كذا صنف ثم Enter يضيفهم مرة واحدة؛ الصنف الموجود مايتكررش.', "Availability inbox — «add another item to this line»: Ctrl+Space ticks several items, then Enter adds them at once; an item already there isn't repeated."),
+                 T('دور «مشاهد» المرتبط بفرع بيشوف حالات فرعه والحالات العامة للشبكة بس.', 'A branch-bound "viewer" sees their own branch\'s cases and the network-wide cases only.'),
                  T('لا شيء في هذه الشاشة يكتب في SOFTECH بدون اعتماد صريح وبوابة مفعّلة.', 'Nothing on this screen writes to SOFTECH without explicit approval and an enabled gate.'),
                  T('كل ملفات Excel في هذه الشاشة فيها «بيانات الصنف» بعد الكود والاسم مباشرة: التصنيف العام، الشكل الصيدلي، الشكل والوحدة، تصنيف الخصم، موقوف التوريد، المورد الرئيسي، الشركة المنتجة، العائلة، سعر الجمهور وسعر التكلفة — من جدول الأصناف لحظة التصدير، فأي تحديث للصنف يظهر في التصدير التالي. «⬇ Excel» موجود كمان في «صندوق الإتاحة» (القائمة المفتوحة)، «متابعة النواقص» (الفئة المختارة كلها)، و«معدلات البيع» (الدفعة المفتوحة). '
                    'في «تلبية طلبات الفروع» و«طلبات واتساب» السعران بجانب البيانات هما أسعار الخطة نفسها. ملف الطلب اللي بيتبعت للمورد يفضل بالكود والاسم والكمية بس — من غير أسعارنا.',
@@ -1025,8 +1026,8 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('«مقارنة أسعار الشراء»: فلتر المورد بقى يقبل أكثر من مورد.', '"Purchase price comparison": the supplier filter now takes several suppliers.'),
+        'updated': '2026-11-17',
+        'change_note': T('صندوق الإتاحة: إضافة كذا صنف للسطر مرة واحدة (Ctrl+مسافة أو Ctrl+F1)', 'Availability inbox: add several items to a line at once (Ctrl+Space or Ctrl+F1)'),
     },
     {
         'key': 'purchasing.overview',

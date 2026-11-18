@@ -711,6 +711,12 @@ class TypoTests(TestCase):
         self.assertTrue(res[0].startswith('CATAFLAM'), res)
         self.assertNotEqual(res[0], 'ANTIFLAM 50MG 20TAB')
 
+    def test_unfiltered_typo_query_count_unchanged(self):
+        # S3: the filter-aware approx tier adds nothing to the unfiltered path (S2 count, warm)
+        W.item_search('voltren')
+        with self.assertNumQueries(APPROX_QUERIES_S2):
+            W.item_search('voltren')
+
     def test_gibberish_no_guess(self):
         self.assertEqual(W.item_search('xqzvw'), [])
 
@@ -787,6 +793,39 @@ class SoundTierTests(TestCase):
         after = dict(W.item_search('بنادول'))
         self.assertNotIn(adv.id, after)
         self.assertEqual(after.get(other.id), 'sound')
+
+    def test_unfiltered_sound_query_count_unchanged(self):
+        # S3: the filter-aware sound index adds nothing to the unfiltered path (POS / softech
+        # search, the list without filters) — the S2 count, index warm
+        W.item_search('بنادول')
+        with self.assertNumQueries(SOUND_QUERIES_S2):
+            W.item_search('بنادول')
+
+    def test_within_none_is_todays_behaviour(self):
+        for q in ('بنادول', 'كتافلام', 'سيريلاك', 'كاتافلام 50'):
+            self.assertEqual(P.candidates(q, limit=60, within=None), P.candidates(q, limit=60), q)
+            self.assertEqual(P.quick_ids(q, within=None), P.quick_ids(q), q)
+
+    def test_within_drops_items_before_the_cut(self):
+        cat = [i.id for n, i in self.it.items() if n.startswith('CATAFLAM')]
+        keep = frozenset(cat[1:])
+        got = P.candidates('كتافلام', limit=1, within=keep)
+        self.assertEqual(len(got), 1)
+        self.assertIn(got[0][0], keep)
+        ids = P.quick_ids('كتافلام', within=keep)
+        self.assertTrue(ids)
+        self.assertTrue(set(ids) <= set(keep))          # the filter holds: nothing outside keep
+        self.assertNotIn(cat[0], ids)                    # the dropped item never comes back
+        self.assertIn(cat[1], ids)                       # a kept target is present
+        self.assertEqual(P.quick_ids('كتافلام', within=frozenset()), [])
+
+
+# S2's query count for an unfiltered Arabic sound search (index warm): the code lookup, the
+# learned memory, the name rank (savepoint + SET LOCAL pair), synonyms, the sound tier's names
+# + rejections, the ingredient tier
+SOUND_QUERIES_S2 = 12
+# … and for an unfiltered Latin typo («voltren» → the approx tier's names)
+APPROX_QUERIES_S2 = 11
 
 
 class IngredientAndEndpointTests(TestCase):

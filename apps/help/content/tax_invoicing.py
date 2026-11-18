@@ -197,7 +197,7 @@ SCREENS = [
             {'key': 'queue', 'title': T('🧮 طابور الترميز', '🧮 Coding queue'),
              'body': T('أصناف بيعت على إيصالات المنظومة الفعلية بلا كود، مرتبة بقيمة المبيعات. لكل صنف مقترح من مصادر شرائه (كوّد أو استبعد) ونسبة ضريبة من SOFTECH، وكلاهما مدخل فقط؛ قرارك هو ما يُحفظ ويُسجَّل بمن قرر ومتى. '
                        'حدد الأصناف بالمسافة ثم Enter لقبول مقترح كل صنف (الصنف بلا مقترح يُترك)، أو C للتكويد أو K للاستبعاد. النسبة بالأحمر تحتاج تأكيداً: اختر 0 أو 14 ثم قرر الصنف وحده؛ القبول الجماعي معطل طالما في المختار صنف كهذا. '
-                       '«إعادة فتح» تحت تفاصيل الصنف (M أو الضغط عليه) تمسح القرار بسبب مكتوب وتُبقي نسبة الضريبة المؤكدة؛ لتغييرها عدّلها في تبويب «الأصناف». «ما لدى المصلحة» يعرض الأكواد المفعلة لدى المصلحة الفعلية وليست في ملف الأكواد. لا يُرسل شيء للمصلحة من هنا. '
+                       '«إعادة فتح» تحت تفاصيل الصنف (M أو الضغط عليه) تمسح القرار بسبب مكتوب وتُبقي نسبة الضريبة المؤكدة؛ لتغييرها عدّلها في تبويب «الأصناف». «ما لدى المصلحة» يعرض الأكواد المفعلة لدى المصلحة الفعلية وليست في ملف الأكواد. القرار وحده لا يُرسل شيئاً للمصلحة. '
                        'عمود «الفئة (GPC)» يقترح فئة كل صنف ومصدرها: قرارات سابقة لأصناف نفس العائلة، أو أكواد المصلحة لنفس العائلة، أو ملف الشركة، أو «دواء»، أو «اقتراح ذكي» بدرجة ثقته وسببه. '
                        'الذكاء الاصطناعي يقترح فقط والشخص يؤكد؛ وهو متوقف حتى يفعّله المالك، و«اقترح مرة أخرى» تقول ذلك؛ وهي تسأل عن 5 أصناف على الأكثر في المرة وتتوقف عند أول صنف لا يرد فيه المزود. «تغيير» يفتح بحثاً عن الفئة (↑↓ ثم Enter). الاقتراح الذكي غير عالي الثقة يُقرر صنفاً صنفاً. '
                        '«تحتاج فئة» على صنف قراره «يُكوَّد» بلا فئة: اخترها دون إعادة فتح، ما دام لا يوجد طلب كود مفتوح أو معتمد له. '
@@ -209,10 +209,15 @@ SCREENS = [
                        '«اقرأ الملف الحالي» يرفع نسخة منه ويقارنها بآخر نسخة لدينا. «اكتب الآن» يضع آخر نسخة مكانه بعد نسخة احتياطية في D:\\invoicer_mini\\backup (آخر 30). '
                        'مفتاح الكتابة يفتحه المالك وحده؛ وهو مغلق يصبح الزر «معاينة الآن»: يتحقق الجهاز من الملف ولا يكتب شيئاً. '
                        'إن كان في الملف الحالي تعديلات يدوية توقف الكتابة: «استورد التعديلات» يجعله نسختنا التالية (وإن نقصه أصناف مكوّدة تؤكد حذفها)، أو «اكتب فوقها» بسبب مكتوب يُسجَّل. '
-                       'كل ليلة 03:00 يُقرأ الملف، ويُكتب إن كان المفتاح مفتوحاً. «الملف مفتوح في المحصّل» = لم يُكتب، أغلقه وأعد المحاولة.',
+                       'كل ليلة 03:00 يُقرأ الملف، ويُكتب إن كان المفتاح مفتوحاً. «الملف مفتوح في المحصّل» = لم يُكتب، أغلقه وأعد المحاولة. '
+                       '«طلبات الإنتاج» تطلب الأكواد من منظومة المصلحة الفعلية: «جهّز الطلبات» (أو «جهّز الطلب» على صف الصنف) يكوّن طلباً لكل صنف قراره «يُكوَّد» من فئته وأسمائه، ولا يُرسل شيئاً؛ المتروك يظهر بسببه. '
+                       '«أرسل» لمن يملك الاعتماد النهائي، بعد كتابة عدد الطلبات، وهو مغلق حتى يفتح المالك مفتاح TAX_ETA_CODING_PRODUCTION_ENABLED. '
+                       'حتى تعتمد المصلحة أول طلب يُرسل طلب واحد فقط، ولا يُرسل غيره وهو لديها. الطلب المرفوض قبل الإرسال يظهر بسببه، و«إلغاء» بسبب مكتوب للطلب الجاهز أو غير المقبول. '
+                       '«حدّث من المصلحة» يسأل عن قرارها: الاعتماد يجعل الصنف معتمداً وفي القائمة البيضاء، فتُعاد مراجعة الإيصالات والمسودات المحجوزة عليه. '
+                       'إن رفضت المصلحة كود EGS وللصنف باركود GS1 صحيح يظهر «جرّب GS1» ليجهّز طلب GS1؛ لا يحدث ذلك وحده.',
                        'Items sold on production receipts with no code, biggest sales first. Each has a suggestion from where it was bought (code or keep out) and a VAT rate from SOFTECH; both are inputs only, and your decision is what is saved, with who and when. '
                        'Tick items with Space, then Enter accepts each one’s suggestion (an item with none is left), or C to code and K to keep out. A red rate needs checking: pick 0 or 14, then decide that item on its own; bulk accept is off while the selection holds one. '
-                       '"Reopen" in the item details (M or a click) clears the decision with a written reason and keeps the confirmed VAT rate; to change the rate, edit it on the items tab. "What ETA holds" lists codes active on ETA production that are not in the coding sheet. Nothing is sent to ETA from here. '
+                       '"Reopen" in the item details (M or a click) clears the decision with a written reason and keeps the confirmed VAT rate; to change the rate, edit it on the items tab. "What ETA holds" lists codes active on ETA production that are not in the coding sheet. A decision alone sends nothing to ETA. '
                        'The "Category (GPC)" column suggests each item’s brick and where it came from: earlier decisions for items of the same family, ETA codes of the same family, the company sheet, "Medicine", or "AI suggestion" with its confidence and reason. '
                        'The AI only suggests; a person confirms. It is off until the owner turns it on, and "Suggest again" says so; it asks about 5 items at most at a time and stops at the first item the provider does not answer. "Change" opens a brick search (↑↓ then Enter). An AI suggestion that is not high-confidence is decided one item at a time. '
                        '"Needs a category" marks an item decided "code" with no brick: pick one without reopening, as long as it has no open or approved code request. '
@@ -224,7 +229,12 @@ SCREENS = [
                        '"Read the current file" uploads a copy and compares it with our latest version. "Write now" puts the latest version in its place after a backup in D:\\invoicer_mini\\backup (newest 30). '
                        'Only the owner turns the write switch on; while it is off the button reads "Preview now": the seal PC checks the file and writes nothing. '
                        'If the current file has hand edits, writing stops: "Import the edits" makes it our next version (confirm if it drops coded items), or "Write over them" with a written, logged reason. '
-                       'Each night at 03:00 the file is read, and written if the switch is on. "File open in the Invoicer" = not written; close it and try again.')},
+                       'Each night at 03:00 the file is read, and written if the switch is on. "File open in the Invoicer" = not written; close it and try again. '
+                       '"Production requests" asks ETA production for codes: "Prepare requests" (or "Prepare request" on an item row) drafts one per item decided "code" from its brick and names, and sends nothing; a skipped item shows why. '
+                       '"Send" is for those who hold finalize, after typing the number of requests, and it is off until the owner turns on TAX_ETA_CODING_PRODUCTION_ENABLED. '
+                       'Until ETA approves the first request, one request goes at a time and none while it is with ETA. A request refused before sending shows its reason; "Cancel" with a written reason works on a prepared or failed one. '
+                       '"Refresh from ETA" asks for its decision: approval makes the item approved and white-listed, and the receipts and drafts held on it are checked again. '
+                       'If ETA rejects an EGS code and the item has a valid GS1 barcode, "Try GS1" drafts a GS1 request; it never happens by itself.')},
             {'key': 'receipts', 'title': T('🧾 الإيصالات', '🧾 Receipts'),
              'body': T('ملخص بالحالات لكل فرع، والقائمة بأسباب الحجز، واستيراد يوم من SOFTECH للقراءة فقط، وإعداد جهاز كل فرع، وقرار كل قناة. «إصدار الجاهز» يجمد الإيصالات في سلسلة الفرع، و«معاينة الإرسال» لا ترسل شيئاً. الإرسال الفعلي يظهر بعد المعاينة ويحتاج كتابة كود الفرع، وهو معطل طالما الإرسال مغلق.',
                        'A per-branch summary by status, the list with hold reasons, reading a day from SOFTECH (read only), each branch’s device setup, and each channel’s decision. "Issue ready" freezes receipts into the branch chain, and "Preview sending" sends nothing. The real send appears after the preview and needs the typed branch code; it is disabled while sending is off.')},
@@ -511,9 +521,13 @@ SCREENS = [
              'warn': T('مفتاح الكتابة يفتحه المالك وحده. «اكتب فوقها» يمسح تعديلات المحصّل اليدوية ويُسجَّل بسببه.',
                        'Only the owner turns the write switch on. "Write over them" erases the hand edits and is logged with its reason.'),
              'open_hint': T('داخل «ملف أكواد الإيصالات (المحصّل)» في تبويب «🧮 طابور الترميز».', 'Inside "Receipt codes file (Invoicer)" on the "🧮 Coding queue" tab.')},
+            {'target': 'tax-invoicing-queue-production', 'label': T('طلبات الإنتاج', 'Production requests'),
+             'text': T('طلبات أكواد المنظومة الفعلية من قرارات «يُكوَّد». الإرسال مغلق حتى يفتحه المالك، ويحتاج الاعتماد النهائي وكتابة العدد، وأول طلب وحده.',
+                       'Production code requests from "code" decisions. Sending is off until the owner opens it, needs finalize and the typed count, and the first goes alone.'),
+             'open_hint': T('تبويب «🧮 طابور الترميز»، فوق «ملف أكواد الإيصالات».', 'The "🧮 Coding queue" tab, above "Receipt codes file".')},
         ],
         'updated': '2026-11-18',
-        'change_note': T('«ملف أكواد الإيصالات (المحصّل)»: «الجهاز المحلي» يقرأ ملف المحصّل على جهاز الختم ويكتبه (معاينة حتى يفتح المالك المفتاح)',
-                         '"Receipt codes file (Invoicer)": "Local device" reads and writes the Invoicer file on the seal PC (preview until the owner opens the switch)'),
+        'change_note': T('«🧮 طابور الترميز»: لوحة «طلبات الإنتاج» لطلب الأكواد من المصلحة الفعلية ومتابعتها، و«جرّب GS1» بعد رفض كود EGS؛ «ملف أكواد الإيصالات (المحصّل)»: «الجهاز المحلي» يقرأ ملف المحصّل على جهاز الختم ويكتبه (معاينة حتى يفتح المالك المفتاح)',
+                         '"🧮 Coding queue": a "Production requests" panel to request codes from ETA production and follow them, and "Try GS1" after an EGS rejection; "Receipt codes file (Invoicer)": "Local device" reads and writes the Invoicer file on the seal PC (preview until the owner opens the switch)'),
     },
 ]

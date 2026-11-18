@@ -74,6 +74,7 @@ MODULE_BY_PREFIX = {
     'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
     'counselling': 'counselling',   # Project 4 sheets; assistant + cards are POS (see required_access)
     'data-health': 'data_health',   # Stage 5 /data-health; rules, held files, restore = IsAdminRole in the views
+    'rpa': 'rpa',                   # روبوت الإدخال (SOFTECH screen RPA): view / create / edit / approve; jobs branch-scoped
     'crews': 'crews',               # الأطقم (spec 2026-11-13 §6.5): view / edit only; company-level
 }
 

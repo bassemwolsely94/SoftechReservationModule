@@ -9,7 +9,7 @@ import SortTh from '../components/SortTh'
 import SoftechGrid from './invoices/SoftechGrid'
 import BundleWorkbench from './invoices/BundleWorkbench'
 import DuplicateNotice from './invoices/DuplicateNotice'
-import ItemSearchInput from '../components/ItemSearchInput'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
 
@@ -71,7 +71,7 @@ async function learnWithApproval(invoiceId, lineId, onNotify) {
   } catch { /* learning is best-effort; never blocks the confirm */ }
 }
 
-function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNotify, kb, openReq }) {
+export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNotify, kb, openReq }) {
   const [editing,     setEditing]     = useState(false)
   const [draft,       setDraft]       = useState({ ...line })
   const [showMatches, setShowMatches] = useState(false)
@@ -93,7 +93,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
     }
   }
 
-  // Free-text / item-code search pick (ItemSearchInput → updateLine).
+  // Free-text / item-code search pick (ItemSearchWidget → updateLine).
   const pickItem = async (item) => {
     await invoicesApi.updateLine(invoiceId, line.id, { item: item.item_id, is_confirmed: true })
     learnWithApproval(invoiceId, line.id, onNotify)
@@ -278,7 +278,7 @@ function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNoti
           {/* Free-text / item-code search — type a name or a SofTech code to re-match. */}
           <div className="mb-3">
             <div className="text-xs font-semibold text-gray-500 mb-1">ابحث بالاسم أو كود الصنف:</div>
-            <ItemSearchInput onSelect={pickItem} placeholder="ابحث بالاسم أو الكود… (مثال: strepsils أو 34192)" />
+            <ItemSearchWidget mode="single" onSelect={pickItem} placeholder="ابحث بالاسم أو الكود… (مثال: strepsils أو 34192)" />
           </div>
           <div className="text-xs font-semibold text-gray-500 mb-2">اقتراحات تلقائية:</div>
           {matches.length === 0 ? (

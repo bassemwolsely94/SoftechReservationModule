@@ -32,6 +32,8 @@ WRITER_FLAGS = {
     'TAX_ETA_CODING_ENABLED':              {'protects': 'طلب أكواد الأصناف EGS من مصلحة الضرائب'},
     'TAX_ETA_PRODUCTION_ALLOWED':          {'protects': 'أي إرسال لمنظومة المصلحة الفعلية (غير التجريبية)'},
     'TAX_EGS_SHEET_AGENT_WRITE_ENABLED':   {'protects': 'استبدال ملف أكواد المحصّل على جهاز الختم (D:\\invoicer_mini)'},
+    'TAX_ETA_CODING_PRODUCTION_ENABLED':   {'protects': 'طلب أكواد الأصناف من منظومة المصلحة الفعلية (الإنتاج)'},
+    'TAX_ETA_CODING_PRODUCTION_BATCH_OK':  {'protects': 'إرسال أكثر من طلب كود للمنظومة الفعلية قبل اعتماد أول طلب'},
     'ISR_WRITER_ENABLED':                  {'protects': 'طلبات التوريد ISR (stockisrm / stockisr)'},
     'SALES_RATE_WRITER_ENABLED':           {'protects': 'معدل البيع stkbal.monthlyqty'},
     'COVERAGE_WRITER_ENABLED':             {'protects': 'التغطية stkbal.maxnowqtymonths'},
@@ -56,6 +58,7 @@ WRITER_FLAGS = {
     'REPLACEMENT_POSTING_ENABLED':         {'protects': 'مستندات بدل الروشتة'},
     'INSURANCE_SOFTECH_WRITE_ENABLED':     {'protects': 'إعادة تسعير مطالبات التأمين'},
     'CUSTOMER_MERGE_WRITE_ENABLED':        {'protects': 'دمج أكواد العملاء المكررة'},
+    'RPA_SOFTECH_ENTRY_ENABLED':           {'protects': 'روبوت إدخال SOFTECH (إذن صرف، جرد، مشتريات، مرتجع)'},
 }
 
 # Scheduled jobs that call a writer service: not registered on a non-writer instance.

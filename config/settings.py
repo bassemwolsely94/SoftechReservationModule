@@ -235,6 +235,7 @@ INSTALLED_APPS = [
     'apps.approvals',
     'apps.batches',
     'apps.hr',
+    'apps.rpa',  # روبوت الإدخال — SOFTECH screen RPA (design 2026-11-16)
     'apps.crews',  # الأطقم — dated cross-branch people groupings (spec 2026-11-13 §6)
     'apps.forecasting',
     'apps.insights',
@@ -904,6 +905,13 @@ TAX_RECONCILE_WAIT_MINUTES = config('TAX_RECONCILE_WAIT_MINUTES', default=15, ca
 TAX_ERECEIPT_SUBMIT_ENABLED = config('TAX_ERECEIPT_SUBMIT_ENABLED', default=False, cast=bool)
 TAX_ETA_CODING_ENABLED = config('TAX_ETA_CODING_ENABLED', default=False, cast=bool)
 TAX_ETA_PRODUCTION_ALLOWED = config('TAX_ETA_PRODUCTION_ALLOWED', default=False, cast=bool)
+# Item-code requests to ETA's production system (coding.production_gate), from any server whatever it sends
+# invoices to. Independent of TAX_ETA_PRODUCTION_ALLOWED, which also unlocks invoice sending. BATCH_OK lifts the
+# first-request rule (one request until ETA approves one). Login: TAX_ETA_PRODUCTION_CLIENT_*, else the reading one.
+TAX_ETA_CODING_PRODUCTION_ENABLED = config('TAX_ETA_CODING_PRODUCTION_ENABLED', default=False, cast=bool)
+TAX_ETA_CODING_PRODUCTION_BATCH_OK = config('TAX_ETA_CODING_PRODUCTION_BATCH_OK', default=False, cast=bool)
+TAX_ETA_PRODUCTION_CLIENT_ID = config('TAX_ETA_PRODUCTION_CLIENT_ID', default='')
+TAX_ETA_PRODUCTION_CLIENT_SECRET = config('TAX_ETA_PRODUCTION_CLIENT_SECRET', default='')
 TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool)
 # Nightly AI proposal of a GPC brick for uncoded items (apps/tax_invoicing/gpc_ai.py). Sends item names only.
 TAX_GPC_AI_ENABLED = config('TAX_GPC_AI_ENABLED', default=False, cast=bool)
@@ -938,6 +946,8 @@ if _RUNNING_TESTS:
     TAX_EGS_SHEET_AGENT_WRITE_ENABLED = False
     TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
     TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
+    TAX_ETA_CODING_PRODUCTION_ENABLED = TAX_ETA_CODING_PRODUCTION_BATCH_OK = False
+    TAX_ETA_PRODUCTION_CLIENT_ID = TAX_ETA_PRODUCTION_CLIENT_SECRET = ''
     TAX_EGS_SHEET_DIR = Path(tempfile.mkdtemp(prefix='elrezeiky_test_egs_sheets_'))   # never the real folder
     atexit.register(shutil.rmtree, TAX_EGS_SHEET_DIR, ignore_errors=True)
 
@@ -964,6 +974,8 @@ CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
 # B7 merge part 2 — approved pairs merged at HQ (apps/customers/merge_write.py). Off by default (dry run).
 CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=False, cast=bool)
 CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
+# SOFTECH screen RPA: the Windows agent may type documents into SOFTECH. Off by default.
+RPA_SOFTECH_ENTRY_ENABLED   = config('RPA_SOFTECH_ENTRY_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

@@ -733,3 +733,23 @@ quality_manager GET /api/data-health/rules/
 supervisor GET /api/data-health/held/
 supervisor GET /api/data-health/held/987654321/thumbnail/
 supervisor GET /api/data-health/rules/
+
+# reason: rpa (SOFTECH screen robot, design 2026-11-16) — the module grant is per action, stricter by design:
+#   recipes (import / edit / approve) and the screen switch are admin only (RpaAdminOnly + is_admin) because they
+#   decide the keystrokes typed into SOFTECH; job approve / cancel need the 'approve' right (four-eyes);
+#   resolving a needs-person document needs the 'edit' right. Grants: supervisor view/create/approve/edit,
+#   purchasing view/create, quality_manager view/create/approve. Owner approved this baseline 2026-11-17.
+purchasing POST /api/rpa/documents/987654321/resolve/
+purchasing POST /api/rpa/jobs/987654321/approve/
+purchasing POST /api/rpa/jobs/987654321/cancel/
+purchasing POST /api/rpa/recipes/
+purchasing POST /api/rpa/recipes/987654321/approve/
+purchasing POST /api/rpa/screens/x/
+quality_manager POST /api/rpa/documents/987654321/resolve/
+quality_manager POST /api/rpa/recipes/
+quality_manager POST /api/rpa/recipes/987654321/approve/
+quality_manager POST /api/rpa/screens/x/
+supervisor PATCH /api/rpa/recipes/987654321/
+supervisor POST /api/rpa/recipes/
+supervisor POST /api/rpa/recipes/987654321/approve/
+supervisor POST /api/rpa/screens/x/

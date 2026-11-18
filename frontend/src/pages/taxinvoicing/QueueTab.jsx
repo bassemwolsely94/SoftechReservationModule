@@ -6,11 +6,14 @@
  * Batch S2: «الفئة (GPC)» shows each item's suggested brick and where it came from; a person confirms it. The picker is
  * an inline search box; an AI suggestion that is not high-confidence is decided one item at a time.
  * Batch S3: «ملف أكواد الإيصالات (المحصّل)» (EgsSheetPanel) builds and downloads the Invoicer file's versions.
+ * Batch S4: a decided row shows its latest production code request; «جهّز الطلب» drafts one from the decision and
+ * «جرّب GS1» takes the offer after an EGS rejection. «طلبات الإنتاج» (ProductionRequestsPanel) sends and follows them.
  */
 import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
 import EgsSheetPanel from './EgsSheetPanel'
+import ProductionRequestsPanel from './ProductionRequestsPanel'
 import SortTh from '../../components/SortTh'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useServerSort from '../../hooks/useServerSort'
@@ -459,6 +462,24 @@ export default function QueueTab({ me }) {
                             <>
                               <Badge tone={dec.tone}>{dec.label}</Badge>
                               <div className="text-[11px] text-gray-400">{r.decided_by}</div>
+                              {r.request && (
+                                <div className="text-[11px] text-gray-600" title={r.request.error || ''}>
+                                  طلب المصلحة: {r.request.status_label}{r.request.eta_status ? ` · ${r.request.eta_status}` : ''}
+                                </div>
+                              )}
+                              {me.can_edit && r.decision === 'code' && r.request_ready && (
+                                <Btn className="px-2 py-1 mt-1" disabled={act.pending}
+                                  onClick={() => act.run(guard(() => taxInvoicingApi.codingPrepare({ itemcodes: [r.itemcode] })),
+                                    d => (d.created.length ? `جُهّز طلب الصنف ${r.itemcode}` : `لم يُجهّز: ${d.skipped[0]?.why || ''}`))}>
+                                  جهّز الطلب
+                                </Btn>
+                              )}
+                              {me.can_edit && r.gs1_offer?.available && (
+                                <Btn className="px-2 py-1 mt-1 ms-1" disabled={act.pending} title={`باركود ${r.gs1_offer.gtin}`}
+                                  onClick={() => act.run(guard(() => taxInvoicingApi.codingGs1({ itemcode: r.itemcode })), `جُهّز طلب GS1 للصنف ${r.itemcode}`)}>
+                                  جرّب GS1
+                                </Btn>
+                              )}
                             </>
                           ) : canDecide ? (
                             <div className="flex gap-1">
@@ -490,6 +511,7 @@ export default function QueueTab({ me }) {
         {note && <div role="status" className="text-xs text-amber-700 mt-2">{note}</div>}
         <div className="mt-2"><ActionMsg msg={act.msg} /></div>
       </Section>
+      <ProductionRequestsPanel me={me} />
       <EgsSheetPanel />
       <EtaHolds />
     </div>

@@ -723,21 +723,27 @@ function PromoPanel({ offerId }) {
   )
 }
 
-function ItemPick({ label, value, onChange, single }) {
+export function ItemPick({ label, value, onChange, single }) {
   const [items, setItems] = useState([])   // {id, code, name} chips for display
-  const add = (it) => {
-    const id = it.id || it.item_id
-    if (!id || value.includes(id)) return
-    setItems(prev => [...prev, { id, code: it.softech_id || it.softech_itemcode, name: it.name || it.item_name }])
-    onChange(single ? [id] : [...value, id])
-    if (single) return
+  // single: one item; multi: an array — collected first, then ONE onChange (a per-item onChange
+  // would each start from the same stale `value` and keep only the last pick)
+  const add = (picked) => {
+    const fresh = []
+    for (const it of (Array.isArray(picked) ? picked : [picked])) {
+      const id = it.id || it.item_id
+      if (!id || value.includes(id) || fresh.some(f => f.id === id)) continue
+      fresh.push({ id, code: it.softech_id || it.softech_itemcode, name: it.name || it.item_name })
+    }
+    if (!fresh.length) return
+    setItems(prev => [...prev, ...fresh])
+    onChange(single ? [fresh[0].id] : [...value, ...fresh.map(f => f.id)])
   }
   const rm = (id) => { setItems(prev => prev.filter(x => x.id !== id)); onChange(value.filter(x => x !== id)) }
   const shown = items.filter(x => value.includes(x.id))
   return (
     <div>
       <label className="label">{label}</label>
-      <ItemSearchWidget onSelect={add} placeholder="ابحث لإضافة صنف…" />
+      <ItemSearchWidget mode={single ? 'single' : 'multi'} onSelect={add} placeholder="ابحث لإضافة صنف…" />
       <div className="flex flex-wrap gap-1 mt-1">
         {shown.map(x => (
           <span key={x.id} className="text-[11px] bg-surface-2 border border-line rounded px-1.5 py-0.5">

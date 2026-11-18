@@ -3026,6 +3026,28 @@ export const codeMapsApi = {
   patchItemType: (id, data) => api.patch(`/config/code-maps/item-types/${id}/`, data),
 }
 
+// ── SOFTECH screen robot (/rpa) — staff API, paths per Task 9 ──────────────────
+
+export const rpaApi = {
+  status:        ()          => api.get('/rpa/status/'),
+  jobs:          (params)    => api.get('/rpa/jobs/', { params }),
+  createJob:     (formData)  => api.post('/rpa/jobs/', formData),          // multipart
+  job:           (id)        => api.get(`/rpa/jobs/${id}/`),
+  approveJob:    (id)        => api.post(`/rpa/jobs/${id}/approve/`),
+  cancelJob:     (id, reason) => api.post(`/rpa/jobs/${id}/cancel/`, { reason }),
+  document:      (id)        => api.get(`/rpa/documents/${id}/`),
+  // decision: 'retry' | 'posted' | 'cancelled' (the server checks SOFTECH for retry and posted)
+  resolve:       (id, decision, reason) => api.post(`/rpa/documents/${id}/resolve/`, { decision, reason }),
+  recipes:       ()          => api.get('/rpa/recipes/'),
+  createRecipe:  (formData)  => api.post('/rpa/recipes/', formData),        // multipart .dld
+  approveRecipe: (id)        => api.post(`/rpa/recipes/${id}/approve/`),
+  editRecipe:    (id, data)  => api.patch(`/rpa/recipes/${id}/`, data),   // draft only; admin
+  setScreen:     (key, enabled) => api.post(`/rpa/screens/${key}/`, { enabled }),   // admin; never live
+  devices:       ()          => api.get('/rpa/devices/'),
+  addDevice:     (label)     => api.post('/rpa/devices/', { label }),       // → { device, token } once
+  revokeDevice:  (id)        => api.post(`/rpa/devices/${id}/revoke/`),
+}
+
 // ── Pick zones (replenishment picking-sheet classification) ───────────────────
 
 export const pickZonesApi = {
@@ -3321,6 +3343,10 @@ export const taxInvoicingApi = {
   codingReopen:    (data)         => api.post('/tax-invoicing/codes/queue/reopen/', data),
   codingSetBrick:  (data)         => api.post('/tax-invoicing/codes/queue/brick/', data),
   codingSuggest:   (data)         => api.post('/tax-invoicing/codes/queue/suggest/', data),
+  // Production code requests (batch S4): prepared from decisions, sent only through the server's gates
+  codingPrepare:   (data)         => api.post('/tax-invoicing/codes/queue/prepare/', data),
+  codingGs1:       (data)         => api.post('/tax-invoicing/codes/queue/gs1/', data),
+  codingProduction: ()            => api.get('/tax-invoicing/codes/production/'),
   etaHolds:        (params = {})  => api.get('/tax-invoicing/codes/eta-holds/', { params }),
   egsSheet:        ()             => api.get('/tax-invoicing/codes/sheet/'),
   egsSheetBuild:   (data = {})    => api.post('/tax-invoicing/codes/sheet/build/', data),

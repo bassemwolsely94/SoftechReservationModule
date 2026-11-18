@@ -15,6 +15,7 @@ import useHelpTab from '../help/useHelpTab'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
+import { newBundleItems } from '../utils/bundleItems'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
@@ -197,9 +198,10 @@ function VariantGroupsTab() {
 }
 
 // ── Product Bundles Tab ───────────────────────────────────────────────────────
-function BundlesTab() {
+export function BundlesTab() {
   const qc = useQueryClient()
   const [selected, setSelected] = useState(null)
+  const [addErr, setAddErr] = useState(null)   // {bundleId, msg}: shown only on that bundle
   const [q, setQ] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [newBundle, setNewBundle] = useState({
@@ -231,6 +233,8 @@ function BundlesTab() {
     mutationFn: ({ bundleId, item }) =>
       catalogIntelApi.addBundleItem(bundleId, { item: item.id, quantity: 1 }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bundles'] }),
+    onError: (_e, { bundleId, item }) =>
+      setAddErr({ bundleId, msg: `تعذّرت إضافة «${item.name || item.id}» للباقة` }),
   })
 
   const removeItemMutation = useMutation({
@@ -367,10 +371,18 @@ function BundlesTab() {
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للباقة</label>
               <ItemSearchWidget
                 selected={null}
-                onSelect={(item) => addItemMutation.mutate({ bundleId: selectedBundle.id, item })}
+                mode="multi"
+                onSelect={(picked) => {
+                  setAddErr(null)
+                  newBundleItems(picked, selectedBundle)
+                    .forEach(item => addItemMutation.mutate({ bundleId: selectedBundle.id, item }))
+                }}
                 onClear={() => {}}
                 placeholder="ابحث باسم الصنف أو الكود أو الباركود..."
               />
+              {addErr?.bundleId === selectedBundle.id && (
+                <div className="text-xs text-red-600 mt-1">{addErr.msg}</div>
+              )}
             </div>
 
             {/* Items */}

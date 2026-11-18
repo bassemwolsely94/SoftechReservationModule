@@ -108,8 +108,16 @@ class ItemSearchSerializer(serializers.ModelSerializer):
     def to_representation(self, obj):
         """`/api/items/?rank=engine` (S2): the view puts the engine's {item_id: tier} and the
         matched ingredient names in the context — the row then carries `tier` + its flag.
+        With `stock_branch` (rank=engine + branch=<pk>) it also carries `qty_at_branch`.
         Without them (every other caller) the row is exactly as before."""
         row = super().to_representation(obj)
+        # rank=engine + branch: sellable stock at that branch, from the prefetched stock rows
+        # (stock_levels__branch, as total_stock) — no query per row
+        branch = self.context.get('stock_branch')
+        if branch is not None:
+            row['qty_at_branch'] = float(sum(
+                s.quantity_on_hand for s in obj.stock_levels.all()
+                if s.branch_id == branch and is_sellable(s)))
         tiers = self.context.get('engine_tiers')
         if tiers is not None and obj.id in tiers:
             row.update(engine_tier_fields(
