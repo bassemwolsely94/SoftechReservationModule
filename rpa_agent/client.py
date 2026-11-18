@@ -29,3 +29,22 @@ class AgentClient:
         self._post("runs/%s/screenshot/" % run_id,
                    data={"step_index": str(step_index)},
                    files={"image": ("shot.png", png_bytes, "image/png")})
+
+    # ── supplier-portal robot (/api/rpa/agent/portal/, apps/rpa/portal/agent_views.py) ──
+
+    def portal_claim(self):
+        """{"run_id", "plan"} (plan kind discovery / fill / history), or None when there is no work."""
+        r = self._post("portal/claim/")
+        return None if r.status_code == 204 else r.json()
+
+    def portal_heartbeat(self, run_id):
+        self._post("portal/runs/%s/heartbeat/" % run_id)
+
+    def portal_report(self, run_id, payload):
+        self._post("portal/runs/%s/report/" % run_id, json=payload)
+
+    def portal_screenshot(self, run_id, step, png):
+        kind = "image/jpeg" if png[:2] == bytes((0xFF, 0xD8)) else "image/png"
+        self._post("portal/runs/%s/screenshot/" % run_id,
+                   data={"step_index": str(step)},
+                   files={"image": ("shot." + kind.split("/")[1], png, kind)})

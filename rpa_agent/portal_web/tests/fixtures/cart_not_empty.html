@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Quick Order</title><script>var fx=JSON.parse(localStorage.getItem("fx")||"{}");fx.cart=[{sku:"11111",qty:2}];localStorage.setItem("fx",JSON.stringify(fx));</script><script src="portal.js"></script></head>
+<body data-page="quick-order">
+<header><span>Welcome</span> <span id="account" aria-label="Account name"></span>
+<a href="login.html">Sign Out</a>
+<dl><dt>Consumption</dt><dd id="credit-consumption" aria-label="Consumption"></dd>
+<dt>Credit</dt><dd id="credit-credit" aria-label="Credit"></dd>
+<dt>Credit Limit</dt><dd id="credit-limit" aria-label="Credit Limit"></dd></dl></header>
+<div id="messages"></div>
+<h1>Quick Order</h1>
+<label>SKU <input id="qo-sku" type="text"></label>
+<label>Qty <input id="qo-qty" type="number"></label>
+<button id="qo-add" type="button">Add to cart</button>
+<label>Search <input id="search-term" type="search"></label>
+<button id="search-go" type="button">Search</button>
+<ul id="search-results" aria-label="Search results"></ul>
+<table aria-label="Cart"><thead><tr><th>ID</th><th>Product</th><th>Qty</th><th>PH. Price</th><th>Discount %</th><th>Available Bonus</th><th>Expiry Date</th><th></th></tr></thead><tbody id="cart-body"></tbody></table>
+<label>Auto recurring order? <select><option>None (one time order only)</option><option>Recurring order</option></select></label>
+<a href="review.html">Proceed To Next Step</a>
+</body></html>
