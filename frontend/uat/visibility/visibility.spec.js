@@ -5,9 +5,9 @@
 // `:param` routes run only with an id from reference(<user's branch>); the rest are listed as skipped.
 // Per user × route: is its menu entry shown (navItemVisible / the MobileLayout tab rule, with the
 // user's /api/auth/me/ caps and the exported expected perms = can(key, module, 'view')), what
-// gotoSettled() saw, console/API errors and ms.
+// openScreen() saw (time to first content or refusal, not to network idle), console/API errors and ms.
 //
-// "Refused" = gotoSettled's refusal, a redirect to a landing screen (/dashboard, /m/me, /rider…), or
+// "Refused" = refusal text or a 403 on a near-empty screen, a redirect to a landing screen (/dashboard, /m/me, /rider…), or
 // a screen that opens but whose own data APIs all answer 403 (served = 'refused'). Layout calls
 // (seen on >= 40 % of one surface's visits) are not "own data" (matrix shellApis).
 // Verdicts (findings via finding(), ws 'W2'):
@@ -17,7 +17,7 @@
 //   menu shown, screen refused                         → P2 screen  (P3 when the entry is only a parent: /finance → /finance/coa)
 //   blank, or a loading text still on screen ('stuck') → P2 screen
 //   menu hidden, screen opens but serves no data       → P3 screen  (not a clean refusal; nothing leaks)
-//   slow (> 5000 ms or never settled)                  → P3 slow, on top of any other verdict
+//   slow (> 5000 ms to content)                → P3 slow, on top of any other verdict
 //   hidden + refused, shown + renders, no menu entry   → pass
 //
 // Output: test-results-uat/visibility-matrix.json, rewritten after each user (users merged by key):
@@ -26,7 +26,7 @@
 //   skipped: [{route, reason}],                        // :param / public routes not visited
 //   users: {
 //     [key]: { role, shape, branch, at: ISO, durationMs, relogins, shellApis: {desk|m|rider: [apiPath]},
-//       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'unhandled403'|'crash'|'hang', raw: <gotoSettled status>,
+//       rows: { [route]: { status: 'ok'|'slow'|'refused'|'blank'|'stuck'|'unhandled403'|'crash'|'hang', raw: <openScreen status>,
 //                          served: 'data'|'refused'|'none', ms, finalUrl,
 //                          menu: true|false|null, menuPath, inherited: bool,
 //                          canView: bool|null,             // can(key, item.module, 'view') when the menu item names a module
@@ -40,18 +40,26 @@ import path from 'node:path'
 import { test } from '@playwright/test'
 import { UAT_USERS, stateFile, safeKey, BRANCH_A, BRANCH_B, userByKey, PASSWORD } from '../lib/users.js'
 import { expectedFor, can, reference } from '../lib/expected.js'
-import { gotoSettled } from '../lib/page.js'
 import { finding } from '../lib/findings.js'
 import { KNOWN_GAPS } from '../../e2e/knownGaps.js'
 import { sweepRoutes, menuEntryFor, menuShown } from './routes.js'
 
-const CAP_MS = 60_000
+// Time-to-content, not time-to-idle (run 3): lib gotoSettled waits for networkidle, which polling
+// screens (bell, freshness, queue status) reach late or never: 125 min for one user. A visibility
+// check only needs "rendered or refused", so openScreen() below waits for the FIRST of: content
+// (main / [data-tour] / h1 with text, no spinner, no loading text), a refusal (refusal text, URL
+// left the route, /login). CAP_MS bounds that wait; SETTLE_MS then collects late API errors.
+// ms = time to that first signal; > SLOW_MS is 'slow'; no signal within CAP_MS = 'slow' at CAP_MS.
+const CAP_MS = 20_000
 const SLOW_MS = 5_000
-// Hard stop per visit (gotoSettled can need ~2 × CAP_MS): past it the visit is a 'hang' finding
-// and the sweep moves on, so one wedged screen cannot hold the heavy lock.
+const SETTLE_MS = 1_500
+// Backstop per visit: past it the visit is a 'hang' finding and the sweep moves on.
 const HANG_MS = 150_000
-// One user's whole sweep (35-125 min on the copy in run 2); the chunk runner kills at 150 min.
-const USER_TIMEOUT_MS = 140 * 60_000
+// One user's whole sweep (~10-15 min with openScreen); the chunk runner kills at 45 min.
+const USER_TIMEOUT_MS = 40 * 60_000
+const SPINNERS = '[aria-busy="true"], .animate-spin, [data-loading="true"]'
+// Same refusal wording as lib/page.js (gotoSettled), which this spec no longer calls.
+const REFUSED_TEXT = /غير مصرح|ليس لديك صلاحية|لا تملك صلاحية|403|Forbidden/
 const OUT_DIR = path.resolve(__dirname, '..', '..', 'test-results-uat')
 const MATRIX = path.join(OUT_DIR, 'visibility-matrix.json')
 const SHOTS = path.join(OUT_DIR, 'visibility', 'shots')
@@ -78,7 +86,50 @@ function writeMatrix(key, entry, skipped) {
 }
 
 const LOADING = /جار[ٍِ]?\s*التحميل|Loading\.\.\./
-// Calls any screen may make that say nothing about the screen's own data (pickers, badges, help).
+
+/** Same return shape and status rules as lib gotoSettled, but timed to first content/refusal. */
+async function openScreen(page, url) {
+  const consoleErrors = []
+  const apiErrors = []
+  const onConsole = m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)) }
+  const onPageError = e => consoleErrors.push(`pageerror: ${String(e).slice(0, 300)}`)
+  const onResponse = r => {
+    if (r.url().includes('/api/') && r.status() >= 400) apiErrors.push({ url: r.url().replace(/^https?:\/\/[^/]+/, ''), status: r.status() })
+  }
+  const wanted = url.split('?')[0]
+  page.on('console', onConsole); page.on('pageerror', onPageError); page.on('response', onResponse)
+  const t0 = Date.now()
+  let timedOut = false, ms
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CAP_MS * 2 })
+    await page.waitForFunction(({ wanted, spin, refused, loading }) => {
+      const p = location.pathname.replace(/\/$/, '') || '/'
+      if (p !== (wanted.replace(/\/$/, '') || '/')) return true                     // redirected (refusal / landing / login)
+      const root = document.querySelector('main') || document.querySelector('#root')
+      const text = root ? root.innerText : ''
+      if (new RegExp(refused).test(text)) return true                              // refusal text
+      const content = document.querySelector('main, [data-tour], h1')
+      return !!content && content.innerText.trim().length > 0 && !document.querySelector(spin) && !new RegExp(loading).test(text)
+    }, { wanted, spin: SPINNERS, refused: REFUSED_TEXT.source, loading: LOADING.source }, { timeout: CAP_MS, polling: 200 })
+      .catch(() => { timedOut = true })
+    ms = Date.now() - t0
+    await page.waitForTimeout(SETTLE_MS)
+  } finally {
+    page.off('console', onConsole); page.off('pageerror', onPageError); page.off('response', onResponse)
+  }
+  if (ms === undefined) ms = Date.now() - t0
+  const finalUrl = new URL(page.url()).pathname
+  const text = (await page.locator('main, #root').first().innerText().catch(() => '')).trim()
+  const crashed = consoleErrors.some(e => e.startsWith('pageerror')) || apiErrors.some(e => e.status >= 500 && e.status !== 503)
+  let status
+  if (crashed) status = 'crash'
+  else if (REFUSED_TEXT.test(text) || apiErrors.some(e => e.status === 403) && text.length < 200 ||
+           (finalUrl !== new URL(url, 'http://x').pathname && /\/(dashboard|login|rider|m)$/.test(finalUrl))) status = 'refused'
+  else if (timedOut) status = 'slow'
+  else if (text.length < 20) status = 'blank'
+  else status = ms > SLOW_MS ? 'slow' : 'ok'
+  return { ms, status, consoleErrors, apiErrors, finalUrl }
+}// Calls any screen may make that say nothing about the screen's own data (pickers, badges, help).
 const GENERIC_API = /^\/api\/(auth|config|access\/whoami|audit\/screen-view|help|users\/my-permissions|notifications|sync\/(status|freshness)|branches|counselling\/status|personal)(\/|$)/
 const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/\d+(?=\/|$)/g, '/:n')
 
@@ -89,7 +140,7 @@ const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/
  */
 function judge({ status, served, menu, inherited, knownGap }) {
   if (status === 'hang') return { verdict: 'P2', kind: 'slow', severity: 'P2', reason: 'hang',
-    expected: `screen settles or is refused within ${HANG_MS} ms`, actual: `gotoSettled had not returned after ${HANG_MS} ms; visit abandoned` }
+    expected: `screen settles or is refused within ${HANG_MS} ms`, actual: `the visit had not returned after ${HANG_MS} ms; visit abandoned` }
   if (status === 'crash') return { verdict: 'P1', kind: 'crash', severity: 'P1', reason: 'crash',
     expected: 'screen renders or is refused cleanly', actual: 'page error or 5xx' }
   if ((status === 'stuck' && served === 'refused') || status === 'unhandled403') {
@@ -162,10 +213,14 @@ for (const u of users) {
 
     test(`every screen for ${u.key} (${u.role})`, async ({ page }) => {
       test.setTimeout(USER_TIMEOUT_MS)
-      // gotoSettled with a hard stop; a hung visit is abandoned (page sent to about:blank).
+      // openScreen with a hard stop; a hung visit is abandoned (page sent to about:blank).
       const visitOnce = async route => {
         let timer
-        const go = gotoSettled(page, route, { capMs: CAP_MS, slowMs: SLOW_MS })
+        // Unload the previous screen first: at ~1 s per visit it is still firing requests (and could
+        // throw page errors) while the next navigation starts, which were then counted for the new
+        // screen (run 3 dev: purchasing/QA calls credited to /finance/pnl as "served data").
+        await page.goto('about:blank', { timeout: 15_000 }).catch(() => {})
+        const go = openScreen(page, route)
         const hang = new Promise(res => { timer = setTimeout(() => res(null), HANG_MS) })
         const r = await Promise.race([go, hang])
         clearTimeout(timer)
@@ -226,6 +281,10 @@ for (const u of users) {
         raw.push({ route, r, status, apis: seen, evidence })
       }
 
+      // Stop attributing: pass 2's evidence revisits (shotAgain) would otherwise be credited to the
+      // last route's visit (seen run 3 dev: QA/purchasing calls landing on /finance/pnl).
+      visit = -1; seen = []
+
       // Layout calls (menu badges, me, notifications …) = API paths seen on ≥ 40 % of the visits
       // of the same surface (desktop vs /m); what is left is each screen's own data.
       const surface = route => (route === '/m' || route.startsWith('/m/') ? 'm' : route.startsWith('/rider') ? 'rider' : 'desk')
@@ -275,8 +334,8 @@ for (const u of users) {
         // Slow is reported on its own, on top of any other verdict.
         if (status !== 'hang' && (r.status === 'slow' || r.ms > SLOW_MS)) {
           finding({ ws: 'W2', key: u.key, route, kind: 'slow', severity: 'P3',
-                    expected: `settles within ${SLOW_MS} ms`,
-                    actual: r.ms >= CAP_MS - 1000 ? `not settled after ${r.ms} ms` : `${r.ms} ms` })
+                    expected: `content or refusal within ${SLOW_MS} ms`,
+                    actual: r.ms >= CAP_MS - 1000 ? `no content or refusal after ${r.ms} ms` : `${r.ms} ms to content` })
         }
       }
 
@@ -296,6 +355,6 @@ async function shot(page, key, route) {
 // Judged after the loop, so the page has moved on: reopen briefly for the picture.
 async function shotAgain(page, key, route) {
   await page.goto(route, { waitUntil: 'domcontentloaded', timeout: CAP_MS }).catch(() => {})
-  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+  await page.waitForTimeout(3_000)   // not networkidle: polling screens never reach it
   return shot(page, key, route)
 }
