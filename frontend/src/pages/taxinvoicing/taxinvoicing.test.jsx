@@ -60,6 +60,11 @@ const api = vi.hoisted(() => ({
   egsSheet: vi.fn(() => Promise.resolve({ data: { versions: [], build: { state: 'idle' }, pending: { ready: 0, skipped: [] }, can_build: false } })),
   egsSheetBuild: vi.fn(),
   egsSheetDownload: vi.fn(),
+  codeCancel: vi.fn(),
+  codingPrepare: vi.fn(),
+  codingGs1: vi.fn(),
+  codingProduction: vi.fn(() => Promise.resolve({ data: { enabled: false, batch_ok: false, first_request_pending: true, in_flight: 0,
+    ready: { count: 0, itemcodes: [] }, gs1_offers: {} } })),
 }))
 
 vi.mock('../../components/DataFreshnessBar', () => ({ default: () => null }))
@@ -78,6 +83,7 @@ const { HistoryProgress } = await import('./SettingsTab')
 const { default: HistoryTab } = await import('./HistoryTab')
 const { default: QueueTab } = await import('./QueueTab')
 const { default: EgsSheetPanel, REMINDER } = await import('./EgsSheetPanel')
+const { default: ProductionRequestsPanel, SWITCH_OFF, FIRST_ONLY } = await import('./ProductionRequestsPanel')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -855,5 +861,131 @@ describe('Invoicer codes file panel', () => {
     await screen.findByText(/النسخة 2/)
     expect(screen.queryByRole('button', { name: 'بناء نسخة جديدة' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'تنزيل الملف كاملاً' })).toBeNull()
+  })
+})
+
+describe('production code requests panel', () => {
+  const req = (id, itemcode, status, extra = {}) => ({ id, itemcode, item_code: `EG-100200300-${itemcode}`, purpose: 'new',
+    purpose_label: 'كود جديد', code_name: `Item ${itemcode}`, code_name_ar: '', status, status_label: status, eta_status: '',
+    environment: 'production', error: '', prepared_at: '2026-11-17T10:00:00Z', sent_at: null, ...extra })
+  const state = (extra = {}) => ({ data: { enabled: true, batch_ok: false, first_request_pending: false, in_flight: 0,
+    ready: { count: 2, itemcodes: ['900', '901'] }, gs1_offers: {}, ...extra } })
+  const list = rows => ({ data: { summary: {}, rows } })
+
+  it('lists production requests only and prepares the ready items with the skipped reasons', async () => {
+    api.codingProduction.mockResolvedValue(state())
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared')]))
+    api.codingPrepare.mockResolvedValue({ data: { created: [5], skipped: [{ itemcode: '901', why: 'تحتاج فئة GPC' }] } })
+    show(<ProductionRequestsPanel me={ME} />)
+    expect(await screen.findByText('Item 900')).toBeTruthy()
+    expect(api.codes).toHaveBeenCalledWith({ environment: 'production' })
+    fireEvent.click(await screen.findByRole('button', { name: 'جهّز الطلبات (2)' }))
+    await waitFor(() => expect(api.codingPrepare).toHaveBeenCalledWith({ itemcodes: ['900', '901'] }))
+    expect(await screen.findByText('جُهّز 1 طلب — تُرك 1: 901 (تحتاج فئة GPC)')).toBeTruthy()
+  })
+
+  it('keeps «أرسل» disabled with the reason while the switch is off', async () => {
+    api.codingProduction.mockResolvedValue(state({ enabled: false }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared')]))
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 900')
+    await waitFor(() => expect(screen.getAllByText(SWITCH_OFF).length).toBe(2))
+    expect(SWITCH_OFF).toBe('إرسال الأكواد للمنظومة الفعلية مغلق (TAX_ETA_CODING_PRODUCTION_ENABLED)')
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '1' } })
+    expect(screen.getByRole('button', { name: 'أرسل' }).disabled).toBe(true)
+  })
+
+  it('applies the first-request rule to more than one request', async () => {
+    api.codingProduction.mockResolvedValue(state({ first_request_pending: true }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(2, '901', 'prepared')]))
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 901')
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '2' } })
+    expect(screen.getByRole('button', { name: 'أرسل' }).disabled).toBe(true)
+    expect(FIRST_ONLY).toBe('أرسل طلباً واحداً أولاً حتى تعتمده المصلحة')
+    expect(screen.getAllByText(FIRST_ONLY).length).toBe(2)    // the notice and the button's reason
+    fireEvent.click(screen.getByLabelText('اختيار طلب 900'))
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '1' } })
+    expect(screen.getByRole('button', { name: 'أرسل' }).disabled).toBe(false)
+  })
+
+  it('sends with the typed count and shows the refused reasons', async () => {
+    api.codingProduction.mockResolvedValue(state({ batch_ok: true }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(2, '901', 'failed', { error: 'مرفوض' })]))
+    api.codesSend.mockResolvedValue({ data: { submitted: 1, failed: 0, uncertain: 0, stopped: '', refused: [{ id: 2, why: 'لا يمكن الوصول' }] } })
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 901')
+    await waitFor(() => expect(screen.getByText('اكتب عدد الطلبات (2) للتأكيد')).toBeTruthy())
+    const send = screen.getByRole('button', { name: 'أرسل' })
+    expect(send.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '2' } })
+    fireEvent.click(send)
+    await waitFor(() => expect(api.codesSend).toHaveBeenCalledWith({ ids: [1, 2], confirm: '2' }))
+    expect(within(await screen.findByTestId('production-refused')).getByText('901: لا يمكن الوصول')).toBeTruthy()
+  })
+
+  it('refreshes the requests with ETA, cancels with a reason and takes the GS1 offer', async () => {
+    api.codingProduction.mockResolvedValue(state({ gs1_offers: { 902: '6223000000007' } }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(3, '901', 'submitted'), req(4, '902', 'rejected')]))
+    api.codesRefresh.mockResolvedValue({ data: { checked: 1, approved: 1, rejected: 0, error: '' } })
+    api.codeCancel.mockResolvedValue({ data: {} })
+    api.codingGs1.mockRejectedValue({ response: { status: 400, data: { detail: 'للصنف كود معتمد أو قيد الاعتماد' } } })
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 902')
+    fireEvent.click(screen.getByRole('button', { name: 'حدّث من المصلحة' }))
+    await waitFor(() => expect(api.codesRefresh).toHaveBeenCalledWith({ ids: [3] }))
+    const row900 = screen.getByText('Item 900').closest('tr')
+    fireEvent.click(within(row900).getByRole('button', { name: 'إلغاء' }))
+    const confirm = within(row900).getByRole('button', { name: 'تأكيد الإلغاء' })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(within(row900).getByLabelText('سبب إلغاء 900'), { target: { value: 'خطأ في الاسم' } })
+    fireEvent.click(confirm)
+    await waitFor(() => expect(api.codeCancel).toHaveBeenCalledWith(1, 'خطأ في الاسم'))
+    expect(within(screen.getByText('Item 901').closest('tr')).queryByRole('button', { name: 'إلغاء' })).toBeNull()
+    fireEvent.click(await within(screen.getByText('Item 902').closest('tr')).findByRole('button', { name: 'جرّب GS1' }))
+    await waitFor(() => expect(api.codingGs1).toHaveBeenCalledWith({ itemcode: '902' }))
+    expect(await screen.findByText('للصنف كود معتمد أو قيد الاعتماد')).toBeTruthy()
+  })
+
+  it('hides the buttons without the permissions', async () => {
+    api.codingProduction.mockResolvedValue(state({ gs1_offers: { 902: '6223000000007' } }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(4, '902', 'rejected')]))
+    show(<ProductionRequestsPanel me={{ ...ME, can_edit: false, can_finalize: false }} />)
+    await screen.findByText('Item 902')
+    await waitFor(() => expect(api.codingProduction).toHaveBeenCalled())
+    for (const name of [/جهّز الطلبات/, 'حدّث من المصلحة', 'إلغاء', 'جرّب GS1', 'أرسل']) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+    expect(screen.queryByLabelText('اكتب عدد الطلبات للتأكيد')).toBeNull()
+  })
+})
+
+describe('coding queue production request actions', () => {
+  const qrow = (itemcode, extra = {}) => ({
+    id: Number(itemcode), itemcode, name: `Item ${itemcode}`, name_ar: '', value: '100.00', docs: 1, last_day: '2026-11-14',
+    premark: 'code', premark_reason: 'official', note: '', sources: {}, vat_rate: '14', vat_flagged: false, vat_why: 'catalog',
+    eta_last_status: '', decision: 'code', decided_by: 'محاسب', decided_at: '2026-11-17T10:00:00Z', brick: '10000673',
+    brick_name: 'أدوية', brick_source: 'decisions', brick_confidence: '', brick_reason: '', brick_second: '', brick_second_name: '',
+    own_brick: '', own_brick_name: '', brick_confirmed: true, request: null, request_ready: false, request_blocker: '',
+    gs1_offer: { available: false, gtin: '' }, ...extra,
+  })
+
+  it('prepares one decided row and takes its GS1 offer', async () => {
+    api.codingQueue.mockResolvedValue({ data: { count: 2, page: 1, pages: 1, total_value: '200.00', catalog_without_profile: false, rows: [
+      qrow('910', { request_ready: true }),
+      qrow('911', { request: { id: 8, status: 'rejected', status_label: 'رفضته المصلحة', eta_status: 'Rejected', error: '', purpose: 'new' },
+        request_ready: true, gs1_offer: { available: true, gtin: '6223000000007' } }),
+    ] } })
+    api.etaHolds.mockResolvedValue({ data: { on_eta_not_in_sheet: [], in_sheet_not_on_eta: [], counts: {} } })
+    api.codingPrepare.mockResolvedValue({ data: { created: [9], skipped: [] } })
+    api.codingGs1.mockResolvedValue({ data: { created: [10], skipped: [] } })
+    show(<QueueTab me={ME} />)
+    const row910 = (await screen.findByText('Item 910')).closest('tr')
+    fireEvent.click(within(row910).getByRole('button', { name: 'جهّز الطلب' }))
+    await waitFor(() => expect(api.codingPrepare).toHaveBeenCalledWith({ itemcodes: ['910'] }))
+    const row911 = screen.getByText('Item 911').closest('tr')
+    expect(within(row911).getByText(/طلب المصلحة: رفضته المصلحة · Rejected/)).toBeTruthy()
+    fireEvent.click(within(row911).getByRole('button', { name: 'جرّب GS1' }))
+    await waitFor(() => expect(api.codingGs1).toHaveBeenCalledWith({ itemcode: '911' }))
   })
 })
