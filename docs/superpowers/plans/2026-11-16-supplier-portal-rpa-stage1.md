@@ -422,8 +422,9 @@ class PortalWiringTests(TestCase):
 ```
 
   `mode` is `"live"` only when `portal.live and not job.dry_run`, and `"dry_run"` otherwise.
-- `history_plan(basket) -> dict`: `{"kind": "history", "basket_id", "since": filled_at iso,
-  "order_ref": portal_ref or ""}`.
+- `history_plan(basket, *, since) -> dict`: `{"kind": "history", "basket_id", "since": iso,
+  "order_ref": portal_ref or ""}`. `since` is required (PlanError without it). It is the start of the
+  earliest live fill run that may have ordered, minus the safety margin (ruling R9, Task 7).
 - Plans never contain a password, a URL taken from the database, or any instruction to press Submit.
 
 - [ ] **Step 1: Write the failing tests**
@@ -479,6 +480,12 @@ class PortalWiringTests(TestCase):
 | `handover` (live) | `awaiting_submit` (`filled_at` set). The lease keeps running while the person decides. |
 | `submit_seen` + `order_ref` | `submitted`, then Task 8's `record_order` |
 | `cart_not_empty`, `wrong_account`, `cart_mismatch`, `unknown_message`, `login_required_timeout`, `stopped_by_operator`, `timeout`, `error` | `needs_person` with that reason |
+
+**Driver contract (ruling, Task 7 review):** the driver reports `cart_not_empty` and `wrong_account`
+**only** from run_plan step 1, before any line is added. These two are the only outcomes treated as
+"nothing touched". Any identity mismatch found later (for example on the review page) is reported as
+`wrong_account_late`, which counts as "may have ordered". The queue also checks the reported steps and
+treats a "pre-cart" outcome that lists an added line as "may have ordered".
 
 - **A report from the wrong device**, or for a run that isn't open → 409.
 - **Credit.** Every report carrying `credit` saves it on `PortalAccount.last_credit` (with `at`). Every
