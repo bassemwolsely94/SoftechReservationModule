@@ -5,6 +5,9 @@ Types PBX extensions from data (crews spec 5.6): call-center crew extensions -> 
 extensions -> hq/branch by their dated assignment, then the owner-confirmed data file
 (apps/pbx/data/confirmed_extension_types.json). Gateways are never touched.
 Default is a dry run; --apply saves and writes one audit row. Run after sync_pbx_extensions.
+Two employees (or two crews) on one extension: the first claim is kept (employees by hr_number,
+crews by name) and the conflict is printed. The employee tier reads current
+Employee.pbx_extensions (not dated) — review the dry run before --apply.
 """
 from django.core.management.base import BaseCommand
 
@@ -20,7 +23,14 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         apply = options['apply']
-        changes = classify(apply=apply)
+        conflicts = []
+        changes = classify(apply=apply, conflicts=conflicts)
+        if conflicts:
+            self.stdout.write(self.style.WARNING(
+                f'{len(conflicts)} extension conflict(s) - first claim kept, review before --apply:'))
+            for c in conflicts:
+                self.stdout.write(f"  conflict ext={c['extension']:<12} kept {c['kept']}, "
+                                  f"dropped {c['dropped']}")
         for c in changes:
             self.stdout.write(f"  ext={c['extension']:<12} {c['old']} -> {c['new']}  ({c['source']})")
         verb = 'Classified' if apply else 'Would classify (dry run, use --apply)'

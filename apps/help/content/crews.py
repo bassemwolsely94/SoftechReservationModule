@@ -17,7 +17,7 @@ MODULE = {
         'تختاره، ولا يمكن أن يبدأ قبل أول الشهر الحالي، فلا يغيّر الشهور المقفلة أبدًا. الشخص غير الموجود في كشف '
         'الرواتب (كود مستخدم SOFTECH أو رقم داخلي فقط) يظهر بعلامة «خارج كشف الرواتب». تبويب «بائع غير محدد» '
         'يبيّن نسبة المبيعات المسجلة على حساب عام أو حساب جهاز كاشير بدل البائع الحقيقي؛ إصلاحها أمر تشغيلي '
-        '(أن يسجل كل بائع بحسابه) وليس من هذه الشاشة. طاقم «الكول سنتر» من نوع كول سنتر بُني من أكواد البائعين '
+        '(أن يسجل كل بائع بحسابه) وليس من هذه الشاشة. طاقم «الكول سنتر» من نوع كول سنتر يُبنى بأمر seed_call_center_crew من أكواد البائعين '
         'والأرقام الداخلية في إعداد الكول سنتر، مؤرخًا من أول شهر له أرقام: أرقامه هي مبيعات أعضائه (بائع الفاتورة لا الكاشير) '
         'داخل تواريخ عضويتهم ومكالمات أرقامهم الداخلية. حتى يوافق المالك على مقارنة القديم بالجديد تبقى لوحة المؤشرات '
         'والمستهدفات والحوافز على أرقام الكول سنتر القديمة كما هي. كل تغيير يُسجّل في سجل المراجعة، والشاشة لا تقرأ من SOFTECH ولا تكتب فيه.',
@@ -28,7 +28,7 @@ MODULE = {
         'start before the first of the current month, so closed months never change. Someone not on the payroll (a '
         'SOFTECH user code or a phone extension only) carries an «off payroll» badge. The "Unknown seller" tab shows the '
         'share of sales recorded on a generic or cashier-station account instead of the real seller; fixing it is an '
-        'operations matter (every seller signing in with their own account), not something this screen does. The call-center crew «الكول سنتر» was built from the seller codes '
+        'operations matter (every seller signing in with their own account), not something this screen does. The call-center crew «الكول سنتر» is created by the seed_call_center_crew command from the seller codes '
         'and extensions in the call-center settings, dated from its first month with figures: its figures are its members’ sales '
         '(the invoice seller, never the cashier) inside their membership dates and the calls of their extensions. Until the owner '
         'approves the old-versus-new comparison, the KPI board, targets and incentives keep the old call-center figures unchanged. Every '

@@ -39,6 +39,7 @@ SALES_METRICS = (K.M_CASH_DELIVERY, K.M_GROSS_PROFIT, K.M_BEAUTY, K.M_CUSTOMERS,
 NOTE_NO_MEMBERS = 'no_members'                  # no seller and no extension identity
 NOTE_NO_SELLERS = 'no_sellers'                  # extensions only: sales metrics not computed
 NOTE_RETURNS_UNREACHABLE = 'returns_unreachable'
+NOTE_RETURNS_NOT_DEDUCTED = 'returns_not_deducted'  # returns=False (--no-returns): gross figures
 NOTE_CDR_UNAVAILABLE = 'cdr_unavailable'        # no CDR configured and no CSV given
 NOTE_CDR_UNREACHABLE = 'cdr_unreachable'        # configured, but the pull failed
 
@@ -192,6 +193,8 @@ def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr
             _subtract_returns(kpis, total)
             for key, ret in each.items():
                 _subtract_returns(per[key], ret)
+    elif sellers:       # --no-returns: the money figures are gross and the row must say so
+        notes.append(NOTE_RETURNS_NOT_DEDUCTED)
 
     rows = cdr_rows if cdr_rows is not None else _cdr_rows(year, month, notes)
     if rows is not None:

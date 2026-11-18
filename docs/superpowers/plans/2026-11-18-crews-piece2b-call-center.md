@@ -148,6 +148,7 @@
 
 ## Part B — held until the owner signs off the comparison (not built in this PR)
 
+0. Precondition: never migrate or rebuild from `CrewKpiRollup` rows whose notes are non-empty; parameterise `cc_softech`'s IN list before reuse; owner reviews `classify_pbx_extensions` dry-run before `--apply` (employee tier can flip an agent phone to hq).
 1. `KpiActualRollup.crew` FK + branch nullable + check (exactly one); CC rows moved to the crew value-for-value (or rebuilt from `CrewKpiRollup` if the owner prefers the crew figures); `CrewKpiRollup` dropped.
 2. `SalesTarget` crew scope and `ForecastScenario`/`ForecastResult` crew scope; the 5 CC targets and 31 CC forecast rows migrated value-for-value; one `crew_actual(crew, metric, start, end)` for the target engine (fixes the CC `actual_value() = 0` finding).
 3. Engine / KPI board / KPI export / references / rollup refresh read the crew through `legacy_cc_branch()`'s replacement; `build_call_center_rollups` reads `identities()`.

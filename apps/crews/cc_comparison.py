@@ -20,7 +20,7 @@ A figure that cannot be computed (SOFTECH / CDR unreachable) is None — «غي�
 SOFTECH reads only through cc_softech / softech_returns (config.sybase); CDR through config.issabel.
 """
 from collections import Counter, defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -53,21 +53,32 @@ METRIC_LABELS = {
 NOT_ADDITIVE_PER_PERSON = ('pic_count', 'call_count')
 PIC_NOT_ADDITIVE = ('عدد العملاء (PIC) وعدد المكالمات لكل شخص غير تجميعي: عميل أو رقم خدمه شخصان '
                     'يُعد عند كل منهما، فمجموع الأشخاص قد يزيد عن رقم الطاقم.')
+# returns_for_spans over the 400-day look-back credits a former member's return to the crew total;
+# that person has no row this month, so per-person money does not sum to the crew figure.
+FORMER_MEMBER_RETURNS = ('مرتجعات الأعضاء السابقين (من غادر الطاقم قبل الشهر) تُخصم من إجمالي الطاقم لكنها '
+                         'لا تظهر في صف أي شخص، فمجموع أعمدة المبالغ لكل شخص قد لا يساوي إجمالي الطاقم '
+                         'عند وجود مرتجعات. / Returns of former members are deducted from the crew total '
+                         'but appear in no person row, so per-person money columns may not sum to the '
+                         'total when returns apply.')
+PERSON_NOTES = {'linked_employee': 'موظف مرتبط: هويته المؤرخة تختلف عن كود الإعداد — انظر الأسئلة'}
 
 REASONS = {
     'same': {'ar': 'مطابق', 'en': 'Same: crew = stored = old rule now'},
     'drift_since_build': {'ar': 'تغيّرت بيانات المبيعات/المرتجعات منذ بناء الرقم القديم',
                           'en': 'Sales/returns data changed since the stored figure was built'},
-    'membership': {'ar': 'اختلاف أعضاء الطاقم عن أكواد الإعداد',
-                   'en': 'Crew members differ from the CallCenterConfig codes'},
+    'membership': {'ar': 'اختلاف أعضاء الطاقم عن أكواد الإعداد (قد يكون سببه ربط موظف — انظر الأسئلة)',
+                   'en': 'Crew members differ from the CallCenterConfig codes (may be caused by an '
+                         'employee link — see the questions)'},
     'returns_unreachable': {'ar': 'لم يُحسب خصم المرتجعات (SOFTECH غير متاح)',
                             'en': 'Returns not deducted (SOFTECH unreachable)'},
     'returns_not_deducted': {'ar': 'لم يُخصم المرتجع في هذا التشغيل (--no-returns) — القيم إجمالية',
                              'en': 'Returns not deducted in this run (--no-returns) — gross figures'},
     'cdr_unavailable': {'ar': 'عدد المكالمات غير قابل لإعادة الحساب هنا (CDR غير متاح) — القيمة المخزنة فقط',
                         'en': 'Call count cannot be recomputed here (no CDR) — stored value only'},
-    'return_before_membership': {'ar': 'مرتجع لبيع سابق لبداية العضوية',
-                                 'en': 'A return of a sale made before the membership began'},
+    'return_before_membership': {'ar': 'مرتجع لبيع سابق لبداية العضوية أو أقدم من 400 يوم أو برقم '
+                                       'مستند قديم مكرر',
+                                 'en': 'A return of a sale made before the membership began, older '
+                                       'than 400 days, or under a reused old document number'},
     'no_stored_value': {'ar': 'لا يوجد رقم مخزن قديم', 'en': 'No stored old figure'},
 }
 
@@ -193,8 +204,66 @@ class _Labeller:
         return self.ext_label.get(value) or f'داخلي {value}', False
 
 
+NOTE_LINKED_EMPLOYEE = 'linked_employee'
+ONE_DAY = timedelta(days=1)
+
+
+def _linked_seed_rows(crew) -> dict:
+    """employee_id -> (Employee, [seed rows]) for the seed's own include rows that store an
+    employee FK (a config code / extension matched that employee's current value, spec §6.8)."""
+    from .cc_seed import SEED_REASON
+    out = {}
+    if crew is None:
+        return out
+    for r in (crew.manual_members.filter(reason=SEED_REASON, mode='include', voided_at__isnull=True,
+                                         employee__isnull=False)
+              .select_related('employee').order_by('employee_id', 'id')):
+        out.setdefault(r.employee_id, (r.employee, []))[1].append(r)
+    return out
+
+
+def _covered(spans, frm, to) -> bool:
+    """True when the inclusive spans cover every day of [frm, to]."""
+    day = frm
+    for a, b in sorted(spans):
+        if a > day:
+            break
+        if b >= day:
+            day = b + ONE_DAY
+    return day > to
+
+
+def _linked_differs(rows, ids, emp_id, m_start, m_end) -> bool:
+    """Does the linked employee's dated identity this month differ from the seed's bare codes:
+    an extra user code / extension (from the employee's assignment), or a seed code missing on
+    some day the seed row is active (employment / assignment dates)?"""
+    key = ('emp', emp_id)
+    own = ({('softech_user', r.softech_usercode) for r in rows if r.softech_usercode}
+           | {('extension', r.pbx_extension) for r in rows if r.pbx_extension})
+    carried = [i for i in ids if i.member_key == key and i.kind in ('softech_user', 'extension')]
+    if {(i.kind, i.value) for i in carried} - own:
+        return True
+    for r in rows:
+        frm = max(r.valid_from, m_start)
+        to = min(r.valid_to or m_end, m_end)
+        if frm > to:
+            continue
+        ident = ('softech_user', r.softech_usercode) if r.softech_usercode else ('extension', r.pbx_extension)
+        if not _covered([(i.valid_from, i.valid_to) for i in carried if (i.kind, i.value) == ident],
+                        frm, to):
+            return True
+    return False
+
+
+def _linked_question(emp, rows, months) -> str:
+    code = '، '.join(r.softech_usercode or r.pbx_extension for r in rows)
+    listed = '، '.join(f'{y}-{m:02d}' for y, m in months)
+    return (f'الموظف {emp.name_ar} ({emp.hr_number}) مرتبط بكود الإعداد {code}: هويته المؤرخة تختلف '
+            f'في الشهور {listed} — هل يبقى الربط أم يُستبدل بالكود فقط؟')
+
+
 def _people_rows(y, m, crew_month, ids, *, old_for, cfg_codes, cfg_exts, cdr_rows, labeller,
-                 returns_missing) -> list:
+                 returns_missing, linked_keys=frozenset()) -> list:
     """Per member: crew figures vs the old rule over the member's identities that are in
     CallCenterConfig (computed for the member's codes together, so distinct counts stay
     distinct). Config codes / extensions no member carries get their own row, crew 0."""
@@ -234,7 +303,8 @@ def _people_rows(y, m, crew_month, ids, *, old_for, cfg_codes, cfg_exts, cdr_row
                 crew = crew_vals.get(metric, 0) if in_crew else 0
             out.append({'year': y, 'month': m, 'member_key': _key_str(key), 'label': label,
                         'generic': generic, 'metric': metric, 'old': _f(old), 'crew': _f(crew),
-                        'diff': _diff(crew, old)})
+                        'diff': _diff(crew, old),
+                        'notes': [NOTE_LINKED_EMPLOYEE] if key in linked_keys else []})
     return out
 
 
@@ -342,6 +412,8 @@ def compare(crew, start, end, *, returns=True, cdr_rows_by_month=None, cdr_from_
             stored[(r['year'], r['month'], r['metric'])] = r['value']
 
     month_rows, people, crew_values = [], [], {}
+    linked = _linked_seed_rows(crew)
+    linked_months = defaultdict(list)
     for y, m in months:
         rows, cdr_note = _cdr_rows(y, m, cdr_rows_by_month)
         cdr_missing = rows is None
@@ -386,16 +458,25 @@ def compare(crew, start, end, *, returns=True, cdr_rows_by_month=None, cdr_from_
                                'diff_old_crew': _diff(c, o), 'reason': reason,
                                'notes': list(cm.notes)})
 
-        ids = identities(crew, *resolver.month_bounds(y, m)) if crew else []
+        m_start, m_end = resolver.month_bounds(y, m)
+        ids = identities(crew, m_start, m_end) if crew else []
+        linked_keys = set()
+        for emp_id, (_emp, seed_rows) in linked.items():
+            if _linked_differs(seed_rows, ids, emp_id, m_start, m_end):
+                linked_keys.add(('emp', emp_id))
+                linked_months[emp_id].append((y, m))
         people += _people_rows(y, m, cm, ids, old_for=old_for, cfg_codes=codes, cfg_exts=exts,
-                               cdr_rows=rows, labeller=labeller, returns_missing=returns_missing)
+                               cdr_rows=rows, labeller=labeller, returns_missing=returns_missing,
+                               linked_keys=linked_keys)
 
     targets = _targets(cc, stored, crew_values, set(months))
+    questions = _questions(targets, cdr_from_csv=cdr_from_csv)
+    questions += [_linked_question(emp, seed_rows, linked_months[emp_id])
+                  for emp_id, (emp, seed_rows) in linked.items() if linked_months[emp_id]]
     result = {
         'crew_id': crew.pk if crew else None, 'start': list(start), 'end': list(end),
         'returns': returns, 'months': month_rows, 'people': people, 'targets': targets,
-        'forecasts': _forecasts(),
-        'questions': _questions(targets, cdr_from_csv=cdr_from_csv),
+        'forecasts': _forecasts(), 'questions': questions,
     }
     result['totals'] = _totals(month_rows)
     return result
@@ -557,13 +638,15 @@ def build_workbook(result):
         return f'{label} — غير تجميعي' if metric in NOT_ADDITIVE_PER_PERSON else label
 
     ws = sheet('حسب الشخص', ['السنة', 'الشهر', 'الشخص', 'المفتاح', 'بائع غير محدد', 'المؤشر',
-                             'metric', 'القديم (أكواد الإعداد)', 'الطاقم', 'الفرق'],
+                             'metric', 'القديم (أكواد الإعداد)', 'الطاقم', 'الفرق', 'ملاحظات'],
                [([p['year'], p['month'], p['label'], p['member_key'], 'نعم' if p['generic'] else '',
-                  person_metric(p['metric']), p['metric'], p['old'], p['crew'], p['diff']],
+                  person_metric(p['metric']), p['metric'], p['old'], p['crew'], p['diff'],
+                  '، '.join(PERSON_NOTES.get(n, n) for n in p.get('notes', []))],
                  _fmt(p['metric'])) for p in result['people']],
                num_cols=(8, 9, 10))
     ws.append([])
     ws.append([PIC_NOT_ADDITIVE])
+    ws.append([FORMER_MEMBER_RETURNS])
 
     sheet('المستهدفات', ['#', 'metric', 'الفترة', 'المستهدف', 'المحقق (اللوحة)',
                          'المحقق (SalesTarget.actual_value اليوم)', 'المحقق (الطاقم)', '% اللوحة',

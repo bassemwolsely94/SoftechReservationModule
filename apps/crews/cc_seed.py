@@ -19,6 +19,7 @@ from apps.hr.models import Employee
 
 from .models import Crew, CrewKpiRollup, CrewManualMember
 
+
 class CcCrewNameTaken(Exception):
     """A live crew of another type already holds the call-center crew's name."""
 

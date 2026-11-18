@@ -360,6 +360,23 @@ class BuildCrewRollupsCommandTests(_Base):
                                                    metric='call_count').value, Decimal('2'))
         return c
 
+    def test_no_returns_build_marks_rows_returns_not_deducted(self):
+        self.inv('62', date(2026, 6, 3), 1000, cost=600, phc='P1')
+        c = self.crew([('62', '', SEED_FROM, None)])
+        get_conn = mock.Mock()
+        with mock.patch('apps.crews.softech_returns.get_sybase_connection', get_conn),                 mock.patch('apps.crews.kpi.cdr_configured', return_value=False):
+            call_command('build_crew_rollups', crew=c.pk, year=2026, month=6, no_returns=True,
+                         stdout=StringIO())
+        get_conn.assert_not_called()
+        rows = CrewKpiRollup.objects.filter(crew=c, year=2026, month=6)
+        self.assertEqual(set(rows.values_list('metric', flat=True)), set(FIVE))
+        for r in rows:
+            self.assertIn('returns_not_deducted', r.notes, r.metric)
+        # extensions only (no seller): nothing to deduct, no such note
+        c2 = self.crew([('', '10', SEED_FROM, None)])
+        month = crew_kpi.compute_crew_month(c2, 2026, 6, returns=False, cdr_rows=[])
+        self.assertNotIn('returns_not_deducted', month.notes)
+
     def test_rebuild_without_cdr_removes_stale_call_count(self):
         c = self._build_with_csv()
         with mock.patch('apps.crews.kpi.cdr_configured', return_value=False):

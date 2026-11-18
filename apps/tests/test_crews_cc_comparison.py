@@ -323,6 +323,65 @@ class SectionTests(_Base):
         self.assertTrue(any(REASON in t for t in texts for REASON in [C.REASONS['same']['ar']]))
 
 
+class LinkedEmployeeTests(_Base):
+    """Seed rows that store an employee FK resolve through the employee's DATED identity; the
+    report must say in which months that differs from the seed's bare code (spec §6.8 ruling)."""
+
+    def _employee(self, assignments):
+        from apps.hr.models import Employee, EmployeeAssignment
+        e = Employee.objects.create(hr_number='E62', name_ar='سعيد', softech_usercode='62',
+                                    start_date=date(2024, 1, 1))
+        for code, frm, to in assignments:
+            EmployeeAssignment.objects.create(employee=e, softech_usercode=code, valid_from=frm,
+                                              valid_to=to, source='manual')
+        return e
+
+    def test_early_month_with_other_usercode_is_a_question(self):
+        self.june_sales()
+        self.store_old()
+        KpiActualRollup.objects.create(branch=self.cc, year=2026, month=5, metric='cash_delivery',
+                                       value=Decimal('0'))     # seed starts 2026-05-01
+        e = self._employee([('55', date(2026, 5, 1), date(2026, 5, 31)),
+                            ('62', date(2026, 6, 1), None)])
+        crew = self.crew()
+        self.assertEqual(crew.manual_members.get(softech_usercode='62').employee_id, e.pk)
+        res = C.compare(crew, (2026, 5), JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        linked = [q for q in res['questions'] if 'مرتبط بكود الإعداد' in q]
+        self.assertEqual(len(linked), 1, res['questions'])
+        self.assertIn('سعيد (E62)', linked[0])
+        self.assertIn('62', linked[0])
+        self.assertIn('2026-05', linked[0])
+        self.assertNotIn('2026-06', linked[0])
+        key = f'emp:{e.pk}'
+        may = [p for p in res['people'] if p['member_key'] == key and p['month'] == 5]
+        june = [p for p in res['people'] if p['member_key'] == key and p['month'] == 6]
+        self.assertTrue(may and june)
+        self.assertTrue(all('linked_employee' in p['notes'] for p in may))
+        self.assertTrue(all(p['notes'] == [] for p in june))
+        self.assertIn('ربط موظف', C.REASONS['membership']['ar'])
+
+    def test_exact_match_employee_is_no_question(self):
+        self.june_sales()
+        self.store_old()
+        e = self._employee([('62', date(2024, 1, 1), None)])
+        crew = self.crew()
+        self.assertEqual(crew.manual_members.get(softech_usercode='62').employee_id, e.pk)
+        res = self.cmp(crew)
+        self.assertFalse([q for q in res['questions'] if 'مرتبط بكود الإعداد' in q])
+        self.assertFalse([p for p in res['people'] if p['notes']])
+        self.assertEqual(self.row(res, 'cash_delivery')['reason'], 'same')
+
+    def test_person_sheet_footnote_for_former_member_returns(self):
+        from openpyxl import load_workbook
+        self.store_old()
+        res = C.compare(self.crew(), JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
+        buf = io.BytesIO()
+        C.build_workbook(res).save(buf)
+        ws = load_workbook(io.BytesIO(buf.getvalue()))['حسب الشخص']
+        texts = [c.value for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
+        self.assertTrue(any('الأعضاء السابقين' in t and 'former members' in t for t in texts))
+
+
 class CommandTests(_Base):
     def test_seed_in_transaction_leaves_no_rows(self):
         self.june_sales()
