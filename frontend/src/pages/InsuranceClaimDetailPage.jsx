@@ -543,7 +543,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
                             className="text-blue-600 hover:underline">بالاسم</button>
                         </div>
                         {/* or find it by name (this line only): a pick fills the code and runs the same
-                            lookup as «بحث» (Enter takes an exact code only); the save stays «حفظ» below */}
+                            lookup as «بحث»; the save stays «حفظ» below */}
                         {nameSearchFor === l.id && (
                           <div className="mt-1 min-w-[16rem]">
                             <ItemSearchWidget mode="single" autoFocus placeholder="ابحث بالاسم…"
