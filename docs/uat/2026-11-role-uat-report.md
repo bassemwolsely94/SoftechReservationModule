@@ -3,9 +3,8 @@
 Design `docs/superpowers/specs/2026-11-16-role-uat-design.md` · Plan `docs/superpowers/plans/2026-11-16-role-uat.md`
 · Runbook `scripts/uat/README.md`
 
-> **Status: draft.** W4, W5a, W5b, W6 and W7 are in, with their fixes in PR 161 and PR 163
-> (not merged). W2 (screens) and the W3 live button sweep are re-running with a relogin guard,
-> because runs longer than an hour went on signed out.
+> **Status: draft.** Every workstream is in. Fixes: PR 163 merged 2026-11-18; PR 161 merging.
+> W2 numbers are from run 4b; its clean rerun (4c) will replace them.
 
 ## How it was tested
 
@@ -95,11 +94,41 @@ The questions as originally asked:
 | pass | supervisor | `/approvals` | inbox across branches with decision buttons |
 | pass | admin | `/users`, `/insurance` | list and claims load; no phones on the user list |
 
-### W2 — screen visibility (*pending*, branch `claude/uat-w2-visibility-f91f78`)
+### W2 — screen visibility (branch `claude/uat-w2-visibility-f91f78`)
 
-Known so far: `/stock-count` (call_center, accountant) and `/vouchers` (accountant) get a clean 403 from the
-server, but the page leaves it unhandled and shows a misleading empty state («لا توجد جلسات جرد») instead of
-"no access" — P2 where the menu shows the screen, P3 where it hides it.
+19 users × 190 routes (23 skipped) = **3,466 visits**, every one checked signed in first (0 relogins needed);
+0 hangs, crashes or blank screens. Numbers below are from run 4b (2026-11-18, harness bugs fixed and
+rechecked); **run 4c (clean rerun) final counts: _pending_**.
+
+**P1 — the menu hides the screen, but it opens and its data API answers 200** (a role can reach by URL what the
+menu says it may not see; matrix tightening per D5, or a menu-model fix):
+
+| screen | users | screen | users |
+|---|---|---|---|
+| `/salesperson-board` (forecasting) | 9 | `/m/delivery` | 5 |
+| `/purchasing` (runs/latest) | 9 | `/m/shortage` (+ detail) | 4 |
+| `/recommendations` | 7 | `/m/vouchers`, `/m/stock-count`, `/m/demand` (+ detail) | 3 each |
+| `/m/qa`, `/m/approvals` | 6 each | `/analytics/transfers` | 2 salespersons |
+| `/demand/dashboard`, `/demand/recovery` | purchasing | | |
+
+Doubtful (only a setup call answers, no business data): `/stock-audit` (12, `stock-audit/me`), `/callcenter`
+(11, PBX/WebRTC config), `/demand` (staff list), `/inventory` and `/analytics/sales` (filter options).
+
+**P2 — menu shows it, the server refuses:** `/rider` for admin, supervisor and others (rider APIs 403);
+`/customers/merge` and `/transits` for some roles. Delivery and delivery@B see 17 menu entries that refuse —
+they live in the rider shell, so this is likely the menu model, not access (owner to confirm).
+`/stock-count` (call_center, accountant) and `/vouchers` (accountant) get a clean 403 but show a misleading
+empty state («لا توجد جلسات جرد») instead of "no access".
+
+**P3 — unhandled 403 (empty page, not saying "no access")**, menu hides them: worst `/insurance` and its 4
+subpages (14 users), `/offers` (12), `/procurement/*` (9–10), `/supply` (5). Under a shown `/finance` or
+`/delivery` entry, `/finance/cashflow`, `/finance/cash`, `/finance/receivables`, `/finance/supplier-terms` and
+`/delivery/my` are reachable from the menu for some users.
+
+**Speed (time to first content):** p50 0.62 s, p95 1.9 s overall; per role p50 0.40–1.0 s, p95 0.96–2.9 s
+(call_center highest). Slow: `/sync` 20 s with no content (2 users); `/m/pos` 1.9 s; `/composition` 1.4 s.
+Panel data after first content: `/market-shortage` >22 s, `/finance/cash` and `/finance/cashflow` ~15 s,
+`/insurance` ~10.5 s.
 
 ### W4 — phones and other branches on screen (branch `claude/uat-w4-exposure-e89046`)
 
