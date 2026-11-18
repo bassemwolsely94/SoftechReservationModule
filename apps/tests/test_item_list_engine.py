@@ -329,3 +329,114 @@ class FilteredSoundAndTypoTests(TestCase):
         got = item_search(self.QUERY_AR, base=Item.objects.filter(category=self.cat_a), limit=5)
         self.assertEqual(len(got), 5)
         self.assertTrue(all(i in crowd and t == 'sound' for i, t in got), got)
+
+
+class InStockEngineTests(TestCase):
+    """2026-11-17 perf fix — «متوفر» (in_stock) on the engine list is a per-row sellable SUM
+    (catalog.models.sellable_qty_subquery) and the sound / typo tiers ask only their own hits
+    (wildcard.sound_within → phonetic.candidates' callable `within`), never base's whole id list.
+    The rows must be exactly the old ones: SUM of exclude_unsellable stock > 0."""
+
+    QUERY_AR = 'بنادول'          # sounds like PANADOL (skeleton BNDL)
+
+    def setUp(self):
+        from apps.branches.models import Branch
+        from apps.catalog.models import ItemStock
+        P.reset_index()
+        cache.delete('catalog:softech_search_down')
+        retail = Branch.objects.create(softech_branch_id='IS1', name='IS1', name_ar='IS1', kind='retail')
+        hq = Branch.objects.create(softech_branch_id='IS0', name='IS0', name_ar='IS0', kind='hq')
+        closed = Branch.objects.create(softech_branch_id='IS9', name='IS9', name_ar='IS9', kind='closed')
+        pending = Branch.objects.create(softech_branch_id='IS8', name='IS8', name_ar='IS8', kind='pending')
+        # name → [(branch, store, qty)]: every sellable / unsellable / zero / negative mix
+        mix = {
+            'sellable':        [(retail, '101', 5)],
+            'quarantine 102':  [(retail, '102', 5)],
+            'quarantine 105':  [(hq, '105', 9)],
+            'hq store 110':    [(hq, '110', 5)],
+            'hq store 101':    [(hq, '101', 5)],
+            'closed branch':   [(closed, '101', 5)],
+            'pending branch':  [(pending, '101', 5)],
+            'zero':            [(retail, '101', 0)],
+            'negative':        [(retail, '101', -3)],
+            'net negative':    [(retail, '101', 5), (retail, '104', -10)],
+            'net zero':        [(retail, '101', 2), (retail, '104', -2)],
+            'net positive':    [(retail, '101', 5), (retail, '104', -3), (retail, '102', 100)],
+            'negative + 102':  [(retail, '101', -1), (retail, '102', 50)],
+            'fraction':        [(retail, '101', '0.25')],
+            'no stock rows':   [],
+        }
+        self.items = {}
+        for k, (label, rows) in enumerate(mix.items()):
+            for name in (f'PANADOL STK {label.upper()}', f'STOCKY {label.upper()}'):
+                it = Item.objects.create(softech_id=f'IS{k:02d}{len(self.items)}', name=name,
+                                         pack_price=10, is_active=True)
+                self.items[name] = it
+                for br, store, qty in rows:
+                    ItemStock.objects.create(item=it, branch=br, softech_store_code=store,
+                                             quantity_on_hand=qty)
+        gone = Item.objects.create(softech_id='ISX', name='STOCKY INACTIVE', is_active=False)
+        ItemStock.objects.create(item=gone, branch=retail, softech_store_code='101', quantity_on_hand=7)
+        self.in_stock_labels = {'sellable', 'hq store 101', 'net positive', 'fraction'}
+        self.user = get_user_model().objects.create_user(username='instk', password='x')
+        self.c = APIClient()
+        self.c.force_authenticate(self.user)
+
+    def get(self, q, **params):
+        r = self.c.get(URL, {'search': q, 'rank': 'engine', 'page_size': 100, **params})
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        return r.json()
+
+    def old_rule_ids(self):
+        """The list's own total_stock annotation (the rule before the fix), as the reference."""
+        from django.db.models import DecimalField, Sum, Value
+        from django.db.models.functions import Coalesce
+        from apps.catalog.models import unsellable_q
+        return set(Item.objects.filter(is_active=True).annotate(total_stock=Coalesce(
+            Sum('stock_levels__quantity_on_hand', filter=~unsellable_q('stock_levels__')),
+            Value(0, output_field=DecimalField()), output_field=DecimalField()))
+            .filter(total_stock__gt=0).values_list('id', flat=True))
+
+    def expected(self, prefix):
+        return {self.items[f'{prefix} {lb.upper()}'].id for lb in self.in_stock_labels}
+
+    def test_in_stock_rows_equal_the_old_rule(self):
+        ref = self.old_rule_ids()
+        for q, prefix in (('stocky', 'STOCKY'), ('panadol stk', 'PANADOL STK')):
+            data = self.get(q, in_stock='true')
+            got = [x['id'] for x in data['results']]
+            self.assertEqual(set(got), self.expected(prefix), q)
+            self.assertEqual(set(got), {i for i in ref if Item.objects.get(id=i).name.startswith(prefix)}, q)
+            self.assertEqual(data['count'], len(self.in_stock_labels), q)
+            # the filter keeps the engine's order: the unfiltered order, out-of-stock rows dropped
+            whole = [x['id'] for x in self.get(q)['results']]
+            self.assertEqual(got, [i for i in whole if i in set(got)], q)
+            self.assertTrue(all(x['total_stock'] > 0 for x in data['results']), q)
+
+    def test_sound_tier_respects_in_stock(self):
+        # Arabic «بنادول» reaches the PANADOL names only by sound: the in-stock ones stay
+        data = self.get(self.QUERY_AR, in_stock='true')
+        got = {x['id'] for x in data['results']}
+        self.assertEqual(got, self.expected('PANADOL STK'))
+        self.assertTrue(all(x.get('sound') for x in data['results']), data['results'][:2])
+
+    def test_callable_within_matches_the_frozenset_form(self):
+        from apps.catalog.models import sellable_qty_subquery
+        base = Item.objects.filter(is_active=True).alias(_q=sellable_qty_subquery()).filter(_q__gt=0)
+        ids = frozenset(base.values_list('id', flat=True))
+        keep = lambda xs: {i for i in xs if i in ids}
+        for q in (self.QUERY_AR, 'panadol', 'stoky'):
+            self.assertEqual(P.candidates(q, limit=3, within=keep), P.candidates(q, limit=3, within=ids), q)
+
+    def test_in_stock_engine_query_count_and_no_whole_table_sum(self):
+        self.get(self.QUERY_AR, in_stock='true')          # warm the sound index / caches
+        with CaptureQueriesContext(connection) as ctx:
+            self.get(self.QUERY_AR, in_stock='true')
+        sql = [q['sql'] for q in ctx.captured_queries]
+        # no grouped stock aggregate (the old SUM … HAVING over every item) in any query
+        self.assertFalse([s for s in sql if 'HAVING' in s], sql)
+        # base's whole id list is never fetched: every item query is bounded by the tiers' own
+        # conditions or an id list
+        self.assertEqual(len(sql), self.IN_STOCK_QUERIES, '\n'.join(s[:120] for s in sql))
+
+    IN_STOCK_QUERIES = 20     # measured 2026-11-17 (incl. the middleware network lookup)

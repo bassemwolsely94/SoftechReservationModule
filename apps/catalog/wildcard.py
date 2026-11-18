@@ -362,18 +362,22 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
         keep = set(base.filter(id__in=ids).values_list('id', flat=True))
         return [i for i in ids if i in keep]
 
-    base_ids = []
+    in_base = {}                     # item id → inside `base`, asked once per id per search
+
+    def keep(ids):
+        ask = [i for i in ids if i not in in_base]
+        if ask:
+            have = set(base.filter(id__in=ask).values_list('id', flat=True))
+            in_base.update((i, i in have) for i in ask)
+        return {i for i in ids if in_base[i]}
 
     def sound_within():
         # the in-memory sound index keeps its best candidates per lookup: with a narrowed
         # `base` it must pick them from base's items only, or a filtered item ranked below the
-        # whole catalog's cut is lost. One id query, only when narrowed and only when a sound /
-        # typo tier runs; None (unfiltered) = the index's own path, no query
-        if not narrowed:
-            return None
-        if not base_ids:
-            base_ids.append(frozenset(base.values_list('id', flat=True)))
-        return base_ids[0]
+        # whole catalog's cut is lost. Asked lazily (phonetic.candidates' callable `within`):
+        # one query for the index's hits only, never base's whole id list (with «متوفر» that
+        # list cost 0.4–0.7 s, 2026-11-17); None (unfiltered) = the index's own path, no query
+        return keep if narrowed else None
 
     def add(ids, tier):
         for i in ids:

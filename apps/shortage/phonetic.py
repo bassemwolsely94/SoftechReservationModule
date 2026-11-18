@@ -393,7 +393,12 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None, wit
     similarity against every catalog item's brand (and scientific) skeleton. ms-fast.
     `within` (a frozenset of item ids, or None = the whole catalog): items outside it are
     dropped BEFORE each lookup keeps its best `limit`, so a filtered item ranked below the
-    whole catalog's cut is still found (the Ctrl+F1 modal's filters)."""
+    whole catalog's cut is still found (the Ctrl+F1 modal's filters).
+    `within` may instead be a callable `keep(ids) -> set of the ids inside` — then each lookup
+    runs over the whole pool (every hit ≥ cutoff, a few hundred at most), ONE `keep` call
+    answers for their union, and each lookup keeps its best `limit` of the kept hits: the same
+    hits in the same order as the frozenset form (extract orders by score, ties by position, in
+    both), without first listing every id of a filter such as «متوفر» (2026-11-17)."""
     from rapidfuzz import process
     from rapidfuzz.distance import Levenshtein
     p = parse_query(text)
@@ -401,7 +406,10 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None, wit
     if not skels:
         return []
     ix = ix or index()
-    if within is not None:
+    lazy = callable(within)
+    if lazy:
+        narrow = lambda pool: pool
+    elif within is not None:
         # the index positions inside `within`; each pool becomes {position: skeleton}, so
         # `extract` still hands back the position as its key
         sel = [k for k, iid in enumerate(ix['ids']) if iid in within]
@@ -421,11 +429,15 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None, wit
         pools.append((vkeys[0], ix['vfirst']))   # «هيرو» HR is ambiguous; HIRU = HERO is not
     # each lookup method keeps its own best `limit` — the union is scored by the caller, so
     # many short "STL" products can't crowd out ACETYLCYSTEINE found via the joined words
-    for q, pool in pools:
-        if len(q) < 2:
-            continue
-        for _choice, score, idx in process.extract(q, narrow(pool), scorer=Levenshtein.normalized_similarity,
-                                                   limit=limit, score_cutoff=cutoff):
+    found = [process.extract(q, narrow(pool), scorer=Levenshtein.normalized_similarity,
+                             limit=None if lazy else limit, score_cutoff=cutoff)
+             for q, pool in pools if len(q) >= 2]
+    if lazy:
+        union = {ix['ids'][idx] for res in found for _c, _s, idx in res}
+        kept = within(sorted(union)) if union else set()
+        found = [[r for r in res if ix['ids'][r[2]] in kept][:limit] for res in found]
+    for res in found:
+        for _choice, score, idx in res:
             iid = ix['ids'][idx]
             if score > hits.get(iid, 0):
                 hits[iid] = score
