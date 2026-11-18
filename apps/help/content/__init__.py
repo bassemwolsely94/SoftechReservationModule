@@ -22,6 +22,6 @@ MODULE_FILES = [
     'analytics', 'incentives',
     'finance', 'insurance', 'tax_invoicing', 'commerce',
     'hr', 'crews',
-    'data_health', 'code_maps', 'rpa',
+    'data_health', 'code_maps', 'rpa', 'rpa_portals',
     'admin',
 ]
