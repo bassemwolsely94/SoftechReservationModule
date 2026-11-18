@@ -16,7 +16,7 @@
  *   • Last-run status badge
  */
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { purchasingApi, branchesApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
@@ -460,7 +460,7 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
       ...advParams,
     }).then(r => r.data.results || r.data),
     staleTime: 5 * 60_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
     enabled: !!runId,
   })
 
@@ -570,7 +570,7 @@ function BranchTab({ abcFilter, search, ordering, onSort, branches: baseBranches
       ...advParams,
     }).then(r => r.data.results || r.data),
     staleTime: 5 * 60_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
     enabled: !!runId,
   })
 
@@ -759,7 +759,7 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
       ...advParams,
     }).then(r => r.data.results || r.data),
     staleTime: 2 * 60_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
     retry: false,
   })
 
@@ -770,8 +770,8 @@ function TransferRecsTab({ canReview }) {   // purchasing approve: admin / purch
     mutationFn: ({ id, status, notes }) =>
       purchasingApi.transferRecStatus(id, { status, notes }),
     onSuccess: () => {
-      qc.invalidateQueries(['purchasing-transfer-recs'])
-      qc.invalidateQueries(['purchasing-transfer-summary'])
+      qc.invalidateQueries({ queryKey: ['purchasing-transfer-recs'] })
+      qc.invalidateQueries({ queryKey: ['purchasing-transfer-summary'] })
       setReviewing(null)
     },
   })
@@ -1545,9 +1545,9 @@ export default function PurchasingDashboard() {
       setPreTriggerRunId(null)
       // Small delay so DB writes settle before we re-fetch
       setTimeout(() => {
-        qc.invalidateQueries(['purchasing-run-latest'])
-        qc.invalidateQueries(['purchasing-summary'])
-        qc.invalidateQueries(['purchasing-run-last-attempt'])
+        qc.invalidateQueries({ queryKey: ['purchasing-run-latest'] })
+        qc.invalidateQueries({ queryKey: ['purchasing-summary'] })
+        qc.invalidateQueries({ queryKey: ['purchasing-run-last-attempt'] })
         // Table rows auto-refresh when runId changes (they key on runId)
         // One alert with the outcome of the run this page watched (the run itself
         // happens on the server — nothing runs on the user's PC).
@@ -1753,7 +1753,7 @@ export default function PurchasingDashboard() {
     setParamsSaving(true)
     try {
       await purchasingApi.updateConfig(params)
-      qc.invalidateQueries(['purchasing-config'])
+      qc.invalidateQueries({ queryKey: ['purchasing-config'] })
       setParamsOpen(false)
     } catch (err) {
       alert('خطأ في حفظ الإعدادات: ' + (err?.response?.data?.errors
@@ -1771,8 +1771,8 @@ export default function PurchasingDashboard() {
       setTriggerTime(Date.now())
       setIsFullTrigger(!!(opts?.full))
       setPreTriggerRunId(runId)         // snapshot old runId to detect new run
-      qc.invalidateQueries(['purchasing-run-latest'])
-      qc.invalidateQueries(['purchasing-run-active'])   // immediately start polling active
+      qc.invalidateQueries({ queryKey: ['purchasing-run-latest'] })
+      qc.invalidateQueries({ queryKey: ['purchasing-run-active'] })   // immediately start polling active
     },
   })
 
@@ -1784,8 +1784,8 @@ export default function PurchasingDashboard() {
       setTriggerTime(Date.now())
       setIsFullTrigger(true)            // treat like a long run for progress polling
       setPreTriggerRunId(runId)
-      qc.invalidateQueries(['purchasing-run-latest'])
-      qc.invalidateQueries(['purchasing-run-active'])
+      qc.invalidateQueries({ queryKey: ['purchasing-run-latest'] })
+      qc.invalidateQueries({ queryKey: ['purchasing-run-active'] })
     },
     onError: (err) => {
       const msg = err?.response?.data?.detail || 'تعذّرت مزامنة التعويض'

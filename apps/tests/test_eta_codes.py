@@ -71,6 +71,10 @@ class FetchTests(Fixture, TestCase):
         self.run_fetch(FakeReader([[row('EG-100200300-A1', 'Rejected'), row('X1')]], fail_at=2))
         self.assertEqual(EtaCodeUsage.objects.get(item_code='EG-100200300-A1').status, 'Approved')
 
+    def test_parent_item_code_is_kept_as_the_brick(self):
+        self.run_fetch(FakeReader([[row('EG-100200300-A1', parentItemCode='10000673', codeTypeName='EGS')]]))
+        self.assertEqual(EtaCodeUsage.objects.get(item_code='EG-100200300-A1').gpc, '10000673')
+
     def test_total_pages_stops_clamped_paging(self):
         full = {'result': [row('A'), row('B')], 'metadata': {'totalPages': 1}}
         r = FakeReader([full] * 50)    # ETA clamps an out-of-range Pn to the last page

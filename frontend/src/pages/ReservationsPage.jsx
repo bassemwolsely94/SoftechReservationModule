@@ -269,7 +269,7 @@ export default function ReservationsPage() {
           (d.skipped ? ` — تم تخطي ${d.skipped} بسبب قيود الحالة` : '')
         )
         setSelectedIds([])
-        qc.invalidateQueries(['reservations'])
+        qc.invalidateQueries({ queryKey: ['reservations'] })
       }
     } catch (e) {
       setBulkMsg('❌ ' + (e.response?.data?.detail || 'حدث خطأ'))

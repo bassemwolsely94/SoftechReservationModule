@@ -3,7 +3,7 @@
  * Customer Case Management: list, filter, state machine, CSAT, case notes
  */
 import { useState, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { callCenterApi, customersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
@@ -627,7 +627,7 @@ export default function CasesPage() {
     queryKey: ['cases-list', queryParams],
     queryFn:  () => callCenterApi.cases.list(queryParams).then(r => r.data),
     staleTime: 15_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const cases   = data?.results || data || []

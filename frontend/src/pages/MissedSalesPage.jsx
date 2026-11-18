@@ -8,7 +8,7 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { missedSalesApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
@@ -81,7 +81,7 @@ export default function MissedSalesPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['missed-sales', status, ordering, page],
     queryFn: () => missedSalesApi.list({ status, ordering, page }).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
   const rows = data?.results || []
   const disabled = error?.response?.status === 503

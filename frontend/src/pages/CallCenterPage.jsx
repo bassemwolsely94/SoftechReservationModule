@@ -23,6 +23,7 @@ import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
+import StockLookupDrawer from '../components/StockLookupDrawer'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -836,6 +837,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
   })
   const [converting, setConverting]       = useState(false)
   const [convertResult, setConvertResult] = useState(null)
+  const [stockFor, setStockFor]           = useState(null)   // a saved call item → network stock drawer (C01)
   const searchTimeoutRef = useRef(null)
 
   // Branches for conversion dropdowns
@@ -856,6 +858,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
     ;(async () => {
       setFlushing(true)
       const saved = []
+      const failed = []
       for (const item of pendingItems) {
         try {
           const { data } = await callCenterApi.addItem(savedCallId, {
@@ -866,11 +869,15 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
             notes:            item.notes || '',
           })
           saved.push(data)
-        } catch { /* silent — item already shown in UI */ }
+        } catch (e) {
+          failed.push(item.item?.name || item.manual_item_name || '—')
+        }
       }
       setPendingItems([])
       setDbItems(prev => [...prev, ...saved])
       setFlushing(false)
+      // a lost item used to vanish silently (full audit C01: no call item was ever stored)
+      if (failed.length) alert(`تعذّر حفظ ${failed.length} صنف مع المكالمة: ${failed.join('، ')} — أضفه مرة أخرى.`)
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedCallId])
@@ -909,11 +916,16 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
     ...dbItems.map(i => ({ ...i, _status: i.converted_to !== 'none' ? 'converted' : 'saved' })),
   ]
 
-  async function addCatalogItem(catalogItem) {
+  async function addCatalogItem(found) {
+    // The item search (/items/softech-search/) returns the catalog id as item_id, not id — reading
+    // .id sent item=null and every searched item was refused (full audit C01). A result that is not
+    // in our catalog yet (no item_id) is kept as a manual line with its name and code.
+    const id = found.id ?? found.item_id ?? null
+    const catalogItem = id ? { ...found, id } : null
     const payload = {
-      item:             catalogItem.id,
-      manual_item_name: '',
-      manual_item_code: '',
+      item:             id,
+      manual_item_name: id ? '' : (found.name || ''),
+      manual_item_code: id ? '' : (found.softech_id || ''),
       quantity:         1,
       notes:            '',
     }
@@ -925,7 +937,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
     } else {
       setPendingItems(p => [...p, { ...payload, item: catalogItem, _tempId: Date.now() }])
     }
-    setLastAddedItemId(catalogItem.id)
+    if (id) setLastAddedItemId(id)
     setSearchQ(''); setSearchRes([]); setShowSearch(false)
   }
 
@@ -1015,6 +1027,30 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
 
   const unconvertedCount = dbItems.filter(i => i.converted_to === 'none').length
 
+  // Network stock for one saved call item (full audit C01). Reserve / transfer go through the call's own
+  // convert endpoints with item_ids=[this item], so the record stays linked to the call item.
+  const catalogIdOf = (ci) => (ci.item && typeof ci.item === 'object' ? ci.item.id : ci.item) || null
+  async function afterStockAction() {
+    const { data } = await callCenterApi.getItems(savedCallId)
+    setDbItems(data)
+    qc.invalidateQueries({ queryKey: ['reservations'] })
+    qc.invalidateQueries({ queryKey: ['transfers'] })
+  }
+  async function reserveFromDrawer(ci, branch) {
+    await qtySave.current
+    const res = await callCenterApi.convertToReservation(savedCallId, { branch_id: branch, item_ids: [ci.id] })
+    await afterStockAction()
+    return res
+  }
+  async function transferFromDrawer(ci, source, target) {
+    await qtySave.current
+    const res = await callCenterApi.convertToTransfer(savedCallId, {
+      requesting_branch_id: target, supplying_branch_id: source, item_ids: [ci.id],
+    })
+    await afterStockAction()
+    return res
+  }
+
   return (
     <div className="card" data-tour="callcenter-operator-items">
       <div className="flex items-center justify-between mb-3">
@@ -1056,7 +1092,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
             <div className="absolute z-20 top-full right-0 left-0 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1">
               {searchRes.slice(0, 15).map(item => (
                 <button data-tour="callcenter-operator-items-result"
-                  key={item.id}
+                  key={item.id ?? item.item_id ?? item.softech_id}
                   onClick={() => addCatalogItem(item)}
                   className="w-full text-right px-3 py-2 hover:bg-brand-50 text-sm border-b border-gray-50 last:border-0 transition-colors">
                   <span className="font-semibold text-gray-800 block break-words">{item.name}</span>
@@ -1126,6 +1162,11 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
                     onChange={e => updateQty(item, parseFloat(e.target.value) || 1)}
                     onBlur={() => saveQty(item)}
                   />
+                )}
+                {!isConverted && item._status === 'saved' && catalogIdOf(item) && (
+                  <button data-tour="callcenter-operator-items-stock" onClick={() => setStockFor(item)}
+                    title="رصيد الصنف بكل الفروع — حجز أو تحويل من فرع آخر"
+                    className="text-xs text-brand-600 hover:text-brand-800 shrink-0">📍</button>
                 )}
                 {!isConverted && (
                   <button data-tour="callcenter-operator-items-remove" onClick={() => removeItem(item)}
@@ -1272,6 +1313,17 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
           <button onClick={() => { setConvertResult(null); setShowConvert(null) }}
             className="text-green-600 hover:underline mt-1 block">إخفاء ←</button>
         </div>
+      )}
+
+      {stockFor && (
+        <StockLookupDrawer
+          item={{ id: catalogIdOf(stockFor), name: stockFor.item_name || stockFor.display_name,
+                  softech_id: stockFor.item_code || stockFor.display_code }}
+          branchId={branchId || null} customer={customer} channel="call_center"
+          fixedQty={stockFor.quantity}
+          onReserveAt={customer?.id ? (branch) => reserveFromDrawer(stockFor, branch) : undefined}
+          onTransferFrom={(source, target) => transferFromDrawer(stockFor, source, target)}
+          onClose={() => setStockFor(null)} />
       )}
     </div>
   )

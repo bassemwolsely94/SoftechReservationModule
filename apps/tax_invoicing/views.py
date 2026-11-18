@@ -18,6 +18,7 @@ apps/tax_invoicing/views.py — mounted at /api/tax-invoicing/ (doc 36).
   GET  codes/  GET codes/candidates/  POST codes/prepare/ · codes/send/ · codes/refresh/
   PATCH codes/<id>/  POST codes/<id>/cancel/         EGS item-code requests (coding.py)
   GET  codes/queue/  POST codes/queue/decide/ · codes/queue/reopen/   production coding decisions (coding_queue.py)
+  POST codes/queue/brick/ · codes/queue/suggest/      the decision's GPC brick; ask the AI again (gpc_ai.py)
 Every rule is enforced in services.py or here; the screen only hides what the user cannot do.
 """
 import datetime as dt
@@ -1235,8 +1236,9 @@ def codes_queue(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, APPROVER])
 def codes_queue_decide(request):
-    """{itemcodes: [..≤200], decision: code|keep_out, vat_rate?, names?, note?}. One item: its own rate and names, 409
-    when it already has a decision. Many: each takes its prefilled rate; flagged or already-decided ones are skipped."""
+    """{itemcodes: [..≤200], decision: code|keep_out, vat_rate?, names?, note?, brick?}. One item: its own rate, names
+    and brick (else its suggested brick), 409 when it already has a decision. Many: each takes its prefilled rate and
+    suggested brick; a flagged rate, a missing or medium/low-confidence AI brick, or an earlier decision is skipped."""
     from . import coding_queue
     d = request.data
     itemcodes = d.get('itemcodes')
@@ -1246,7 +1248,7 @@ def codes_queue_decide(request):
     try:
         decided, skipped = coding_queue.decide_many(itemcodes, request.user, decision=d.get('decision') or '',
                                                     vat_rate=d.get('vat_rate'), names=names,
-                                                    note=str(d.get('note') or ''))
+                                                    note=str(d.get('note') or ''), brick=d.get('brick'))
     except TaxItemProfile.DoesNotExist:
         return Response({'detail': coding_queue.UNKNOWN_ITEM}, status=status.HTTP_404_NOT_FOUND)
     except services.TaxRuleError as exc:
@@ -1267,6 +1269,63 @@ def codes_queue_reopen(request):
     except services.TaxRuleError as exc:
         return _refuse(exc)
     return Response({'itemcode': profile.softech_itemcode, 'decision': None})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, APPROVER])
+def codes_queue_brick(request):
+    """{itemcode, brick}: sets the GPC brick of an item decided "code" while it has no open or approved production
+    code request (audited)."""
+    from . import coding_queue, gpc
+    profile = get_object_or_404(TaxItemProfile, softech_itemcode=str(request.data.get('itemcode') or '').strip())
+    try:
+        row = coding_queue.set_brick(profile.pk, request.user, request.data.get('brick'))
+    except services.TaxRuleError as exc:
+        if str(exc) == coding_queue.BRICK_REQUESTED:
+            return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+        return _refuse(exc)
+    return Response({'itemcode': profile.softech_itemcode, 'brick': row.brick, 'brick_source': row.brick_source,
+                     'brick_name': gpc.names([row.brick]).get(row.brick, '')})
+
+
+SUGGEST_MAX = 5     # each AI call can take tens of seconds; an outage must not outlive nginx's 600 s
+SUGGEST_OFF = 'اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً'
+SUGGEST_NOT_ASKED = 'للصنف فئة معروفة أو هو دواء — لا حاجة للسؤال'
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, APPROVER])
+def codes_queue_suggest(request):
+    """{itemcodes: [..≤5]}: asks the AI again for each item's brick (a proposal only; a person confirms it).
+    Refused while TAX_GPC_AI_ENABLED is off. Stops at the first "no answer" (provider down): returns what was done
+    with stopped='provider', the rest not asked."""
+    from . import coding_queue, gpc_ai
+    if not gpc_ai.enabled():
+        return Response({'detail': SUGGEST_OFF}, status=status.HTTP_400_BAD_REQUEST)
+    itemcodes = request.data.get('itemcodes')
+    if not isinstance(itemcodes, list):
+        return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
+    codes = list(dict.fromkeys(str(c).strip() for c in itemcodes if str(c).strip()))
+    if not codes:
+        return Response({'detail': 'اختر الأصناف'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(codes) > SUGGEST_MAX:
+        return Response({'detail': f'{SUGGEST_MAX} صنف على الأكثر في المرة'}, status=status.HTTP_400_BAD_REQUEST)
+    profiles = {p.softech_itemcode: p for p in TaxItemProfile.objects.filter(softech_itemcode__in=codes)}
+    asked, skipped = [], []
+    for code in codes:
+        profile = profiles.get(code)
+        if profile is None:
+            skipped.append({'itemcode': code, 'why': coding_queue.UNKNOWN_ITEM})
+            continue
+        row = gpc_ai.suggest_one(profile)
+        if row is None:
+            skipped.append({'itemcode': code, 'why': SUGGEST_NOT_ASKED})
+            continue
+        asked.append({'itemcode': code, 'brick': row.brick, 'second': row.second, 'confidence': row.confidence,
+                      'reason': row.reason, 'error': row.error})
+        if row.error.startswith(gpc_ai.NO_ANSWER):     # the provider is down: don't wait out the rest
+            return Response({'asked': asked, 'skipped': skipped, 'stopped': 'provider'})
+    return Response({'asked': asked, 'skipped': skipped})
 
 
 @api_view(['GET'])

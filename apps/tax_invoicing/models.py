@@ -200,6 +200,31 @@ class TaxCodingDecision(models.Model):
         return f'{self.profile_id} {self.decision or "-"}'
 
 
+class TaxBrickSuggestion(models.Model):
+    """The AI's proposed GPC brick for one item (gpc_ai), kept so the queue can show it without asking again.
+    Only a proposal: a person confirms the brick on the coding decision. source 'none' = asked, no usable answer
+    (`error` says why). Only gpc_ai writes it."""
+    CONFIDENCE_CHOICES = [('high', 'عالية'), ('medium', 'متوسطة'), ('low', 'منخفضة'), ('', '-')]
+    SOURCE_AI, SOURCE_NONE = 'ai', 'none'
+    SOURCE_CHOICES = [(SOURCE_AI, 'اقتراح الذكاء الاصطناعي'), (SOURCE_NONE, 'لا اقتراح')]
+
+    profile = models.OneToOneField(TaxItemProfile, on_delete=models.PROTECT, related_name='brick_suggestion')
+    brick = models.CharField(max_length=8, blank=True, default='', db_default='')
+    second = models.CharField(max_length=8, blank=True, default='', db_default='')
+    reason = models.CharField(max_length=200, blank=True, default='', db_default='')
+    confidence = models.CharField(max_length=6, choices=CONFIDENCE_CHOICES, blank=True, default='', db_default='')
+    source = models.CharField(max_length=4, choices=SOURCE_CHOICES, default=SOURCE_NONE, db_default=SOURCE_NONE)
+    model = models.CharField(max_length=60, blank=True, default='', db_default='')
+    error = models.CharField(max_length=200, blank=True, default='', db_default='')
+    asked_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = 'اقتراح فئة GPC'
+
+    def __str__(self):
+        return f'{self.profile_id} {self.brick or self.source}'
+
+
 class TaxExclusionBasis(models.Model):
     """A documented legal basis for leaving a line off an official invoice. None is seeded: until
     an authorized person records one, no exclusion can be approved and those drafts stay blocked."""
@@ -923,3 +948,35 @@ class EtaCodeUsage(models.Model):
     class Meta:
         verbose_name = 'كود مسجل لدى المصلحة'
         constraints = [models.UniqueConstraint(fields=['system', 'code_type', 'item_code'], name='eta_code_usage_once')]
+
+
+class TaxEgsSheetVersion(models.Model):
+    """One version of the owner's bulk EGS sheet (ElRezeiky_Bulk_EGS_Items.xlsx), the workbook the Invoicer reads to
+    know which items are coded. Version 1 is the owner's file as seeded; later versions are builds that only code
+    uncoded rows or append rows (S3). The file lives under TAX_EGS_SHEET_DIR (newest 10 kept); the row is kept for
+    good. `coded_itemcodes` = every SOFTECH itemcode coded in this version (the receipts recon reads it)."""
+    SOURCE_SEED, SOURCE_BUILD = 'seed', 'build'
+    SOURCE_CHOICES = [(SOURCE_SEED, 'ملف المالك'), (SOURCE_BUILD, 'بناء')]
+
+    number = models.IntegerField(unique=True)
+    sha256 = models.CharField(max_length=64)
+    file_name = models.CharField(max_length=200)
+    size = models.IntegerField(default=0, db_default=0)
+    coded_rows = models.IntegerField(default=0, db_default=0)
+    total_rows = models.IntegerField(default=0, db_default=0)
+    added = models.JSONField(default=list, blank=True)            # itemcodes appended as new rows
+    coded = models.JSONField(default=list, blank=True)            # itemcodes newly coded on existing rows
+    skipped = models.JSONField(default=list, blank=True)          # [{itemcode, why}]
+    coded_itemcodes = models.JSONField(default=list, blank=True)
+    source = models.CharField(max_length=5, choices=SOURCE_CHOICES)
+    built_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='+')
+    built_at = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=300, blank=True, default='', db_default='')
+
+    class Meta:
+        verbose_name = 'نسخة ملف أكواد المحصّل'
+        ordering = ['-number']
+
+    def __str__(self):
+        return f'EGS sheet v{self.number}'
