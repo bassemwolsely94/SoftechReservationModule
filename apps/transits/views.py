@@ -27,6 +27,7 @@ from django.db import models as db_models
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -117,7 +118,7 @@ class InTransitTransferViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, TRANSFERS, RouteModulePermission]
     filter_backends    = [
         DjangoFilterBackend,
-        filters.SearchFilter,
+        WildcardSearchFilter,
         filters.OrderingFilter,
     ]
     # transit_status / priority / supplying_branch / receiving_branch are multi-select

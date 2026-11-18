@@ -9,6 +9,7 @@ Endpoints:
   GET  /api/recommendations/customer/     — ?customer_id=X → customer recs
 """
 from rest_framework import filters, generics, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -110,7 +111,7 @@ class FBTPairListView(generics.ListAPIView):
     """
     permission_classes = [IsAuthenticated, RouteModulePermission]
     serializer_class   = FBTPairSerializer
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, StableOrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, StableOrderingFilter]
     filterset_fields   = ['item_a', 'item_b']
     search_fields      = ['item_a__name', 'item_b__name', 'item_a__softech_id', 'item_b__softech_id']
     ordering_fields    = ['score', 'confidence', 'co_occurrences', 'lift', 'support',

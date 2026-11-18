@@ -7,6 +7,7 @@ NO stock mutations. NO ERP calls. Communication + approval only.
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
@@ -148,7 +149,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes  = [IsAuthenticated, TRANSFERS, RouteModuleDeletePermission]
-    filter_backends     = [DjangoFilterBackend, filters.SearchFilter, NullsLastOrderingFilter]
+    filter_backends     = [DjangoFilterBackend, WildcardSearchFilter, NullsLastOrderingFilter]
     filterset_fields    = ['status', 'requesting_branch', 'supplying_branch']
     search_fields       = [
         'request_number', 'notes',
