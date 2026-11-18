@@ -20,6 +20,7 @@ import HistoryTab from './taxinvoicing/HistoryTab'
 import ImportTab from './taxinvoicing/ImportTab'
 import ItemsTab from './taxinvoicing/ItemsTab'
 import PrintTab from './taxinvoicing/PrintTab'
+import QueueTab from './taxinvoicing/QueueTab'
 import ReceiptsTab from './taxinvoicing/ReceiptsTab'
 import SettingsTab from './taxinvoicing/SettingsTab'
 import { Failed, Loading } from './taxinvoicing/ui'
@@ -32,6 +33,7 @@ const TABS = [
   { key: 'items',      label: '🏷️ الأصناف' },
   { key: 'import',     label: '📥 استيراد الأصناف' },
   { key: 'codes',      label: '🔖 أكواد المصلحة' },
+  { key: 'queue',      label: '🧮 طابور الترميز' },
   { key: 'receipts',   label: '🧾 الإيصالات' },
   { key: 'history',    label: '🗂️ سجل المصلحة' },
   { key: 'settings',   label: '⚙️ الإعدادات' },
@@ -94,6 +96,7 @@ export default function TaxInvoicingPage() {
       {tab === 'items' && <ItemsTab key={`${params.get('q') || ''}|${params.get('new') || ''}`} me={access} initialQ={params.get('q') || ''} newCode={params.get('new') || ''} go={go} />}
       {tab === 'import' && <ImportTab me={access} />}
       {tab === 'codes' && <CodesTab me={access} />}
+      {tab === 'queue' && <QueueTab me={access} />}
       {tab === 'receipts' && <ReceiptsTab key={params.get('status') || ''} me={access} initialStatus={params.get('status') || ''} />}
       {tab === 'history' && <HistoryTab me={access} />}
       {tab === 'settings' && <SettingsTab me={access} />}

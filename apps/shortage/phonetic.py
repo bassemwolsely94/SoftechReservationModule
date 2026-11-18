@@ -212,8 +212,12 @@ _LATIN_FORM = {'tab', 'tabs', 'tablet', 'tablets', 'cap', 'caps', 'capsule', 'ca
                'imported', 'and', 'with', 'for', 'the', 'of', 'oral', 'sol', 'solution', 'adult', 'infant'}
 
 _lock = threading.Lock()
+# The live index. `_build` makes a NEW dict and `index()` swaps this one reference (atomic in
+# CPython); a dict a reader may hold is never mutated, so a reader that took `ix = index()` sees
+# one consistent build (ids[k] always lines up with first[k] / joined[k] …).
 _index = {'built': 0.0, 'ids': [], 'first': [], 'joined': [], 'joined3': [], 'tokens': {}, 'vtokens': {},
           'sci': [], 'vfirst': []}
+_stale = False                        # reset_index: rebuild on the next lookup
 
 
 def _item_tokens(name: str, sci: str = ''):
@@ -248,20 +252,59 @@ def _build():
         vtokens[iid] = [t[1] for t in toks]
         s = _item_tokens(sname or '')
         sci.append(s[0][0] if s else '')
-    _index.update(built=time.time(), ids=ids, first=first, joined=joined, joined3=joined3,
-                  tokens=tokens, vtokens=vtokens, sci=sci, vfirst=vfirst)
+    return {'built': time.time(), 'ids': ids, 'first': first, 'joined': joined, 'joined3': joined3,
+            'tokens': tokens, 'vtokens': vtokens, 'sci': sci, 'vfirst': vfirst}
+
+
+def _needs_build(ix) -> bool:
+    return _stale or time.time() - ix['built'] > INDEX_TTL or not ix['ids']
 
 
 def index():
-    if time.time() - _index['built'] > INDEX_TTL or not _index['ids']:
+    """The current index, as a snapshot: callers keep the returned dict and read only from it."""
+    global _index, _stale
+    ix = _index
+    if _needs_build(ix):
         with _lock:
-            if time.time() - _index['built'] > INDEX_TTL or not _index['ids']:
-                _build()
-    return _index
+            ix = _index
+            if _needs_build(ix):
+                _stale = False        # cleared BEFORE the read, so a reset during the build wins
+                ix = _build()
+                _index = ix           # one reference swap
+    return ix
 
 
 def reset_index(*_a, **_k):
-    _index['built'] = 0.0
+    global _stale
+    _stale = True
+
+
+def warm_search_index():
+    """Build the sound index ahead of the first search; never raises (runs on a start-up thread)."""
+    try:
+        index()
+    except Exception:
+        import logging
+        logging.getLogger("elrezeiky.shortage").exception("warm_search_index failed")
+
+
+def warm_after_init(*, poll: float = 0.1, timeout: float = 120.0, sleep=None):
+    """The start-up thread's target (apps.shortage.apps): wait until the app registry is ready
+    — ready() runs before it is, and a query then gets Django's "Accessing the database during
+    app initialization" warning — then warm the sound index. Gives up after `timeout` seconds.
+    Always closes this thread's DB connections. Never raises."""
+    from django.apps import apps as registry
+    from django.db import connections
+    sleep = sleep or time.sleep
+    try:
+        deadline = time.monotonic() + timeout
+        while not registry.ready:
+            if time.monotonic() >= deadline:
+                return
+            sleep(poll)
+        warm_search_index()
+    finally:
+        connections.close_all()
 
 
 def _connect_signals():
@@ -282,6 +325,61 @@ def search_ids(query: str, *, limit: int = 8) -> list:
     return [m['item_id'] for m in find_best_matches(query, top_n=limit, min_score=0.75)]
 
 
+def quick_ids(query: str, *, limit: int = 8, within=None) -> list:
+    """The catalog search box's `sound` tier (apps/catalog/wildcard.item_search): the same
+    sound evidence and order as `search_ids`, from this in-process index alone — no DB
+    prefilter, no learned memory (item_search has its own `learned` tier) and no Arabic-name
+    word scoring (its name tiers already find Arabic text in names). ≈ the cost of
+    `candidates` plus one small query, where the full matcher took 26–67 ms.
+    Score = the matcher's Arabic score: 0.62 + 0.30 × sound (sound ≥ 0.75, below that there
+    is no evidence) + agreement of the typed numbers / form words / descriptors − 0.2 per
+    recorded rejection (up to 3); kept when ≥ SOUND_MIN (0.75), like `search_ids`. Ties go to
+    the closer whole name. [] for a Latin query or under 3 characters, like `search_ids`.
+    `within`: as `candidates` — only these item ids compete for the `limit` (None = all)."""
+    if not re.search(r'[؀-ۿ]', query or '') or len((query or '').strip()) < 3:
+        return []
+    from types import SimpleNamespace
+    from rapidfuzz import fuzz
+    from apps.catalog.models import Item
+    from .matching import _arabic_adjust, _normalize
+    snd = {}
+    ix = index()                      # one snapshot for the candidates and their scores
+    for iid, _s in candidates(query, limit=60, ix=ix, within=within):
+        s = sound_score(query, iid, ix=ix)
+        if s >= 0.75:
+            snd[iid] = s
+    if not snd:
+        return []
+    names = dict(Item.objects.filter(id__in=list(snd), is_active=True).order_by()
+                 .values_list('id', 'name'))
+    pq = parse_query(query)
+    q_nums = re.findall(r'\d+(?:\.\d+)?', _normalize(query))
+    qn = _normalize(query)
+    # negative learning, as the shared matcher: an item people REPLACED for this spelling (or
+    # a close one) drops per rejection — one takes a plain sound hit under the floor
+    from . import learning
+    try:
+        rejected = learning.rejections(query)
+    except Exception:
+        rejected = {}
+    ranked = []
+    for i, n in names.items():
+        # as the matcher: the floor is on the score capped to 0..1, the order on the uncapped
+        # one (bonuses must not tie at 1.0); the penalty comes off both
+        raw = 0.62 + 0.30 * snd[i] + _arabic_adjust(SimpleNamespace(name=n), q_nums, pq['forms'], pq['words'])
+        pen = REJECTION_PENALTY * min(rejected.get(i, 0), 3)
+        if min(1.0, max(0.0, raw)) - pen >= SOUND_MIN:
+            ranked.append((raw - pen, fuzz.ratio(qn, _normalize(n)), -i, i))
+    ranked.sort(reverse=True)
+    return [i for *_k, i in ranked[:limit]]
+
+
+# the shared matcher's values (apps/shortage/matching.find_best_matches: the search box's
+# min_score and its local REJECTION_PENALTY) — kept equal so both paths agree
+SOUND_MIN = 0.75
+REJECTION_PENALTY = 0.2
+
+
 # ── retrieval + scoring ─────────────────────────────────────────────────────────
 def _sim(a: str, b: str) -> float:
     from rapidfuzz.distance import Levenshtein
@@ -290,16 +388,36 @@ def _sim(a: str, b: str) -> float:
     return Levenshtein.normalized_similarity(a, b)
 
 
-def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72) -> list:
+def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72, ix=None, within=None) -> list:
     """[(item_id, sound score 0..1)] for the line's first name word(s) — by skeleton
-    similarity against every catalog item's brand (and scientific) skeleton. ms-fast."""
+    similarity against every catalog item's brand (and scientific) skeleton. ms-fast.
+    `within` (a frozenset of item ids, or None = the whole catalog): items outside it are
+    dropped BEFORE each lookup keeps its best `limit`, so a filtered item ranked below the
+    whole catalog's cut is still found (the Ctrl+F1 modal's filters).
+    `within` may instead be a callable `keep(ids) -> set of the ids inside` — then each lookup
+    runs over the whole pool (every hit ≥ cutoff, a few hundred at most), ONE `keep` call
+    answers for their union, and each lookup keeps its best `limit` of the kept hits: the same
+    hits in the same order as the frozenset form (extract orders by score, ties by position, in
+    both), without first listing every id of a filter such as «متوفر» (2026-11-17)."""
     from rapidfuzz import process
     from rapidfuzz.distance import Levenshtein
     p = parse_query(text)
     skels, vkeys = p['skels'], p['vkeys']
     if not skels:
         return []
-    ix = index()
+    ix = ix or index()
+    lazy = callable(within)
+    if lazy:
+        narrow = lambda pool: pool
+    elif within is not None:
+        # the index positions inside `within`; each pool becomes {position: skeleton}, so
+        # `extract` still hands back the position as its key
+        sel = [k for k, iid in enumerate(ix['ids']) if iid in within]
+        if not sel:
+            return []
+        narrow = lambda pool: {k: pool[k] for k in sel}
+    else:
+        narrow = lambda pool: pool
     q1 = skels[0]
     q12 = ''.join(skels[:2])
     q123 = ''.join(skels[:3])
@@ -311,23 +429,27 @@ def candidates(text: str, *, limit: int = 60, cutoff: float = 0.72) -> list:
         pools.append((vkeys[0], ix['vfirst']))   # «هيرو» HR is ambiguous; HIRU = HERO is not
     # each lookup method keeps its own best `limit` — the union is scored by the caller, so
     # many short "STL" products can't crowd out ACETYLCYSTEINE found via the joined words
-    for q, pool in pools:
-        if len(q) < 2:
-            continue
-        for _choice, score, idx in process.extract(q, pool, scorer=Levenshtein.normalized_similarity,
-                                                   limit=limit, score_cutoff=cutoff):
+    found = [process.extract(q, narrow(pool), scorer=Levenshtein.normalized_similarity,
+                             limit=None if lazy else limit, score_cutoff=cutoff)
+             for q, pool in pools if len(q) >= 2]
+    if lazy:
+        union = {ix['ids'][idx] for res in found for _c, _s, idx in res}
+        kept = within(sorted(union)) if union else set()
+        found = [[r for r in res if ix['ids'][r[2]] in kept][:limit] for res in found]
+    for res in found:
+        for _choice, score, idx in res:
             iid = ix['ids'][idx]
             if score > hits.get(iid, 0):
                 hits[iid] = score
     return sorted(hits.items(), key=lambda x: -x[1])
 
 
-def sound_score(text: str, item_id: int) -> float:
+def sound_score(text: str, item_id: int, *, ix=None) -> float:
     """How well the line's name words SOUND like the item's name words (0..1): the first
     query word against the item's first two words, plus coverage of the other words."""
     p = parse_query(text)
     skels, vkeys = p['skels'], p['vkeys']
-    ix = index()
+    ix = ix or index()
     toks = ix['tokens'].get(item_id) or []
     vtoks = ix['vtokens'].get(item_id) or []
     if not skels or not toks:

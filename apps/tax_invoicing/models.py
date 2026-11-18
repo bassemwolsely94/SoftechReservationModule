@@ -164,6 +164,67 @@ class TaxItemProfile(models.Model):
         return f'{self.softech_itemcode} {self.eta_code}'.strip()
 
 
+class TaxCodingDecision(models.Model):
+    """The owner's production-coding decision for one item: give it an ETA code or keep it out for now.
+    Only coding_queue writes it. Reopening keeps the row (decision = '') so the item can be decided again;
+    the full history is in the audit events."""
+    DECISION_CODE, DECISION_KEEP_OUT = 'code', 'keep_out'
+    DECISION_CHOICES = [(DECISION_CODE, 'يُكوَّد'), (DECISION_KEEP_OUT, 'يبقى خارج الترميز')]
+
+    profile = models.OneToOneField(TaxItemProfile, on_delete=models.PROTECT, related_name='coding_decision')
+    decision = models.CharField(max_length=10, choices=DECISION_CHOICES, blank=True, default='')
+    # What the purchase rule suggested when the decision was taken (coding_rule.premark).
+    premark = models.CharField(max_length=10, blank=True, default='')
+    premark_reason = models.CharField(max_length=30, blank=True, default='')
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    vat_flagged = models.BooleanField(default=False)
+    code_name = models.CharField(max_length=200, blank=True, default='')
+    code_name_ar = models.CharField(max_length=200, blank=True, default='')
+    description = models.CharField(max_length=300, blank=True, default='')
+    description_ar = models.CharField(max_length=300, blank=True, default='')
+    brick = models.CharField(max_length=8, blank=True, default='')
+    brick_source = models.CharField(max_length=15, blank=True, default='')
+    note = models.CharField(max_length=300, blank=True, default='')
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='+')
+    reopened_at = models.DateTimeField(null=True, blank=True)
+    reopen_reason = models.CharField(max_length=300, blank=True, default='')
+
+    class Meta:
+        verbose_name = 'قرار ترميز صنف'
+
+    def __str__(self):
+        return f'{self.profile_id} {self.decision or "-"}'
+
+
+class TaxBrickSuggestion(models.Model):
+    """The AI's proposed GPC brick for one item (gpc_ai), kept so the queue can show it without asking again.
+    Only a proposal: a person confirms the brick on the coding decision. source 'none' = asked, no usable answer
+    (`error` says why). Only gpc_ai writes it."""
+    CONFIDENCE_CHOICES = [('high', 'عالية'), ('medium', 'متوسطة'), ('low', 'منخفضة'), ('', '-')]
+    SOURCE_AI, SOURCE_NONE = 'ai', 'none'
+    SOURCE_CHOICES = [(SOURCE_AI, 'اقتراح الذكاء الاصطناعي'), (SOURCE_NONE, 'لا اقتراح')]
+
+    profile = models.OneToOneField(TaxItemProfile, on_delete=models.PROTECT, related_name='brick_suggestion')
+    brick = models.CharField(max_length=8, blank=True, default='', db_default='')
+    second = models.CharField(max_length=8, blank=True, default='', db_default='')
+    reason = models.CharField(max_length=200, blank=True, default='', db_default='')
+    confidence = models.CharField(max_length=6, choices=CONFIDENCE_CHOICES, blank=True, default='', db_default='')
+    source = models.CharField(max_length=4, choices=SOURCE_CHOICES, default=SOURCE_NONE, db_default=SOURCE_NONE)
+    model = models.CharField(max_length=60, blank=True, default='', db_default='')
+    error = models.CharField(max_length=200, blank=True, default='', db_default='')
+    asked_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = 'اقتراح فئة GPC'
+
+    def __str__(self):
+        return f'{self.profile_id} {self.brick or self.source}'
+
+
 class TaxExclusionBasis(models.Model):
     """A documented legal basis for leaving a line off an official invoice. None is seeded: until
     an authorized person records one, no exclusion can be approved and those drafts stay blocked."""
@@ -480,8 +541,9 @@ class TaxCodeRequest(models.Model):
         verbose_name = 'طلب كود صنف من المصلحة'
         ordering = ['-prepared_at', '-id']
         constraints = [
-            models.UniqueConstraint(fields=['profile'], condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
-                                    name='one_open_code_request_per_item'),
+            models.UniqueConstraint(fields=['profile', 'environment'],
+                                    condition=Q(status__in=['prepared', 'sending', 'submitted', 'uncertain']),
+                                    name='one_open_code_request_per_item_system'),
         ]
 
     def __str__(self):
@@ -494,6 +556,15 @@ class TaxGpcBrick(models.Model):
     code = models.CharField(max_length=8, unique=True)
     name_en = models.CharField(max_length=300, blank=True)
     name_ar = models.CharField(max_length=300, blank=True)
+    # 'workbook' for the owner's workbook, else the GS1 list version (e.g. 'gs1-20260520')
+    source = models.CharField(max_length=20, default='workbook', db_default='workbook')
+    definition = models.TextField(blank=True, default='', db_default='')
+    segment_code = models.CharField(max_length=8, blank=True, default='', db_default='')
+    family_code = models.CharField(max_length=8, blank=True, default='', db_default='')
+    class_code = models.CharField(max_length=8, blank=True, default='', db_default='')
+    segment_name = models.CharField(max_length=300, blank=True, default='', db_default='')
+    family_name = models.CharField(max_length=300, blank=True, default='', db_default='')
+    class_name = models.CharField(max_length=300, blank=True, default='', db_default='')
     loaded_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -856,3 +927,100 @@ class EtaReconUncodedItem(models.Model):
                                                name='eta_recon_uncoded_once')]
         indexes = [models.Index(fields=['system', 'itemcode'], name='eta_recon_uncoded_item'),
                    models.Index(fields=['system', 'day'], name='eta_recon_uncoded_day')]
+
+
+class EtaCodeUsage(models.Model):
+    """One code-usage request ETA holds for us in one system (the portal's code-usage history), whatever its status
+    (Approved / Rejected / Submitted). A read-only mirror: only eta_codes.fetch writes it. `itemcode` is our SOFTECH
+    code once the EGS/GS1 code is matched to an item."""
+    system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
+    code_type = models.CharField(max_length=10)
+    item_code = models.CharField(max_length=100)
+    code_name = models.CharField(max_length=300, blank=True, default='')
+    active_from = models.DateField(null=True, blank=True)
+    active_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=30, blank=True, default='')
+    gpc = models.CharField(max_length=10, blank=True, default='')
+    request_id = models.CharField(max_length=30, blank=True, default='')
+    itemcode = models.CharField(max_length=10, blank=True, default='', db_index=True)
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'كود مسجل لدى المصلحة'
+        constraints = [models.UniqueConstraint(fields=['system', 'code_type', 'item_code'], name='eta_code_usage_once')]
+
+
+class TaxEgsSheetVersion(models.Model):
+    """One version of the owner's bulk EGS sheet (ElRezeiky_Bulk_EGS_Items.xlsx), the workbook the Invoicer reads to
+    know which items are coded. Version 1 is the owner's file as seeded; later versions are builds that only code
+    uncoded rows or append rows (S3). The file lives under TAX_EGS_SHEET_DIR (newest 10 kept); the row is kept for
+    good. `coded_itemcodes` = every SOFTECH itemcode coded in this version (the receipts recon reads it)."""
+    SOURCE_SEED, SOURCE_BUILD, SOURCE_FETCH = 'seed', 'build', 'fetch'
+    SOURCE_CHOICES = [(SOURCE_SEED, 'ملف المالك'), (SOURCE_BUILD, 'بناء'),
+                      (SOURCE_FETCH, 'الملف الحالي على جهاز الختم')]
+
+    number = models.IntegerField(unique=True)
+    sha256 = models.CharField(max_length=64)
+    file_name = models.CharField(max_length=200)
+    size = models.IntegerField(default=0, db_default=0)
+    coded_rows = models.IntegerField(default=0, db_default=0)
+    total_rows = models.IntegerField(default=0, db_default=0)
+    added = models.JSONField(default=list, blank=True)            # itemcodes appended as new rows
+    coded = models.JSONField(default=list, blank=True)            # itemcodes newly coded on existing rows
+    skipped = models.JSONField(default=list, blank=True)          # [{itemcode, why}]
+    coded_itemcodes = models.JSONField(default=list, blank=True)
+    source = models.CharField(max_length=5, choices=SOURCE_CHOICES)
+    built_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='+')
+    built_at = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=300, blank=True, default='', db_default='')
+
+    class Meta:
+        verbose_name = 'نسخة ملف أكواد المحصّل'
+        ordering = ['-number']
+
+    def __str__(self):
+        return f'EGS sheet v{self.number}'
+
+
+class TaxAgentFileJob(models.Model):
+    """A file task for the signing agent on the seal PC (doc 36, S5). `egs_fetch` = upload a copy of the live
+    Invoicer sheet (read only, the agent copies it first); `egs_write` = replace the live sheet with `version`'s file
+    (mode 'write', only with TAX_EGS_SHEET_AGENT_WRITE_ENABLED) or only report what it would do (mode 'preview').
+    `sha256` = the hash of exactly the bytes the download serves; `live_sha256` = the live file the write expects
+    to replace (the last fetch's). A 'held' write is never offered to the agent: the last fetch showed hand edits
+    (apps/tax_invoicing/egs_agent.py). Folders on the seal PC come from the agent's own config, never from here."""
+    KIND_FETCH, KIND_WRITE = 'egs_fetch', 'egs_write'
+    KIND_CHOICES = [(KIND_FETCH, 'قراءة الملف الحالي'), (KIND_WRITE, 'كتابة نسخة')]
+    MODE_PREVIEW, MODE_WRITE = 'preview', 'write'
+    MODE_CHOICES = [(MODE_PREVIEW, 'معاينة'), (MODE_WRITE, 'كتابة')]
+    PENDING, CLAIMED, DONE, FAILED, BUSY, HELD = 'pending', 'claimed', 'done', 'failed', 'busy', 'held'
+    STATUS_CHOICES = [(PENDING, 'بالانتظار'), (CLAIMED, 'لدى جهاز الختم'), (DONE, 'تم'), (FAILED, 'فشل'),
+                      (BUSY, 'الملف مفتوح في المحصّل'), (HELD, 'موقوف: تعديلات يدوية في الملف')]
+    OPEN = (PENDING, CLAIMED)
+
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    mode = models.CharField(max_length=7, choices=MODE_CHOICES, default=MODE_PREVIEW, db_default=MODE_PREVIEW)
+    status = models.CharField(max_length=7, choices=STATUS_CHOICES, default=PENDING, db_default=PENDING,
+                              db_index=True)
+    version = models.ForeignKey(TaxEgsSheetVersion, null=True, blank=True, on_delete=models.PROTECT,
+                                related_name='agent_jobs')
+    sha256 = models.CharField(max_length=64, blank=True, default='', db_default='')
+    live_sha256 = models.CharField(max_length=64, blank=True, default='', db_default='')
+    then_write = models.BooleanField(default=False, db_default=False)     # fetch: ask for a write on its result
+    override = models.BooleanField(default=False, db_default=False)       # write: «اكتب فوقها» by a person
+    fetched_file = models.CharField(max_length=200, blank=True, default='', db_default='')
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True, default='', db_default='')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'مهمة ملف لجهاز الختم'
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return f'{self.kind} #{self.pk} ({self.status})'

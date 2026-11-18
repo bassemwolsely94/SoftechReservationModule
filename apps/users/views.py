@@ -62,6 +62,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
     can_usage_print  = drf_serializers.SerializerMethodField()   # Project 5: flag ON + RBAC usage_print view
     can_hr_attendance = drf_serializers.SerializerMethodField()  # admin or a named attendance grantee
+    can_marketplace  = drf_serializers.SerializerMethodField()   # doc 38: flag ON + RBAC marketplace view
     features = drf_serializers.SerializerMethodField()           # switches for features that ship dark
 
     def get_features(self, obj):
@@ -96,6 +97,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.usage_print.access import can_open
         return can_open(obj.user)
 
+    def get_can_marketplace(self, obj):
+        from apps.marketplace.access import can_open
+        return can_open(obj.user)
+
     class Meta:
         model  = StaffProfile
         fields = [
@@ -105,7 +110,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
             'features',
         ]
 

@@ -40,10 +40,13 @@ ALL_MODULES = [
     'ledger',        # الحسابات العامة (finance GL): view/create drafts/approve/export = accountant; edit (COA, rules) + finalize (period close) = admin or named grant
     'tax_invoicing', # الفواتير الضريبية (doc 36): view · create drafts · edit item mapping · approve review + documents = accountant; finalize (send to ETA, issuer settings, exclusion bases) = admin or named grant
     'counselling',   # إرشادات الاستخدام (Project 4): 'edit' = write / AI-draft / link items, 'approve' = make customer-facing
+    'marketplace',   # المنصات والتطبيقات (doc 38): 'view' orders, 'create' intake + accept/reject + status, 'approve' listings, 'edit' channels/stores/settlement
     'usage_print',   # طباعة طريقة الاستخدام: 'view' open, 'create' confirm + print, 'edit' presets + slip settings
     'hr_attendance', # الحضور والبصمة: no role but admin; everyone else via named grants (apps/hr/attendance/access.py)
     'data_health',   # صحة البيانات: 'view' = Growth + Problems + forced refresh; rules / held files / restore = admin only
     'crews',         # الأطقم: 'view' = list/members/history/unattributed sales, 'edit' = create/change/end rows/archive; admin only by default
+    'rpa',           # روبوت الإدخال (SOFTECH screen RPA): view = see jobs, create = upload / run on my PC, approve = approve jobs + recipes, edit = resolve a needs_person document
+    'alerts',        # التنبيهات والإعلانات: 'view' = phone-alert log + policies, 'edit' = change policies/channel, 'create' = publish an announcement (admin + supervisor, owner 2026-11-17)
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -79,6 +82,7 @@ PERMISSIONS = {
     # run OTP redemptions, manage CC cases, send campaigns.
     # ─────────────────────────────────────────────────────────────────────
     'call_center': {
+        'marketplace':  {'view', 'create'},
         'dashboard':    RO,
         'pos':          {'view', 'create'},         # indirect-POS: build + push to cashier
         'reservations': {'view', 'create', 'edit', 'export', 'assign'},
@@ -103,6 +107,7 @@ PERMISSIONS = {
     # runs stock count, approves transfers, manages shortage.
     # ─────────────────────────────────────────────────────────────────────
     'pharmacist': {
+        'marketplace':  {'view', 'create'},
         'dashboard':    RO,
         'pos':          {'view', 'create'},         # indirect-POS operator
         'usage_print':  {'view', 'create'},         # confirm + print usage-instruction slips
@@ -158,6 +163,7 @@ PERMISSIONS = {
     # Cannot touch reservations or clinical demand operations.
     # ─────────────────────────────────────────────────────────────────────
     'purchasing': {
+        'marketplace':  {'view'},
         'dashboard':    RO,
         'catalog':      {'view', 'edit', 'export', 'approve'},
         'transfers':    {'view', 'create', 'edit', 'approve', 'export', 'finalize', 'delete'},   # delete: owner Q-7e 2026-11-05 (transit pick config, Z-7c)
@@ -229,7 +235,9 @@ PERMISSIONS = {
     # Can approve escalations, override agents, export data, audit logs.
     # ─────────────────────────────────────────────────────────────────────
     'supervisor': {
+        'marketplace':  {'view', 'create', 'approve', 'edit', 'export'},
         'dashboard':    RO,
+        'alerts':       {'view', 'create', 'edit'},   # phone alerts + announcements (owner 2026-11-17)
         'pos':          {'view', 'create', 'edit'},
         'usage_print':  {'view', 'create', 'edit'},   # + presets and slip settings
         'reservations': {'view', 'create', 'edit', 'approve', 'export', 'assign'},
@@ -266,6 +274,7 @@ PERMISSIONS = {
     # No write access.
     # ─────────────────────────────────────────────────────────────────────
     'quality_manager': {
+        'marketplace':  {'view', 'export'},
         'dashboard':    RO,
         'gamification': RE,   # executive gamification reports
         'reservations': RE,
@@ -329,6 +338,16 @@ for _role, _modules in PERMISSIONS.items():
 DATA_HEALTH_VIEWERS = ('supervisor', 'quality_manager')
 for _role in DATA_HEALTH_VIEWERS:
     PERMISSIONS[_role].setdefault('data_health', {'view'})
+
+# SOFTECH screen RPA (design 2026-11-16): create = upload / run on my PC; approve = approve jobs and
+# recipes; edit = resolve a needs_person document. Everyone else none.
+RPA_GRANTS = {
+    'supervisor':      {'view', 'create', 'approve', 'edit'},
+    'purchasing':      {'view', 'create'},
+    'quality_manager': {'view', 'create', 'approve'},
+}
+for _role, _actions in RPA_GRANTS.items():
+    PERMISSIONS[_role].setdefault('rpa', set(_actions))
 
 
 class Command(BaseCommand):

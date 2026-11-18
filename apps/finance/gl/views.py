@@ -86,6 +86,8 @@ def _ledger_error(e: ledger.LedgerError):
     if extra.get('line_no'):
         detail = f'{detail} (السطر {extra["line_no"]})'
     http = status.HTTP_409_CONFLICT if e.code in CONFLICT_CODES else status.HTTP_400_BAD_REQUEST
+    if e.code == 'self_approval':
+        http = status.HTTP_403_FORBIDDEN
     return Response({'code': e.code, 'detail': detail, 'extra': _j(extra)}, status=http)
 
 
@@ -448,7 +450,7 @@ def entry_approve(request, pk):
     if profile is None:
         return _no_profile()
     try:
-        e = ledger.approve(pk, user=profile)
+        e = ledger.approve(pk, user=profile, checker=True)
     except LedgerEntry.DoesNotExist:
         return _bad('not_found', 'القيد غير موجود', status.HTTP_404_NOT_FOUND)
     except ledger.LedgerError as err:
@@ -473,7 +475,7 @@ def entries_approve(request):
     for raw in dict.fromkeys(_int(i) if _int(i) is not None else str(i) for i in ids):
         pk = raw if isinstance(raw, int) else None
         try:
-            e = ledger.approve(pk, user=profile)
+            e = ledger.approve(pk, user=profile, checker=True)
             results.append({'id': pk, 'ok': True, 'number': e.number})
         except LedgerEntry.DoesNotExist:
             results.append({'id': raw, 'ok': False, 'code': 'not_found', 'detail': 'القيد غير موجود'})

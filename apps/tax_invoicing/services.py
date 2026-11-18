@@ -29,6 +29,30 @@ class TaxRuleError(Exception):
     """A rule refused the action. The message is written for the user."""
 
 
+def confirm_treatment(profile, *, treatment, vat_rate, reference, actor):
+    """Validate and set an item's VAT treatment (shared by the item screen and the coding queue).
+
+    Sets the five treatment fields on `profile`; the caller saves and audits."""
+    from decimal import InvalidOperation
+    if treatment not in dict(TaxItemProfile.TREATMENT_CHOICES):
+        raise TaxRuleError('معاملة ضريبية غير معروفة')
+    try:
+        rate = Decimal(str(vat_rate))
+    except InvalidOperation:
+        raise TaxRuleError('نسبة غير صحيحة') from None
+    reference = (reference or '').strip()
+    if treatment == TaxItemProfile.TREATMENT_TAXABLE and not (0 < rate <= 100):
+        raise TaxRuleError('الصنف الخاضع يحتاج نسبة ضريبة')
+    if treatment in (TaxItemProfile.TREATMENT_EXEMPT, TaxItemProfile.TREATMENT_ZERO) and not reference:
+        raise TaxRuleError('اذكر مرجع الإعفاء أو النسبة الصفرية')
+    unclassified = treatment == TaxItemProfile.TREATMENT_UNCLASSIFIED
+    profile.tax_treatment = treatment
+    profile.vat_rate = rate if treatment == TaxItemProfile.TREATMENT_TAXABLE else Decimal('0')
+    profile.treatment_reference = reference
+    profile.treatment_confirmed_at = None if unclassified else timezone.now()
+    profile.treatment_confirmed_by = None if unclassified else actor
+
+
 class TaxBlocked(TaxRuleError):
     def __init__(self, issues):
         self.issues = issues

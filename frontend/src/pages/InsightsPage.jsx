@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { insightsApi, syncApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { usePermission } from '../hooks/usePermission'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 
@@ -114,7 +115,10 @@ const THRESHOLD_HINTS = {
 export default function InsightsPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
-  const canRun = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role)
+  // generate: the API's analyst roles (apps/insights/views.py ANALYST_ROLES) AND its matrix grant
+  // (analytics — INSIGHTS asks view for every call), so a removed grant hides it (UAT D5)
+  const analyticsView = usePermission('analytics', 'view')
+  const canRun = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && analyticsView
   const canEditRules = ['admin', 'supervisor'].includes(user?.role)   // matches InsightRuleViewSet._guard
   const [view, setView] = useState('reports')                         // 'reports' | 'rules'
   useHelpTab(view)

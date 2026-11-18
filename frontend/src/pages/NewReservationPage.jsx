@@ -394,7 +394,9 @@ export default function NewReservationPage() {
       const url = force ? '/reservations/?force=true' : '/reservations/'
       const res = await api.post(url, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
 
-      // After creating header, bulk-create extra lines
+      // After creating header, bulk-create extra lines. A line that fails is reported on the
+      // reservation page — it used to be dropped silently (full audit FE-2).
+      const lineErrors = []
       if (extraLines.length > 0 && res.data.id) {
         const linesApi = await import('../api/client').then(m => m.reservationsApi)
         for (const line of extraLines) {
@@ -407,12 +409,19 @@ export default function NewReservationPage() {
             if (payload.item || payload.manual_item_name?.trim()) {
               await linesApi.addLine(res.data.id, payload)
             }
-          } catch { /* non-fatal */ }
+          } catch (lineErr) {
+            const d = lineErr.response?.data
+            lineErrors.push({
+              name: line.item?.name || line.manual_item_name || '—',
+              qty: line.quantity_requested,
+              reason: d?.detail || (d && typeof d === 'object' ? Object.values(d).flat().join(' — ') : '') || lineErr.message,
+            })
+          }
         }
       }
 
-      qc.invalidateQueries(['reservations-kanban'])
-      navigate(`/reservations/${res.data.id}`)
+      qc.invalidateQueries({ queryKey: ['reservations-kanban'] })
+      navigate(`/reservations/${res.data.id}`, lineErrors.length ? { state: { lineErrors } } : undefined)
     } catch (e) {
       if (e.response?.status === 409 && e.response?.data?.duplicate) {
         // Duplicate found — show warning modal

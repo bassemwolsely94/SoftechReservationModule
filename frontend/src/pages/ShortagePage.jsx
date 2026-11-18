@@ -20,7 +20,6 @@ import MultiSelectFilter from '../components/MultiSelectFilter'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useAuthStore from '../store/authStore'
 import ItemSearchWidget from '../components/ItemSearchWidget'
-import ItemSearchInput from '../components/ItemSearchInput'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
@@ -605,7 +604,9 @@ function OcrReviewModal({ lines, onImport, onClose, title = 'OCR', candidates = 
               {/* Inline item search picker */}
               {picking && (
                 <div className="mt-2 pr-7" onClick={e => e.stopPropagation()}>
-                  <ItemSearchInput
+                  <ItemSearchWidget
+                    mode="single"
+                    autoFocus
                     onSelect={item => setOverride(i, item)}
                     placeholder="ابحث واختر الصنف الصحيح..."
                   />
@@ -1812,7 +1813,7 @@ export default function ShortagePage() {
         <CreateModal
           branches={branches}
           onClose={() => setShowCreate(false)}
-          onCreated={(id) => { setShowCreate(false); setActiveId(id) }}
+          onCreated={(id) => { setShowCreate(false); loadLists(); if (id) setActiveId(id) }}
         />
       )}
 

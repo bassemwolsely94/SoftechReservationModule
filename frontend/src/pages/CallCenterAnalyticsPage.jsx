@@ -156,9 +156,9 @@ function QAScoreModal({ call, onClose }) {
       ? callCenterApi.updateQuality(call.id, data)
       : callCenterApi.createQuality(call.id, data),
     onSuccess: () => {
-      qc.invalidateQueries(['callcenter-calls'])
-      qc.invalidateQueries(['callcenter-dashboard'])
-      qc.invalidateQueries(['call-quality', call.id])
+      qc.invalidateQueries({ queryKey: ['callcenter-calls'] })
+      qc.invalidateQueries({ queryKey: ['callcenter-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['call-quality', call.id] })
       onClose()
     },
   })

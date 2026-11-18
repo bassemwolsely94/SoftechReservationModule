@@ -82,7 +82,7 @@ export default function NewTransferPage() {
       const res = await transfersApi.create(payload)
       const newId = res.data.id
       if (submitAndSend) await transfersApi.submit(newId)
-      qc.invalidateQueries(['transfers'])
+      qc.invalidateQueries({ queryKey: ['transfers'] })
 
       if (submitAndSend) {
         navigate(`/transfers/${newId}`)
@@ -155,6 +155,7 @@ export default function NewTransferPage() {
           {/* Shared ItemSearchWidget — barcode scanner compatible */}
           <ItemSearchWidget
             selected={null}
+            mode="list"
             onSelect={addItem}
             placeholder="ابحث باسم الصنف أو الكود أو الباركود (ماسح ضوئي متوافق)..."
           />

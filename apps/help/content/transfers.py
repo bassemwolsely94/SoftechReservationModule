@@ -680,7 +680,7 @@ SCREENS = [
             T('«📲 نبّه على الموبايل» (يظهر لو الإدارة فعّلته): يصل واتساب لمسؤول صرف تحويلات المخزن الرئيسي، ثم تنبيهات تغيّر الحالة لموبايل الفرع.',
               '"📲 Alert by phone" (shown when management enabled it): a WhatsApp message reaches the HQ dispatch owner, then status-change alerts go to the branch mobile.'),
         ],
-        'tips': [
+        'tips': [T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.'),
             T('لو صنف «لا يوجد مخزون في أي فرع» فالتحويل لن يفيد — سجّله كطلب ضائع أو نقص للمشتريات.',
               'If an item shows "no stock in any branch", a transfer will not help — record it as lost demand or a shortage for purchasing.'),
         ],
@@ -740,8 +740,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-03',
-        'change_note': T('خيار «📲 نبّه على الموبايل» عند تقديم الطلب', 'The "📲 Alert by phone" option when submitting a request'),
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث بتفضى بعد كل صنف وتفضل جاهزة للصنف اللي بعده', 'The search box clears after each item and stays ready for the next one'),
     },
     {
         'key': 'transfers.detail',
@@ -1223,8 +1223,9 @@ SCREENS = [
              'when': T('لما الصنف اتنقل مكانه والقواعد بقت بتصنّفه صح.', 'When the item moved and the rules classify it correctly now.'),
              'warn': T('الصنف ممكن يروح لمنطقة تانية في ورقة التجميع الجاية — جرّبه في الاختبار الأول.', 'The item may land in another zone on the next picking sheet — test it first.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'tips': [T('تخصيص صنف: ابحث بالاسم أو الكود أو الباركود (* أو % لأي حروف)، أو Ctrl+F1 للبحث المتقدم.', 'Assign an item: search by name, code or barcode (* or % for any characters), or Ctrl+F1 for advanced search.')],
+        'updated': '2026-11-17',
+        'change_note': T('خانة البحث عن الصنف بقت نفس خانة باقي الشاشات (Ctrl+F1 للبحث المتقدم)', 'The item search box is now the same as on other screens (Ctrl+F1 for advanced search)'),
     },
     {
         'key': 'transfers.mobile_list',

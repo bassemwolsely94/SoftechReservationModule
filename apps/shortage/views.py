@@ -439,6 +439,15 @@ class ShortageListViewSet(viewsets.ModelViewSet):
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
 
+    def create(self, request, *args, **kwargs):
+        # Answer with the full list row (id, counts, labels) so the screen can open the new list
+        # straight away (UAT W5a: the write serializer alone returned no id).
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        self.perform_create(ser)
+        row = ShortageListSerializer(ser.instance, context=self.get_serializer_context()).data
+        return Response(row, status=status.HTTP_201_CREATED)
+
     # ─── Add single item ───────────────────────────────────────────────────────
 
     @action(detail=True, methods=['post'], url_path='add-item')

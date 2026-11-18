@@ -148,6 +148,10 @@ def delivery_proof_candidates():
     return _aged_by_field('delivery_proof')
 
 
+def rpa_screenshots_candidates():
+    return _aged_by_field('rpa_screenshots')
+
+
 def staff_messages_candidates():
     return _aged_by_field('staff_messages')
 

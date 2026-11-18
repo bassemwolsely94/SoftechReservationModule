@@ -321,6 +321,7 @@ function CreateDemandModal({ branches, userBranchId, onClose, onCreated }) {
             {/* Pass selected=null always so widget resets after each pick (items go to the list below) */}
             <ItemSearchWidget
               selected={null}
+              mode="list"
               onSelect={addItem}
               onClear={() => {}}
               placeholder="ابحث باسم الصنف أو الكود أو الباركود (قارئ ضوئي متوافق)..."
@@ -607,7 +608,7 @@ useEffect(() => {
     setBulkBusy(true)
     try {
       const { data } = await demandApi.bulkAction({ ids: selectedIds, action, assigned_to })
-      qc.invalidateQueries(['demands'])
+      qc.invalidateQueries({ queryKey: ['demands'] })
       setSelectedIds([])
       if (data.skipped) alert(`تم: ${data.ok} · تم تخطّي ${data.skipped} (حالة غير صالحة للإجراء)`)
     } catch (e) {
@@ -799,7 +800,7 @@ useEffect(() => {
           userBranchId={userBranchId}
           onClose={() => setShowCreate(false)}
           onCreated={(id) => {
-            qc.invalidateQueries(['demands'])
+            qc.invalidateQueries({ queryKey: ['demands'] })
             navigate(`/demand/${id}`)
           }}
         />

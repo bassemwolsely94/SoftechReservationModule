@@ -3,10 +3,11 @@
  * Customer Case Management: list, filter, state machine, CSAT, case notes
  */
 import { useState, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { callCenterApi, customersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { usePermissionAny } from '../hooks/usePermission'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
@@ -57,9 +58,14 @@ const STATUS_OPTIONS = [
 
 // ─── CaseDetail Panel ────────────────────────────────────────────────────────
 
+// Case writes (open, note, assign, resolve, close) — the API takes callcenter create, edit or
+// approve (apps/callcenter/views.py CALLCENTER); the matrix decides, not a role list (UAT D5).
+const CC_WRITE = ['create', 'edit', 'approve']
+
 function CaseDetailPanel({ caseId, onClose, onStateChange }) {
   const qc = useQueryClient()
   const { user } = useAuthStore()
+  const canEdit = usePermissionAny('callcenter', CC_WRITE)
   const [noteText, setNoteText]       = useState('')
   const [resolveText, setResolveText] = useState('')
   const [showResolve, setShowResolve] = useState(false)
@@ -214,7 +220,6 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
 
   const sm = STATUS_META[cas.status] || { label: cas.status, cls: 'bg-gray-100' }
   const pm = PRIORITY_META[cas.priority] || {}
-  const canEdit = ['admin', 'supervisor', 'call_center', 'quality_manager'].includes(user?.role)
 
   return (
     <div className="flex flex-col h-full" dir="rtl">
@@ -604,7 +609,6 @@ function StandaloneCaseModal({ onClose, onCreated }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CasesPage() {
-  const { user } = useAuthStore()
   const qc = useQueryClient()
   const [filters, setFilters] = useState({
     status: '', category: '', search: '', ordering: '-created_at',
@@ -623,7 +627,7 @@ export default function CasesPage() {
     queryKey: ['cases-list', queryParams],
     queryFn:  () => callCenterApi.cases.list(queryParams).then(r => r.data),
     staleTime: 15_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const cases   = data?.results || data || []
@@ -636,7 +640,7 @@ export default function CasesPage() {
     setPage(1)
   }
 
-  const canCreate = ['admin', 'supervisor', 'call_center', 'quality_manager'].includes(user?.role)
+  const canCreate = usePermissionAny('callcenter', CC_WRITE)
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">

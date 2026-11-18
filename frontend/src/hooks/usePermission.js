@@ -54,4 +54,18 @@ export function usePermissions(module) {
   return permissions?.[module] || {}
 }
 
+/**
+ * usePermissionAny(module, actions)
+ *
+ * True when the role holds ANY of `actions` on `module` — for screens whose API accepts
+ * several grants, e.g. call-center case writes take create, edit or approve
+ * (apps/callcenter/views.py CALLCENTER). Fail-closed while permissions load.
+ *
+ *   const canWrite = usePermissionAny('callcenter', ['create', 'edit', 'approve'])
+ */
+export function usePermissionAny(module, actions) {
+  const map = usePermissions(module)
+  return actions.some(a => !!map[a])
+}
+
 export default usePermission

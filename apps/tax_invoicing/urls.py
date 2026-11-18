@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import history_views, views
+from . import egs_sheet_views, history_views, views
 
 urlpatterns = [
     path('me/', views.me),
@@ -36,6 +36,8 @@ urlpatterns = [
     path('signing/smoke-test/', views.signing_smoke_test),
     path('signing-agent/next/', views.agent_next_job),
     path('signing-agent/jobs/<int:pk>/result/', views.agent_job_result),
+    path('signing-agent/files/<int:pk>/download/', views.agent_file_download),
+    path('signing-agent/files/<int:pk>/result/', views.agent_file_result),
     path('eta/status/', views.eta_status),
     path('eta/check-login/', views.eta_check_login),
     path('codes/', views.codes),
@@ -61,6 +63,22 @@ urlpatterns = [
     path('codes/send/', views.codes_send),
     path('codes/refresh/', views.codes_refresh),
     path('codes/check/', views.codes_check),
+    path('codes/eta-holds/', views.codes_eta_holds),
+    path('codes/queue/', views.codes_queue),
+    path('codes/queue/decide/', views.codes_queue_decide),
+    path('codes/queue/reopen/', views.codes_queue_reopen),
+    path('codes/queue/brick/', views.codes_queue_brick),
+    path('codes/queue/suggest/', views.codes_queue_suggest),
+    path('codes/queue/prepare/', views.codes_queue_prepare),
+    path('codes/queue/gs1/', views.codes_queue_gs1),
+    path('codes/production/', views.codes_production),
+    path('codes/sheet/', egs_sheet_views.sheet),
+    path('codes/sheet/build/', egs_sheet_views.sheet_build),
+    path('codes/sheet/<int:number>/download/', egs_sheet_views.sheet_download),
+    path('codes/sheet/agent/', egs_sheet_views.agent_state),
+    path('codes/sheet/agent/fetch/', egs_sheet_views.agent_fetch),
+    path('codes/sheet/agent/write/', egs_sheet_views.agent_write),
+    path('codes/sheet/agent/import/', egs_sheet_views.agent_import),
     path('codes/<int:pk>/', views.code_detail),
     path('codes/<int:pk>/cancel/', views.code_cancel),
     path('receipts/', views.receipts_list),

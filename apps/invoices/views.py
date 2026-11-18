@@ -764,7 +764,7 @@ class SupplierInvoiceViewSet(_DuplicateUploadNotice, viewsets.ModelViewSet):
         try:
             result['duplicates'] = writer.check_duplicates(invoice)
         except Exception as e:
-            result['duplicates'] = {'is_duplicate': False, 'error': str(e)[:200]}
+            result['duplicates'] = {'is_duplicate': False, 'error': public_error(request, e)}
         return Response(result)
 
     @action(detail=True, methods=['get', 'post'], url_path='duplicate-check')

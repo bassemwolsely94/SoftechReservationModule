@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import useGridKeyboard, { GRID_KEYS_HINT } from '../../hooks/useGridKeyboard'
 import { invoicesApi } from '../../api/client'
-import ItemSearchInput from '../../components/ItemSearchInput'
+import ItemSearchWidget from '../../components/ItemSearchWidget'
 
 const n = (v, d = 3) => (v === null || v === undefined || v === '' ? '' : Number(v).toFixed(d))
 
@@ -416,7 +416,7 @@ export default function SoftechGrid({ invoiceId, editable = true, onChanged }) {
                 )}
                 {pickFor === row.line_id && (
                   <tr><td colSpan={22} className="px-3 py-2 bg-gray-50 border-t border-gray-200">
-                    <ItemSearchInput onSelect={item => pick(row.line_id, item)}
+                    <ItemSearchWidget mode="single" onSelect={item => pick(row.line_id, item)}
                       placeholder="ابحث واختر الصنف الصحيح…" />
                   </td></tr>
                 )}

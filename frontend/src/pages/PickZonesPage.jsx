@@ -24,7 +24,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pickZonesApi, branchesApi } from '../api/client'
-import ItemSearchInput from '../components/ItemSearchInput'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -123,7 +123,7 @@ function SettingsCard({ zones, canEdit, showToast }) {
   const saveThreshold = useMutation({
     mutationFn: (v) => pickZonesApi.saveSettings({ price_threshold: v }),
     onSuccess: () => {
-      qc.invalidateQueries(['pick-zone-settings'])
+      qc.invalidateQueries({ queryKey: ['pick-zone-settings'] })
       showToast('✅ تم حفظ حد الغوالي')
       setThreshold(null)
     },
@@ -132,7 +132,7 @@ function SettingsCard({ zones, canEdit, showToast }) {
 
   const setRole = useMutation({
     mutationFn: ({ id, flag }) => pickZonesApi.updateZone(id, { [flag]: true }),
-    onSuccess: () => { qc.invalidateQueries(['pick-zones']); showToast('✅ تم تحديث الدور') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pick-zones'] }); showToast('✅ تم تحديث الدور') },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في التحديث')}`),
   })
 
@@ -210,12 +210,12 @@ function ZoneRow({ zone, canEdit, showToast }) {
 
   const update = useMutation({
     mutationFn: (data) => pickZonesApi.updateZone(zone.id, data),
-    onSuccess: () => { qc.invalidateQueries(['pick-zones']); showToast('✅ تم الحفظ') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pick-zones'] }); showToast('✅ تم الحفظ') },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحفظ')}`),
   })
   const remove = useMutation({
     mutationFn: () => pickZonesApi.deleteZone(zone.id),
-    onSuccess: () => { qc.invalidateQueries(['pick-zones']); qc.invalidateQueries(['pick-rules']); showToast('🗑️ حُذفت المنطقة') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pick-zones'] }); qc.invalidateQueries({ queryKey: ['pick-rules'] }); showToast('🗑️ حُذفت المنطقة') },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحذف')}`),
   })
 
@@ -297,7 +297,7 @@ function ZonesTab({ zones, branchParam, purpose, canEdit, showToast }) {
       location: add.location.trim(),
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['pick-zones'])
+      qc.invalidateQueries({ queryKey: ['pick-zones'] })
       setAdd({ name: '', sort_key: '', location: '' })
       showToast('✅ أُضيفت المنطقة')
     },
@@ -428,12 +428,12 @@ function RuleRow({ rule, idx, total, zones, canEdit, onMove, showToast }) {
 
   const update = useMutation({
     mutationFn: (data) => pickZonesApi.updateRule(rule.id, data),
-    onSuccess: () => { qc.invalidateQueries(['pick-rules']); showToast('✅ تم الحفظ') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pick-rules'] }); showToast('✅ تم الحفظ') },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحفظ')}`),
   })
   const remove = useMutation({
     mutationFn: () => pickZonesApi.deleteRule(rule.id),
-    onSuccess: () => { qc.invalidateQueries(['pick-rules']); showToast('🗑️ حُذفت القاعدة') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pick-rules'] }); showToast('🗑️ حُذفت القاعدة') },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحذف')}`),
   })
 
@@ -514,7 +514,7 @@ function RulesTab({ zones, branchParam, purpose, canEdit, showToast }) {
 
   const reorder = useMutation({
     mutationFn: (ids) => pickZonesApi.reorderRules(ids),
-    onSuccess: () => qc.invalidateQueries(['pick-rules']),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pick-rules'] }),
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في إعادة الترتيب')}`),
   })
   const create = useMutation({
@@ -527,7 +527,7 @@ function RulesTab({ zones, branchParam, purpose, canEdit, showToast }) {
       priority: (rules.length + 1) * 10,
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['pick-rules'])
+      qc.invalidateQueries({ queryKey: ['pick-rules'] })
       setAdd({ zone: '', match_field: 'name', keywords: '', values: [] })
       showToast('✅ أُضيفت القاعدة')
     },
@@ -628,9 +628,9 @@ function UncategorizedRow({ item, zones, branchParam, purpose, canEdit, showToas
       branch: branchBody(branchParam), purpose,
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['pick-uncategorized'])
-      qc.invalidateQueries(['pick-overrides'])
-      qc.invalidateQueries(['pick-zones'])
+      qc.invalidateQueries({ queryKey: ['pick-uncategorized'] })
+      qc.invalidateQueries({ queryKey: ['pick-overrides'] })
+      qc.invalidateQueries({ queryKey: ['pick-zones'] })
       showToast(`✅ صُنِّف ${item.item_name}`)
     },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في التخصيص')}`),
@@ -753,15 +753,15 @@ function OverrideRow({ ov, zones, canEdit, showToast }) {
 
   const update = useMutation({
     mutationFn: (data) => pickZonesApi.updateOverride(ov.id, data),
-    onSuccess: () => { qc.invalidateQueries(['pick-overrides']); showToast('✅ تم الحفظ') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['pick-overrides'] }); showToast('✅ تم الحفظ') },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحفظ')}`),
   })
   const remove = useMutation({
     mutationFn: () => pickZonesApi.deleteOverride(ov.id),
     onSuccess: () => {
-      qc.invalidateQueries(['pick-overrides'])
-      qc.invalidateQueries(['pick-uncategorized'])
-      qc.invalidateQueries(['pick-zones'])
+      qc.invalidateQueries({ queryKey: ['pick-overrides'] })
+      qc.invalidateQueries({ queryKey: ['pick-uncategorized'] })
+      qc.invalidateQueries({ queryKey: ['pick-zones'] })
       showToast('🗑️ أُلغي التخصيص — يعود الصنف للقواعد العامة')
     },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحذف')}`),
@@ -804,7 +804,7 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
-  const [newItem, setNewItem] = useState(null)   // from ItemSearchInput
+  const [newItem, setNewItem] = useState(null)   // from ItemSearchWidget
   const [newZone, setNewZone] = useState('')
   const [newTag, setNewTag]   = useState('')
 
@@ -824,9 +824,9 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
       branch: branchBody(branchParam), purpose,
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['pick-overrides'])
-      qc.invalidateQueries(['pick-uncategorized'])
-      qc.invalidateQueries(['pick-zones'])
+      qc.invalidateQueries({ queryKey: ['pick-overrides'] })
+      qc.invalidateQueries({ queryKey: ['pick-uncategorized'] })
+      qc.invalidateQueries({ queryKey: ['pick-zones'] })
       setNewItem(null); setNewZone(''); setNewTag('')
       showToast('✅ أُضيف التخصيص')
     },
@@ -847,7 +847,7 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
                   <button onClick={() => setNewItem(null)} className="text-gray-400 hover:text-gray-700">✕</button>
                 </div>
               ) : (
-                <ItemSearchInput onSelect={it => setNewItem(it)} placeholder="ابحث عن الصنف..." />
+                <ItemSearchWidget mode="single" onSelect={it => setNewItem(it)} placeholder="ابحث عن الصنف..." />
               )}
             </div>
             <select className="input-field text-sm w-44" value={newZone}
@@ -946,8 +946,8 @@ export default function PickZonesPage() {
     mutationFn: () => pickZonesApi.copyDefaults(
       branchParam === '' ? null : Number(branchParam), purpose),
     onSuccess: (r) => {
-      qc.invalidateQueries(['pick-zones'])
-      qc.invalidateQueries(['pick-rules'])
+      qc.invalidateQueries({ queryKey: ['pick-zones'] })
+      qc.invalidateQueries({ queryKey: ['pick-rules'] })
       showToast(`✅ نُسخ الإعداد المطبق حالياً (${r.data.zones_created} منطقة، ${r.data.rules_created} قاعدة)`)
     },
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في النسخ')}`),

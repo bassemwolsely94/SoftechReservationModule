@@ -10,15 +10,32 @@
  *   F8     — Execute search
  *   ↑ / ↓  — Navigate result rows
  *   Enter  — Select highlighted row
+ *   multi only (the useGridKeyboard keys, never while typing in a field):
+ *   Space  — tick / untick the highlighted row
+ *   Enter  — add the ticked rows (or the highlighted one when none is ticked)
  *
  * Props:
  *   onSelect(item) — called when the user picks an item; modal stays open control stays
+ *                    (with `multi`: onSelect(items[]) once, from «إضافة المحدد (n)» or Enter)
  *   onClose()      — called when modal should be dismissed
+ *   multi          — checkbox column; a row click ticks instead of picking
+ * Every item handed out carries `id` and `item_id`, equal.
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import api from '../api/client'
 import Highlight from './Highlight'
+import SearchTierChip from './SearchTierChip'
+import { withItemId, useTicked } from './itemSearchPick'
+
+const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
+// a text field / select has the focus (a checkbox or button still counts as "in the grid")
+function isTyping(t) {
+  if (!t) return false
+  if (t.isContentEditable) return true
+  if (!TYPING.has(t.tagName)) return false
+  return !(t.tagName === 'INPUT' && ['checkbox', 'radio', 'button'].includes(t.type))
+}
 
 const PAGE_SIZE = 30
 
@@ -69,7 +86,12 @@ function buildParams(criteria) {
   const q = (criteria.search || '').trim()
   // one rule set server-side (apps/catalog/wildcard.py): * and % = any characters, parts in
   // order, ranked exact text first — over name, scientific name, code and barcode
-  if (q) p.search = q
+  // engine order + tier chips (S2) from 2 non-wildcard characters — the picker's minimum (the
+  // engine finds nothing for one letter); shorter text keeps the plain wildcard list
+  if (q) {
+    p.search = q
+    if (q.replace(/[*%]/g, '').length >= 2) p.rank = 'engine'
+  }
 
   if (criteria.category)       p.category        = criteria.category
   if (criteria.supplier_code)  p.supplier_code   = criteria.supplier_code
@@ -152,14 +174,16 @@ function SortTh({ colKey, sortField, sortDir, onSort, children, className = '' }
 
 // ── Main modal ─────────────────────────────────────────────────────────────────
 
-export default function AdvancedItemSearchModal({ onSelect, onClose }) {
+export default function AdvancedItemSearchModal({ onSelect, onClose, multi = false }) {
+  const { ticked, toggle: toggleTick, isTicked } = useTicked()
   const [criteria,     setCriteria]     = useState({ ...EMPTY_CRITERIA })
   const [activeParams, setActiveParams] = useState(null)   // null = not searched yet
   const [page,         setPage]         = useState(1)
   const [highlighted,  setHighlighted]  = useState(-1)
 
-  // Sort state — field key + direction
-  const [sortField, setSortField] = useState('name')
+  // Sort state — field key + direction. null = no header clicked: the server's order (the
+  // engine's ranking when there is search text), so no `ordering` is sent
+  const [sortField, setSortField] = useState(null)
   const [sortDir,   setSortDir]   = useState('asc')
 
   const firstInputRef  = useRef(null)
@@ -173,20 +197,22 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
   })
 
   // Build ordering string for API
-  const orderingParam = sortDir === 'asc'
-    ? (SORTABLE_COLS[sortField] || sortField)
-    : `-${SORTABLE_COLS[sortField] || sortField}`
+  const orderingParam = !sortField ? undefined
+    : sortDir === 'asc'
+      ? (SORTABLE_COLS[sortField] || sortField)
+      : `-${SORTABLE_COLS[sortField] || sortField}`
 
   // ── Search results ──────────────────────────────────────────────────────────
   const { data: searchData, isFetching } = useQuery({
     queryKey: ['adv-item-search', activeParams, page, orderingParam],
     queryFn: () =>
       api.get('/items/', {
-        params: { ...activeParams, page, page_size: PAGE_SIZE, ordering: orderingParam },
+        params: { ...activeParams, page, page_size: PAGE_SIZE,
+                  ...(orderingParam ? { ordering: orderingParam } : {}) },
       }).then(r => r.data),
     enabled: activeParams !== null,
     staleTime: 10_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const results    = searchData?.results || []
@@ -204,7 +230,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
     if (highlighted >= 0 && resultsBodyRef.current) {
       resultsBodyRef.current
         .querySelector(`[data-row="${highlighted}"]`)
-        ?.scrollIntoView({ block: 'nearest' })
+        ?.scrollIntoView?.({ block: 'nearest' })
     }
   }, [highlighted])
 
@@ -219,15 +245,23 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
     setCriteria({ ...EMPTY_CRITERIA })
     setActiveParams(null)
     setHighlighted(-1)
-    setSortField('name')
+    setSortField(null)
     setSortDir('asc')
     setTimeout(() => firstInputRef.current?.focus(), 50)
   }, [])
 
   const handleSelect = useCallback((item) => {
-    onSelect(item)
+    onSelect(withItemId(item))
     onClose()
   }, [onSelect, onClose])
+
+  // multi: one onSelect(items[]) with the ticked rows (or the given fallback row)
+  const handleAddTicked = useCallback((fallback) => {
+    const items = ticked.length ? ticked : (fallback ? [fallback] : [])
+    if (!items.length) return
+    onSelect(items.map(withItemId))
+    onClose()
+  }, [ticked, onSelect, onClose])
 
   function set(field, value) {
     setCriteria(prev => ({ ...prev, [field]: value }))
@@ -255,11 +289,32 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
       if (e.key === 'ArrowDown' && results.length > 0) {
         e.preventDefault()
         setHighlighted(i => Math.min(i + 1, results.length - 1))
+        // multi: ↓ from the search box hands the focus to the grid, so Space / Enter reach it
+        if (multi && e.target === firstInputRef.current) resultsBodyRef.current?.focus()
         return
       }
       if (e.key === 'ArrowUp' && results.length > 0) {
         e.preventDefault()
         setHighlighted(i => Math.max(i - 1, -1))
+        return
+      }
+      if (multi) {
+        // the grid keys (useGridKeyboard): Space ticks, Enter adds — never while typing in a field
+        if (isTyping(e.target)) return
+        // a focused button (sort header, «بحث», paging, ✕) keeps its native Space / Enter
+        if (e.target?.tagName === 'BUTTON') return
+        const row = highlighted >= 0 ? results[highlighted] : null
+        const space = e.code === 'Space' || e.key === ' '
+        // a focused checkbox (a row's or a criteria one) toggles natively via its own onChange
+        if (space && e.target?.type === 'checkbox') return
+        if (space) {
+          if (row) { e.preventDefault(); toggleTick(row) }
+          return
+        }
+        if (e.key === 'Enter' && (ticked.length || row)) {
+          e.preventDefault()
+          handleAddTicked(row)
+        }
         return
       }
       if (e.key === 'Enter' && highlighted >= 0 && results[highlighted]) {
@@ -269,7 +324,8 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [results, highlighted, handleReset, handleSearch, handleSelect, onClose])
+  }, [results, highlighted, handleReset, handleSearch, handleSelect, onClose,
+      multi, ticked, toggleTick, handleAddTicked])
 
   // ── Render ───────────────────────────────────────────────────────────────────
   const inputCls = 'w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400'
@@ -293,9 +349,19 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
               🔍 البحث المتقدم عن الأصناف
             </h2>
             <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
-              F7: إعادة تعيين · F8: بحث · ↑↓: تنقل في النتائج · Enter: اختيار · Esc: إغلاق
+              {multi
+                ? 'F7: إعادة تعيين · F8: بحث · ↑↓: تنقل في النتائج · مسافة: تحديد · Enter: إضافة المحدد · Esc: إغلاق'
+                : 'F7: إعادة تعيين · F8: بحث · ↑↓: تنقل في النتائج · Enter: اختيار · Esc: إغلاق'}
             </p>
           </div>
+          {multi && (
+            <button data-tour="item-search-modal-add-ticked" type="button"
+              onClick={() => handleAddTicked(null)}
+              disabled={!ticked.length}
+              className="ms-auto me-3 px-4 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 font-semibold disabled:opacity-40">
+              إضافة المحدد ({ticked.length})
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-700 text-xl leading-none font-light w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100"
@@ -303,7 +369,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
         </div>
 
         {/* ── Criteria ────────────────────────────────────────────────────────── */}
-        <div className="px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
+        <div data-tour="item-search-modal-filters" className="px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
 
           {/* Row 1: main text search + category + medicine type + family */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
@@ -313,6 +379,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
               </label>
               <input
                 ref={firstInputRef}
+                data-tour="item-search-modal-text"
                 type="text"
                 className={inputCls}
                 placeholder="مثال: urosolv* أو par* أو *cillin أو 6221077... أو كود 404"
@@ -321,11 +388,9 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
               />
               <p className="text-[10px] text-gray-400 mt-0.5">
-                بدون *: بحث في الاسم والكود والباركود ·
-                مع *: بحث بالاسم فقط مع بدل
-                (<span className="font-mono text-brand-500">urosolv*</span> = كل ما يبدأ بـ urosolv ·
-                <span className="font-mono text-brand-500">*cillin</span> = كل ما ينتهي بـ cillin ·
-                <span className="font-mono text-brand-500">amox*500</span> = بدل في المنتصف)
+                * أو % = أي حروف (<span className="font-mono text-brand-500">urosolv*</span> ·
+                <span className="font-mono text-brand-500">*cillin</span>) — البحث في الاسم والاسم العلمي والكود والباركود،
+                ويفهم العربي والأخطاء الإملائية بعلامة بجانب الاسم، وأقرب نتيجة أولاً.
               </p>
             </div>
 
@@ -440,7 +505,8 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
         </div>
 
         {/* ── Results table ────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto min-h-0" ref={resultsBodyRef}>
+        <div data-tour="item-search-modal-results" data-testid="adv-results" tabIndex={0}
+          className="flex-1 overflow-y-auto min-h-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40" ref={resultsBodyRef}>
           {activeParams === null ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-2">
               <div className="text-5xl">🔍</div>
@@ -457,6 +523,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
             <table className="w-full text-xs border-collapse">
               <thead className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-200">
                 <tr className="text-[11px] text-gray-500 font-semibold">
+                  {multi && <th className="px-2 py-2.5 text-center w-8" title="اختيار متعدد"></th>}
                   <th className="px-2 py-2.5 text-center w-8 font-mono">#</th>
                   <SortTh colKey="softech_id" {...sortProps} className="w-16">الكود</SortTh>
                   <SortTh colKey="name" {...sortProps} className="min-w-[220px]">الاسم</SortTh>
@@ -485,8 +552,16 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
                       className={`border-b border-gray-50 cursor-pointer transition-colors
                         ${isHL ? 'bg-brand-50 outline outline-1 outline-brand-300' : 'hover:bg-gray-50'}`}
                       onMouseEnter={() => setHighlighted(idx)}
-                      onClick={() => handleSelect(item)}
+                      onClick={() => (multi ? toggleTick(item) : handleSelect(item))}
                     >
+                      {multi && (
+                        <td className="px-2 py-2 text-center">
+                          <input type="checkbox" className="rounded" aria-label={`تحديد ${item.name}`}
+                            checked={isTicked(item)}
+                            onClick={e => e.stopPropagation()}
+                            onChange={() => toggleTick(item)} />
+                        </td>
+                      )}
                       {/* # */}
                       <td className="px-2 py-2 text-center text-gray-400 font-mono">
                         {(page - 1) * PAGE_SIZE + idx + 1}
@@ -499,7 +574,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
 
                       {/* Name — full wrap, no truncation */}
                       <td className="px-3 py-2 font-semibold text-gray-900 min-w-[220px]">
-                        <div className="whitespace-normal leading-snug"><Highlight text={item.name} query={activeParams?.search} /></div>
+                        <div className="whitespace-normal leading-snug"><Highlight text={item.name} query={activeParams?.search} /><SearchTierChip row={item} /></div>
                       </td>
 
                       {/* Scientific name — full wrap, no truncation */}
@@ -560,7 +635,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
 
                       {/* Select button */}
                       <td className="px-2 py-2 text-center">
-                        <button
+                        {!multi && <button
                           onClick={e => { e.stopPropagation(); handleSelect(item) }}
                           className={`text-[10px] px-2 py-1 rounded font-semibold transition-colors
                             ${isHL
@@ -568,7 +643,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
                               : 'bg-gray-100 text-gray-600 hover:bg-brand-100 hover:text-brand-700'}`}
                         >
                           اختر
-                        </button>
+                        </button>}
                       </td>
                     </tr>
                   )

@@ -2300,6 +2300,28 @@ def _run_retention_watch():
         logger.error('[APScheduler] retention watch failed: %s', exc)
 
 
+def _run_portal_expire_leases():
+    """Supplier-portal robot: a basket held past its lease goes to a person (never back to the queue)."""
+    try:
+        from apps.rpa.portal.queue import expire_leases
+        n = expire_leases()
+        if n:
+            logger.info('[APScheduler] portal leases expired: %s', n)
+    except Exception as exc:
+        logger.error('[APScheduler] portal lease expiry failed: %s', type(exc).__name__)
+
+
+def _run_portal_history_check():
+    """Supplier-portal robot: queue an Order History read for stuck baskets that may have ordered."""
+    try:
+        from apps.rpa.portal.queue import daily_history_check
+        n = daily_history_check()
+        if n:
+            logger.info('[APScheduler] portal Order History reads queued: %s', n)
+    except Exception as exc:
+        logger.error('[APScheduler] portal history check failed: %s', type(exc).__name__)
+
+
 def _run_segment_customers():
     """Wrapper for APScheduler — calls segment_customers management command."""
     try:
@@ -2677,6 +2699,28 @@ def _run_eta_history_topup():
             eta_history.top_up(system)
         except Exception as exc:
             logger.warning('[APScheduler] ETA history top-up %s: %s', system, exc)
+
+
+def _run_gpc_ai_suggest():
+    """AI GPC brick proposals for uncoded items (batch S2), biggest uncoded value first. Behind
+    TAX_GPC_AI_ENABLED; sends item names only, never prices or customers; a person confirms every brick."""
+    from apps.tax_invoicing import gpc_ai
+    try:
+        counts = gpc_ai.run()
+        logger.info('[APScheduler] GPC AI suggestions: %s', counts)
+    except Exception as exc:
+        logger.warning('[APScheduler] GPC AI suggestions: %s', type(exc).__name__)
+
+
+def _run_egs_sheet_agent_nightly():
+    """S5: ask the seal PC's agent for the live Invoicer sheet; with TAX_EGS_SHEET_AGENT_WRITE_ENABLED on, its
+    result asks for a write of the latest version (held on hand edits, nothing when it already is the latest)."""
+    from apps.tax_invoicing import egs_agent
+    try:
+        job = egs_agent.nightly()
+        logger.info('[APScheduler] EGS sheet agent nightly: %s', job)
+    except Exception as exc:
+        logger.warning('[APScheduler] EGS sheet agent nightly: %s', type(exc).__name__)
 
 
 def _run_eta_recon_daily():
@@ -3938,6 +3982,17 @@ def start_scheduler():
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
+    # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
+    _scheduler.add_job(
+        _run_portal_expire_leases, 'interval', minutes=5, id='rpa_portal_expire_leases',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=300,
+    )
+    # Supplier-portal robot: daily 07:40, an Order History read for every stuck basket that may have
+    # ordered and was not read since (or whose read failed). Local DB only; the robot does the read.
+    _scheduler.add_job(
+        _run_portal_history_check, 'cron', hour=7, minute=40, id='rpa_portal_history_check',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
+    )
     # Dead-stock list (P-27): after each successful engine run (checked every 30 min, PG only).
     _scheduler.add_job(
         _run_dead_stock_snapshot, 'interval', minutes=30, id='dead_stock_snapshot',
@@ -4003,6 +4058,16 @@ def start_scheduler():
     )
     _scheduler.add_job(
         _run_eta_recon_daily, 'cron', hour=5, minute=15, id='eta_recon_daily',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # S5: the seal PC agent reads (and, switch on, replaces) the Invoicer's bulk EGS sheet at 03:00.
+    _scheduler.add_job(
+        _run_egs_sheet_agent_nightly, 'cron', hour=3, minute=0, id='egs_sheet_agent_nightly',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # AI GPC brick proposals for the ETA coding queue (switch TAX_GPC_AI_ENABLED, default off).
+    _scheduler.add_job(
+        _run_gpc_ai_suggest, 'cron', hour=2, minute=30, id='gpc_ai_suggest',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # HR attendance health (every 30 min): silent machine/agent, clock drift, falling log count.

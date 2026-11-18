@@ -15,6 +15,69 @@ real token. Full owner steps: [docs/deploy/2026-11-tax-signing-workstation.md](.
 | `requirements.txt` | Python packages. Python and the PKCS#11 DLL must have the same bitness. |
 | `config.example.ini` | Copy to `config.ini`. It holds no secrets, and the agent refuses to start if it does. |
 
+## The bulk EGS sheet (agent version 2)
+
+From version 2 the agent also looks after Invoicer's sheet `ElRezeiky_Bulk_EGS_Items.xlsx`. The server
+asks for one of two jobs:
+
+- **Read the current file** (`egs_fetch`): the agent copies the live sheet to a temporary file outside the
+  Invoicer folder and uploads the copy. It never opens the live sheet itself, and writes nothing.
+- **Write a new version** (`egs_write`): the agent downloads the version and checks its SHA-256. Then:
+  - **Preview** (the server's write switch `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` is off, the default): nothing
+    is written in the Invoicer folder. The agent only reports what it would do: the live sheet's size and
+    hash, whether it is in use, whether the backup folder looks writable.
+  - **Write** (switch on, and the job and the download both say `write`): the agent checks the live sheet is
+    still the one the server last read (otherwise it refuses: `live_changed`), writes
+    `ElRezeiky_Bulk_EGS_Items.new.xlsx` beside it, copies the live sheet to
+    `backup\ElRezeiky_Bulk_EGS_Items.<YYYYMMDD-HHMMSS>.xlsx`, and swaps the new file in. If Invoicer or Excel
+    holds the sheet, it retries 5 times over about 2 minutes, then reports **busy**, removes the `.new` file
+    and leaves the live sheet as it was. Before every swap attempt it reads the live sheet again: if someone
+    saved a change while it waited, it refuses (`live_changed`) and keeps that change. Any other failure also
+    leaves the live sheet as it was. The server counts a write as done only when the agent read the live
+    sheet back as the new version.
+
+The folder comes only from `config.ini`; the server never sends a path. Backups are kept in
+`D:\invoicer_mini\backup`, newest 30.
+
+**Signing waits during a sheet job.** The agent does one job at a time. A write held by Invoicer can take
+several minutes (retries while reading, backing up and swapping), and a signing job waits behind it. This is
+fine while signing through the agent is not live; revisit it before it is.
+
+### Updating the agent on the seal PC (192.168.1.8)
+
+1. Stop the agent: close its console window, or end the scheduled task
+   (`Stop-ScheduledTask -TaskName 'ElRezeiky Tax Signing Agent'`).
+2. Copy `agent.py` (and `cades.py`, `requirements.txt`, `config.example.ini`) from this folder over the ones
+   in `C:\ElRezeikyTaxAgent`. Keep your `config.ini`.
+3. Open `C:\ElRezeikyTaxAgent\config.ini` and add this line under `[agent]`:
+
+   ```ini
+   invoicer_dir = D:\invoicer_mini
+   ```
+
+4. Start the agent again as before (console window and PIN, or `Start-ScheduledTask`). Signing works exactly
+   as before. On the panel «ملف أكواد الإيصالات (المحصّل)» the agent now shows as version 2.
+5. Press «اقرأ الملف الحالي» once and check the agent log shows `kind=egs_fetch status=done`.
+
+Writing stays a preview until the owner turns the write switch on, on the server.
+
+### Rolling back the sheet
+
+0. **First** ask the owner to turn `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` off on the server. Otherwise the 03:00
+   nightly job writes the latest version over the restored file.
+   اطلب من المالك إيقاف `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` أولاً — وإلا تكتب مهمة الساعة 3 فجراً أحدث نسخة
+   فوق الاسترجاع.
+1. Close Excel, and close Invoicer if it is open.
+2. In `D:\invoicer_mini\backup`, pick the backup to go back to (the name is the time it was taken).
+3. Copy it to `D:\invoicer_mini` and rename it to `ElRezeiky_Bulk_EGS_Items.xlsx`, replacing the live file.
+4. Press «اقرأ الملف الحالي» so the server knows what the live sheet is now.
+
+A rollback lasts only while the switch stays off, or until a newer version supersedes it: a restored backup
+is one of our own versions, so with the switch on the next write replaces it with the latest.
+
+To roll back the agent itself, copy the previous `agent.py` back and remove nothing else: an older agent
+ignores `invoicer_dir`, and the server then offers it signing jobs only.
+
 ## Exit codes
 
 | Code | Meaning | Restart it automatically? |

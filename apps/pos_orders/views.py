@@ -71,6 +71,19 @@ def _branch_of(request):
     return None
 
 
+def _pos_branch(request, branch_id):
+    """The POS works the user's own branches only (owner decision D2, UAT 2026-11-17).
+    Returns (branch, None) or (None, error Response): 404 unknown, 403 outside branch_scope.
+    All-branch roles keep every branch."""
+    from apps.branches.models import Branch
+    branch = Branch.objects.filter(pk=branch_id).first() if str(branch_id).isdigit() else None
+    if branch is None:
+        return None, Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    if not branch_scope.allows(request.user, branch.pk):
+        return None, Response({'detail': 'نقطة البيع متاحة لفرعك فقط.'}, status=status.HTTP_403_FORBIDDEN)
+    return branch, None
+
+
 def _valid_uuid(token):
     """Return the canonical UUID string if `token` is a valid UUID, else None — so a
     malformed client_token is ignored (fresh order) instead of 500-ing the UUIDField query."""
@@ -950,16 +963,14 @@ def batch_availability_view(request):
     GET ?branch=<id>&item=<softech_itemcode>[&store=<storecode>]
     Returns the available batches (expiry/qty) + a summary; out_of_stock ⇒ reservation.
     """
-    from apps.branches.models import Branch
     from .batch_availability import item_availability, summarize, batch_action
     item = (request.query_params.get('item') or '').strip()
     branch_id = request.query_params.get('branch')
     if not item or not branch_id:
         return Response({'detail': 'برجاء تحديد الفرع والصنف.'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
-        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    branch, refused = _pos_branch(request, branch_id)
+    if refused:
+        return refused
     store = (request.query_params.get('store') or branch.softech_branch_id or '').strip()
     try:
         batches, stockable = item_availability(branch.effective_db_host, store, item,
@@ -1027,16 +1038,14 @@ def contract_fields_view(request):
     GET ?branch=<id>&customer=<contract personcode>
     Returns {fields:[{slot,column,label_ar,label_en,is_date}]} from SOFTECH motalba_fields — the POS
     renders ONLY these fields (blacked-out ones omitted) with the per-contract labels."""
-    from apps.branches.models import Branch
     from .contract_fields import contract_field_spec
     personcode = (request.query_params.get('customer') or '').strip()
     branch_id = request.query_params.get('branch')
     if not personcode or not branch_id:
         return Response({'detail': 'برجاء تحديد الفرع وعميل التعاقد.'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
-        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    branch, refused = _pos_branch(request, branch_id)
+    if refused:
+        return refused
     try:
         fields = contract_field_spec(branch.effective_db_host, branch.effective_db_port,
                                      branch.db_name or 'SOFTECHDB9', personcode)
@@ -1063,22 +1072,20 @@ def customer_types(request):
 @permission_classes([CanOperatePosOrders])
 def customer_entities(request):
     """إسم العميل — entities of one نوع العميل. GET ?branch=&type=<key>[&q=]."""
-    from apps.branches.models import Branch
     from .customer_directory import list_entities
     type_key = (request.query_params.get('type') or '').strip()
     branch_id = request.query_params.get('branch')
     q = (request.query_params.get('q') or '').strip() or None
     if not type_key or not branch_id:
         return Response({'detail': 'برجاء تحديد الفرع ونوع العميل.'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
-        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    branch, refused = _pos_branch(request, branch_id)
+    if refused:
+        return refused
     try:
         entities = list_entities(branch.effective_db_host, type_key, q=q,
                                  db_port=branch.effective_db_port, db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'entities': [], 'note': f'تعذّر القراءة: {e}'})
+        return Response({'entities': [], 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'type': type_key, 'entities': entities})
 
 
@@ -1086,21 +1093,19 @@ def customer_entities(request):
 @permission_classes([CanOperatePosOrders])
 def salespeople_view(request):
     """مسئول البيع — searchable list of {usercode, name} from SOFTECH users. GET ?branch=[&q=]."""
-    from apps.branches.models import Branch
     from .customer_directory import salespeople
     branch_id = request.query_params.get('branch')
     q = (request.query_params.get('q') or '').strip() or None
     if not branch_id:
         return Response({'detail': 'برجاء تحديد الفرع.'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
-        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    branch, refused = _pos_branch(request, branch_id)
+    if refused:
+        return refused
     try:
         people = salespeople(branch.effective_db_host, q=q, db_port=branch.effective_db_port,
                              db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'salespeople': [], 'note': f'تعذّر القراءة: {e}'})
+        return Response({'salespeople': [], 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'salespeople': people})
 
 
@@ -1108,20 +1113,18 @@ def salespeople_view(request):
 @permission_classes([CanOperatePosOrders])
 def branch_stores_view(request):
     """من حساب مخزن — stores of a branch (branch-dependent). GET ?branch="""
-    from apps.branches.models import Branch
     from .customer_directory import branch_stores
     branch_id = request.query_params.get('branch')
     if not branch_id:
         return Response({'detail': 'برجاء تحديد الفرع.'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
-        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    branch, refused = _pos_branch(request, branch_id)
+    if refused:
+        return refused
     try:
         stores = branch_stores(branch.effective_db_host, branch.softech_branch_id,
                                db_port=branch.effective_db_port, db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'stores': [], 'note': f'تعذّر القراءة: {e}'})
+        return Response({'stores': [], 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'branch': branch.softech_branch_id, 'stores': stores})
 
 
@@ -1276,7 +1279,7 @@ def flush_now(request):
         try:
             res = writer.push_order(order, dry_run=False)
         except Exception as e:
-            failed += 1; results.append({'id': order.pk, 'error': str(e)}); continue
+            failed += 1; results.append({'id': order.pk, 'error': public_error(request, e)}); continue
         _audit_pos(request, 'softech_pos_order_pushed', order, res, via='flush_now')
         if res.get('queued'):
             queued += 1
@@ -1306,17 +1309,15 @@ def discount_suggest(request):
     Returns per item: `suggestions[code]` = rate to auto-apply (contract only; null for retail),
     `caps[code]` = the max % the operator may enter for that item. Read-only; graceful if down.
     """
-    from apps.branches.models import Branch
     from .discount_authority import DiscountAuthorityReader
     items = [s.strip() for s in (request.query_params.get('items') or '').split(',') if s.strip()]
     branch_id = request.query_params.get('branch')
     channel = request.query_params.get('channel', 'cash')
     if not items or not branch_id:
         return Response({'detail': 'برجاء تحديد الفرع والأصناف.'}, status=status.HTTP_400_BAD_REQUEST)
-    try:
-        branch = Branch.objects.get(pk=branch_id)
-    except Branch.DoesNotExist:
-        return Response({'detail': 'الفرع غير موجود.'}, status=status.HTTP_404_NOT_FOUND)
+    branch, refused = _pos_branch(request, branch_id)
+    if refused:
+        return refused
     sp = _staff(request.user)
     seller = (sp.softech_user_id.strip() if sp and sp.softech_user_id else '')
     is_contract = channel in ('contract', 'insurance')
@@ -1355,7 +1356,7 @@ def discount_suggest(request):
         finally:
             reader.close()
     except Exception as e:
-        return Response({'suggestions': {}, 'caps': {}, 'ceiling': None, 'note': f'تعذّر القراءة: {e}'})
+        return Response({'suggestions': {}, 'caps': {}, 'ceiling': None, 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'suggestions': suggestions, 'caps': caps, 'ceiling': ceiling,
                      'source': 'contract' if is_contract else 'item_pos'})
 
@@ -1395,6 +1396,9 @@ def reference_data(request):
         # None = all channels; else the explicit allow-list this member may operate
         'allowed_channels': (sorted(sp.pos_channels()) if (sp and sp.pos_channels() is not None) else None),
         'default_branch': (sp.branch_id if sp and sp.branch_id else None),   # auto-select the seller's branch
+        # D2: the branches this user may sell for (None = every branch); the picker lists only these
+        'pos_branch_ids': (lambda ids: None if ids is None else sorted(ids))(branch_scope.branch_ids(request.user)),
+        'returns_enabled': bool(getattr(settings, 'POS_RETURNS_ENABLED', False)),   # D3: offer «مرتجع»?
         'note': 'SOFTECH writes are disabled (no test instance). /push returns a dry-run plan.',
     })
 

@@ -67,10 +67,12 @@ _RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
 # the tests are written against. Without this a production .env (writers ON) made every
 # "gate off by default" test fail. Tests that need a gate open use override_settings.
 # SOFTECH_TESTS_ALLOW_LIVE=True keeps .env for a deliberate run against a TEST server.
+# Every TAX_ETA_* value (system, addresses, logins) also takes its code default (empty), so a server
+# whose .env points at ETA's pre-production never logs in to ETA from a test (role sweep check-login).
 if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast=bool):
     import re as _re
     _GATE_KEY = _re.compile(r'(_ENABLED|_WRITE|_WRITER|_AUTO_APPROVE|_AUTO_TOPUP|_UPDATE_PATIENTDATA|_NOTIFY)$'
-                            r'|^COUPON_GUARD_')
+                            r'|^COUPON_GUARD_|^TAX_ETA_')
     _env_config = config
 
     def config(key, *args, **kwargs):          # noqa: F811 — test-run wrapper
@@ -235,6 +237,7 @@ INSTALLED_APPS = [
     'apps.approvals',
     'apps.batches',
     'apps.hr',
+    'apps.rpa',  # روبوت الإدخال — SOFTECH screen RPA (design 2026-11-16)
     'apps.crews',  # الأطقم — dated cross-branch people groupings (spec 2026-11-13 §6)
     'apps.forecasting',
     'apps.insights',
@@ -247,6 +250,7 @@ INSTALLED_APPS = [
     'apps.tax_invoicing',  # Tax invoices to ETA (doc 36) — drafts, review, gated submission
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
     'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
+    'apps.marketplace',    # Marketplace / delivery-platform channels (doc 38) — never writes SOFTECH, flags below
     'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
     'apps.trace',          # P-58 EDA track-and-trace foundation — dormant (TRACK_TRACE_ENABLED)
@@ -469,6 +473,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+# A test run hashes thousands of throw-away passwords; the production-strength PBKDF2 hash costs
+# ~0.3 s each. Tests only ever compare a password with check_password, which works with any
+# hasher, so a test run uses the cheap one. Real logins never run with argv[1] == 'test'.
+if _RUNNING_TESTS:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -605,8 +614,25 @@ ERP_SERVICE_USERCODE = config('ERP_SERVICE_USERCODE', default='')
 # SOFTECH; /push returns a dry-run plan only. Flip to True ONLY after the live
 # write path is implemented and validated against SOFTECH_TEST_HOST.
 POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
+# Returns (doc_kind 'return', SOFTECH doccode 30) on the POS screen. Owner decision D3 (UAT 2026-11-17):
+# OFF = a NEW return order is refused and the screen does not offer «مرتجع»; returns already created
+# keep their posting path. Not a SOFTECH writer switch.
+POS_RETURNS_ENABLED = config('POS_RETURNS_ENABLED', default=False, cast=bool)
+# D1 (UAT 2026-11-17): hours another branch's customer stays openable by id after a full-phone find.
+CUSTOMER_FOUND_HOURS = config('CUSTOMER_FOUND_HOURS', default=12, cast=int)
+# Maker-checker on ISR / GL / price-change approvals (core/maker_checker.py, UAT W5b 2026-11-17): the
+# creator never approves their own document, except the admin role while this is True (the owner
+# prepares and approves today). Set False once real roles are assigned (owner decision D4).
+SELF_APPROVAL_ADMIN_EXEMPT = config('SELF_APPROVAL_ADMIN_EXEMPT', default=True, cast=bool)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
+
+# Marketplace channels (apps.marketplace, doc 38). OFF = screen hidden, API 404. Never writes SOFTECH.
+# MARKETPLACE_PUSH_ENABLED gates pushing stock/price/status OUT to a platform (default OFF; dry-run first).
+MARKETPLACE_ENABLED = config('MARKETPLACE_ENABLED', default=False, cast=bool)
+MARKETPLACE_PUSH_ENABLED = config('MARKETPLACE_PUSH_ENABLED', default=False, cast=bool)
+# The 'fake' test adapter (shared-secret webhook, no real platform) may be chosen only in DEBUG / tests.
+MARKETPLACE_ALLOW_FAKE_ADAPTER = DEBUG or _RUNNING_TESTS
 # HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
 # the agent endpoints answer 503 and no collection is accepted. Read-only; never writes SOFTECH.
 HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool)
@@ -904,7 +930,16 @@ TAX_RECONCILE_WAIT_MINUTES = config('TAX_RECONCILE_WAIT_MINUTES', default=15, ca
 TAX_ERECEIPT_SUBMIT_ENABLED = config('TAX_ERECEIPT_SUBMIT_ENABLED', default=False, cast=bool)
 TAX_ETA_CODING_ENABLED = config('TAX_ETA_CODING_ENABLED', default=False, cast=bool)
 TAX_ETA_PRODUCTION_ALLOWED = config('TAX_ETA_PRODUCTION_ALLOWED', default=False, cast=bool)
+# Item-code requests to ETA's production system (coding.production_gate), from any server whatever it sends
+# invoices to. Independent of TAX_ETA_PRODUCTION_ALLOWED, which also unlocks invoice sending. BATCH_OK lifts the
+# first-request rule (one request until ETA approves one). Login: TAX_ETA_PRODUCTION_CLIENT_*, else the reading one.
+TAX_ETA_CODING_PRODUCTION_ENABLED = config('TAX_ETA_CODING_PRODUCTION_ENABLED', default=False, cast=bool)
+TAX_ETA_CODING_PRODUCTION_BATCH_OK = config('TAX_ETA_CODING_PRODUCTION_BATCH_OK', default=False, cast=bool)
+TAX_ETA_PRODUCTION_CLIENT_ID = config('TAX_ETA_PRODUCTION_CLIENT_ID', default='')
+TAX_ETA_PRODUCTION_CLIENT_SECRET = config('TAX_ETA_PRODUCTION_CLIENT_SECRET', default='')
 TAX_ALLOW_MOCK_SIGNER = config('TAX_ALLOW_MOCK_SIGNER', default=False, cast=bool)
+# Nightly AI proposal of a GPC brick for uncoded items (apps/tax_invoicing/gpc_ai.py). Sends item names only.
+TAX_GPC_AI_ENABLED = config('TAX_GPC_AI_ENABLED', default=False, cast=bool)
 # ETA history mirror: reading each ETA system with its own login (never sends). Production uses an ERP
 # registration made for us, never Invoicer's. Each system has its own switch, default off.
 TAX_ETA_READ_PREPROD_ENABLED = config('TAX_ETA_READ_PREPROD_ENABLED', default=False, cast=bool)
@@ -919,6 +954,12 @@ TAX_ETA_HISTORY_RECEIPTS_START = config('TAX_ETA_HISTORY_RECEIPTS_START', defaul
 TAX_SIGNING_AGENT_TOKEN = config('TAX_SIGNING_AGENT_TOKEN', default='')
 TAX_SIGNING_CERT_THUMBPRINT = config('TAX_SIGNING_CERT_THUMBPRINT', default='')
 TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=int)
+# Versions of the owner's bulk EGS sheet (the Invoicer's item-code workbook, S3). Outside MEDIA_ROOT, never served
+# by URL, git-ignored; the newest 10 versions' files are kept.
+TAX_EGS_SHEET_DIR = config('TAX_EGS_SHEET_DIR', default=BASE_DIR / 'private' / 'egs_sheets', cast=Path)
+# The seal PC's agent replaces the Invoicer's live sheet only with this on (S5); off = preview: it downloads and
+# checks the version and reports what it would do, writing nothing on the seal PC. Writer flag (config/writers.py).
+TAX_EGS_SHEET_AGENT_WRITE_ENABLED = config('TAX_EGS_SHEET_AGENT_WRITE_ENABLED', default=False, cast=bool)
 # A test run must NEVER reach ETA, whatever .env says: no address, no login, every send switch off. Tests that
 # exercise the ETA path set what they need with override_settings and mocked HTTP.
 if _RUNNING_TESTS:
@@ -926,9 +967,14 @@ if _RUNNING_TESTS:
     TAX_ETA_CLIENT_ID = TAX_ETA_CLIENT_SECRET = TAX_ETA_CA_BUNDLE = ''
     TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
     TAX_SIGNER_CLASS, TAX_ALLOW_MOCK_SIGNER = 'apps.tax_invoicing.signing.NotConfiguredSigner', False
-    TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = False
+    TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = TAX_GPC_AI_ENABLED = False
+    TAX_EGS_SHEET_AGENT_WRITE_ENABLED = False
     TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
     TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
+    TAX_ETA_CODING_PRODUCTION_ENABLED = TAX_ETA_CODING_PRODUCTION_BATCH_OK = False
+    TAX_ETA_PRODUCTION_CLIENT_ID = TAX_ETA_PRODUCTION_CLIENT_SECRET = ''
+    TAX_EGS_SHEET_DIR = Path(tempfile.mkdtemp(prefix='elrezeiky_test_egs_sheets_'))   # never the real folder
+    atexit.register(shutil.rmtree, TAX_EGS_SHEET_DIR, ignore_errors=True)
 
 # Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
 # every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.
@@ -953,6 +999,9 @@ CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
 # B7 merge part 2 — approved pairs merged at HQ (apps/customers/merge_write.py). Off by default (dry run).
 CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=False, cast=bool)
 CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
+# SOFTECH screen RPA: the Windows agent may type documents into SOFTECH. Off by default.
+RPA_SOFTECH_ENTRY_ENABLED   = config('RPA_SOFTECH_ENTRY_ENABLED', default=False, cast=bool)
+RPA_SUPPLIER_PORTAL_ENABLED = config('RPA_SUPPLIER_PORTAL_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

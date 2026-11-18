@@ -30,6 +30,17 @@ def exclude_unsellable(qs):
     return qs.exclude(unsellable_q())
 
 
+def sellable_qty_subquery(outer='pk'):
+    """Correlated Subquery: one item's sellable on-hand total (SUM over its exclude_unsellable
+    stock rows; NULL when it has none). `> 0` is the catalog's «متوفر» rule, the same as the
+    item list's total_stock annotation, but evaluated per candidate row instead of grouping the
+    whole stock table (the Ctrl+F1 in_stock filter, measured 2026-11-17)."""
+    from django.db.models import OuterRef, Subquery, Sum
+    rows = (exclude_unsellable(ItemStock.objects.filter(item=OuterRef(outer))).order_by()
+            .values('item').annotate(_s=Sum('quantity_on_hand')).values('_s'))
+    return Subquery(rows, output_field=models.DecimalField(max_digits=14, decimal_places=3))
+
+
 def is_sellable(stock) -> bool:
     """Same rule as exclude_unsellable for one loaded ItemStock (select/prefetch its branch)."""
     if stock.softech_store_code in QUARANTINE_STORE_CODES:

@@ -51,6 +51,25 @@ const api = vi.hoisted(() => ({
   reconUncoded: vi.fn(),
   reconUncodedExport: vi.fn(),
   saveReceiptConfig: vi.fn(),
+  codingQueue: vi.fn(),
+  codingDecide: vi.fn(),
+  codingReopen: vi.fn(),
+  codingSetBrick: vi.fn(),
+  codingSuggest: vi.fn(),
+  etaHolds: vi.fn(),
+  egsSheet: vi.fn(() => Promise.resolve({ data: { versions: [], build: { state: 'idle' }, pending: { ready: 0, skipped: [] }, can_build: false } })),
+  egsSheetBuild: vi.fn(),
+  egsSheetDownload: vi.fn(),
+  egsAgent: vi.fn(() => Promise.resolve({ data: { switch: false, agent: { at: null, version: null, outdated: true }, live: null,
+    last_fetch: null, held: null, jobs: [], busy: false, has_version: true, can_approve: false } })),
+  egsAgentFetch: vi.fn(),
+  egsAgentWrite: vi.fn(),
+  egsAgentImport: vi.fn(),
+  codeCancel: vi.fn(),
+  codingPrepare: vi.fn(),
+  codingGs1: vi.fn(),
+  codingProduction: vi.fn(() => Promise.resolve({ data: { enabled: false, batch_ok: false, first_request_pending: true, in_flight: 0,
+    ready: { count: 0, itemcodes: [] }, gs1_offers: {} } })),
 }))
 
 vi.mock('../../components/DataFreshnessBar', () => ({ default: () => null }))
@@ -67,6 +86,10 @@ const { BranchActions, ChainStart, TestMapping, SendFrom } = await import('./Rec
 const { default: CodesTab, CodeCheck, Candidates, Gs1Candidates } = await import('./CodesTab')
 const { HistoryProgress } = await import('./SettingsTab')
 const { default: HistoryTab } = await import('./HistoryTab')
+const { default: QueueTab } = await import('./QueueTab')
+const { default: EgsSheetPanel, REMINDER } = await import('./EgsSheetPanel')
+const { default: EgsAgentPart, OUTDATED, SWITCH_OFF: AGENT_SWITCH_OFF, jobResult } = await import('./EgsAgentPart')
+const { default: ProductionRequestsPanel, SWITCH_OFF, FIRST_ONLY } = await import('./ProductionRequestsPanel')
 
 const line = (id, status) => ({
   id, docnumber: '55', docdate: '2026-10-01', branch: '170', itemcode: `I${id}`, item_name: `صنف ${id}`, quantity: '1',
@@ -554,5 +577,546 @@ describe('SOFTECH ↔ ETA reconciliation', () => {
     expect(api.reconLines).toHaveBeenCalledWith(expect.objectContaining({ system: 'production', outcome: 'missing_at_eta', reason: 'none', ordering: '-softech_total' }))
     fireEvent.change(screen.getByLabelText('القناة'), { target: { value: '90' } })
     await waitFor(() => expect(api.reconLines).toHaveBeenLastCalledWith(expect.objectContaining({ channel: '90', reason: 'none' })))
+  })
+})
+
+describe('production coding queue', () => {
+  const qrow = (itemcode, value, extra = {}) => ({
+    id: Number(itemcode), itemcode, name: `Item ${itemcode}`, name_ar: '', value, docs: 3, last_day: '2026-11-14',
+    premark: 'code', premark_reason: 'official', note: 'اشتُري من موزع أو مخزن أو مصنع', sources: { OFFICIAL_DISTRIBUTOR: 12 },
+    vat_rate: '0', vat_flagged: false, vat_why: 'catalog', eta_last_status: '', decision: null, decided_by: '', decided_at: null,
+    brick: '10000673', brick_name: 'أدوية', brick_source: 'medicine', brick_confidence: '', brick_reason: '', brick_second: '',
+    brick_second_name: '', own_brick: '', own_brick_name: '', brick_confirmed: false, ...extra,
+  })
+  const rows = [
+    qrow('900', '5000.00'),
+    qrow('901', '1200.00', { premark: 'keep_out', premark_reason: 'unofficial_only', note: 'لم يُشترَ من موزع أو مخزن أو مصنع' }),
+    qrow('902', '300.00', { vat_flagged: true, vat_why: 'zero_for_type' }),
+  ]
+
+  beforeEach(() => {
+    api.codingQueue.mockResolvedValue({ data: { count: 3, page: 1, pages: 1, total_value: '6500.00', catalog_without_profile: false, rows } })
+    api.etaHolds.mockResolvedValue({ data: { on_eta_not_in_sheet: [{ code_type: 'EGS', item_code: 'EG-1-77', code_name: 'Old item', status: 'Active', itemcode: '77' }],
+      in_sheet_not_on_eta: ['55'], counts: { usages: 10, active: 8, matched: 7, unmatched: 1, sheet: 9 } } })
+    api.codingDecide.mockResolvedValue({ data: { decided: ['901'], skipped: [] } })
+  })
+
+  it('renders the rows biggest sales first, as the server sends them', async () => {
+    show(<QueueTab me={ME} />)
+    await screen.findByText('Item 900')
+    const grid = screen.getByTestId('coding-queue-grid')
+    const names = within(grid).getAllByText(/^Item 9\d\d$/).map(e => e.textContent)
+    expect(names).toEqual(['Item 900', 'Item 901', 'Item 902'])
+    expect(api.codingQueue).toHaveBeenCalledWith(expect.objectContaining({ ordering: '-value', page: 1 }))
+  })
+
+  it('disables the bulk accept while the selection holds a row whose VAT needs checking', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 900'))
+    expect(screen.getByRole('button', { name: /قبول المقترح/ }).disabled).toBe(false)
+    fireEvent.click(screen.getByLabelText('اختيار 902'))
+    expect(screen.getByRole('button', { name: /قبول المقترح/ }).disabled).toBe(true)
+  })
+
+  it('K on the selected row keeps it out of coding', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 901'))
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'KeyK', key: 'k' })
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' }))
+  })
+
+  it('decides a flagged row on its own with the rate chosen for it', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 902'))
+    const code = screen.getAllByRole('button', { name: 'كوّد' })[0]
+    expect(code.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('نسبة ضريبة 902'), { target: { value: '14' } })
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'KeyC', key: 'c' })
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['902'], decision: 'code', vat_rate: '14', brick: '10000673' }))
+  })
+
+  it('Enter accepts each selected row by its own pre-mark', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 900'))
+    fireEvent.click(screen.getByLabelText('اختيار 901'))
+    fireEvent.mouseDown(screen.getByText('Item 900'))
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledTimes(2))
+    expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['900'], decision: 'code', vat_rate: '0', brick: '10000673' })
+    expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' })
+  })
+
+  it('leaves Enter on a focused row button to that button, not to the active row', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.mouseDown(await screen.findByText('Item 900'))
+    const row901 = screen.getByText('Item 901').closest('tr')
+    const keepOut = within(row901).getByRole('button', { name: 'استبعد' })
+    keepOut.focus()
+    expect(fireEvent.keyDown(keepOut, { code: 'Enter', key: 'Enter' })).toBe(true)   // not prevented: the button clicks
+    expect(fireEvent.keyDown(keepOut, { code: 'KeyK', key: 'k' })).toBe(true)
+    expect(api.codingDecide).not.toHaveBeenCalled()
+    fireEvent.click(keepOut)
+    await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['901'], decision: 'keep_out' }))
+  })
+
+  it('reloads the queue when a decision is refused', async () => {
+    api.codingDecide.mockRejectedValue({ response: { status: 409, data: { detail: 'للصنف قرار سابق — أعد فتحه أولاً' } } })
+    show(<QueueTab me={ME} />)
+    const row900 = (await screen.findByText('Item 900')).closest('tr')
+    const before = api.codingQueue.mock.calls.length
+    fireEvent.click(within(row900).getByRole('button', { name: 'استبعد' }))
+    expect(await screen.findByText('للصنف قرار سابق — أعد فتحه أولاً')).toBeTruthy()
+    await waitFor(() => expect(api.codingQueue.mock.calls.length).toBeGreaterThan(before))
+  })
+
+  it('reports a refused group and still saves the other on Enter', async () => {
+    api.codingDecide.mockImplementation(body => (body.decision === 'keep_out'
+      ? Promise.reject({ response: { status: 409, data: { detail: 'للصنف قرار سابق' } } })
+      : Promise.resolve({ data: { decided: ['900'], skipped: [] } })))
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByLabelText('اختيار 900'))
+    fireEvent.click(screen.getByLabelText('اختيار 901'))
+    fireEvent.mouseDown(screen.getByText('Item 900'))
+    fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
+    expect(await screen.findByText(/قُرر 1 — تُرك 1: 901 \(للصنف قرار سابق\)/)).toBeTruthy()
+  })
+
+  it('hides the decide buttons without approve', async () => {
+    show(<QueueTab me={{ ...ME, can_approve: false }} />)
+    await screen.findByText('Item 900')
+    expect(screen.queryByRole('button', { name: /قبول المقترح/ })).toBeNull()
+    expect(screen.queryByLabelText('اختيار 900')).toBeNull()
+  })
+
+  describe('GPC brick column', () => {
+    const aiRow = qrow('903', '250.00', { brick: '10000777', brick_name: 'كريمات البشرة', brick_source: 'ai', brick_confidence: 'medium',
+      brick_reason: '<b>كريم</b> للبشرة', own_brick: '10000999', own_brick_name: 'مستحضرات' })
+    const s1Row = qrow('904', '200.00', { decision: 'code', decided_by: 'admin', brick: '', brick_name: '', brick_source: '', brick_confirmed: false })
+    beforeEach(() => {
+      api.codingQueue.mockResolvedValue({ data: { count: 5, page: 1, pages: 1, total_value: '6950.00', catalog_without_profile: false,
+        rows: [...rows, aiRow, s1Row] } })
+      api.codeGpc.mockImplementation(({ q } = {}) => Promise.resolve({ data: { loaded: true,
+        rows: q ? [{ code: '10002222', name_ar: 'كريمات', used: 0 }, { code: '10003333', name_ar: 'لوشن', used: 0 }] : [] } }))
+    })
+
+    it('labels where each brick came from, the AI confidence and reason as text, and a missing brick', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      expect(within(row903).getByText('اقتراح ذكي · متوسطة')).toBeTruthy()
+      expect(within(row903).getByText('<b>كريم</b> للبشرة')).toBeTruthy()      // plain text, never HTML
+      expect(row903.querySelector('b')).toBeNull()
+      expect(within(row903).getByText(/في ملف الشركة:/).textContent).toContain('10000999')
+      const row900 = screen.getByText('Item 900').closest('tr')
+      expect(within(row900).getByText('دواء')).toBeTruthy()
+      const row904 = screen.getByText('Item 904').closest('tr')
+      expect(within(row904).getByText('تحتاج فئة')).toBeTruthy()
+    })
+
+    it('disables bulk accept and code while the selection holds an AI suggestion that is not high-confidence', async () => {
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 900'))
+      fireEvent.click(screen.getByLabelText('اختيار 903'))
+      const accept = screen.getByRole('button', { name: /قبول المقترح/ })
+      expect(accept.disabled).toBe(true)
+      expect(accept.title).toBe('في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده')
+    })
+
+    it('a single code sends the brick shown on the row, so the server cannot save a different one', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      fireEvent.click(within(row903).getByRole('button', { name: 'كوّد' }))
+      await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['903'], decision: 'code', vat_rate: '0', brick: '10000777' }))
+    })
+
+    it('keeps the AI brick guard on Enter when only one of the ticked rows is to be coded', async () => {
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 901'))    // pre-marked keep_out
+      fireEvent.click(screen.getByLabelText('اختيار 903'))           // pre-marked code, medium AI brick
+      const accept = screen.getByRole('button', { name: /قبول المقترح/ })
+      expect(accept.disabled).toBe(true)
+      expect(accept.title).toBe('في المختار صنف فئته اقتراح ذكي يحتاج تأكيداً — قرره وحده')
+      fireEvent.mouseDown(screen.getByText('Item 903'))
+      fireEvent.keyDown(screen.getByTestId('coding-queue-grid'), { code: 'Enter', key: 'Enter' })
+      expect(api.codingDecide).not.toHaveBeenCalled()
+    })
+
+    it('says when asking again stopped because the AI provider does not answer', async () => {
+      api.codingSuggest.mockResolvedValue({ data: { asked: [{ itemcode: '903', brick: '', error: 'لم يرد مزود الذكاء الاصطناعي' }],
+        skipped: [], stopped: 'provider' } })
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 903'))
+      fireEvent.click(screen.getByRole('button', { name: 'اقترح مرة أخرى' }))
+      expect(await screen.findByText(/توقف السؤال: مزود الذكاء الاصطناعي لا يرد/)).toBeTruthy()
+    })
+
+    it('picks a brick with the keyboard for an undecided row and sends it with the decision', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      fireEvent.click(within(row903).getByRole('button', { name: 'اختيار فئة 903' }))
+      const box = screen.getByLabelText('بحث فئة 903')
+      fireEvent.change(box, { target: { value: 'كريم' } })
+      await waitFor(() => expect(api.codeGpc).toHaveBeenCalledWith({ q: 'كريم' }))
+      await screen.findByText('لوشن')
+      // keys typed in the picker never reach the grid shortcuts
+      expect(fireEvent.keyDown(box, { code: 'KeyK', key: 'k' })).toBe(true)
+      fireEvent.keyDown(box, { code: 'ArrowDown', key: 'ArrowDown' })
+      fireEvent.keyDown(box, { code: 'Enter', key: 'Enter' })
+      expect(api.codingDecide).not.toHaveBeenCalled()
+      expect(within(row903).getByText('اختيار يدوي')).toBeTruthy()
+      fireEvent.click(within(row903).getByRole('button', { name: 'كوّد' }))
+      await waitFor(() => expect(api.codingDecide).toHaveBeenCalledWith({ itemcodes: ['903'], decision: 'code', vat_rate: '0', brick: '10003333' }))
+    })
+
+    it('ignores Enter while the search results are still for an earlier text', async () => {
+      show(<QueueTab me={ME} />)
+      const row903 = (await screen.findByText('Item 903')).closest('tr')
+      fireEvent.click(within(row903).getByRole('button', { name: 'اختيار فئة 903' }))
+      const box = screen.getByLabelText('بحث فئة 903')
+      fireEvent.change(box, { target: { value: 'كريم' } })
+      await screen.findByText('لوشن')
+      api.codeGpc.mockImplementation(() => Promise.resolve({ data: { loaded: true, rows: [{ code: '10004444', name_ar: 'صابون', used: 0 }] } }))
+      fireEvent.change(box, { target: { value: 'صابون' } })
+      fireEvent.keyDown(box, { code: 'Enter', key: 'Enter' })     // still showing the «كريم» list: nothing picked
+      expect(within(row903).queryByText('اختيار يدوي')).toBeNull()
+      await screen.findByText('صابون')
+      fireEvent.keyDown(box, { code: 'Enter', key: 'Enter' })
+      expect(within(row903).getByText('اختيار يدوي')).toBeTruthy()
+      expect(within(row903).getByText('10004444')).toBeTruthy()
+    })
+
+    it('sets the brick of an item already decided "code"', async () => {
+      api.codingSetBrick.mockResolvedValue({ data: { itemcode: '904', brick: '10002222', brick_source: 'person', brick_name: 'كريمات' } })
+      show(<QueueTab me={ME} />)
+      const row904 = (await screen.findByText('Item 904')).closest('tr')
+      fireEvent.click(within(row904).getByRole('button', { name: 'اختيار فئة 904' }))
+      fireEvent.change(screen.getByLabelText('بحث فئة 904'), { target: { value: '1000' } })
+      fireEvent.click(await screen.findByText('كريمات'))
+      await waitFor(() => expect(api.codingSetBrick).toHaveBeenCalledWith({ itemcode: '904', brick: '10002222' }))
+    })
+
+    it('asks again for the selection and shows the server refusal when the switch is off', async () => {
+      api.codingSuggest.mockRejectedValue({ response: { status: 400, data: { detail: 'اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً' } } })
+      show(<QueueTab me={ME} />)
+      fireEvent.click(await screen.findByLabelText('اختيار 903'))
+      fireEvent.click(screen.getByRole('button', { name: 'اقترح مرة أخرى' }))
+      await waitFor(() => expect(api.codingSuggest).toHaveBeenCalledWith({ itemcodes: ['903'] }))
+      expect(await screen.findByText('اقتراح الفئة بالذكاء الاصطناعي متوقف — فعّله من الإعدادات أولاً')).toBeTruthy()
+    })
+  })
+
+  it('shows what ETA production holds that our sheet lacks', async () => {
+    show(<QueueTab me={ME} />)
+    fireEvent.click(await screen.findByRole('button', { name: /عرض ما لدى المصلحة/ }))
+    expect(await screen.findByText('EG-1-77')).toBeTruthy()
+  })
+})
+
+describe('Invoicer codes file panel', () => {
+  const version = (extra = {}) => ({ number: 2, built_at: '2026-11-17T10:00:00Z', source: 'build', built_by: 'محاسب', note: '',
+    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, ...extra })
+  const sheet = (extra = {}) => ({ data: { versions: [version(), version({ number: 1, source: 'seed', added: 0, coded: 0 })],
+    build: { state: 'idle' }, pending: { ready: 4, skipped: [{ itemcode: '500', why: 'لا توجد فئة GPC للصنف' }] }, can_build: true, ...extra } })
+
+  it('shows the latest version, its counts, the reminder and the skipped reasons on demand', async () => {
+    api.egsSheet.mockResolvedValue(sheet())
+    show(<EgsSheetPanel />)
+    expect(await screen.findByText(/النسخة 2/)).toBeTruthy()
+    expect(screen.getByText('36,010')).toBeTruthy()
+    expect(screen.getByText(REMINDER)).toBeTruthy()
+    expect(REMINDER).toBe('بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات')
+    expect(screen.getByText('القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات.')).toBeTruthy()
+    expect(screen.queryByText(/لا توجد فئة GPC للصنف/)).toBeNull()
+    expect(screen.getByText('تُرك في هذه النسخة').querySelector('b').textContent).toBe('2')
+    expect(screen.getByRole('button', { name: /متروك الآن/ }).textContent).toContain('1')
+    fireEvent.click(screen.getByRole('button', { name: /متروك الآن/ }))
+    expect(screen.getByText(/لا توجد فئة GPC للصنف/)).toBeTruthy()
+  })
+
+  it('starts a build and downloads the full file of the latest version', async () => {
+    api.egsSheet.mockResolvedValue(sheet())
+    api.egsSheetBuild.mockResolvedValue({ data: { started: true } })
+    api.egsSheetDownload.mockResolvedValue({ data: new Blob(['x']) })
+    URL.createObjectURL = vi.fn(() => 'blob:x')
+    URL.revokeObjectURL = vi.fn()
+    show(<EgsSheetPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'بناء نسخة جديدة' }))
+    await waitFor(() => expect(api.egsSheetBuild).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'تنزيل الملف كاملاً' }))
+    await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'full'))
+    fireEvent.click(screen.getByRole('button', { name: 'الصفوف الجديدة فقط' }))
+    await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'new'))
+  })
+
+  it('shows a refused build with its reasons, such as a duplicate itemcode in the held sheet', async () => {
+    api.egsSheet.mockResolvedValue(sheet({ build: { state: 'refused', refused: ['كود صنف مكرر في العمود J: 300'], finished_at: '2026-11-17T10:02:00Z' } }))
+    show(<EgsSheetPanel />)
+    const box = await screen.findByTestId('egs-sheet-refused')
+    expect(within(box).getByText('كود صنف مكرر في العمود J: 300')).toBeTruthy()
+  })
+
+  it('polls while a build runs and disables the build button', async () => {
+    api.egsSheet.mockResolvedValue(sheet({ build: { state: 'running', started_at: '2026-11-17T10:00:00Z' } }))
+    show(<EgsSheetPanel />)
+    expect((await screen.findByRole('button', { name: 'جارٍ البناء…' })).disabled).toBe(true)
+    await waitFor(() => expect(api.egsSheet.mock.calls.length).toBeGreaterThan(1), { timeout: 6000 })
+  }, 10000)
+
+  it('offers no build or download without the approve permission', async () => {
+    api.egsSheet.mockResolvedValue(sheet({ can_build: false }))
+    show(<EgsSheetPanel />)
+    await screen.findByText(/النسخة 2/)
+    expect(screen.queryByRole('button', { name: 'بناء نسخة جديدة' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'تنزيل الملف كاملاً' })).toBeNull()
+  })
+})
+
+
+describe('seal PC agent part of the Invoicer codes file panel', () => {
+  const codes = items => ({ count: items.length, items })
+  const state = (extra = {}) => ({ data: {
+    switch: false, agent: { at: '2026-11-18T01:00:00Z', version: 2, min_version: 2, outdated: false }, live: null,
+    last_fetch: null, held: null, jobs: [], busy: false, has_version: true, can_approve: true, ...extra } })
+  const fetchRow = (extra = {}) => ({ id: 5, finished_at: '2026-11-18T03:00:00Z', live: { coded_rows: 36011, total_rows: 36500 },
+    latest: 2, matches_version: null, hand_edits: true, current: true, has_copy: true, importable: true, import_removes: 0,
+    added_vs_latest: codes(['900']), removed_vs_latest: codes([]), ...extra })
+
+  it('shows the agent, the switch off as preview only, and asks for a read and a preview', async () => {
+    api.egsAgent.mockResolvedValue(state())
+    api.egsAgentFetch.mockResolvedValue({ data: { job: { id: 1 } } })
+    api.egsAgentWrite.mockResolvedValue({ data: { job: { id: 2, mode: 'preview', status: 'pending' } } })
+    show(<EgsAgentPart />)
+    expect(await screen.findByText(AGENT_SWITCH_OFF)).toBeTruthy()
+    expect(screen.getByText('إصدار البرنامج').querySelector('b').textContent).toBe('2')
+    expect(screen.queryByText(OUTDATED)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'اكتب الآن' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'اقرأ الملف الحالي' }))
+    await waitFor(() => expect(api.egsAgentFetch).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'معاينة الآن' }))
+    await waitFor(() => expect(api.egsAgentWrite).toHaveBeenCalledWith({}))
+    expect(await screen.findByText('طُلبت المعاينة — لا يُكتب شيء في الملف')).toBeTruthy()
+  })
+
+  it('says «اكتب الآن» with the switch on and reports nothing to write', async () => {
+    api.egsAgent.mockResolvedValue(state({ switch: true }))
+    api.egsAgentWrite.mockResolvedValue({ data: { job: null } })
+    show(<EgsAgentPart />)
+    fireEvent.click(await screen.findByRole('button', { name: 'اكتب الآن' }))
+    expect(await screen.findByText('الملف الحالي هو آخر نسخة — لا شيء يُكتب')).toBeTruthy()
+  })
+
+  it('warns when the seal PC runs an old agent', async () => {
+    api.egsAgent.mockResolvedValue(state({ agent: { at: '2026-11-18T01:00:00Z', version: 0, outdated: true } }))
+    show(<EgsAgentPart />)
+    expect(await screen.findByText(OUTDATED)).toBeTruthy()
+    expect(OUTDATED).toContain('حدّث برنامج الختم على جهاز الختم')
+  })
+
+  it('lists the differences of the last read on demand', async () => {
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow({ hand_edits: false, matches_version: 2, importable: false }) }))
+    show(<EgsAgentPart />)
+    expect(await screen.findByText('مطابق للنسخة 2')).toBeTruthy()
+    expect(screen.queryByText('900')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /في الملف الحالي وليس في النسخة 2/ }))
+    expect(screen.getByText('900')).toBeTruthy()
+    expect(screen.queryByTestId('egs-agent-held')).toBeNull()
+  })
+
+  it('a hold offers the import, and the removals checkbox only when the import drops coded items', async () => {
+    const held = { id: 9, version: 2, added: codes(['900']), removed: codes(['0200']) }
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow({ import_removes: 1 }), held }))
+    api.egsAgentImport.mockResolvedValue({ data: { version: { number: 3 } } })
+    show(<EgsAgentPart />)
+    const box = await screen.findByTestId('egs-agent-held')
+    expect(within(box).getByText(/الكتابة موقوفة/).textContent).toContain('+1 / −1')
+    const importBtn = within(box).getByRole('button', { name: 'استورد التعديلات' })
+    expect(importBtn.disabled).toBe(true)
+    fireEvent.click(within(box).getByRole('checkbox'))
+    fireEvent.click(importBtn)
+    await waitFor(() => expect(api.egsAgentImport).toHaveBeenCalledWith({ job: 5, allow_removals: true }))
+  })
+
+  it('no removals: no checkbox, the import goes at once', async () => {
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow(), held: { id: 9, version: 2, added: codes(['900']), removed: codes([]) } }))
+    api.egsAgentImport.mockResolvedValue({ data: { version: { number: 3 } } })
+    show(<EgsAgentPart />)
+    const box = await screen.findByTestId('egs-agent-held')
+    expect(within(box).queryByRole('checkbox')).toBeNull()
+    fireEvent.click(within(box).getByRole('button', { name: 'استورد التعديلات' }))
+    await waitFor(() => expect(api.egsAgentImport).toHaveBeenCalledWith({ job: 5, allow_removals: false }))
+  })
+
+  it('writing over hand edits asks for a reason inline, then sends override with it', async () => {
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow(), held: { id: 9, version: 2, added: codes(['900']), removed: codes([]) } }))
+    api.egsAgentWrite.mockResolvedValue({ data: { job: { id: 3, mode: 'preview', status: 'pending' } } })
+    show(<EgsAgentPart />)
+    fireEvent.click(await screen.findByRole('button', { name: 'اكتب فوقها' }))
+    const confirm = screen.getByRole('button', { name: 'تأكيد المعاينة فوقها' })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('سبب الكتابة فوق التعديلات'), { target: { value: 'المالك طلب' } })
+    fireEvent.click(confirm)
+    await waitFor(() => expect(api.egsAgentWrite).toHaveBeenCalledWith({ override: true, note: 'المالك طلب' }))
+  })
+
+  it('offers no buttons without the approve permission', async () => {
+    api.egsAgent.mockResolvedValue(state({ can_approve: false, last_fetch: fetchRow(), held: { id: 9, version: 2, added: codes(['900']), removed: codes([]) } }))
+    show(<EgsAgentPart />)
+    await screen.findByTestId('egs-agent-held')
+    for (const name of ['اقرأ الملف الحالي', 'معاينة الآن', 'استورد التعديلات', 'اكتب فوقها']) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+  })
+
+  it('shows recent jobs with their outcome and polls only while one waits', async () => {
+    const jobs = [
+      { id: 2, kind: 'egs_write', mode: 'preview', status: 'busy', override: false, created_at: '2026-11-18T03:05:00Z', error: 'the sheet stayed in use', result: {} },
+      { id: 1, kind: 'egs_fetch', mode: 'preview', status: 'pending', override: false, created_at: '2026-11-18T03:00:00Z', error: '', result: {} },
+    ]
+    api.egsAgent.mockResolvedValue(state({ jobs, busy: true }))
+    show(<EgsAgentPart />)
+    const grid = await screen.findByLabelText('مهام جهاز الختم')
+    expect(within(grid).getByText('the sheet stayed in use')).toBeTruthy()
+    expect(within(grid).getByText('الملف مفتوح في المحصّل')).toBeTruthy()
+    await waitFor(() => expect(api.egsAgent.mock.calls.length).toBeGreaterThan(1), { timeout: 6000 })
+  }, 10000)
+
+  it('does not poll when no job waits', async () => {
+    api.egsAgent.mockResolvedValue(state())
+    show(<EgsAgentPart />)
+    await screen.findByText(AGENT_SWITCH_OFF)
+    await new Promise(r => setTimeout(r, 4500))
+    expect(api.egsAgent.mock.calls.length).toBe(1)
+  }, 8000)
+
+  it('words each job outcome', () => {
+    expect(jobResult({ kind: 'egs_write', status: 'done', result: { preview: true, would_write: true } })).toBe('معاينة: كان سيُكتب')
+    expect(jobResult({ kind: 'egs_write', status: 'done', result: { written: true, backup: 'b.xlsx' } })).toBe('كُتب الملف · نسخة احتياطية b.xlsx')
+    expect(jobResult({ kind: 'egs_write', status: 'held', result: { added: 1, removed: 0 } })).toBe('+1 / −0 عن آخر نسخة')
+    expect(jobResult({ kind: 'egs_fetch', status: 'done', result: { coded_rows: 5, total_rows: 9, matches_version: 2 } })).toBe('مكوّد 5 من 9 · = النسخة 2')
+  })
+})
+
+describe('production code requests panel', () => {
+  const req = (id, itemcode, status, extra = {}) => ({ id, itemcode, item_code: `EG-100200300-${itemcode}`, purpose: 'new',
+    purpose_label: 'كود جديد', code_name: `Item ${itemcode}`, code_name_ar: '', status, status_label: status, eta_status: '',
+    environment: 'production', error: '', prepared_at: '2026-11-17T10:00:00Z', sent_at: null, ...extra })
+  const state = (extra = {}) => ({ data: { enabled: true, batch_ok: false, first_request_pending: false, in_flight: 0,
+    ready: { count: 2, itemcodes: ['900', '901'] }, gs1_offers: {}, ...extra } })
+  const list = rows => ({ data: { summary: {}, rows } })
+
+  it('lists production requests only and prepares the ready items with the skipped reasons', async () => {
+    api.codingProduction.mockResolvedValue(state())
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared')]))
+    api.codingPrepare.mockResolvedValue({ data: { created: [5], skipped: [{ itemcode: '901', why: 'تحتاج فئة GPC' }] } })
+    show(<ProductionRequestsPanel me={ME} />)
+    expect(await screen.findByText('Item 900')).toBeTruthy()
+    expect(api.codes).toHaveBeenCalledWith({ environment: 'production' })
+    fireEvent.click(await screen.findByRole('button', { name: 'جهّز الطلبات (2)' }))
+    await waitFor(() => expect(api.codingPrepare).toHaveBeenCalledWith({ itemcodes: ['900', '901'] }))
+    expect(await screen.findByText('جُهّز 1 طلب — تُرك 1: 901 (تحتاج فئة GPC)')).toBeTruthy()
+  })
+
+  it('keeps «أرسل» disabled with the reason while the switch is off', async () => {
+    api.codingProduction.mockResolvedValue(state({ enabled: false }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared')]))
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 900')
+    await waitFor(() => expect(screen.getAllByText(SWITCH_OFF).length).toBe(2))
+    expect(SWITCH_OFF).toBe('إرسال الأكواد للمنظومة الفعلية مغلق (TAX_ETA_CODING_PRODUCTION_ENABLED)')
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '1' } })
+    expect(screen.getByRole('button', { name: 'أرسل' }).disabled).toBe(true)
+  })
+
+  it('applies the first-request rule to more than one request', async () => {
+    api.codingProduction.mockResolvedValue(state({ first_request_pending: true }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(2, '901', 'prepared')]))
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 901')
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '2' } })
+    expect(screen.getByRole('button', { name: 'أرسل' }).disabled).toBe(true)
+    expect(FIRST_ONLY).toBe('أرسل طلباً واحداً أولاً حتى تعتمده المصلحة')
+    expect(screen.getAllByText(FIRST_ONLY).length).toBe(2)    // the notice and the button's reason
+    fireEvent.click(screen.getByLabelText('اختيار طلب 900'))
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '1' } })
+    expect(screen.getByRole('button', { name: 'أرسل' }).disabled).toBe(false)
+  })
+
+  it('sends with the typed count and shows the refused reasons', async () => {
+    api.codingProduction.mockResolvedValue(state({ batch_ok: true }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(2, '901', 'failed', { error: 'مرفوض' })]))
+    api.codesSend.mockResolvedValue({ data: { submitted: 1, failed: 0, uncertain: 0, stopped: '', refused: [{ id: 2, why: 'لا يمكن الوصول' }] } })
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 901')
+    await waitFor(() => expect(screen.getByText('اكتب عدد الطلبات (2) للتأكيد')).toBeTruthy())
+    const send = screen.getByRole('button', { name: 'أرسل' })
+    expect(send.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('اكتب عدد الطلبات للتأكيد'), { target: { value: '2' } })
+    fireEvent.click(send)
+    await waitFor(() => expect(api.codesSend).toHaveBeenCalledWith({ ids: [1, 2], confirm: '2' }))
+    expect(within(await screen.findByTestId('production-refused')).getByText('901: لا يمكن الوصول')).toBeTruthy()
+  })
+
+  it('refreshes the requests with ETA, cancels with a reason and takes the GS1 offer', async () => {
+    api.codingProduction.mockResolvedValue(state({ gs1_offers: { 902: '6223000000007' } }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(3, '901', 'submitted'), req(4, '902', 'rejected')]))
+    api.codesRefresh.mockResolvedValue({ data: { checked: 1, approved: 1, rejected: 0, error: '' } })
+    api.codeCancel.mockResolvedValue({ data: {} })
+    api.codingGs1.mockRejectedValue({ response: { status: 400, data: { detail: 'للصنف كود معتمد أو قيد الاعتماد' } } })
+    show(<ProductionRequestsPanel me={ME} />)
+    await screen.findByText('Item 902')
+    fireEvent.click(screen.getByRole('button', { name: 'حدّث من المصلحة' }))
+    await waitFor(() => expect(api.codesRefresh).toHaveBeenCalledWith({ ids: [3] }))
+    const row900 = screen.getByText('Item 900').closest('tr')
+    fireEvent.click(within(row900).getByRole('button', { name: 'إلغاء' }))
+    const confirm = within(row900).getByRole('button', { name: 'تأكيد الإلغاء' })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(within(row900).getByLabelText('سبب إلغاء 900'), { target: { value: 'خطأ في الاسم' } })
+    fireEvent.click(confirm)
+    await waitFor(() => expect(api.codeCancel).toHaveBeenCalledWith(1, 'خطأ في الاسم'))
+    expect(within(screen.getByText('Item 901').closest('tr')).queryByRole('button', { name: 'إلغاء' })).toBeNull()
+    fireEvent.click(await within(screen.getByText('Item 902').closest('tr')).findByRole('button', { name: 'جرّب GS1' }))
+    await waitFor(() => expect(api.codingGs1).toHaveBeenCalledWith({ itemcode: '902' }))
+    expect(await screen.findByText('للصنف كود معتمد أو قيد الاعتماد')).toBeTruthy()
+  })
+
+  it('hides the buttons without the permissions', async () => {
+    api.codingProduction.mockResolvedValue(state({ gs1_offers: { 902: '6223000000007' } }))
+    api.codes.mockResolvedValue(list([req(1, '900', 'prepared'), req(4, '902', 'rejected')]))
+    show(<ProductionRequestsPanel me={{ ...ME, can_edit: false, can_finalize: false }} />)
+    await screen.findByText('Item 902')
+    await waitFor(() => expect(api.codingProduction).toHaveBeenCalled())
+    for (const name of [/جهّز الطلبات/, 'حدّث من المصلحة', 'إلغاء', 'جرّب GS1', 'أرسل']) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+    expect(screen.queryByLabelText('اكتب عدد الطلبات للتأكيد')).toBeNull()
+  })
+})
+
+describe('coding queue production request actions', () => {
+  const qrow = (itemcode, extra = {}) => ({
+    id: Number(itemcode), itemcode, name: `Item ${itemcode}`, name_ar: '', value: '100.00', docs: 1, last_day: '2026-11-14',
+    premark: 'code', premark_reason: 'official', note: '', sources: {}, vat_rate: '14', vat_flagged: false, vat_why: 'catalog',
+    eta_last_status: '', decision: 'code', decided_by: 'محاسب', decided_at: '2026-11-17T10:00:00Z', brick: '10000673',
+    brick_name: 'أدوية', brick_source: 'decisions', brick_confidence: '', brick_reason: '', brick_second: '', brick_second_name: '',
+    own_brick: '', own_brick_name: '', brick_confirmed: true, request: null, request_ready: false, request_blocker: '',
+    gs1_offer: { available: false, gtin: '' }, ...extra,
+  })
+
+  it('prepares one decided row and takes its GS1 offer', async () => {
+    api.codingQueue.mockResolvedValue({ data: { count: 2, page: 1, pages: 1, total_value: '200.00', catalog_without_profile: false, rows: [
+      qrow('910', { request_ready: true }),
+      qrow('911', { request: { id: 8, status: 'rejected', status_label: 'رفضته المصلحة', eta_status: 'Rejected', error: '', purpose: 'new' },
+        request_ready: true, gs1_offer: { available: true, gtin: '6223000000007' } }),
+    ] } })
+    api.etaHolds.mockResolvedValue({ data: { on_eta_not_in_sheet: [], in_sheet_not_on_eta: [], counts: {} } })
+    api.codingPrepare.mockResolvedValue({ data: { created: [9], skipped: [] } })
+    api.codingGs1.mockResolvedValue({ data: { created: [10], skipped: [] } })
+    show(<QueueTab me={ME} />)
+    const row910 = (await screen.findByText('Item 910')).closest('tr')
+    fireEvent.click(within(row910).getByRole('button', { name: 'جهّز الطلب' }))
+    await waitFor(() => expect(api.codingPrepare).toHaveBeenCalledWith({ itemcodes: ['910'] }))
+    const row911 = screen.getByText('Item 911').closest('tr')
+    expect(within(row911).getByText(/طلب المصلحة: رفضته المصلحة · Rejected/)).toBeTruthy()
+    fireEvent.click(within(row911).getByRole('button', { name: 'جرّب GS1' }))
+    await waitFor(() => expect(api.codingGs1).toHaveBeenCalledWith({ itemcode: '911' }))
   })
 })

@@ -680,3 +680,36 @@ class AuditTrailTests(TestCase):
         self.assertGreaterEqual(body['count'], 1)
         self.assertEqual(body['events'][0]['action'], 'status_change')
         self.assertIn('action_label', body['events'][0])
+
+
+# ── 7. A submitted claim does not slide back to draft (UAT W5b P2, 2026-11-17) ───
+class LockedClaimReopenTests(TestCase):
+    def setUp(self):
+        from .factories import make_user
+        self.sub = m.InsuranceSubClient.objects.create(
+            client=m.InsuranceClient.objects.create(name='ج'), name='ف')
+        self.claim = _mk_claim(number='LK1', sub=self.sub, status=m.InsuranceClaim.STATUS_SUBMITTED)
+        _, _, self.purch = make_user('ins_purch', role='purchasing', access_all=True)
+        _, _, self.admin = make_user('ins_admin', role='admin', access_all=True)
+
+    def _move(self, api, status_, **extra):
+        return api.post(f'/api/insurance/claims/{self.claim.id}/change-status/',
+                        {'status': status_, **extra}, format='json')
+
+    def test_branch_staff_cannot_reopen_submitted_claim(self):
+        for target in (m.InsuranceClaim.STATUS_DRAFT, m.InsuranceClaim.STATUS_READY):
+            with self.subTest(target=target):
+                r = self._move(self.purch, target)
+                self.assertEqual(r.status_code, 409, r.content)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, m.InsuranceClaim.STATUS_SUBMITTED)
+
+    def test_forward_moves_still_allowed(self):
+        r = self._move(self.purch, m.InsuranceClaim.STATUS_UNDER_REVIEW)
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def test_admin_reopens_only_with_a_reason(self):
+        self.assertEqual(self._move(self.admin, m.InsuranceClaim.STATUS_DRAFT).status_code, 400)
+        r = self._move(self.admin, m.InsuranceClaim.STATUS_DRAFT, notes='رقم مطالبة خاطئ')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.claim.audit_events.filter(action='status_change').count(), 1)

@@ -14,7 +14,7 @@ def T(ar, en):
 
 MODULE_FILES = [
     'general', 'gamification',
-    'pos', 'reservations', 'demand', 'transfers', 'followups', 'delivery', 'stockcount', 'tasks',
+    'pos', 'reservations', 'demand', 'transfers', 'followups', 'delivery', 'marketplace', 'stockcount', 'tasks',
     'customers', 'vouchers', 'loyalty',
     'catalog', 'counselling', 'chronic', 'batches', 'stock_audit', 'shortage', 'replacement',
     'callcenter', 'omni',
@@ -22,6 +22,6 @@ MODULE_FILES = [
     'analytics', 'incentives',
     'finance', 'insurance', 'tax_invoicing', 'commerce',
     'hr', 'crews',
-    'data_health', 'code_maps',
+    'data_health', 'code_maps', 'rpa', 'rpa_portals',
     'admin',
 ]

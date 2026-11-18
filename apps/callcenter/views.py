@@ -820,7 +820,12 @@ class CallLogViewSet(viewsets.ModelViewSet):
 
         notes    = request.data.get('notes', '')
         priority = request.data.get('priority', 'normal')
-        channel  = request.data.get('channel', 'pickup')
+        # The form's «القناة» is pickup / home_delivery = how the customer gets it (fulfillment_method).
+        # Reservation.channel is the POS sale type (cash_sales / home_delivery / contract_sales); writing
+        # 'pickup' into it stored a value outside its choices (full audit C01).
+        delivery = request.data.get('channel') in ('home_delivery', 'delivery')
+        channel     = 'home_delivery' if delivery else 'cash_sales'
+        fulfillment = 'delivery' if delivery else 'pickup'
         item_ids = request.data.get('item_ids')  # optional filter
 
         qs = call.items.filter(converted_to='none')
@@ -849,6 +854,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
                     notes               = combined_notes,
                     priority            = priority,
                     channel             = channel,
+                    fulfillment_method  = fulfillment,
                     order_source        = 'cc_call',
                     status              = 'pending',
                     created_by          = profile,
@@ -1058,6 +1064,16 @@ class CustomerCaseViewSet(viewsets.ModelViewSet):
         profile = _profile(self.request)
         case = serializer.save(opened_by=profile)
         case._log_event('حالة جديدة مفتوحة', profile)
+
+    def create(self, request, *args, **kwargs):
+        # Answer with the full case (id, case_number, labels, events; phone masked by the
+        # serializer) so the screen can select the new case (UAT W5a: the write serializer
+        # alone returned no id).
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        self.perform_create(ser)
+        data = CustomerCaseDetailSerializer(ser.instance, context=self.get_serializer_context()).data
+        return Response(data, status=status.HTTP_201_CREATED)
 
     # ── State machine actions ─────────────────────────────────────────────────
 

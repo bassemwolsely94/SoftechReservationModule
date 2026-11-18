@@ -16,6 +16,7 @@ import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import GiftCouponsTab from './vouchers/GiftCouponsTab'
 import useAuthStore from '../store/authStore'
+import { usePermission } from '../hooks/usePermission'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import useServerSort from '../hooks/useServerSort'
@@ -135,7 +136,7 @@ function Toast({ toast }) {
 const CustomerPicker = CustomerSearchWidget
 
 // ── Tab 1: Create Voucher Modal ───────────────────────────────────────────────
-function CreateVoucherModal({ onClose, onCreate }) {
+export function CreateVoucherModal({ onClose, onCreate }) {
   const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState({
     title: '', description: '',
@@ -316,8 +317,9 @@ function CreateVoucherModal({ onClose, onCreate }) {
           <Field label="الأصناف المؤهلة (اختياري — تقصُر القسيمة على أصناف محددة)">
             <ItemSearchWidget
               selected={null}
-              onSelect={it => setApplicableItems(prev =>
-                prev.some(p => p.id === it.id) ? prev : [...prev, { id: it.id, name: it.name }])}
+              mode="multi"
+              onSelect={picked => picked.forEach(it => setApplicableItems(prev =>
+                prev.some(p => p.id === it.id) ? prev : [...prev, { id: it.id, name: it.name }]))}
               placeholder="ابحث لإضافة صنف مؤهل..."
             />
             {applicableItems.length > 0 && (
@@ -1375,8 +1377,10 @@ export default function VouchersPage() {
   const [redeemTarget, setRedeemTarget] = useState(null)
 
   const { user } = useAuthStore()
-  // Display only — the API enforces the same roles (apps/vouchers/coupon_views.py).
-  const canSeeCoupons = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role)
+  // Display only — the API enforces the same roles (apps/vouchers/coupon_views.py) and the
+  // middleware the vouchers view grant; a removed grant hides the tab (UAT D5).
+  const vouchersView = usePermission('vouchers', 'view')
+  const canSeeCoupons = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && vouchersView
 
   const tabs = [
     { key: 'vouchers',  label: '🎫 القسائم' },
