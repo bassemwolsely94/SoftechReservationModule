@@ -196,7 +196,8 @@ class ForecastEngine:
         # Call Center overlay — forecast as its OWN member (sales/profit/beauty/orders +
         # call_count), but NOT summed into the chain (its sales are already in the branches).
         from apps.branches.models import Branch
-        cc = Branch.objects.filter(softech_branch_id='CC').first()
+        from apps.forecasting.call_center import legacy_cc_branch
+        cc = legacy_cc_branch()
         if cc:
             out.append({'branch': cc, 'key': 'CC', 'label': 'الكول سنتر',
                         'kwargs': {'branch_ids': [cc.id]}, 'in_chain': False})

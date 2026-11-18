@@ -27,7 +27,8 @@ def get_cc_branch():
     b, _ = Branch.objects.get_or_create(
         softech_branch_id=CC_BRANCH_KEY,
         defaults={'code': CC_BRANCH_KEY, 'name': 'Call Center',
-                  'name_ar': 'الكول سنتر', 'is_operational': False, 'is_active': True})
+                  'name_ar': 'الكول سنتر', 'is_operational': False, 'is_active': True,
+                  'kind': Branch.KIND_CALL_CENTER})
     return b
 
 

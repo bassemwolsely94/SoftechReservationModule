@@ -44,7 +44,8 @@ def _chain_series(metric):
 def _cc_series(metric):
     from apps.forecasting.models import KpiActualRollup as K
     from apps.branches.models import Branch
-    cc = Branch.objects.filter(softech_branch_id='CC').first()
+    from apps.forecasting.call_center import legacy_cc_branch
+    cc = legacy_cc_branch()
     if not cc:
         return {}
     return {(r['year'], r['month']): float(r['value'])

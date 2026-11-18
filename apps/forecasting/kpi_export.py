@@ -150,7 +150,8 @@ def cc_targets(year, month, *, incentive_threshold=Decimal('0.90'),
                benchmark_growth=Decimal('0.30'), factors=None):
     """Call-center targets (sales/profit/beauty/orders) per model from the CC rollup history."""
     from apps.branches.models import Branch
-    cc = Branch.objects.filter(softech_branch_id='CC').first()
+    from apps.forecasting.call_center import legacy_cc_branch
+    cc = legacy_cc_branch()
     if not cc:
         return None
     fac = factors or ForecastEngine.DEFAULT_FACTORS
@@ -511,7 +512,8 @@ def _write_recon_sheet(ws, year, month, legacy_path):
             'customer_count': 'عدد العملاء', 'beauty': 'التجميل'}
     metrics = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty']
     branches = {b.code: b for b in Branch.objects.filter(code__in=[c for c in legacy if c != 'CC'])}
-    cc = Branch.objects.filter(softech_branch_id='CC').first()
+    from apps.forecasting.call_center import legacy_cc_branch
+    cc = legacy_cc_branch()
 
     def emit(code, name, bid, legvals):
         for m in metrics:

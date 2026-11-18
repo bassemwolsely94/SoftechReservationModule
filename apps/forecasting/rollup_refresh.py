@@ -57,9 +57,12 @@ def month_status(year, month, now=None):
     now = now or timezone.now()
     today = timezone.localdate(now)
     start, end = _month_range(year, month)
-    computed = (KpiActualRollup.objects.filter(year=year, month=month)
-                .exclude(branch__softech_branch_id='CC')
-                .aggregate(m=Min('computed_at'))['m'])
+    from apps.forecasting.call_center import legacy_cc_branch
+    cc = legacy_cc_branch()
+    rollups = KpiActualRollup.objects.filter(year=year, month=month)
+    if cc is not None:
+        rollups = rollups.exclude(branch=cc)
+    computed = rollups.aggregate(m=Min('computed_at'))['m']
     synced = (PurchaseHistory.objects.filter(invoice_date__gte=start, invoice_date__lt=end)
               .aggregate(m=Max('last_synced'))['m'])
     current = (year, month) == (today.year, today.month)

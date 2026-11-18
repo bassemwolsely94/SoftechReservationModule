@@ -1,0 +1,127 @@
+"""
+apps/crews/cc_seed.py
+
+Seeds the call-center crew «الكول سنتر» from CallCenterConfig (piece 2b). One dated, open-ended
+manual include row per SOFTECH usercode and per PBX extension, starting the first day of the
+earliest month with a CC KpiActualRollup so history resolves. The rows are written directly (not
+through services.add_manual, whose month floor refuses past dates) and the seed is audited.
+CallCenterConfig stays the live source; nothing reads the crew's figures yet (money gate).
+No SOFTECH access.
+"""
+from datetime import date
+
+from django.db import transaction
+from django.utils import timezone
+
+from apps.audit.models import AuditLog
+from apps.hr.attendance.employee_import import normalise_code
+from apps.hr.models import Employee
+
+from .models import Crew, CrewKpiRollup, CrewManualMember
+
+CC_CREW_NAME = 'الكول سنتر'
+SEED_REASON = 'بذرة الكول سنتر من إعداد الكول سنتر (piece 2b)'
+
+
+def seed_start() -> date:
+    from apps.forecasting.call_center import legacy_cc_branch
+    from apps.forecasting.models import KpiActualRollup
+    cc = legacy_cc_branch()
+    if cc is not None:
+        first = (KpiActualRollup.objects.filter(branch=cc).order_by('year', 'month')
+                 .values_list('year', 'month').first())
+        if first:
+            return date(first[0], first[1], 1)
+    return timezone.localdate().replace(day=1)
+
+
+def _num_key(v):
+    s = str(v)
+    return (0, int(s), s) if s.isdigit() else (1, 0, s)
+
+
+def extra_pbx_agent_extensions() -> list:
+    """Active PBX extensions typed «agent» that CallCenterConfig does not list, sorted numerically."""
+    from apps.forecasting.models import CallCenterConfig
+    from apps.pbx.models import AgentExtension
+    cfg = {str(e) for e in CallCenterConfig.get_solo().call_agent_extensions}
+    exts = {str(e) for e in AgentExtension.objects.filter(
+        extension_type=AgentExtension.TYPE_AGENT, is_active=True).values_list('extension', flat=True)}
+    return sorted(exts - cfg, key=_num_key)
+
+
+def _employee_by_usercode(code):
+    found = list(Employee.objects.filter(softech_usercode=code)[:2])
+    return found[0] if len(found) == 1 else None
+
+
+def _employee_by_extension(ext):
+    found = [e for e in Employee.objects.exclude(pbx_extensions=[]) if ext in (e.pbx_extensions or [])]
+    return found[0] if len(found) == 1 else None
+
+
+def seed_plan(include_pbx_agent_extensions=False) -> list:
+    from apps.forecasting.models import CallCenterConfig
+    cfg = CallCenterConfig.get_solo()
+    plan = []
+    for raw in cfg.sales_agent_usercodes or []:
+        code = normalise_code(raw)
+        if not code:
+            continue
+        emp = _employee_by_usercode(code)
+        plan.append({'kind': 'usercode', 'value': code, 'employee_id': emp.pk if emp else None,
+                     'label': '' if emp else f'مندوب {code}'})
+    exts = [str(e).strip() for e in cfg.call_agent_extensions or [] if str(e).strip()]
+    if include_pbx_agent_extensions:
+        exts += extra_pbx_agent_extensions()
+    for ext in exts:
+        emp = _employee_by_extension(ext)
+        plan.append({'kind': 'extension', 'value': ext, 'employee_id': emp.pk if emp else None,
+                     'label': '' if emp else f'داخلي {ext}'})
+    return plan
+
+
+def _existing(crew, item) -> bool:
+    field = 'softech_usercode' if item['kind'] == 'usercode' else 'pbx_extension'
+    return crew.manual_members.filter(mode='include', valid_to__isnull=True, voided_at__isnull=True,
+                                      **{field: item['value']}).exists()
+
+
+@transaction.atomic
+def seed(user=None, include_pbx_agent_extensions=False, dry_run=False, _action='crew_cc_seeded') -> dict:
+    plan = seed_plan(include_pbx_agent_extensions)
+    start = seed_start()
+    crew = Crew.objects.filter(name=CC_CREW_NAME, is_archived=False).first()
+    created, skipped = [], []
+    if dry_run:
+        for item in plan:
+            (skipped if crew and _existing(crew, item) else created).append(item)
+        return {'crew_id': crew.pk if crew else None, 'created': created, 'skipped': skipped,
+                'start': start}
+    if crew is None:
+        crew = Crew.objects.create(name=CC_CREW_NAME, type='call_center', created_by=user,
+                                   updated_by=user, description='بذرة من إعداد الكول سنتر')
+    for item in plan:
+        if _existing(crew, item):
+            skipped.append(item)
+            continue
+        CrewManualMember.objects.create(
+            crew=crew, mode='include', employee_id=item['employee_id'],
+            softech_usercode=item['value'] if item['kind'] == 'usercode' else '',
+            pbx_extension=item['value'] if item['kind'] == 'extension' else '',
+            label=item['label'], reason=SEED_REASON, valid_from=start, created_by=user)
+        created.append(item)
+    AuditLog.log(_action, user=user, obj=crew,
+                 new_data={'created': created, 'skipped': skipped, 'start': start.isoformat()},
+                 extra={'crew_id': crew.pk, 'row': None, 'row_id': None})
+    return {'crew_id': crew.pk, 'created': created, 'skipped': skipped, 'start': start}
+
+
+@transaction.atomic
+def reseed(user=None, **kw) -> dict:
+    """Delete the call-center crew's manual rows and shadow rollups, then seed again (audited)."""
+    crew = Crew.objects.filter(name=CC_CREW_NAME, is_archived=False).first()
+    if crew is not None:
+        crew.manual_members.all().delete()
+        CrewKpiRollup.objects.filter(crew=crew).delete()
+    return seed(user=user, _action='crew_cc_reseeded', **kw)
