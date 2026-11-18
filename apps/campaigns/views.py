@@ -120,9 +120,7 @@ def _build_audience_qs(target_filter: dict):
     # ── LEGACY: free-text chronic_conditions (kept for backward compat) ───────
     chronic_category = target_filter.get('chronic_category', '').strip()
     if chronic_category:
-        qs = qs.filter(
-            Q(chronic_conditions__icontains=chronic_category)
-        )
+        qs = qs.filter(wq(chronic_category, 'chronic_conditions'))
 
     # ── WhatsApp-only filter ──────────────────────────────────────────────────
     if target_filter.get('has_whatsapp'):

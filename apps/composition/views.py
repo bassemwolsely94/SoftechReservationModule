@@ -182,10 +182,7 @@ class IngredientParseCandidateViewSet(viewsets.ReadOnlyModelViewSet):
                 pass
         molecule = p.get('molecule')
         if molecule:
-            qs = qs.filter(
-                Q(raw_ainame__icontains=molecule) |
-                Q(parsed_components__icontains=molecule)
-            )
+            qs = qs.filter(wq(molecule, 'raw_ainame', 'parsed_components'))
         q = p.get('q')
         if q:
             qs = qs.filter(wq(q, 'raw_ainame'))
@@ -372,8 +369,9 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
         p = self.request.query_params
         molecule = p.get('molecule')
         if molecule:
+            # exact id: ?exact=1 asks for the molecule name whole (iexact), as before
             qs = (qs.filter(molecule__iexact=molecule) if p.get('exact')
-                  else qs.filter(molecule__icontains=molecule))
+                  else qs.filter(wq(molecule, 'molecule')))
         sv = p.get('strength_value')
         if sv:
             try:
@@ -391,7 +389,7 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
         if forms:
             any_form = Q()
             for f in forms:
-                any_form |= Q(dosage_form__icontains=f)
+                any_form |= wq(f, 'dosage_form')
             qs = qs.filter(any_form)
         if p.get('class_id'):
             qs = qs.filter(ingredient_class_id=p['class_id'])

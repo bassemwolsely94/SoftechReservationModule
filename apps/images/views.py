@@ -446,7 +446,7 @@ def product_image_search(request):
     if producers:
         any_producer = Q()
         for producer in producers:
-            any_producer |= Q(producer_name__icontains=producer)
+            any_producer |= wq(producer, 'producer_name')
         qs = qs.filter(any_producer)
 
     # ── image-status filter ───────────────────────────────────────────────────

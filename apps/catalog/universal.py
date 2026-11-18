@@ -112,8 +112,7 @@ def _search_customers(raw, *, limit, user=None):
     digits = raw.replace(' ', '')
     q = (
         wq(raw, 'name')
-        | Q(phone__icontains=digits) | Q(phone_alt__icontains=digits)
-        | Q(whatsapp_phone__icontains=digits)
+        | wq(digits, 'phone', 'phone_alt', 'whatsapp_phone')
         | Q(softech_pic__iexact=raw) | Q(softech_id__iexact=raw)
     )
     qs = Customer.objects.filter(q)
@@ -164,8 +163,7 @@ def _search_reservations(raw, *, branch_id, limit, user=None):
     from core import branch_scope
     digits = raw.replace(' ', '')
     q = (
-        wq(raw, 'contact_name') | Q(contact_phone__icontains=digits)
-        | Q(manual_item_name__icontains=raw) | Q(item__name__icontains=raw)
+        wq(raw, 'contact_name', 'manual_item_name', 'item__name') | wq(digits, 'contact_phone')
     )
     if raw.isdigit():
         q |= Q(pk=int(raw))

@@ -177,9 +177,8 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         item_search = (p.get('item_search') or '').strip()
         if item_search:
             qs = qs.filter(
-                wq(item_search, 'item__name', 'item__name_scientific') |
-                Q(item__softech_id__icontains=item_search) |
-                Q(item__active_ingredients__icontains=item_search)
+                wq(item_search, 'item__name', 'item__name_scientific',
+                   'item__softech_id', 'item__active_ingredients')
             )
         qs = filter_in(qs, 'item__medicine_type', multi_values(p, 'medicine_type'))
         if p.get('effect_code'):
@@ -189,33 +188,27 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         if indications:
             ind_q = Q()
             for indication in indications:
-                ind_q |= (
-                    Q(item__effect_name_ar__icontains=indication) |
-                    Q(item__effect_name2_ar__icontains=indication) |
-                    Q(item__effect_name__icontains=indication)
-                )
+                ind_q |= wq(indication, 'item__effect_name_ar', 'item__effect_name2_ar',
+                            'item__effect_name')
             qs = qs.filter(ind_q)
         active_ing = (p.get('active_ingredient') or '').strip()
         if active_ing:
-            qs = qs.filter(item__active_ingredients__icontains=active_ing)
+            qs = qs.filter(wq(active_ing, 'item__active_ingredients'))
 
         # ── Customer filters ─────────────────────────────────────────────────
         cust_search = (p.get('customer_search') or '').strip()
         if cust_search:
-            qs = qs.filter(
+            qs = qs.filter(wq(
+                cust_search,
                 # Full Customer record (linked)
-                wq(cust_search, 'customer__name') |
-                Q(customer__phone__icontains=cust_search) |
-                Q(customer__whatsapp_phone__icontains=cust_search) |
-                Q(customer__softech_pic__icontains=cust_search) |
+                'customer__name', 'customer__phone', 'customer__whatsapp_phone',
+                'customer__softech_pic',
                 # LocalCustomer (PIC / delivery — most tasks link here, not Customer)
-                wq(cust_search, 'local_customer__name') |
-                Q(local_customer__phone__icontains=cust_search) |
-                Q(local_customer__phone_alt__icontains=cust_search) |
-                Q(local_customer__phcode__icontains=cust_search) |
+                'local_customer__name', 'local_customer__phone', 'local_customer__phone_alt',
+                'local_customer__phcode',
                 # phcode stored directly on the task for fast lookup
-                Q(phcode__icontains=cust_search)
-            )
+                'phcode',
+            ))
         qs = filter_in(qs, 'customer__segment', multi_values(p, 'segment'))
         qs = filter_in(qs, 'customer__churn_segment', multi_values(p, 'churn_segment'))
 

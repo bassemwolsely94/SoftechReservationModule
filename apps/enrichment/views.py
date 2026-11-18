@@ -87,7 +87,7 @@ class ItemEnrichmentViewSet(viewsets.ModelViewSet):
             try:
                 qs = qs.filter(item__category_id=int(category))
             except (ValueError, TypeError):
-                qs = qs.filter(item__category__name__icontains=category)
+                qs = qs.filter(wq(category, 'item__category__name'))
 
         # ── Has pending suggestions (param: has_pending = true/1) ─────────────
         has_pending = p.get('has_pending', '').lower()

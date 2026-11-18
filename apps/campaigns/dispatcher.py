@@ -141,7 +141,8 @@ class CampaignDispatcher:
             qs = qs.filter(segment__in=segments)
 
         if f.get('chronic_category'):
-            qs = qs.filter(health_profile__chronic_conditions__icontains=f['chronic_category'])
+            from apps.catalog.wildcard import wq
+            qs = qs.filter(wq(f['chronic_category'], 'health_profile__chronic_conditions'))
 
         now = timezone.now()
         if f.get('last_purchase_days_max'):

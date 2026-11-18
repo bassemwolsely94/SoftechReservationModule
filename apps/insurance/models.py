@@ -923,7 +923,8 @@ class InsuranceClaimBillingGroup(models.Model):
         if self.filter_relative_degree:
             qs = qs.filter(relative_degree=self.filter_relative_degree)
         if self.filter_dept_name:
-            qs = qs.filter(dept_name__icontains=self.filter_dept_name)
+            from apps.catalog.wildcard import wq
+            qs = qs.filter(wq(self.filter_dept_name, 'dept_name'))
         if self.filter_hi_type_code:
             qs = qs.filter(hi_type_code=self.filter_hi_type_code)
         if self.filter_patient_no_prefix:

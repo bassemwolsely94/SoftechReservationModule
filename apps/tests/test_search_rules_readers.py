@@ -131,3 +131,32 @@ class BranchRequestLineRematchTests(TestCase):
                        {'q': 'volt*gel'})
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual([c['id'] for c in r.data['results']], [hit.id])
+
+
+class FollowupAndChequeReaderTests(TestCase):
+    """S4 follow-up: followups `?item_search=` / `?customer_search=` and cheque plans `?q=`."""
+
+    def test_followup_item_and_customer_patterns(self):
+        from apps.followups.models import FollowUpTask
+        from .factories import make_customer
+        _, _, client = make_admin('rd_f_admin')
+        branch = make_branch()
+        hit = FollowUpTask.objects.create(
+            customer=make_customer('Mona Hassan', '01011112222'), item=make_item('Voltaren Emulgel', 'RD201'),
+            branch=branch, due_date=datetime.date(2026, 11, 20), status='pending')
+        FollowUpTask.objects.create(
+            customer=make_customer('Other Person', '01233334444'), item=make_item('Cataflam 50', 'RD202'),
+            branch=branch, due_date=datetime.date(2026, 11, 20), status='pending')
+        for params in ({'item_search': 'RD2*01'}, {'customer_search': '0101*2222'}):
+            rows = _rows(client.get('/api/followups/tasks/', {'page_size': 100, **params}))
+            self.assertEqual([r['id'] for r in rows], [hit.id], params)
+
+    def test_cheque_plan_payee_pattern(self):
+        from decimal import Decimal
+        from apps.cheques.models import ChequePlan
+        _, _, client = make_admin('rd_ch_admin')
+        for title, payee in (('Plan Alpha', 'Pharma Overseas Co'), ('Plan Beta', 'Ibn Sina Trading')):
+            ChequePlan.objects.create(title=title, payee_name=payee, total_amount=Decimal('1000'),
+                                      first_due_date=datetime.date(2026, 11, 1))
+        rows = _rows(client.get('/api/cheques/plans/', {'q': 'pl*pha'}))
+        self.assertEqual([r['title'] for r in rows], ['Plan Alpha'])

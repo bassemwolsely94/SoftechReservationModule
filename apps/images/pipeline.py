@@ -91,7 +91,8 @@ def build_item_queryset(filters: dict) -> list:
     # ── Producer / manufacturer filter ────────────────────────────────────────
     producer = (filters.get('producer_name') or '').strip()
     if producer:
-        qs = qs.filter(producer_name__icontains=producer)
+        from apps.catalog.wildcard import wq
+        qs = qs.filter(wq(producer, 'producer_name'))
 
     # ── ABC class filter (from latest demand run) ─────────────────────────────
     abc = (filters.get('abc_class') or '').strip().upper()
