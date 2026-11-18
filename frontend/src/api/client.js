@@ -566,6 +566,8 @@ export const targetsApi = {
   create: (data)        => api.post('/incentives/targets/', data),
   update: (id, data)    => api.patch(`/incentives/targets/${id}/`, data),
   remove: (id)          => api.delete(`/incentives/targets/${id}/`),
+  // live call-center crews a target can name (served under the targets permission)
+  crews:  ()            => api.get('/incentives/targets/crews/'),
 }
 
 // Branch-KPI forecasting (doc 16)

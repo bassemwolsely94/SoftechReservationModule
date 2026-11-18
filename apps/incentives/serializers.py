@@ -266,13 +266,19 @@ from .models import SalesTarget   # noqa: E402
 
 class SalesTargetSerializer(serializers.ModelSerializer):
     attainment   = serializers.SerializerMethodField()
-    scope_label  = serializers.CharField(source='get_scope_type_display', read_only=True)
+    scope_label  = serializers.SerializerMethodField()
+    crew_name    = serializers.CharField(source='crew.name', read_only=True, default=None)
     metric_label = serializers.CharField(source='get_metric_display', read_only=True)
     branch_name  = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
 
     def get_attainment(self, obj):
         return obj.attainment()
+
+    def get_scope_label(self, obj):
+        if obj.crew_id:
+            return f'{obj.get_scope_type_display()} · {obj.crew.name}'
+        return obj.get_scope_type_display()
 
     def get_branch_name(self, obj):
         if not obj.branch_id:
@@ -286,7 +292,7 @@ class SalesTargetSerializer(serializers.ModelSerializer):
         model  = SalesTarget
         fields = [
             'id', 'label', 'scope_type', 'scope_label',
-            'branch', 'branch_name', 'softech_user', 'category', 'category_name', 'crew',
+            'branch', 'branch_name', 'softech_user', 'category', 'category_name', 'crew', 'crew_name',
             'metric', 'metric_label', 'period_start', 'period_end',
             'target_value', 'attainment', 'created_at',
         ]
@@ -303,6 +309,12 @@ class SalesTargetSerializer(serializers.ModelSerializer):
         if scope == SalesTarget.SCOPE_CREW:
             if crew is None or crew.is_archived or crew.type != 'call_center':
                 raise serializers.ValidationError({'crew': self.CREW_REQUIRED})
+            branch = data['branch'] if 'branch' in data else getattr(inst, 'branch', None)
+            user = data['softech_user'] if 'softech_user' in data else getattr(inst, 'softech_user', '')
+            cat = data['category'] if 'category' in data else getattr(inst, 'category', None)
+            if branch is not None or user or cat is not None:
+                raise serializers.ValidationError(
+                    {'scope_type': 'هدف الطاقم لا يحمل فرعًا ولا كود مندوب ولا فئة'})
         elif crew is not None:
             raise serializers.ValidationError({'crew': 'الطاقم يُحدَّد لمستهدف من نوع «طاقم» فقط'})
         return data
