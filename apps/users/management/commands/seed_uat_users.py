@@ -153,7 +153,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _mfa_enforcement_off():
-        # Delete, do not set to false: apps/users/mfa.py reads any row as "on" (finding B-01).
+        # Delete the row: no row = enforcement off, whatever type a hand-made row was given
+        # (finding B-01 is fixed in apps/users/mfa.py; deleting stays the simplest sure way).
         from apps.config.models import SystemSetting
         SystemSetting.objects.filter(key='security.mfa_enforced').delete()
 

@@ -1,4 +1,3 @@
-/* global __dirname */
 // W2 route list, generated from the code (never hand-kept):
 //   every <Route path> in src/App.jsx (nesting resolved) ∪ every side-menu item in navGroups.js
 //   ∪ the mobile bottom tabs (MOBILE_TABS in App.jsx).
