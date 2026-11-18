@@ -619,7 +619,11 @@ treats a "pre-cart" outcome that lists an added line as "may have ordered".
   any `fill` into `input[type=password]`.
 - `run_plan(plan, driver, *, stop, on_step, on_shot) -> dict` returns the report payload. The fill
   flow follows spec §6.2 step 5:
-  1. Account check, then cart-empty check (non-empty → `cart_not_empty`, nothing touched).
+  1. Account check, then cart-empty check (non-empty → `cart_not_empty`, nothing touched). These two
+     steps are reported with the labels `check_account` and `check_cart_empty`. A report with outcome
+     `cart_not_empty` or `wrong_account` must carry ONLY those step labels and an empty `lines` list. The
+     server treats anything else (another label, a non-list, a line entry) as "cart touched" and gates the
+     retry (ruling R11). A later identity mismatch is reported as `wrong_account_late`.
   2. Add each line.
   3. On `short`: step down. Halve between the last refused and 0, up to `max_stepdown_tries`, never
      above `qty`, and keep the largest accepted.
