@@ -338,10 +338,41 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-ci.txt
 
-      - name: Migrate and seed the e2e database
-        run: |
-          python manage.py migrate --noinput
-          python manage.py seed_e2e_users
+      # Same idea as test-db: the migrated (not yet seeded) e2e database is cached per migration set,
+      # so a run with unchanged migrations restores it instead of replaying ~800 migrations.
+      - name: Restore the cached e2e database
+        id: e2edb
+        uses: actions/cache/restore@v4
+        with:
+          path: e2edb.dump
+          key: e2edb-v1-${{ hashFiles('**/migrations/*.py', 'requirements-ci.txt') }}
+
+      - name: Load the cached e2e database
+        if: steps.e2edb.outputs.cache-hit == 'true'
+        run: docker exec -i ${{ job.services.postgres.id }} pg_restore -U postgres -d elrezeiky_e2e --no-owner < e2edb.dump
+
+      - name: Migrate the e2e database (nothing to apply after a cache hit)
+        run: python manage.py migrate --noinput
+
+      - name: Dump the migrated e2e database
+        if: steps.e2edb.outputs.cache-hit != 'true'
+        run: docker exec ${{ job.services.postgres.id }} pg_dump -U postgres -Fc elrezeiky_e2e > e2edb.dump
+
+      - name: Save the e2e database
+        if: steps.e2edb.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: e2edb.dump
+          key: e2edb-v1-${{ hashFiles('**/migrations/*.py', 'requirements-ci.txt') }}
+
+      - name: Seed the e2e users and data
+        run: python manage.py seed_e2e_users
+
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('frontend/package-lock.json') }}
 
       - name: Install frontend dependencies and Chromium
         working-directory: frontend
