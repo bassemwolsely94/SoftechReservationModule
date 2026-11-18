@@ -42,11 +42,14 @@ MODULE = {
             {'key': 'submitted', 'label': T('أُرسلت', 'Submitted'),
              'desc': T('ظهر رقم الطلب؛ يُسجَّل الآن.', 'The order number showed; it is being recorded.'), 'next': ['recorded', 'needs_person']},
             {'key': 'recorded', 'label': T('مسجلة', 'Recorded'),
-             'desc': T('الطلب مسجل في التوريد والباقي رجع للقائمة. لو بقي عليها سبب فهي تحتاج نظرة موظف.', 'The order is recorded in supply and the rest went back to the list. If a reason stays on it, a person must look.')},
+             'desc': T('الطلب مسجل في التوريد والباقي رجع للقائمة. لو بقي عليها سبب (مثل رقم طلب ثانٍ) فهي تحتاج نظرة موظف: راجعها ثم «تمت المراجعة — أزل التنبيه».',
+                       'The order is recorded in supply and the rest went back to the list. If a reason stays on it (such as a second order number), a person must look: check it, then "Checked — clear the warning".')},
             {'key': 'needs_person', 'label': T('تحتاج موظف', 'Needs a person'),
              'desc': T('الروبوت توقف أو ربما أُرسل الطلب؛ شخص يعيد المحاولة أو يربط الطلب أو يلغي.', 'The robot stopped or the order may have been sent; a person retries, links the order or cancels.'),
              'next': ['ready', 'submitted', 'cancelled']},
-            {'key': 'cancelled', 'label': T('ملغاة', 'Cancelled'), 'desc': T('أُلغيت السلة.', 'The basket was cancelled.')},
+            {'key': 'cancelled', 'label': T('ملغاة', 'Cancelled'),
+             'desc': T('أُلغيت السلة. لو ظهر رقم طلب لها بعد الإلغاء ترجع «تحتاج موظف».', 'The basket was cancelled. If an order number shows for it after the cancel, it goes back to "needs a person".'),
+             'next': ['needs_person']},
         ],
     }],
     'journeys': [
@@ -154,7 +157,13 @@ SCREENS = [
                        'وتحتها خطوات الروبوت ولقطات الشاشة والفرق بين ما سُلِّم وما سُجِّل. '
                        '«راجع ثم اضغط Submit بنفسك»: في «الفعلي» يقف الروبوت على صفحة المراجعة ولا يضغط Submit أبداً. '
                        'سلة «تحتاج موظف» (أو مسجلة وعليها سبب) تظهر في «تحتاج موظف»: «إعادة المحاولة» (يرفضها الخادم لو ربما أُرسل الطلب حتى يقرأ سجل الطلبات '
-                       'أو تؤكد أنه لم يُرسل)، «ربط بطلب» برقم الطلب، أو «إلغاء». سلة لها رقم طلب لا تُلغى إلا بتأكيد وسبب، لأن الإلغاء يعيد أصنافها للشراء. '
+                       'أو تؤكد أنه لم يُرسل)، «ربط بطلب» برقم الطلب، أو «إلغاء». '
+                       '«ربط مع كتابة الأسطر» يفتح جدولاً تحت الزر: كل صنف وكميته في الطلب كما في سجل الطلبات بالموقع (عبوات كاملة؛ صفر = لم يُطلب ويرجع للباقي)، '
+                       'مملوءاً مما قرأه الروبوت أو من الكمية المُسلَّمة — استعمله حين لا يقرأ الروبوت الأسطر أو يجد أسطراً لا تخص السلة. '
+                       'لو وجد سجل الطلبات طلباً قد يكون لهذه السلة فلا تُعاد المحاولة بتأكيد «لم يُرسل» إلا مع كتابة السبب. '
+                       'سلة طُلبت أو ربما طُلبت لا تُلغى إلا بتأكيد وسبب، وبعد إلغائها لا تُطلب أصنافها مرة ثانية من تلقاء نفسها: تظهر في «الباقي» '
+                       'بعلامة «ربما طُلبت» حتى يختار لها شخص مورداً من جديد. '
+                       'سلة «مسجلة» عليها تنبيه (مثل رقم طلب ثانٍ ظهر بعد التسجيل): راجعها ثم «تمت المراجعة — أزل التنبيه» مع كتابة ما راجعته. '
                        'زر «افحص سجل الطلبات» يطلب من الروبوت قراءة سجل الطلبات الآن، والنظام يطلبها يومياً تلقائياً.',
                        'Each job is cut into baskets (10 items by default) in list order. Open a basket to see its lines: wanted and accepted quantity, price, '
                        'discount and bonus, the supplier\'s expiry, and the calm flags "short expiry" (under 12 months) and "price jump" (10% or more above the '
@@ -162,13 +171,22 @@ SCREENS = [
                        'handed over and what was recorded. "Review, then press Submit yourself": in "live" the robot stops on the review page and never presses '
                        'Submit. A basket that "needs a person" (or is recorded with a reason on it) shows under "Needs a person": "Retry" (the server refuses '
                        'it while the order may have been sent, until Order History is read or you confirm it was not sent), "Link to order" with the order '
-                       'number, or "Cancel". A basket with an order number is cancelled only with a confirmation and a reason, because cancelling sends its '
-                       'items back to be bought again. "Check Order History" asks the robot to read Order History now; the system also asks daily.')},
+                       'number, or "Cancel". "Link and type the lines" opens a grid under the button: each item and its quantity in the order as Order History '
+                       'on the site shows it (whole packs; zero = not ordered, it goes back to the remainders), prefilled from what the robot read or from the '
+                       'handed-over quantity — use it when the robot could not read the lines or found lines that are not this basket\'s. If Order History '
+                       'found an order that may be this basket\'s, a retry with "not sent" needs a written reason. A basket that was or may have been '
+                       'ordered is cancelled only with a confirmation and a reason, and its items are then never ordered again by themselves: they show under '
+                       '"Remainders" marked "may have been ordered" until a person picks a supplier for them again. A "recorded" basket with a warning (such '
+                       'as a second order number seen after it was recorded): check it, then "Checked — clear the warning" with what you checked. '
+                       '"Check Order History" asks the robot to read Order History now; the system also asks daily.')},
             {'key': 'remainders', 'title': T('الباقي', 'Remainders'),
              'body': T('أسطر قوائم الشراء المفتوحة التي جُرِّب لها مورد ولم يوفّر الكمية كلها. تظهر الكمية الباقية والموردون الذين جُرِّبوا. '
-                       'الأسهم للتنقل وEnter يختار المورد التالي المقترح للسطر، ثم أكمل من «قوائم الشراء».',
+                       'الأسهم للتنقل وEnter يختار المورد التالي المقترح للسطر، ثم أكمل من «قوائم الشراء». '
+                       'سطر من سلة أُلغيت وربما طُلبت يظهر «ربما طُلبت» بلا مورد مقترح: راجع موقع المورد أولاً، ثم اختر مورده من «قوائم الشراء».',
                        'Lines of open buy lists where a supplier was tried and did not give the whole quantity. The remaining quantity and the suppliers '
-                       'already tried show. Arrows move and Enter picks the next suggested supplier for the line; then carry on from "Buy lists".')},
+                       'already tried show. Arrows move and Enter picks the next suggested supplier for the line; then carry on from "Buy lists". '
+                       'A line from a cancelled basket that may have been ordered shows "may have been ordered" with no suggested supplier: check the '
+                       'supplier\'s site first, then pick its supplier under "Buy lists".')},
             {'key': 'accounts', 'title': T('الحسابات', 'Accounts'),
              'body': T('للمدير فقط. حساب الموقع اسم يظهر في القائمة، و«اسم الحساب كما يظهر في الموقع» الذي يتأكد منه الروبوت قبل أن يلمس السلة، وفرع الورق. '
                        'لا تُحفظ أي كلمة سر أو كوكي: تسجّل الدخول بنفسك على جهازك. هنا أيضاً لكل موقع: «مفعّل»، حجم السلة، و«فعلي» — '
@@ -200,8 +218,13 @@ SCREENS = [
         ],
         'faq': [
             {'q': T('لماذا لا أستطيع إلغاء سلة؟', 'Why can I not cancel a basket?'),
-             'a': T('لو لها رقم طلب فالطلب أُرسل للمورد؛ الإلغاء يمسح سجله ويعيد أصنافها للشراء. اربطها بالطلب، أو أكّد الإلغاء واكتب السبب.',
-                    'If it has an order number the order went to the supplier; cancelling drops its record and sends its items back to be bought. Link it, or confirm the cancel and write the reason.')},
+             'a': T('لو طُلبت أو ربما طُلبت (ظهر رقم طلب، أو وصل الروبوت لصفحة Submit) فالإلغاء يحتاج تأكيداً وسبباً. اربطها بالطلب، أو أكّد الإلغاء واكتب السبب؛ '
+                    'أصنافها بعدها تظهر في «الباقي» بعلامة «ربما طُلبت» ولا تُطلب حتى يختار لها شخص مورداً.',
+                    'If it was or may have been ordered (an order number showed, or the robot reached the Submit page) cancelling needs a confirmation and a reason. '
+                    'Link it, or confirm the cancel and write the reason; its items then show under "Remainders" marked "may have been ordered" and are not ordered until a person picks a supplier.')},
+            {'q': T('الروبوت قرأ رقم الطلب لكن لم يقرأ أسطره — ماذا أفعل؟', 'The robot read the order number but not its lines — what do I do?'),
+             'a': T('افتح سجل الطلبات في الموقع، ثم «ربط مع كتابة الأسطر» واكتب كمية كل صنف كما فيه. لا تلغِ السلة: الطلب أُرسل.',
+                    'Open Order History on the site, then "Link and type the lines" and type each item\'s quantity as it shows. Do not cancel the basket: the order was sent.')},
             {'q': T('لماذا لا أرى مهام زملائي؟', 'Why can I not see my colleagues\' jobs?'),
              'a': T('كل مشترٍ يرى مهامه؛ من له صلاحية الموافقة يرى الكل.', 'Each buyer sees their own jobs; whoever holds the approve right sees all.')},
         ],
@@ -231,8 +254,16 @@ SCREENS = [
              'open_hint': T('افتح تبويب «السلال».', 'Open the "Baskets" tab.')},
             {'target': 'rpa-portals-resolve', 'label': T('حسم السلة', 'Settle basket'),
              'text': T('إعادة المحاولة، أو ربط برقم الطلب، أو إلغاء.', 'Retry, link to the order number, or cancel.'),
-             'warn': T('سلة لها رقم طلب لا تُلغى إلا بتأكيد وسبب.', 'A basket with an order number is cancelled only with a confirmation and a reason.'),
+             'warn': T('سلة طُلبت أو ربما طُلبت لا تُلغى إلا بتأكيد وسبب، ولا تُطلب أصنافها ثانية حتى يختار لها شخص مورداً.',
+                       'A basket that may have been ordered is cancelled only with a confirmation and a reason; its items wait until a person picks a supplier.'),
              'open_hint': _BASKET_OPEN},
+            {'target': 'rpa-portals-link-lines', 'label': T('ربط مع كتابة الأسطر', 'Link and type the lines'),
+             'text': T('كمية كل صنف في الطلب كما في سجل الطلبات، بعبوات كاملة.', 'Each item\'s quantity in the order as Order History shows it, in whole packs.'),
+             'open_hint': T('في سلة «تحتاج موظف» اكتب رقم الطلب ثم «ربط مع كتابة الأسطر».',
+                            'In a basket that needs a person, type the order number, then "Link and type the lines".')},
+            {'target': 'rpa-portals-acknowledge', 'label': T('أزل التنبيه', 'Clear the warning'),
+             'text': T('سلة مسجلة عليها تنبيه: اكتب ما راجعته ثم أزله.', 'A recorded basket with a warning: write what you checked, then clear it.'),
+             'open_hint': T('يظهر في سلة «مسجلة» عليها سبب.', 'Shows on a "recorded" basket that has a reason.')},
             {'target': 'rpa-portals-history-refresh', 'label': T('افحص سجل الطلبات', 'Check Order History'),
              'text': T('يطلب من الروبوت قراءة سجل الطلبات الآن.', 'Asks the robot to read Order History now.'),
              'open_hint': _BASKET_OPEN},

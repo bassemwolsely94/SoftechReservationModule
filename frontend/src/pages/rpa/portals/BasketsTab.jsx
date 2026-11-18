@@ -1,9 +1,11 @@
 /**
  * BasketsTab — السلال: every basket (or only those that need a person), and one basket's lines with
  * their calm flags, the robot's steps and screenshots, the handed-over vs recorded diff, and the
- * settle panel (retry / link to an order / cancel). The server refuses what is unsafe — e.g. a
- * retry while the order may have been sent, or cancelling a basket whose order was placed (409:
- * then a confirmation and a reason are asked inline, never in a popup).
+ * settle panel (retry / link to an order, with the order's lines typed in an inline editor / cancel)
+ * and, for a recorded basket that kept a reason, «acknowledge». The server refuses what is unsafe —
+ * e.g. a retry while the order may have been sent, or cancelling a basket whose order was or may have
+ * been placed (409: a confirmation and a reason are asked inline, never in a popup; the server says
+ * up front when it will ask, cancel_needs_confirmation).
  */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -17,15 +19,126 @@ import {
 
 const basketValue = (b, k) => (k === 'status' ? BASKET_STATUS[b.status]?.label : b[k])
 
+const canonSku = s => String(s ?? '').replace(/\s+/g, '').replace(/^ID/i, '').replace(/^0+/, '')
+const wholePacks = v => v !== '' && Number.isInteger(Number(v)) && Number(v) >= 0
+
+// The order lines a person links: one row per basket line with a supplier code, prefilled from the
+// robot's Order History read of that order (when there is one) or from the handed-over quantity.
+function prefill(basket, orderRef) {
+  const order = asList(basket.history_orders).find(o => o.order_ref === orderRef)
+  const read = {}
+  for (const r of asList(order?.lines)) {
+    const k = canonSku(r.sku)
+    if (k && Number.isInteger(r.qty)) read[k] = (read[k] || 0) + r.qty
+  }
+  const qtys = {}
+  for (const ln of asList(basket.lines)) {
+    if (!ln.supplier_key) continue
+    const k = canonSku(ln.supplier_key)
+    qtys[ln.id] = String(order ? (read[k] ?? 0) : (ln.accepted_qty ?? 0))
+  }
+  return qtys
+}
+
+// History rows the basket cannot account for (another code, or a row the robot could not read).
+function strayRows(basket, orderRef) {
+  const order = asList(basket.history_orders).find(o => o.order_ref === orderRef)
+  const mine = new Set(asList(basket.lines).map(ln => canonSku(ln.supplier_key)).filter(Boolean))
+  return asList(order?.lines).filter(r => !canonSku(r.sku) || !mine.has(canonSku(r.sku)) || !Number.isInteger(r.qty))
+}
+
+function LinkLinesEditor({ basket, orderRef, onSend, pending }) {
+  const [qtys, setQtys] = useState(() => prefill(basket, orderRef))
+  const lines = asList(basket.lines).filter(ln => ln.supplier_key)
+  const stray = strayRows(basket, orderRef)
+  const ok = orderRef.trim() && lines.length > 0 && lines.every(ln => wholePacks(qtys[ln.id] ?? ''))
+  const send = () => onSend(lines.map(ln => ({ sku: ln.supplier_key, qty: Number(qtys[ln.id]) })))
+  return (
+    <div data-tour="rpa-portals-link-lines" className="rounded border border-line bg-surface p-2 space-y-2">
+      <div className="text-xs text-muted">
+        اكتب الكمية المطلوبة فعلاً لكل صنف كما في سجل الطلبات بالموقع (عبوات كاملة). صفر = لم يُطلب، ويرجع للباقي.
+      </div>
+      {asList(basket.history_orders).length > 1 && (
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          <span className="text-muted">املأ من قراءة:</span>
+          {basket.history_orders.map(o => (
+            <button key={o.order_ref} type="button" className="btn-ghost text-xs" dir="ltr"
+                    onClick={() => setQtys(prefill(basket, o.order_ref))}>{o.order_ref}{o.matched ? ' ✓' : ''}</button>
+          ))}
+        </div>
+      )}
+      <table className="w-full text-sm">
+        <thead><tr className="text-muted border-b border-line">
+          <th className="p-1 text-start">الصنف</th><th className="p-1 text-start">كود المورد</th>
+          <th className="p-1 text-end">المُسلَّم</th><th className="p-1 text-end">في الطلب</th>
+        </tr></thead>
+        <tbody>
+          {lines.map(ln => (
+            <tr key={ln.id} className="border-b border-line">
+              <td className="p-1">{ln.item_name}</td>
+              <td className="p-1" dir="ltr">{ln.supplier_key}</td>
+              <td className="p-1 text-end tabular-nums">{ln.accepted_qty ?? '—'}</td>
+              <td className="p-1 text-end">
+                <label className="sr-only" htmlFor={`pl-${ln.id}`}>الكمية في الطلب</label>
+                <input id={`pl-${ln.id}`} type="number" min={0} step={1} className="input-field text-sm w-20 text-end"
+                       value={qtys[ln.id] ?? ''} onChange={e => setQtys(q => ({ ...q, [ln.id]: e.target.value }))} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {stray.length > 0 && (
+        <div className="text-xs text-amber-700 dark:text-amber-300">
+          أسطر في سجل الطلبات لا تخص أصناف السلة (لا تُرسل):{' '}
+          <span dir="ltr">{stray.map(r => `${r.sku || '?'} × ${r.qty}`).join(' · ')}</span>
+          . لو أحدها صنف من السلة بكود آخر، اكتب كميته على سطر الصنف.
+        </div>
+      )}
+      <button type="button" className="btn-primary text-sm" disabled={!ok || pending} onClick={send}>
+        ربط بالطلب {orderRef.trim() && <span dir="ltr">#{orderRef.trim()}</span>} بهذه الكميات
+      </button>
+    </div>
+  )
+}
+
+function AcknowledgePanel({ basket }) {
+  const qc = useQueryClient()
+  const [reason, setReason] = useState('')
+  const [err, setErr] = useState('')
+  const ack = useMutation({
+    mutationFn: () => rpaPortalApi.resolveBasket(basket.id, { action: 'acknowledge', reason: reason.trim() }),
+    onSuccess: () => { setErr(''); qc.invalidateQueries({ queryKey: ['rpa-portal'] }) },
+    onError: e => setErr(errText(e)),
+  })
+  if (basket.status !== 'recorded' || !basket.needs_person) return null
+  return (
+    <div data-tour="rpa-portals-acknowledge" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2 text-sm">
+      <div>مسجلة وعليها سبب يحتاج نظرة موظف: <span dir="ltr">{basket.needs_person_reason}</span></div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="sr-only" htmlFor={`ack-${basket.id}`}>ما راجعته</label>
+        <input id={`ack-${basket.id}`} className="input-field text-sm w-72" maxLength={250} value={reason}
+               onChange={e => setReason(e.target.value)} placeholder="ما راجعته (مطلوب)" />
+        <button type="button" className="btn-secondary text-sm" disabled={!reason.trim() || ack.isPending}
+                onClick={() => ack.mutate()}>تمت المراجعة — أزل التنبيه</button>
+      </div>
+      {err && <div className="text-xs text-red-600">{err}</div>}
+    </div>
+  )
+}
+
 function ResolvePanel({ basket }) {
   const qc = useQueryClient()
   const [reason, setReason] = useState('')
-  const [orderRef, setOrderRef] = useState(basket.portal_ref || '')
+  const [orderRef, setOrderRef] = useState(basket.suggested_order_ref || basket.portal_ref || '')
   const [confirmNone, setConfirmNone] = useState(false)
   const [placedAsk, setPlacedAsk] = useState(false)
   const [placedOk, setPlacedOk] = useState(false)
+  const [editLines, setEditLines] = useState(false)
   const [err, setErr] = useState('')
-  const after = () => { setErr(''); setPlacedAsk(false); setPlacedOk(false); qc.invalidateQueries({ queryKey: ['rpa-portal'] }) }
+  const after = () => {
+    setErr(''); setPlacedAsk(false); setPlacedOk(false); setEditLines(false)
+    qc.invalidateQueries({ queryKey: ['rpa-portal'] })
+  }
   const resolve = useMutation({
     mutationFn: data => rpaPortalApi.resolveBasket(basket.id, { reason: reason.trim(), ...data }),
     onSuccess: after,
@@ -36,6 +149,7 @@ function ResolvePanel({ basket }) {
   })
   const history = useMutation({ mutationFn: () => rpaPortalApi.historyCheck(basket.id), onSuccess: after, onError: e => setErr(errText(e)) })
   if (basket.status !== 'needs_person') return null
+  const askPlaced = placedAsk || basket.cancel_needs_confirmation
   return (
     <div data-tour="rpa-portals-resolve" className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 space-y-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -67,16 +181,22 @@ function ResolvePanel({ basket }) {
       <div className="flex flex-wrap items-center gap-2">
         <label className="sr-only" htmlFor={`pr-ref-${basket.id}`}>رقم الطلب</label>
         <input id={`pr-ref-${basket.id}`} className="input-field text-sm w-40" dir="ltr" maxLength={60} value={orderRef}
-               onChange={e => setOrderRef(e.target.value)} placeholder="رقم الطلب في الموقع" />
+               onChange={e => { setOrderRef(e.target.value); setEditLines(false) }} placeholder="رقم الطلب في الموقع" />
         <button type="button" className="btn-secondary text-sm" disabled={!orderRef.trim() || resolve.isPending}
                 onClick={() => resolve.mutate({ action: 'link_order', order_ref: orderRef.trim() })}>ربط بالطلب</button>
+        <button type="button" className="btn-ghost text-sm" disabled={!orderRef.trim()}
+                onClick={() => setEditLines(v => !v)}>{editLines ? 'إخفاء الأسطر' : 'ربط مع كتابة الأسطر'}</button>
         <button type="button" className="btn-ghost text-sm" disabled={resolve.isPending}
                 onClick={() => resolve.mutate({ action: 'cancel', confirm_placed_order_cancel: placedOk })}>إلغاء السلة</button>
       </div>
-      {placedAsk && (
+      {editLines && (
+        <LinkLinesEditor key={orderRef} basket={basket} orderRef={orderRef} pending={resolve.isPending}
+                         onSend={lines => resolve.mutate({ action: 'link_order', order_ref: orderRef.trim(), history_lines: lines })} />
+      )}
+      {askPlaced && (
         <label className="flex items-center gap-1 text-xs text-red-700 dark:text-red-300">
           <input type="checkbox" checked={placedOk} onChange={e => setPlacedOk(e.target.checked)} />
-          أؤكد إلغاء سلة لها طلب مُرسل (اكتب السبب أعلاه ثم «إلغاء السلة» مرة أخرى)
+          ربما طُلبت هذه السلة من الموقع: أؤكد إلغاءها (اكتب السبب أعلاه). أصنافها لن تُطلب ثانية حتى يختار لها شخص مورداً من جديد.
         </label>
       )}
       {err && <div className="text-xs text-red-600">{err}</div>}
@@ -106,9 +226,7 @@ function BasketDetail({ basketId }) {
         {b.portal_ref && <span className="text-xs" dir="ltr">#{b.portal_ref}</span>}
         {b.credit_seen && Object.keys(b.credit_seen).length > 0 && <span className="text-xs text-muted">الرصيد: {credit(b.credit_seen)}</span>}
       </div>
-      {b.status === 'recorded' && b.needs_person && (
-        <div className="text-xs text-amber-700 dark:text-amber-300">مسجلة وعليها سبب يحتاج نظرة موظف: <span dir="ltr">{b.needs_person_reason}</span></div>
-      )}
+      <AcknowledgePanel basket={b} />
       {b.status === 'awaiting_submit' && (
         <div className="text-sm rounded border border-amber-500/40 bg-amber-500/10 p-2">راجع السلة على صفحة المراجعة في الموقع ثم اضغط Submit بنفسك.</div>
       )}
