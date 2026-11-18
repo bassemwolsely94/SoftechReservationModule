@@ -34,6 +34,23 @@ def sees_all_branches(profile) -> bool:
     return bool(profile.access_all_branches or profile.role in ALL_BRANCH_ROLES)
 
 
+# ── Per-profile memo (full audit PERF-4) ─────────────────────────────────────
+# branch_ids() ran 1–3 queries per call, and list serializers call it once per row (customers: 54
+# queries for 50 rows). The answer is memoised on the profile object, keyed on a process-wide
+# generation that apps.users.signals bumps on ANY change to a staff profile, its allowed / restricted
+# branches, or a branch — so a changed scope is never served stale, even through another instance.
+_GENERATION = [0]
+
+
+def bump_generation(**_kwargs):
+    _GENERATION[0] += 1
+
+
+def _memo_key(profile):
+    return (_GENERATION[0], profile.pk, profile.role, profile.branch_id, profile.access_all_branches,
+            profile.is_active, getattr(profile.user, 'is_active', True))
+
+
 def branch_ids(user_or_profile):
     """None = every branch; otherwise the set of Branch pks (possibly empty)."""
     profile = _profile(user_or_profile)
@@ -42,6 +59,16 @@ def branch_ids(user_or_profile):
         if getattr(user, 'is_authenticated', False) and getattr(user, 'is_superuser', False):
             return None
         return set()
+    key = _memo_key(profile)
+    memo = getattr(profile, '_branch_scope_memo', None)
+    if memo is not None and memo[0] == key:
+        return None if memo[1] is None else set(memo[1])      # a copy: callers may mutate it
+    result = _compute_branch_ids(profile)
+    profile._branch_scope_memo = (key, None if result is None else frozenset(result))
+    return result
+
+
+def _compute_branch_ids(profile):
     if not profile.is_active or not getattr(profile.user, 'is_active', True):
         return set()
     restricted = set(profile.restricted_branches.values_list('id', flat=True))

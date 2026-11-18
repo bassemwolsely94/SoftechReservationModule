@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, configApi, demandApi } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_OPTIONS } from '../components/StatusBadge'
@@ -1475,8 +1475,11 @@ function CustomerHistoryPanel({ reservationId, customerId }) {
 export default function ReservationDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const qc = useQueryClient()
   const { user } = useAuthStore()
+  // extra lines that failed to save when the reservation was created (full audit FE-2)
+  const [lineErrors, setLineErrors] = useState(() => location.state?.lineErrors || [])
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [imageUploading, setImageUploading] = useState(false)
@@ -1592,6 +1595,23 @@ export default function ReservationDetailPage() {
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
+      {lineErrors.length > 0 && (
+        <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+             role="alert" data-testid="reservation-line-errors">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-bold">⚠️ تم إنشاء الحجز، لكن {lineErrors.length} صنف لم يُحفظ — أضفه من «الأصناف»:</p>
+              <ul className="mt-1 list-disc pr-5 space-y-0.5">
+                {lineErrors.map((e, i) => (
+                  <li key={i}>{e.name} — كمية {e.qty}{e.reason ? ` (${e.reason})` : ''}</li>
+                ))}
+              </ul>
+            </div>
+            <button onClick={() => { setLineErrors([]); navigate(location.pathname, { replace: true, state: null }) }}
+                    className="text-red-400 hover:text-red-700" title="إخفاء">✕</button>
+          </div>
+        </div>
+      )}
       {showStatusModal && (
         <ChangeStatusModal
           reservation={r}

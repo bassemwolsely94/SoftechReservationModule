@@ -232,7 +232,9 @@ class ReservationListSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Recor
                 'item_softech_id': line.item.softech_id if line.item_id else None,
                 'quantity_requested': float(line.quantity_requested),
             }
-            for line in obj.lines.select_related('item').all()
+            # .all() reads the viewset's prefetch_related('lines__item'); a select_related() here
+            # built a new queryset per row and bypassed it (full audit PERF-4: 59 queries / 50 rows)
+            for line in obj.lines.all()
         ]
 
     def get_customer_name(self, obj):
