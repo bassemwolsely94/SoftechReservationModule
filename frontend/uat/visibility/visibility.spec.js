@@ -15,7 +15,7 @@
 //                                                        rejections = 'unhandled403', a refusal that does not say so: P3 hidden / P2 shown)
 //   menu hidden, own data APIs answer 2xx, not in KNOWN_GAPS → P1 screen   (in KNOWN_GAPS → pass, owner-accepted 2026-11-06)
 //   menu shown, screen refused                         → P2 screen  (P3 when the entry is only a parent: /finance → /finance/coa)
-//   blank, or a loading text still on screen ('stuck') → P2 screen
+//   blank, or a loading text still on screen 20 s after first content ('stuck') → P2 screen
 //   menu hidden, screen opens but serves no data       → P3 screen  (not a clean refusal; nothing leaks)
 //   slow (> 5000 ms to content)                → P3 slow, on top of any other verdict
 //   hidden + refused, shown + renders, no menu entry   → pass
@@ -99,7 +99,7 @@ async function openScreen(page, url) {
   const wanted = url.split('?')[0]
   page.on('console', onConsole); page.on('pageerror', onPageError); page.on('response', onResponse)
   const t0 = Date.now()
-  let timedOut = false, ms, blocker
+  let timedOut = false, ms, blocker, dataMs
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CAP_MS })
     await page.waitForFunction(({ wanted, spin, refused, loading }) => {
@@ -126,6 +126,14 @@ async function openScreen(page, url) {
         `path ${location.pathname}`].filter(Boolean).join('; ')
     }, { spin: SPINNERS, loading: LOADING.source }).catch(() => 'page did not answer')
     await page.waitForTimeout(SETTLE_MS)
+    // A section still saying "loading" after first content is usually a slower panel, not an
+    // endless one (run 4b: 237 'stuck' rows, most with content in < 1 s). Give it up to CAP_MS to
+    // clear; only a loading text still there after that is 'stuck'. dataMs = time until it cleared.
+    if (!timedOut && LOADING.test(await page.locator('main').first().innerText({ timeout: 5_000 }).catch(() => ''))) {
+      await page.waitForFunction(loading => !new RegExp(loading).test(document.querySelector('main')?.innerText || ''),
+        LOADING.source, { timeout: CAP_MS, polling: 250 }).catch(() => {})
+      dataMs = Date.now() - t0
+    }
   } finally {
     page.off('console', onConsole); page.off('pageerror', onPageError); page.off('response', onResponse)
   }
@@ -140,7 +148,7 @@ async function openScreen(page, url) {
   else if (timedOut) status = 'slow'
   else if (text.length < 20) status = 'blank'
   else status = ms > SLOW_MS ? 'slow' : 'ok'
-  return { ms, status, consoleErrors, apiErrors, finalUrl, blocker }
+  return { ms, status, consoleErrors, apiErrors, finalUrl, blocker, dataMs }
 }// Calls any screen may make that say nothing about the screen's own data (pickers, badges, help).
 const GENERIC_API = /^\/api\/(auth|config|access\/whoami|audit\/screen-view|help|users\/my-permissions|notifications|sync\/(status|freshness)|branches|counselling\/status|personal)(\/|$)/
 const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/\d+(?=\/|$)/g, '/:n')
@@ -291,7 +299,7 @@ for (const u of users) {
         let evidence
         if (!['ok', 'slow', 'refused', 'hang'].includes(status)) evidence = await shot(page, u.key, route)
         raw.push({ route, r, status, apis: seen, evidence })
-        console.log(`[w2] ${u.key} ${raw.length}/${list.length} ${route} ${status} ${r.ms} ms (+${Math.round((Date.now() - t0) / 1000)} s)${r.blocker ? ' [' + r.blocker + ']' : ''}`)
+        console.log(`[w2] ${u.key} ${raw.length}/${list.length} ${route} ${status} ${r.ms} ms${r.dataMs ? ' data ' + r.dataMs + ' ms' : ''} (+${Math.round((Date.now() - t0) / 1000)} s)${r.blocker ? ' [' + r.blocker + ']' : ''}`)
       }
 
       // Stop attributing: pass 2's evidence revisits (shotAgain) would otherwise be credited to the
@@ -324,7 +332,7 @@ for (const u of users) {
           : own.some(a => a.status === 403) ? 'refused' : 'none'
         const j = judge({ status, served, menu: shown, inherited, knownGap })
         rows[route] = {
-          status, raw: r.status, served, ms: r.ms, finalUrl: r.finalUrl, menu: shown, menuPath, inherited,
+          status, raw: r.status, served, ms: r.ms, dataMs: r.dataMs, finalUrl: r.finalUrl, menu: shown, menuPath, inherited,
           canView: mod ? can(u.key, mod, 'view') : null, knownGap, verdict: j.verdict, reason: j.reason,
           dataApis: [...new Set(own.map(a => `${a.status} ${clean(a.key)}`))].slice(0, 8),
           consoleErrors: r.consoleErrors.length,
