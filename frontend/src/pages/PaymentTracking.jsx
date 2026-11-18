@@ -346,8 +346,8 @@ export default function PaymentTracking() {
 
   const payments = paymentsData?.results || paymentsData || []
   const invalidate = () => {
-    qc.invalidateQueries(['payments'])
-    qc.invalidateQueries(['payments-summary'])
+    qc.invalidateQueries({ queryKey: ['payments'] })
+    qc.invalidateQueries({ queryKey: ['payments-summary'] })
   }
 
   const confirmMut = useMutation({

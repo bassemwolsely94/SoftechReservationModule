@@ -11,7 +11,7 @@
  * every step still runs but nothing leaves the server.
  */
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { phoneAlertsApi, usersApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -450,7 +450,7 @@ function LogTab({ events }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['phone-alert-log', params],
     queryFn: () => phoneAlertsApi.log(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
   const rows = data?.results || []
   const { sorted, headerProps } = useSortableRows(rows, { defaultSort: null, persistKey: 'phone-alert-log' })

@@ -948,3 +948,35 @@ class EtaCodeUsage(models.Model):
     class Meta:
         verbose_name = 'كود مسجل لدى المصلحة'
         constraints = [models.UniqueConstraint(fields=['system', 'code_type', 'item_code'], name='eta_code_usage_once')]
+
+
+class TaxEgsSheetVersion(models.Model):
+    """One version of the owner's bulk EGS sheet (ElRezeiky_Bulk_EGS_Items.xlsx), the workbook the Invoicer reads to
+    know which items are coded. Version 1 is the owner's file as seeded; later versions are builds that only code
+    uncoded rows or append rows (S3). The file lives under TAX_EGS_SHEET_DIR (newest 10 kept); the row is kept for
+    good. `coded_itemcodes` = every SOFTECH itemcode coded in this version (the receipts recon reads it)."""
+    SOURCE_SEED, SOURCE_BUILD = 'seed', 'build'
+    SOURCE_CHOICES = [(SOURCE_SEED, 'ملف المالك'), (SOURCE_BUILD, 'بناء')]
+
+    number = models.IntegerField(unique=True)
+    sha256 = models.CharField(max_length=64)
+    file_name = models.CharField(max_length=200)
+    size = models.IntegerField(default=0, db_default=0)
+    coded_rows = models.IntegerField(default=0, db_default=0)
+    total_rows = models.IntegerField(default=0, db_default=0)
+    added = models.JSONField(default=list, blank=True)            # itemcodes appended as new rows
+    coded = models.JSONField(default=list, blank=True)            # itemcodes newly coded on existing rows
+    skipped = models.JSONField(default=list, blank=True)          # [{itemcode, why}]
+    coded_itemcodes = models.JSONField(default=list, blank=True)
+    source = models.CharField(max_length=5, choices=SOURCE_CHOICES)
+    built_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='+')
+    built_at = models.DateTimeField(auto_now_add=True)
+    note = models.CharField(max_length=300, blank=True, default='', db_default='')
+
+    class Meta:
+        verbose_name = 'نسخة ملف أكواد المحصّل'
+        ordering = ['-number']
+
+    def __str__(self):
+        return f'EGS sheet v{self.number}'

@@ -927,6 +927,9 @@ TAX_ETA_HISTORY_RECEIPTS_START = config('TAX_ETA_HISTORY_RECEIPTS_START', defaul
 TAX_SIGNING_AGENT_TOKEN = config('TAX_SIGNING_AGENT_TOKEN', default='')
 TAX_SIGNING_CERT_THUMBPRINT = config('TAX_SIGNING_CERT_THUMBPRINT', default='')
 TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=int)
+# Versions of the owner's bulk EGS sheet (the Invoicer's item-code workbook, S3). Outside MEDIA_ROOT, never served
+# by URL, git-ignored; the newest 10 versions' files are kept.
+TAX_EGS_SHEET_DIR = config('TAX_EGS_SHEET_DIR', default=BASE_DIR / 'private' / 'egs_sheets', cast=Path)
 # A test run must NEVER reach ETA, whatever .env says: no address, no login, every send switch off. Tests that
 # exercise the ETA path set what they need with override_settings and mocked HTTP.
 if _RUNNING_TESTS:
@@ -937,6 +940,8 @@ if _RUNNING_TESTS:
     TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = TAX_GPC_AI_ENABLED = False
     TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
     TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
+    TAX_EGS_SHEET_DIR = Path(tempfile.mkdtemp(prefix='elrezeiky_test_egs_sheets_'))   # never the real folder
+    atexit.register(shutil.rmtree, TAX_EGS_SHEET_DIR, ignore_errors=True)
 
 # Stock Transactions Audit (apps/stock_audit, doc 32). Read-only stktrans mirror from HQ:
 # every 2 h replaces the last 3 docdate days; 03:15 catch-up replaces 7 days and prunes.

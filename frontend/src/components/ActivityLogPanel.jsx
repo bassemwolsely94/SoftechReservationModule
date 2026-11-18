@@ -70,8 +70,8 @@ export default function ActivityLogPanel({ reservationId }) {
       expected_date: expectedDate || null,
     }),
     onSuccess: () => {
-      qc.invalidateQueries(['activity', reservationId])
-      qc.invalidateQueries(['reservation', String(reservationId)])
+      qc.invalidateQueries({ queryKey: ['activity', reservationId] })
+      qc.invalidateQueries({ queryKey: ['reservation', String(reservationId)] })
       setActivityType('')
       setNote('')
       setCallbackDatetime('')

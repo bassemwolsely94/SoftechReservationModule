@@ -66,3 +66,6 @@ ocr_tessdata/
 # Attendance agent, filled settings (secret) and local state (names)
 agent.ini
 agent_state/
+
+# Private server files (e.g. TAX_EGS_SHEET_DIR, the Invoicer item-code workbook versions)
+private/

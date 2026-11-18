@@ -5,10 +5,12 @@
  * chosen here (0 / 14) and the item is decided on its own; the server skips flagged items in a bulk "code".
  * Batch S2: «الفئة (GPC)» shows each item's suggested brick and where it came from; a person confirms it. The picker is
  * an inline search box; an AI suggestion that is not high-confidence is decided one item at a time.
+ * Batch S3: «ملف أكواد الإيصالات (المحصّل)» (EgsSheetPanel) builds and downloads the Invoicer file's versions.
  */
 import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
+import EgsSheetPanel from './EgsSheetPanel'
 import SortTh from '../../components/SortTh'
 import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useServerSort from '../../hooks/useServerSort'
@@ -488,6 +490,7 @@ export default function QueueTab({ me }) {
         {note && <div role="status" className="text-xs text-amber-700 mt-2">{note}</div>}
         <div className="mt-2"><ActionMsg msg={act.msg} /></div>
       </Section>
+      <EgsSheetPanel />
       <EtaHolds />
     </div>
   )
