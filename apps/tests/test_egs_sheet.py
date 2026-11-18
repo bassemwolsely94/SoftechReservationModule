@@ -5,8 +5,10 @@ import datetime as dt
 import hashlib
 import io
 import os
+import re
 import shutil
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -230,6 +232,25 @@ def _row_values(ws, n):
     return [ws.cell(n, c).value for c in range(1, 17)]
 
 
+def _values(data):
+    """A workbook read with its cached values (what a reader that does not recalculate sees)."""
+    return openpyxl.load_workbook(io.BytesIO(data), data_only=True)
+
+
+def _fill(ws):
+    """L/N/O/P of every row written as the values of their formulas (a hand-made 'computed' sheet for checks)."""
+    for n, r in enumerate(ws.iter_rows(min_row=2, max_col=16, values_only=True), start=2):
+        r = egs_sheet._padded(r)
+        if egs_sheet._has_row(r):
+            for col, value in zip(egs_sheet.FORMULA_COLS, egs_sheet._formula_values(r)):
+                ws.cell(n, col + 1).value = value
+
+
+def _parts(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        return {n: z.read(n) for n in z.namelist()}
+
+
 def _save(wb):
     buf = io.BytesIO()
     wb.save(buf)
@@ -292,11 +313,16 @@ class BuildTests(_BuildMixin, TestCase):
         v = self.build(note='first')
         self.assertIsInstance(v, TaxEgsSheetVersion)
         self.assertEqual((v.number, v.source, v.coded, v.added), (2, 'build', ['300'], []))
-        ws = _wb(egs_sheet.open_version(v))['DataEntry']
-        r = _row_values(ws, 4)
-        self.assertEqual(r[:11], ['EGS', 'EG-499336534-300', 'CN', 'اسم', 'DS', 'وصف',
+        data = egs_sheet.open_version(v)
+        r = _row_values(_values(data)['DataEntry'], 4)
+        # B, C and E were typed (kept); D, F were empty (filled); A, G, K always; I was 0 (filled)
+        self.assertEqual(r[:11], ['EGS', 'EG-499336534-300', 'C', 'اسم', 'C', 'وصف',
                                   dt.datetime(dt.date.today().year, 1, 1), None, 10000043, 300, 0.14])
-        self.assertEqual(r[11:], [0, None, '0', 14, 'v009'])            # the formulas' values, not formulas
+        self.assertEqual(r[11:], [0, None, '0', 14, 'v009'])            # the formulas' results, stored
+        formulas = _wb(data)['DataEntry']
+        self.assertEqual(formulas['L4'].value, '=IF(AND(K4=0%,A4="EGS",I4<>0,G4<>""),1,0)')
+        self.assertEqual(formulas['P4'].value, '=IF(O4=0,"v003","v009")')
+        self.assertTrue(v.whole_workbook)
         self.assertEqual((v.coded_rows, v.total_rows), (3, 4))
         self.assertEqual(v.coded_itemcodes, ['0200', '100', '300'])
         ev = TaxAuditEvent.objects.get(action='egs_sheet_built')
@@ -308,11 +334,8 @@ class BuildTests(_BuildMixin, TestCase):
         self.profile('100', brick='10000043', rate=0, treatment='exempt')    # coded in the sheet and on ETA
         v = self.build()
         o, n = _wb(self.held_bytes)['DataEntry'], _wb(egs_sheet.open_version(v))['DataEntry']
-        for row in (2, 3, 5):
-            self.assertEqual(_row_values(n, row)[:11], _row_values(o, row)[:11])
-        # L/N/O/P keep their effective value, written as a value: 100 (EGS, 14%), 0200 (GS1, 0%), 400 (A, no G)
-        self.assertEqual([_row_values(n, row)[11:] for row in (2, 3, 5)],
-                         [[0, None, '0', 14, 'v009'], [0, None, '0', 0, 'v003'], [0, None, '0', 14, 'v009']])
+        for row in (1, 2, 3, 5):         # every cell as it was, formulas included
+            self.assertEqual(_row_values(n, row), _row_values(o, row))
         self.assertEqual((v.coded, v.added), (['300'], []))
         self.assertEqual(n.max_row, o.max_row)
 
@@ -321,11 +344,13 @@ class BuildTests(_BuildMixin, TestCase):
         self.profile('500', status='missing', env='', decision=None, treatment='exempt', rate=0)
         v = self.build()
         self.assertEqual((v.added, v.coded), (['500'], []))
-        ws = _wb(egs_sheet.open_version(v))['DataEntry']
-        r = _row_values(ws, 6)
+        data = egs_sheet.open_version(v)
+        r = _row_values(_values(data)['DataEntry'], 6)
         self.assertEqual(r[:11], ['EGS', 'EG-499336534-500', 'ETA NAME', 'ETA NAME', 'ETA NAME', 'ETA NAME',
                                   dt.datetime(2026, 3, 1), None, 10000044, 500, 0])
         self.assertEqual(r[11:], [1, None, '0', 0, 'v003'])
+        ws = _wb(data)['DataEntry']
+        self.assertEqual(ws['N6'].value, '=IF(AND(A6="",G6=""), "1","0")')     # the row above's, translated
         self.assertTrue(ws.cell(6, 1).font.bold)
         self.assertEqual(ws.cell(6, 7).number_format, 'mm-dd-yy')
         self.assertEqual(ws.tables['DataEntryTable'].ref, 'A1:P6')
@@ -338,7 +363,7 @@ class BuildTests(_BuildMixin, TestCase):
         self.profile('500', brick='10000043')
         self.profile('501', brick='10000043')
         v = self.build()
-        ws = _wb(egs_sheet.open_version(v))['DataEntry']
+        ws = _values(egs_sheet.open_version(v))['DataEntry']
         self.assertEqual((ws['J6'].value, ws['J7'].value), (500, 501))
         self.assertEqual([ws[f'{c}7'].value for c in 'LNOP'], [0, '0', 14, 'v009'])
         self.assertEqual(ws.auto_filter.ref, 'A1:P7')
@@ -398,16 +423,16 @@ class BuildTests(_BuildMixin, TestCase):
         ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
         self.assertEqual([ws.cell(n, 9).value for n in (6, 7, 8)], [10000046, 10000044, 10000045])
 
-    def test_no_formula_is_left_in_a_built_file(self):
+    def test_formulas_stay_and_the_written_rows_carry_their_results(self):
         self.profile('300', brick='10000043')
         self.profile('500', brick='10000043')
-        ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
-        formulas = [c.coordinate for row in ws.iter_rows() for c in row
-                    if isinstance(c.value, str) and c.value.startswith('=')]
-        self.assertEqual(formulas, [])
-        self.assertEqual([ws[f'{c}2'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # untouched coded row
-        self.assertEqual([ws[f'{c}4'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # newly coded row
-        self.assertEqual([ws[f'{c}6'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # appended row
+        data = egs_sheet.open_version(self.build())
+        ws = _wb(data)['DataEntry']
+        for n in range(2, 7):
+            self.assertTrue(all(str(ws[f'{c}{n}'].value).startswith('=') for c in 'LNOP'), n)
+        values = _values(data)['DataEntry']
+        self.assertEqual([values[f'{c}4'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # newly coded row
+        self.assertEqual([values[f'{c}6'].value for c in 'LNOP'], [0, '0', 14, 'v009'])     # appended row
 
     def test_a_typed_value_equal_to_the_formula_is_kept(self):
         wb = _wb(self.sheet_bytes())
@@ -417,7 +442,7 @@ class BuildTests(_BuildMixin, TestCase):
         self.profile('300', brick='10000043')
         ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
         self.assertEqual(ws['N3'].value, 0)
-        self.assertEqual(ws['N2'].value, '0')
+        self.assertEqual(ws['N2'].value, '=IF(AND(A2="",G2=""), "1","0")')
 
     def test_a_typed_value_other_than_the_formula_is_kept_on_an_untouched_row(self):
         wb = _wb(self.sheet_bytes())
@@ -429,7 +454,7 @@ class BuildTests(_BuildMixin, TestCase):
         v = self.build()
         self.assertIsInstance(v, TaxEgsSheetVersion)
         ws = _wb(egs_sheet.open_version(v))['DataEntry']
-        self.assertEqual((ws['N2'].value, ws['N4'].value), (1, '0'))
+        self.assertEqual((ws['N2'].value, ws['N4'].value), (1, '0'))         # row 4 is written: its result
 
     def test_a_build_with_nothing_new_returns_the_latest_and_stores_nothing(self):
         self.assertEqual(self.build(), self.held)
@@ -498,7 +523,7 @@ class ChecksTests(_BuildMixin, TestCase):
 
     def check(self, edit):
         wb = _wb(self.held_bytes)
-        egs_sheet._fill_values(wb['DataEntry'])
+        _fill(wb['DataEntry'])
         edit(wb['DataEntry'], wb)
         return egs_sheet.checks(wb, self.held_counts())
 
@@ -556,7 +581,7 @@ class ChecksTests(_BuildMixin, TestCase):
 
         def code_300(ws, wb):
             ws['A4'], ws['G4'], ws['I4'] = 'EGS', D, 10000043
-            egs_sheet._fill_values(ws, [4])
+            _fill(ws)
         problems = self.check(code_300)
         self.assertEqual(len(problems), 1)
         self.assertIn('300', problems[0])
@@ -584,6 +609,76 @@ class WorkbookPartsKeptTests(_BuildMixin, TestCase):
         self.assertEqual(built.defined_names['CodeTypes'].attr_text, "'GPC Bricks Cleaned'!$A$1:$A$2")
         self.assertEqual(built.sheetnames, ['DataEntry', 'GPC Bricks Cleaned', 'ElRezeiky GPC Applied'])
         self.assertEqual(built['GPC Bricks Cleaned']['A1'].value, 'brick')
+
+    def test_every_other_part_of_the_owner_workbook_keeps_its_bytes(self):
+        """The owner's file holds parts openpyxl drops on a re-save (Power Query connections, the data model, custom
+        XML). A build edits DataEntry in place: every other part comes out byte for byte."""
+        extra = {'xl/connections.xml': b'<connections><connection id="1" name="Query - X"/></connections>',
+                 'xl/model/item.data': bytes(range(256)) * 40,
+                 'customXml/item1.xml': '<root>بيانات</root>'.encode('utf-8')}
+        buf = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(self.sheet_bytes())) as zin, zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for info in zin.infolist():
+                zout.writestr(info, zin.read(info.filename))
+            for name, data in extra.items():
+                zout.writestr(name, data)
+        TaxEgsSheetVersion.objects.all().delete()
+        self.seed(buf.getvalue())
+        self.profile('300', brick='10000043')
+        self.profile('500', brick='10000043')             # appended: the table grows too
+        built = egs_sheet.open_version(self.build())
+        old, new = _parts(self.held_bytes), _parts(built)
+        self.assertEqual(list(old), list(new))           # same parts, same order
+        changed = {n for n in old if old[n] != new[n]}
+        self.assertEqual(changed, {'xl/worksheets/sheet1.xml', 'xl/tables/table1.xml'})
+        for name, data in extra.items():
+            self.assertEqual(new[name], data)
+
+    def test_a_coded_only_build_changes_only_the_dataentry_part(self):
+        self.profile('300', brick='10000043')
+        built = egs_sheet.open_version(self.build())
+        old, new = _parts(self.held_bytes), _parts(built)
+        self.assertEqual({n for n in old if old[n] != new[n]}, {'xl/worksheets/sheet1.xml'})
+
+    def test_other_rows_keep_their_exact_xml(self):
+        self.profile('300', brick='10000043')
+        built = egs_sheet.open_version(self.build())
+        old_xml = _parts(self.held_bytes)['xl/worksheets/sheet1.xml'].decode('utf-8')
+        new_xml = _parts(built)['xl/worksheets/sheet1.xml'].decode('utf-8')
+        pick = lambda xml: {m.group(1): m.group(0) for m in re.finditer(r'<row r="(\d+)"[^>]*>.*?</row>', xml)}
+        old_rows, new_rows = pick(old_xml), pick(new_xml)
+        self.assertEqual(set(old_rows), set(new_rows))
+        self.assertEqual({n for n in old_rows if old_rows[n] != new_rows[n]}, {'4'})
+        self.assertEqual(old_xml[:old_xml.index('<sheetData')], new_xml[:new_xml.index('<sheetData')])
+        self.assertEqual(old_xml[old_xml.index('</sheetData>'):], new_xml[new_xml.index('</sheetData>'):])
+
+    def test_a_typed_arabic_name_and_brick_are_never_replaced(self):
+        """Like item 33003 in the real sheet: Arabic name and description typed on an uncoded row."""
+        wb = _wb(self.sheet_bytes())
+        ws = wb['DataEntry']
+        ws['D4'], ws['F4'], ws['I4'] = 'بيوتين روش', 'فيتامين', 10000825
+        TaxEgsSheetVersion.objects.all().delete()
+        self.seed(_save(wb))
+        self.profile('300', brick='10005845')
+        r = _row_values(_values(egs_sheet.open_version(self.build()))['DataEntry'], 4)
+        self.assertEqual((r[3], r[5], r[8]), ('بيوتين روش', 'فيتامين', 10000825))
+        self.assertEqual((r[0], r[10]), ('EGS', 0.14))      # A, and K = the confirmed rate, always
+
+    def test_an_old_build_is_not_whole_and_the_next_build_starts_from_the_owner_file(self):
+        self.profile('300', brick='10000043')
+        old = egs_sheet.store(make_sheet(ROWS), source='build', coded_itemcodes=['0200', '100', '300'])
+        self.assertFalse(old.whole_workbook)
+        self.assertEqual(egs_sheet.latest_whole(), self.held)
+        v = self.build()
+        self.assertEqual((v.number, v.coded, v.whole_workbook), (3, ['300'], True))
+        ev = TaxAuditEvent.objects.get(action='egs_sheet_built')
+        self.assertEqual(ev.after['from'], 1)
+
+    def test_a_date_goes_in_with_a_date_style(self):
+        self.profile('300', brick='10000043')
+        ws = _wb(egs_sheet.open_version(self.build()))['DataEntry']
+        self.assertTrue(ws['G4'].is_date)
+        self.assertEqual(ws['G4'].value, dt.datetime(dt.date.today().year, 1, 1))
 
 
 # ── S3 Task 3: endpoints ───────────────────────────────────────────────────────────────────────
@@ -668,14 +763,17 @@ class SheetApiTests(_BuildMixin, TestCase):
         new = b''.join(self.api.get(SHEET_URL + '2/download/', {'kind': 'new'}).streaming_content)
         for data in (full, new):
             ws = _wb(data)['DataEntry']
-            rows = [n for n in range(2, ws.max_row + 1) if ws.cell(n, 10).value in (300, 500)]
-            self.assertEqual(len(rows), 2)
-            for n in rows:
-                for col, want in ((3, '=1+1'), (4, '=HYPERLINK("x")'), (5, '=1+1')):
-                    cell = ws.cell(n, col)
+            rows = {ws.cell(n, 10).value: n for n in range(2, ws.max_row + 1) if ws.cell(n, 10).value in (300, 500)}
+            self.assertEqual(set(rows), {300, 500})
+            # 500 is appended (every name written); 300's typed C and E stay, its empty D is filled
+            for code, cols in ((500, ((3, '=1+1'), (4, '=HYPERLINK("x")'), (5, '=1+1'))),
+                               (300, ((4, '=HYPERLINK("x")'),))):
+                for col, want in cols:
+                    cell = ws.cell(rows[code], col)
                     self.assertEqual((cell.value, cell.data_type), (want, 's'))
             xml = zipfile.ZipFile(io.BytesIO(data)).read('xl/worksheets/sheet1.xml').decode()
-            self.assertNotIn('<f>', xml)
+            formulas = re.findall(r'<f(?: [^>]*)?>(.*?)</f>', xml)
+            self.assertFalse([f for f in formulas if '1+1' in f or 'HYPERLINK' in f])
 
     def test_no_held_version_is_400_and_starts_nothing(self):
         TaxEgsSheetVersion.objects.all().delete()
@@ -747,6 +845,17 @@ class SheetApiTests(_BuildMixin, TestCase):
         self.assertEqual([ws.cell(n, 10).value for n in range(2, ws.max_row + 1)], [300, 500])
         self.assertEqual(_row_values(ws, 2)[11:], [0, None, '0', 14, 'v009'])
         self.assertEqual(TaxAuditEvent.objects.get(action='egs_sheet_download').after['kind'], 'new')
+
+    def test_an_old_build_cannot_be_downloaded_in_full(self):
+        old = egs_sheet.store(make_sheet(ROWS), source='build', coded_itemcodes=['0200', '100'])
+        r = self.api.get(SHEET_URL + f'{old.number}/download/', {'kind': 'full'})
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()['detail'], egs_sheet.NOT_WHOLE)
+        self.assertEqual(self.api.get(SHEET_URL + f'{old.number}/download/', {'kind': 'new'}).status_code, 200)
+        rows = {v['number']: v for v in self.api.get(SHEET_URL).json()['versions']}
+        self.assertEqual((rows[1]['whole_workbook'], rows[1]['not_whole']), (True, ''))
+        self.assertEqual((rows[old.number]['whole_workbook'], rows[old.number]['not_whole']),
+                         (False, egs_sheet.NOT_WHOLE))
 
     def test_download_errors(self):
         self.assertEqual(self.api.get(SHEET_URL + '1/download/', {'kind': 'csv'}).status_code, 400)

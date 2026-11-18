@@ -6,14 +6,16 @@ This module keeps its versions: `store` writes one version's file under TAX_EGS_
 workbook's DataEntry sheet (coded row = CodeType (A) and ActiveFrom (G) filled; itemcode = EGSRelatedCode (J)).
 `build` makes the next version from the latest: it codes the uncoded row of each newly coded item or appends a row
 for an item not in the sheet, never rewriting a coded row; `checks` must pass before a version is accepted.
-The owner's original file is only ever read."""
+A build edits the DataEntry cells inside the file (egs_xlsx), so every other part of the owner's workbook keeps its
+bytes. The owner's original file is only ever read."""
 import datetime as dt
 import hashlib
+import html
 import io
 import json
 import logging
 import re
-from copy import copy
+import zipfile
 from decimal import Decimal
 from pathlib import Path
 
@@ -22,7 +24,6 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from openpyxl.utils import get_column_letter, range_boundaries
 
 from apps.tax_invoicing.gpc import _text
 from apps.tax_invoicing.models import (EtaCodeUsage, TaxCodingDecision, TaxEgsSheetVersion, TaxIssuerProfile,
@@ -84,12 +85,14 @@ def latest():
 
 
 def store(data, *, source, built_by=None, note='', coded_rows=0, total_rows=0, added=(), coded=(), skipped=(),
-          coded_itemcodes=()):
+          coded_itemcodes=(), whole_workbook=None):
     """Writes `data` as the next version: file first, then the row; a failed row removes the file. Old files (all but
     the newest KEEP_FILES versions; their rows stay) are removed only after the transaction commits
     (transaction.on_commit), so a rollback never loses a kept version's file. A caller that wraps store() in its own
     transaction must call discard_file(version) when that transaction rolls back (Django has no on-rollback hook), as
-    egs_sheet_seed does."""
+    egs_sheet_seed does. `whole_workbook` (default: a seed or a fetched copy is; a build says so itself)."""
+    if whole_workbook is None:
+        whole_workbook = source != TaxEgsSheetVersion.SOURCE_BUILD
     folder = _dir()
     folder.mkdir(parents=True, exist_ok=True)
     sha = hashlib.sha256(data).hexdigest()
@@ -103,7 +106,8 @@ def store(data, *, source, built_by=None, note='', coded_rows=0, total_rows=0, a
             version = TaxEgsSheetVersion.objects.create(
                 number=number, sha256=sha, file_name=name, size=len(data), coded_rows=coded_rows,
                 total_rows=total_rows, added=list(added), coded=list(coded), skipped=list(skipped),
-                coded_itemcodes=list(coded_itemcodes), source=source, built_by=built_by, note=note[:300])
+                coded_itemcodes=list(coded_itemcodes), source=source, built_by=built_by, note=note[:300],
+                whole_workbook=whole_workbook)
         except Exception:
             path.unlink(missing_ok=True)
             raise
@@ -224,9 +228,10 @@ def candidates(coded=None):
     """Newly coded items not yet coded in the sheet, sorted by itemcode: [{itemcode, why, ...row values}]. `why` is
     why an item is not written (unconfirmed VAT, no brick, ...); empty = ready. A newly coded item = no keep-out
     decision AND a code ETA production holds (profile approved with coding_env 'production', or an approved/active
-    production EtaCodeUsage matched to it). `coded` = the sheet's coded itemcodes (default: the latest version's)."""
+    production EtaCodeUsage matched to it). `coded` = the sheet's coded itemcodes (default: those of the latest whole
+    version, the next build's base)."""
     if coded is None:
-        version = latest()
+        version = latest_whole()       # the base of the next build
         coded = version.coded_itemcodes if version else ()
     coded = {_text(c) for c in coded}
     issuer = TaxIssuerProfile.objects.first()
@@ -255,27 +260,6 @@ def _number(text):
 
 def _padded(r):
     return tuple(r) + (None,) * (COLS - len(r))
-
-
-def _scan(ws):
-    """({itemcode: [(row number, coded)]}, last row with a value in A..K)."""
-    rows, last = {}, 1
-    for n, r in enumerate(ws.iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
-        r = _padded(r)
-        if any(v not in (None, '') for v in r[:COL_K + 1]):
-            last = n
-        code = _text(r[COL_J])
-        if code:
-            rows.setdefault(code, []).append((n, bool(_text(r[COL_A]) and _text(r[COL_G]))))
-    return rows, last
-
-
-def _write_row(ws, n, c):
-    values = {COL_A: c['code_type'], COL_B: c['item_code'], 2: c['code_name'], 3: c['code_name_ar'],
-              4: c['description'], 5: c['description_ar'], COL_G: dt.datetime.combine(c['active_from'], dt.time()),
-              COL_I: _number(c['gpc']), COL_J: _number(c['itemcode']), COL_K: float(c['vat'])}
-    for col, value in values.items():
-        _set(ws.cell(n, col + 1), value)
 
 
 def _set(cell, value):
@@ -321,29 +305,6 @@ def _has_row(r):
     return any(not _blank(v) for v in r[:COL_K + 1]) or any(not _blank(r[c]) for c in FORMULA_COLS)
 
 
-def _fill_values(ws, written=()):
-    """Writes L/N/O/P of every DataEntry row as the value its formula gives (the Invoicer may read the file without
-    recalculating, and openpyxl keeps no computed values). Only the cell form changes (formula → its own value);
-    A..K and every effective value stay as they were, so a coded row is still untouched. A value the owner typed
-    instead of a formula is kept: when it equals the formula's (a typed 0 for "0") and when it differs (the real
-    sheet has one: item 114109, N typed 1). Rows in `written` (the rows this build coded or appended) always get the
-    formula values. Returns {(row, column index): value} of the kept typed values that differ, for checks."""
-    written, typed = set(written), {}
-    for n, r in enumerate(ws.iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
-        r = _padded(r)
-        if not _has_row(r):
-            continue
-        for col, value in zip(FORMULA_COLS, _formula_values(r)):
-            got = r[col]
-            if _same(value, got):
-                continue
-            if n not in written and not _blank(got) and not (isinstance(got, str) and got.startswith('=')):
-                typed[(n, col)] = got
-                continue
-            ws.cell(n, col + 1).value = value
-    return typed
-
-
 def _same(want, got):
     """A cell value equal to a formula's value: numbers within 1e-9, else the same text (a typed 0 = "0"); a formula
     or an empty cell never equals a value."""
@@ -356,33 +317,19 @@ def _same(want, got):
     return _text(want) == _text(got)
 
 
-def _formula_mismatches(ws, typed=None):
-    """Itemcodes (or row numbers) whose L/N/O/P are not the values of their formulas, apart from the owner's typed
-    values `typed` kept by _fill_values (same row, same column, same value)."""
-    typed, bad = typed or {}, []
+def _formula_mismatches(ws, rows=None):
+    """Itemcodes (or row numbers) of `rows` (default: every row) whose L/N/O/P are not the values of their
+    formulas. A build checks only the rows it wrote: every other row is the owner's, untouched."""
+    bad = []
     for n, r in enumerate(ws.iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
+        if rows is not None and n not in rows:
+            continue
         r = _padded(r)
         if not _has_row(r):
             continue
-        if not all(_same(w, r[c]) or ((n, c) in typed and typed[(n, c)] == r[c])
-                   for w, c in zip(_formula_values(r), FORMULA_COLS)):
+        if not all(_same(w, r[c]) for w, c in zip(_formula_values(r), FORMULA_COLS)):
             bad.append(_text(r[COL_J]) or f'صف {n}')
     return bad
-
-
-def _copy_style(ws, src, dst):
-    for col in range(1, COLS + 1):
-        cell = ws.cell(src, col)
-        if cell.has_style:
-            ws.cell(dst, col)._style = copy(cell._style)
-    if ws.row_dimensions[src].height is not None:
-        ws.row_dimensions[dst].height = ws.row_dimensions[src].height
-
-
-def _extend(ref, last):
-    """`ref` (A1:P5) grown down to row `last`; never shrunk."""
-    min_col, min_row, max_col, max_row = range_boundaries(ref)
-    return f'{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{max(max_row, last)}'
 
 
 def _is_rate(k):
@@ -426,16 +373,17 @@ def _sample(items, n=5):
 
 
 def checks(wb, held_counts):
-    """Arabic reasons this workbook must not become a version; [] = accepted. `held_counts` = read_counts of the
-    held version plus its `sheetnames` (and `typed`: the owner's typed L/N/O/P values build kept, from
-    _fill_values). The saved file's re-read is checked by build."""
+    """Arabic reasons this workbook must not become a version; [] = accepted. `wb` is read with its values
+    (data_only). `held_counts` = read_counts of the held version plus its `sheetnames` (and `written`: the rows the
+    build wrote — only their L/N/O/P are checked). The saved file's re-read is checked by build."""
     problems = []
     if list(wb.sheetnames) != list(held_counts['sheetnames']):
         problems.append('أسماء أوراق الملف تغيرت عن النسخة السابقة')
     if SHEET not in wb.sheetnames:
         return problems + [f'لا توجد ورقة باسم «{SHEET}» في الملف']
     ws = wb[SHEET]
-    if [_header_text(ws.cell(1, c).value) for c in range(1, COLS + 1)] != HEADER:
+    header = next(ws.iter_rows(max_row=1, max_col=COLS, values_only=True), ())
+    if [_header_text(v) for v in _padded(header)] != HEADER:
         problems.append(f'عناوين ورقة «{SHEET}» ليست عناوين ملف الأكواد')
     counts = _sheet_counts(ws)
     if counts['dup_codes']:
@@ -445,7 +393,7 @@ def checks(wb, held_counts):
     if counts['bad']:
         problems.append('صفوف مكوّدة ناقصة أو خاطئة: '
                         + _sample(f'{code} ({"، ".join(p)})' for code, p in counts['bad']))
-    mismatched = _formula_mismatches(ws, held_counts.get('typed'))
+    mismatched = _formula_mismatches(ws, held_counts.get('written'))
     if mismatched:
         problems.append(f'قيم الأعمدة L وN وO وP لا تطابق معادلاتها: {_sample(mismatched)}')
     new = set(counts['coded_itemcodes']) - {_text(c) for c in held_counts['coded_itemcodes']}
@@ -460,14 +408,77 @@ def checks(wb, held_counts):
     return problems
 
 
+NOT_WHOLE = ('هذه النسخة بُنيت قبل 18 نوفمبر 2026 بطريقة أسقطت أجزاءً من ملف المالك (الاستعلامات والمعادلات) — '
+             'لا تُنزَّل كاملة ولا تُكتب على جهاز الختم؛ ابنِ نسخة جديدة')
+NO_DATE_STYLE = 'لا يوجد صف مكوّد في الملف يُؤخذ منه تنسيق التاريخ — لا يمكن كتابة ActiveFrom'
+OTHER_PARTS = 'تغيّر جزء آخر من ملف المالك غير ورقة الأكواد — لم تُحفظ نسخة'
+NOT_OPENED = 'الملف بعد التعديل لا يُفتح — لم تُحفظ نسخة'
+ALWAYS = (COL_A, COL_G, COL_K)          # what makes the row coded, and the VAT rate a person confirmed
+FORMULA_KINDS = {12: 'n', 14: 'str', 15: 'n', 16: 'str'}     # L, N, O, P (1-based): number or text results
+
+
+def latest_whole():
+    """The newest version that holds the owner's whole workbook: the base of the next build."""
+    return TaxEgsSheetVersion.objects.filter(whole_workbook=True).order_by('-number').first()
+
+
+def _scan_values(data):
+    """({itemcode: [(row, coded)]}, {row: A..P values} of item rows, last row with a value in A..K, last coded
+    row), from the workbook's cached values."""
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    rows, values, last, last_coded = {}, {}, 1, None
+    try:
+        for n, r in enumerate(wb[SHEET].iter_rows(min_row=2, max_col=COLS, values_only=True), start=2):
+            r = _padded(r)
+            if any(v not in (None, '') for v in r[:COL_K + 1]):
+                last = n
+            code = _text(r[COL_J])
+            if code:
+                coded = bool(_text(r[COL_A]) and _text(r[COL_G]))
+                rows.setdefault(code, []).append((n, coded))
+                values[n] = r
+                if coded:
+                    last_coded = n
+    finally:
+        wb.close()
+    return rows, values, last, last_coded
+
+
+def _new_values(c):
+    """A..K of a candidate (0-based columns)."""
+    return {COL_A: c['code_type'], COL_B: c['item_code'], 2: c['code_name'], 3: c['code_name_ar'],
+            4: c['description'], 5: c['description_ar'], COL_G: dt.datetime.combine(c['active_from'], dt.time()),
+            COL_I: _number(c['gpc']), COL_J: _number(c['itemcode']), COL_K: float(c['vat'])}
+
+
+def _empty(col, v):
+    """A cell the build may fill: empty, or a GPC brick of 0."""
+    return _blank(v) or (col == COL_I and _text(v) in ('0', '0.0'))
+
+
+def _one_based(cells):
+    return {col + 1: v for col, v in cells.items()}
+
+
+def _sheetnames(data):
+    """The sheet names of a workbook, in order, from its workbook part."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        text = z.read('xl/workbook.xml').decode('utf-8')
+    return [html.unescape(m) for m in re.findall(r'<sheet\b[^>]*?\bname="([^"]*)"', text)]
+
+
 def build(actor, note=''):
-    """The next version from the latest one: each ready candidate codes its uncoded row, or gets a new row after the
-    last item row (style of the row above, inside the DataEntry table and autofilter). Coded rows are never touched:
-    their A..K stay as they are, and L/N/O/P of every row are written as the values of the owner's formulas
-    (_fill_values: same effective value, so the Invoicer reads them without Excel recalculating).
-    Returns the new version; the latest one unchanged when nothing is to be written; {'refused': [...]} when a check
-    fails (nothing stored). One load, one save."""
-    held = latest()
+    """The next version from the latest whole version (whole_workbook): each ready candidate codes its uncoded row,
+    or gets a new row after the last item row (a copy of that row: styles, formulas). Only DataEntry cells change,
+    inside the file (egs_xlsx.patch); every other part of the owner's workbook keeps its bytes. On a row it codes,
+    the build sets A (code type), G (ActiveFrom) and K (the confirmed VAT rate), fills B..F and I only where they are
+    empty (a typed name or brick is never replaced), and gives L/N/O/P the results of their formulas (the formulas
+    stay). Coded rows are never touched.
+    Returns the new version; the base unchanged when nothing is to be written; {'refused': [...]} when a check
+    fails (nothing stored)."""
+    from apps.tax_invoicing import egs_xlsx
+    started_on = latest()
+    held = latest_whole()
     if held is None:
         return {'refused': [NO_HELD]}
     try:
@@ -483,53 +494,73 @@ def build(actor, note=''):
             ready.append(c)
     if not ready:
         return held
-    wb = openpyxl.load_workbook(io.BytesIO(data))     # not read_only: the workbook is edited and saved whole
-    held_counts['sheetnames'] = list(wb.sheetnames)
-    ws = wb[SHEET]
-    rows, last = _scan(ws)
-    coded, added, written = [], [], []
+    rows, values, last, last_coded = _scan_values(data)
+    template = last
+    edits, appends, coded, added, written = {}, [], [], [], []
     for c in ready:
         at = rows.get(c['itemcode'])
         if at and any(is_coded for _, is_coded in at):     # a coded row is never rewritten
             continue
+        new = _new_values(c)
         if at:
-            _write_row(ws, at[0][0], c)
-            written.append(at[0][0])
+            n = at[0][0]
+            row = list(values[n])
+            change = {}
+            for col, v in new.items():
+                if col in ALWAYS or _empty(col, row[col]):
+                    row[col] = v
+                    change[col] = v
+            change.update(zip(FORMULA_COLS, _formula_values(row)))
+            edits[n] = _one_based(change)
+            written.append(n)
             coded.append(c['itemcode'])
         else:
             last += 1
-            _copy_style(ws, last - 1, last)
-            _write_row(ws, last, c)
+            row = [None] * COLS
+            for col, v in new.items():
+                row[col] = v
+            cells = dict(new)
+            cells.update(zip(FORMULA_COLS, _formula_values(row)))
+            appends.append((last, _one_based(cells)))
             written.append(last)
             added.append(c['itemcode'])
     if not (coded or added):
         return held
-    held_counts['typed'] = _fill_values(ws, written)
-    if added:
-        for table in ws.tables.values():
-            table.ref = _extend(table.ref, last)
-            if table.autoFilter is not None and table.autoFilter.ref:
-                table.autoFilter.ref = _extend(table.autoFilter.ref, last)
-        if ws.auto_filter.ref:
-            ws.auto_filter.ref = _extend(ws.auto_filter.ref, last)
-    problems = checks(wb, held_counts)
+    if last_coded is None:
+        return {'refused': [NO_DATE_STYLE], 'skipped': skipped}
+    try:
+        new_data, _ = egs_xlsx.patch(data, SHEET, edits=edits, appends=appends, template_row=template,
+                                     formula_kinds=FORMULA_KINDS, date_style_row=last_coded,
+                                     date_cols={COL_G + 1})
+        allowed = egs_xlsx.editable_parts(data, SHEET)
+    except egs_xlsx.PatchError as exc:
+        return {'refused': [str(exc)], 'skipped': skipped}
+    if egs_xlsx.changed_parts(data, new_data) - allowed:
+        return {'refused': [OTHER_PARTS], 'skipped': skipped}
+    held_counts['written'] = set(written)
+    held_counts['sheetnames'] = _sheetnames(data)
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(new_data), read_only=True, data_only=True)
+    except Exception:       # openpyxl raises several types for a broken workbook
+        return {'refused': [NOT_OPENED], 'skipped': skipped}
+    try:
+        problems = checks(wb, held_counts)
+        expected = None if problems else _sheet_counts(wb[SHEET])
+    finally:
+        wb.close()
     if problems:
         return {'refused': problems, 'skipped': skipped}
-    expected = _sheet_counts(ws)
-    buf = io.BytesIO()
-    wb.save(buf)
-    new = buf.getvalue()
-    counts = read_counts(new)
+    counts = read_counts(new_data)
     if any(counts[k] != expected[k] for k in ('total_rows', 'coded_rows', 'coded_itemcodes')):
         return {'refused': ['الملف المحفوظ لا يُقرأ بنفس الأعداد — لم تُحفظ نسخة'], 'skipped': skipped}
     version = None
     try:
         with transaction.atomic():      # no version without its audit event
             current = TaxEgsSheetVersion.objects.select_for_update().order_by('-number').first()
-            if current is None or current.pk != held.pk:
+            if current is None or started_on is None or current.pk != started_on.pk:
                 return {'refused': ['بُنيت نسخة أحدث أثناء البناء — أعد المحاولة'], 'skipped': skipped}
-            version = store(new, source=TaxEgsSheetVersion.SOURCE_BUILD, built_by=actor, note=note, added=added,
-                            coded=coded, skipped=skipped, **counts)
+            version = store(new_data, source=TaxEgsSheetVersion.SOURCE_BUILD, built_by=actor, note=note,
+                            added=added, coded=coded, skipped=skipped, whole_workbook=True, **counts)
             audit('egs_sheet_built', actor=actor, entity='egs_sheet', entity_id=version.number, reason=note,
                   after={'number': version.number, 'from': held.number, 'sha256': version.sha256,
                          'coded_rows': version.coded_rows, 'total_rows': version.total_rows,
