@@ -28,10 +28,11 @@
 
 ---
 
-## Module Map (71 Django app folders — see docs/full-project-audit/02)
+## Module Map (70 Django apps under `apps/` as of 2026-11-19 — see docs/full-project-audit/02)
 
 > The tables below highlight the headline modules. The codebase actually contains
-> **52 Django apps** under `apps/` (the "32" and "48" figures were stale). Additional
+> **70 Django apps** under `apps/` (count of `apps/*/apps.py`, 2026-11-19; the older "32", "48",
+> "52" and "71" figures were stale). Additional
 > apps not listed below include: analytics, approvals, audit, batches, campaigns,
 > cheques, dashboard, delivery, discount_approvals, enrichment, erp, finance,
 > forecasting, hr, images, insurance, loyalty, omni, payments, pbx, **pos_orders**,
@@ -83,8 +84,8 @@
 | `apps/callcenter` | Escalation workflow |
 | `apps/followups` | Unclear overlap with `demand.FollowUpTask` |
 | `apps/campaigns` | Send integration |
-| `apps/deliveries` | Stub |
-| `apps/payments` | Stub |
+| `apps/delivery` | Frontend polish (backend complete — see doc 11) |
+| `apps/payments` | Partial — payment tracking, audit and exception checks exist (see doc 11) |
 | `apps/enrichment` | Partial |
 | `apps/recommendations` | Partial |
 | `apps/cheques` | Partial |
@@ -179,7 +180,10 @@
 ## Current Branch
 
 Work happens on short-lived `claude/*` branches merged to `main` through PRs (CI must be green; never
-`--auto`). `main` is the source of truth; check `gh pr list` for open work. Latest full audit:
+`--auto`). `main` is the source of truth; check `gh pr list` for open work. CI (`.github/workflows/ci.yml`,
+2026-11-19) builds the test database once (cached per migration set), runs the backend suite in 6
+parallel shards (`scripts/ci/test_shards.py`, balanced by `scripts/ci/test_timings.json`) and combines
+coverage against the 73% floor; the "Backend tests (Django)" check is the combine step. Latest full audit:
 [docs/full-project-audit/](../full-project-audit/README.md) (2026-11-15).
 
 ---
