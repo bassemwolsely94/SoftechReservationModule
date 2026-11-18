@@ -274,7 +274,7 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
     decisions = {d.profile_id: d for d in TaxCodingDecision.objects.filter(profile__in=[p.pk for p in profiles])
                  .select_related('decided_by')}
     suggested = suggestions(profiles)
-    requests = coding.production_requests([p.pk for p in profiles])
+    prod_requests = coding.production_requests([p.pk for p in profiles])
     brick_names = gpc.names({s['code'] for s in suggested.values()} | {s['second'] for s in suggested.values()}
                             | {d.brick for d in decisions.values()}
                             | {p.gpc_code for p in profiles if gpc.BRICK.match(p.gpc_code or '')})
@@ -319,15 +319,15 @@ def rows(*, recent_days=None, premark=None, decided=None, q=''):
                     'own_brick': own, 'own_brick_name': brick_names.get(own, ''),
                     'brick_confirmed': bool(d is not None and d.decision and d.brick),
                     'eta_last_status': best[code].status if code in best else '',
-                    **_request_fields(p, d, requests.get(p.pk), item)})
+                    **_request_fields(p, d, prod_requests.get(p.pk), item)})
     return out
 
 
-def _request_fields(profile, decision, requests, item):
+def _request_fields(profile, decision, prod_requests, item):
     """The item's latest production code request, whether one can be prepared from its decision (and why not),
     and the «جرّب GS1» offer. No queries."""
-    latest = (requests or {}).get('latest')
-    blocker = coding.decision_blocker(profile, decision, requests)
+    latest = (prod_requests or {}).get('latest')
+    blocker = coding.decision_blocker(profile, decision, prod_requests)
     return {'request': None if latest is None else {
                 'id': latest.pk, 'status': latest.status, 'status_label': latest.get_status_display(),
                 'eta_status': latest.eta_status, 'error': latest.error, 'purpose': latest.purpose},

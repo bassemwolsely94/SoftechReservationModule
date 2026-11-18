@@ -163,16 +163,16 @@ def production_requests(profile_ids):
     return out
 
 
-def decision_blocker(profile, decision, requests):
-    """Why an item cannot get a production request from its decision, '' when it can. `requests` is the item's
+def decision_blocker(profile, decision, item_requests):
+    """Why an item cannot get a production request from its decision, '' when it can. `item_requests` is the item's
     production_requests() entry (or None). No queries; the GPC list and the names are checked when preparing."""
     if decision is None or decision.decision != TaxCodingDecision.DECISION_CODE:
         return NO_DECISION
-    requests = requests or {}
+    item_requests = item_requests or {}
     on_sheet = profile.coding_env in ('', PRODUCTION)
-    if requests.get('approved') or (on_sheet and profile.coding_status == TaxItemProfile.CODE_APPROVED):
+    if item_requests.get('approved') or (on_sheet and profile.coding_status == TaxItemProfile.CODE_APPROVED):
         return ALREADY_APPROVED
-    if requests.get('open'):
+    if item_requests.get('open'):
         return OPEN_IN_PRODUCTION
     if on_sheet and profile.coding_status == TaxItemProfile.CODE_PENDING:
         return CODE_PENDING_ALREADY
@@ -198,7 +198,7 @@ def prepare_from_decisions(itemcodes, actor, system=PRODUCTION):
     profiles = {p.softech_itemcode: p for p in TaxItemProfile.objects.filter(softech_itemcode__in=codes)}
     ids = [p.pk for p in profiles.values()]
     decisions = {d.profile_id: d for d in TaxCodingDecision.objects.filter(profile__in=ids)}
-    requests = production_requests(ids)
+    by_item = production_requests(ids)
     on_eta, _ = _on_eta_production(profiles)
     active_from = timezone.localdate().replace(month=1, day=1)
     created, skipped = [], []
@@ -208,7 +208,7 @@ def prepare_from_decisions(itemcodes, actor, system=PRODUCTION):
             skipped.append({'itemcode': code, 'why': UNKNOWN_ITEM})
             continue
         d = decisions.get(profile.pk)
-        why = decision_blocker(profile, d, requests.get(profile.pk))
+        why = decision_blocker(profile, d, by_item.get(profile.pk))
         if not why and code in on_eta:
             why = ALREADY_APPROVED
         if not why and not gpc.known(d.brick):
