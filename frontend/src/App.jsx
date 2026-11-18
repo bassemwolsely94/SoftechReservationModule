@@ -77,6 +77,7 @@ const PermissionsMatrixPage = lazy(() => import('./pages/PermissionsMatrixPage')
 const PickZonesPage = lazy(() => import('./pages/PickZonesPage'))
 const CodeMapsPage = lazy(() => import('./pages/CodeMapsPage'))
 const RpaPage = lazy(() => import('./pages/RpaPage'))
+const SupplierPortalsPage = lazy(() => import('./pages/SupplierPortalsPage'))
 const PhoneAlertsPage = lazy(() => import('./pages/PhoneAlertsPage'))
 const ErpPermissionsPage = lazy(() => import('./pages/ErpPermissionsPage'))
 const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
@@ -495,6 +496,8 @@ export default function App() {
             <Route path="tax-invoicing" element={<TaxInvoicingPage />} />
             {/* SOFTECH screen robot: gated by the `rpa` module grant (server enforces every action) */}
             <Route path="rpa" element={<RpaPage />} />
+            {/* Supplier-portal robot (Pharma Overseas): same `rpa` grant; company-level data, server-enforced */}
+            <Route path="rpa/portals" element={<SupplierPortalsPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />

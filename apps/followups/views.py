@@ -81,7 +81,9 @@ class ChronicMedicationProfileViewSet(viewsets.ModelViewSet):
 
 class FollowUpTaskViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, FOLLOWUPS]
-    ordering           = ['due_date', '-created_at']
+    # No view default: get_queryset sorts every case itself (?ordering=, by_score, by_priority,
+    # default). A view `ordering` would make the global OrderingFilter re-sort and undo it.
+    ordering           = None
 
     # ── Queryset with full select/prefetch + advanced filtering ───────────────
     def get_serializer_context(self):
@@ -245,9 +247,9 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             'priority_score', '-priority_score',
         }
         if ordering in allowed:
-            qs = qs.order_by(ordering)
+            qs = qs.order_by(ordering, 'pk')
         elif p.get('by_score') in ('1', 'true', 'True'):
-            qs = qs.order_by('-priority_score', 'due_date')
+            qs = qs.order_by('-priority_score', 'due_date', 'pk')
         elif p.get('by_priority') in ('1', 'true', 'True'):
             # Favoured channels first, then soonest due. Ranks from the channel
             # registry; unranked / unknown / blank codes sort last (9).
@@ -258,9 +260,9 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
             qs = qs.annotate(
                 _chan_rank=Case(*whens, default=Value(FollowUpTask.UNRANKED_CHANNEL_PRIORITY),
                                 output_field=IntegerField())
-            ).order_by('_chan_rank', 'due_date')
+            ).order_by('_chan_rank', 'due_date', 'pk')
         else:
-            qs = qs.order_by('due_date', '-created_at')
+            qs = qs.order_by('due_date', '-created_at', 'pk')
 
         return qs
 

@@ -67,10 +67,12 @@ _RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
 # the tests are written against. Without this a production .env (writers ON) made every
 # "gate off by default" test fail. Tests that need a gate open use override_settings.
 # SOFTECH_TESTS_ALLOW_LIVE=True keeps .env for a deliberate run against a TEST server.
+# Every TAX_ETA_* value (system, addresses, logins) also takes its code default (empty), so a server
+# whose .env points at ETA's pre-production never logs in to ETA from a test (role sweep check-login).
 if _RUNNING_TESTS and not config('SOFTECH_TESTS_ALLOW_LIVE', default=False, cast=bool):
     import re as _re
     _GATE_KEY = _re.compile(r'(_ENABLED|_WRITE|_WRITER|_AUTO_APPROVE|_AUTO_TOPUP|_UPDATE_PATIENTDATA|_NOTIFY)$'
-                            r'|^COUPON_GUARD_')
+                            r'|^COUPON_GUARD_|^TAX_ETA_')
     _env_config = config
 
     def config(key, *args, **kwargs):          # noqa: F811 — test-run wrapper
@@ -991,6 +993,7 @@ CUSTOMER_MERGE_WRITE_ENABLED = config('CUSTOMER_MERGE_WRITE_ENABLED', default=Fa
 CUSTOMER_MERGE_BATCH_MAX     = config('CUSTOMER_MERGE_BATCH_MAX', default=20, cast=int)
 # SOFTECH screen RPA: the Windows agent may type documents into SOFTECH. Off by default.
 RPA_SOFTECH_ENTRY_ENABLED   = config('RPA_SOFTECH_ENTRY_ENABLED', default=False, cast=bool)
+RPA_SUPPLIER_PORTAL_ENABLED = config('RPA_SUPPLIER_PORTAL_ENABLED', default=False, cast=bool)
 
 # ── Supplier-invoice save-time validations (replicate SofTech; apps/invoices/validations.py) ──
 INVOICE_MAX_COST_INCREASE_PCT = config('INVOICE_MAX_COST_INCREASE_PCT', default=25, cast=float)  # W2 price spike

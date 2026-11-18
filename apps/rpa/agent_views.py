@@ -74,30 +74,37 @@ class ReportView(AgentView):
                          'status': RpaDocument.objects.values_list('status', flat=True).get(pk=pk)})
 
 
+def save_screenshot(request, target, **owner):
+    """Validate the uploaded step picture for run `target` and store it on `owner` (run= or portal_run=).
+    Shared by the SOFTECH and the supplier-portal agent views."""
+    if target.finished_at is not None:
+        return Response({'detail': 'انتهى هذا التشغيل'}, status=status.HTTP_409_CONFLICT)
+    try:
+        step_index = int(request.data.get('step_index', ''))
+    except (TypeError, ValueError):
+        raise ValidationError({'step_index': 'رقم خطوة غير صالح'})
+    if step_index < 0:
+        raise ValidationError({'step_index': 'رقم خطوة غير صالح'})
+    upload = request.FILES.get('image')
+    if upload is None:
+        raise ValidationError({'image': 'لا توجد صورة'})
+    if upload.size > MAX_SHOT_BYTES:
+        raise ValidationError({'image': 'الصورة أكبر من 2 ميجابايت'})
+    data = upload.read(MAX_SHOT_BYTES + 1)
+    ext = detect(data, 'image') if len(data) <= MAX_SHOT_BYTES else None
+    if ext not in _SHOT_FORMATS:
+        raise ValidationError({'image': 'الصورة يجب أن تكون PNG أو JPEG'})
+    if target.shots.count() >= MAX_SHOTS_PER_RUN:
+        return Response({'detail': 'تم بلوغ الحد الأقصى للصور'}, status=status.HTTP_409_CONFLICT)
+    shot = RpaScreenshot(step_index=step_index, **owner)
+    prefix = 'portalrun' if 'portal_run' in owner else 'run'
+    shot.image.save(f'{prefix}{target.pk}_step{step_index}.{ext}', ContentFile(data), save=True)
+    return Response({'id': shot.pk}, status=status.HTTP_201_CREATED)
+
+
 class ScreenshotView(AgentView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, pk):
         run = get_object_or_404(RpaRun, pk=pk, device=request.auth)
-        if run.finished_at is not None:
-            return Response({'detail': 'انتهى هذا التشغيل'}, status=status.HTTP_409_CONFLICT)
-        try:
-            step_index = int(request.data.get('step_index', ''))
-        except (TypeError, ValueError):
-            raise ValidationError({'step_index': 'رقم خطوة غير صالح'})
-        if step_index < 0:
-            raise ValidationError({'step_index': 'رقم خطوة غير صالح'})
-        upload = request.FILES.get('image')
-        if upload is None:
-            raise ValidationError({'image': 'لا توجد صورة'})
-        if upload.size > MAX_SHOT_BYTES:
-            raise ValidationError({'image': 'الصورة أكبر من 2 ميجابايت'})
-        data = upload.read(MAX_SHOT_BYTES + 1)
-        ext = detect(data, 'image') if len(data) <= MAX_SHOT_BYTES else None
-        if ext not in _SHOT_FORMATS:
-            raise ValidationError({'image': 'الصورة يجب أن تكون PNG أو JPEG'})
-        if run.shots.count() >= MAX_SHOTS_PER_RUN:
-            return Response({'detail': 'تم بلوغ الحد الأقصى للصور'}, status=status.HTTP_409_CONFLICT)
-        shot = RpaScreenshot(run=run, step_index=step_index)
-        shot.image.save(f'run{run.pk}_step{step_index}.{ext}', ContentFile(data), save=True)
-        return Response({'id': shot.pk}, status=status.HTTP_201_CREATED)
+        return save_screenshot(request, run, run=run)

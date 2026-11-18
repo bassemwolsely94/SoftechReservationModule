@@ -8,7 +8,3 @@ access.TrustedNetwork
 #   second profile for the same user is refused. Staff records per branch are covered by the role sweep
 #   and test_branch_isolation (users list / detail scoping).
 users.StaffProfile
-# reason: RpaJob needs an RpaScreen, and the planter cannot build one: the four screens are seeded by the
-#   migration and RpaScreen.key is unique, so a second row is refused. The job holds an upload and its
-#   documents for one supplying branch; its list/detail scoping is covered by the Task 3+ view tests.
-rpa.RpaJob

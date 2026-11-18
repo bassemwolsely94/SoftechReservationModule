@@ -59,6 +59,7 @@ WRITER_FLAGS = {
     'INSURANCE_SOFTECH_WRITE_ENABLED':     {'protects': 'إعادة تسعير مطالبات التأمين'},
     'CUSTOMER_MERGE_WRITE_ENABLED':        {'protects': 'دمج أكواد العملاء المكررة'},
     'RPA_SOFTECH_ENTRY_ENABLED':           {'protects': 'روبوت إدخال SOFTECH (إذن صرف، جرد، مشتريات، مرتجع)'},
+    'RPA_SUPPLIER_PORTAL_ENABLED':         {'protects': 'روبوت مواقع الموردين (طلبيات ومرتجع صلاحية)'},
 }
 
 # Scheduled jobs that call a writer service: not registered on a non-writer instance.
