@@ -362,6 +362,23 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
         keep = set(base.filter(id__in=ids).values_list('id', flat=True))
         return [i for i in ids if i in keep]
 
+    in_base = {}                     # item id → inside `base`, asked once per id per search
+
+    def keep(ids):
+        ask = [i for i in ids if i not in in_base]
+        if ask:
+            have = set(base.filter(id__in=ask).values_list('id', flat=True))
+            in_base.update((i, i in have) for i in ask)
+        return {i for i in ids if in_base[i]}
+
+    def sound_within():
+        # the in-memory sound index keeps its best candidates per lookup: with a narrowed
+        # `base` it must pick them from base's items only, or a filtered item ranked below the
+        # whole catalog's cut is lost. Asked lazily (phonetic.candidates' callable `within`):
+        # one query for the index's hits only, never base's whole id list (with «متوفر» that
+        # list cost 0.4–0.7 s, 2026-11-17); None (unfiltered) = the index's own path, no query
+        return keep if narrowed else None
+
     def add(ids, tier):
         for i in ids:
             if i not in seen:
@@ -418,7 +435,7 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     if len(out) < limit and re.search(r'[؀-ۿ]', raw):
         try:
             from apps.shortage.phonetic import quick_ids
-            add(within(quick_ids(WILD.sub(' ', raw), limit=limit)), 'sound')
+            add(within(quick_ids(WILD.sub(' ', raw), limit=limit, within=sound_within())), 'sound')
         except Exception:
             pass
     # the active ingredient (diclofenac → CATAFLAM): after every brand/name hit, only while the
@@ -432,7 +449,8 @@ def item_search(q: str, *, limit: int = 20, active_only: bool = True, code_prefi
     # no catalog text hit (a remembered item alone doesn't count) → typo-tolerant fallback
     if not raw.isdigit() and not any(t not in ('code', 'code_prefix', 'learned') for _, t in out):
         try:
-            add(within(_approx_ids(WILD.sub(' ', raw), limit, base)), 'approx')   # its matcher fallback
+            # within(): its matcher fallback searches the whole catalog
+            add(within(_approx_ids(WILD.sub(' ', raw), limit, base, within=sound_within())), 'approx')
         except Exception:
             pass
     # a code FRAGMENT (inside the code / barcode) — last, and only when the tiers above left
@@ -510,14 +528,15 @@ _NUM = re.compile(r'\d+(?:\.\d+)?')
 APPROX_MIN = 0.6                      # below this a sound-alike is noise, not a typo
 
 
-def _approx_ids(text: str, limit: int, base) -> list:
+def _approx_ids(text: str, limit: int, base, *, within=None) -> list:
     """Typos («voltren 50», «agmentin 1g», «panadool»): items whose brand SOUNDS like the
     first word (consonant skeleton, apps/shortage/phonetic — ms-fast), re-ranked by how
     close the whole name is and whether the typed numbers are in it. Falls back to the
-    shared matcher. Deterministic — this only proposes, a person picks."""
+    shared matcher. Deterministic — this only proposes, a person picks. `within`: base's
+    item ids when a filter narrows it (phonetic.candidates picks its best from them only)."""
     from rapidfuzz import fuzz
     from apps.shortage import phonetic
-    cands = phonetic.candidates(text, limit=60, cutoff=0.75)
+    cands = phonetic.candidates(text, limit=60, cutoff=0.75, within=within)
     if cands:
         names = dict(base.filter(id__in=[i for i, _ in cands]).values_list('id', 'name'))
         nums = _NUM.findall(text)

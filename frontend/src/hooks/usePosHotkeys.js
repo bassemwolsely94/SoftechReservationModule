@@ -16,7 +16,7 @@ import { useEffect } from 'react'
  *   F9            → preview the send (dry-run — never writes to SOFTECH)
  *   F10           → live send to the cashier (only when the writer is enabled)
  *   ArrowUp/Down  → move the selected line (only when not editing a field)
- * (Ctrl+F1 advanced search is handled inside ItemSearchWidget.)
+ * (Ctrl+F1 advanced search is handled by ItemSearchHotkeyProvider; widgets register via useItemSearchRegistration.)
  *
  * `enabled` is false while a modal/overlay is open so shortcuts don't fire underneath it.
  */

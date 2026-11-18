@@ -898,7 +898,7 @@ SCREENS = [
             T('حدد قيمة العرض ومصدرها، وقواعد التجميع مع عروض أخرى والموافقة، وحدود الاستخدام، وفترة الصلاحية.', 'Set the value and its source, stacking and approval rules, usage limits and the validity window.'),
             T('راجع لوحة التعارضات قبل التفعيل، ثم «حفظ العرض» وغيّر الحالة إلى «فعّال».', 'Check the contradictions panel before activating, then "Save offer" and set status to "Active".'),
         ],
-        'tips': [
+        'tips': [T('تقدر تضيف كذا صنف مرة واحدة: Ctrl+مسافة يعلّم الصنف المظلّل ثم Enter، أو Ctrl+F1 وعلّم الأصناف ثم «إضافة المحدد».', 'Add several items at once: Ctrl+Space ticks the highlighted row, then Enter; or Ctrl+F1, tick the rows, then «Add selected».'),
             T('الاسم العلمي في الكتالوج قد يكون غير دقيق — راجع قائمة الأصناف المطابقة دائماً.', 'The scientific name in the catalog may be inaccurate — always review the matched item list.'),
             T('تنفيذ العروض داخل SOFTECH مُقيَّد بمفتاح تشغيل؛ النظام يحسب العرض ويعرضه في نقطة البيع.', 'Executing offers inside SOFTECH is behind a switch; the system calculates the offer and shows it at the POS.'),
         ],
@@ -1009,8 +1009,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-05',
-        'change_note': T('العرض لا يُطبَّق على صنف عليه علامة أمان تمنع البيع، وخصم العروض المتراكمة على السطر لا يتعدى قيمته', 'An offer never applies to an item whose safety flag blocks the sale, and stacked offers never discount a line beyond its value'),
+        'updated': '2026-11-17',
+        'change_note': T('إضافة كذا صنف مرة واحدة: Ctrl+مسافة أو Ctrl+F1 ثم «إضافة المحدد»', 'Add several items at once: Ctrl+Space, or Ctrl+F1 then «Add selected»'),
     },
     {
         'key': 'pos.usage_print',

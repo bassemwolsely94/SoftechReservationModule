@@ -738,7 +738,8 @@ SCREENS = [
             {'key': 'fbt', 'title': T('🧩 يُشترى معه عادةً', '🧩 Frequently bought together'), 'body': T('أزواج الأصناف التي تُشترى معاً بالتكرار والثقة (للقراءة؛ يحسبها محرك التوصيات).', 'Item pairs bought together with frequency and confidence (read-only; computed by the recommendation engine).')},
             {'key': 'enrichment', 'title': T('🤖 إثراء الكتالوج', '🤖 Catalog enrichment'), 'body': T('تقرير جودة الكتالوج (مكتمل/ناقص/فارغ)، ودفعات إثراء بالذكاء الاصطناعي لنطاق (كل الكتالوج، تصنيف، مورد، أصناف) مع حد نشر تلقائي للبيانات الوصفية فقط — الجرعة والدواعي والتحذيرات والتداخلات بتستنى مراجعة الصيدلي دايماً — ومراجعة الاقتراحات المعلّقة.', 'Catalog quality report (complete/partial/empty), and AI enrichment batches for a scope (whole catalog, class, supplier, items) with an auto-publish threshold for descriptive data only (dose, indications, warnings and interactions always wait for a pharmacist), and review of pending suggestions.')},
         ],
-        'tips': [T('اقتراحات الذكاء الاصطناعي تُراجع قبل النشر؛ لا تعتمد البدائل الدوائية تلقائياً.', 'AI suggestions are reviewed before publishing; drug alternatives are never applied automatically.')],
+        'tips': [T('تقدر تضيف كذا صنف مرة واحدة: Ctrl+مسافة يعلّم الصنف المظلّل ثم Enter، أو Ctrl+F1 وعلّم الأصناف ثم «إضافة المحدد».', 'Add several items at once: Ctrl+Space ticks the highlighted row, then Enter; or Ctrl+F1, tick the rows, then «Add selected».'),
+                 T('اقتراحات الذكاء الاصطناعي تُراجع قبل النشر؛ لا تعتمد البدائل الدوائية تلقائياً.', 'AI suggestions are reviewed before publishing; drug alternatives are never applied automatically.')],
         'related': ['catalog.images', 'catalog.recommendations'],
         'tour': [
             {'target': 'catalog-intelligence-tabs', 'label': T('🔗 المتغيرات · 📦 الباقات · 🧩 · 🤖 الإثراء', '🔗 Variants · 📦 Bundles · 🧩 · 🤖 Enrich'),
@@ -879,8 +880,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-04',
-        'change_note': T('الجرعة والدواعي والتحذيرات من الذكاء الاصطناعي ماعادتش بتتنشر تلقائياً', 'AI dose, indication and warning suggestions are no longer auto-published'),
+        'updated': '2026-11-17',
+        'change_note': T('إضافة كذا صنف مرة واحدة: Ctrl+مسافة أو Ctrl+F1 ثم «إضافة المحدد»', 'Add several items at once: Ctrl+Space, or Ctrl+F1 then «Add selected»'),
     },
     {
         'key': 'catalog.images',

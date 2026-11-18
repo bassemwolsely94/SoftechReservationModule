@@ -24,7 +24,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pickZonesApi, branchesApi } from '../api/client'
-import ItemSearchInput from '../components/ItemSearchInput'
+import ItemSearchWidget from '../components/ItemSearchWidget'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -804,7 +804,7 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
-  const [newItem, setNewItem] = useState(null)   // from ItemSearchInput
+  const [newItem, setNewItem] = useState(null)   // from ItemSearchWidget
   const [newZone, setNewZone] = useState('')
   const [newTag, setNewTag]   = useState('')
 
@@ -847,7 +847,7 @@ function OverridesTab({ zones, branchParam, purpose, canEdit, showToast }) {
                   <button onClick={() => setNewItem(null)} className="text-gray-400 hover:text-gray-700">✕</button>
                 </div>
               ) : (
-                <ItemSearchInput onSelect={it => setNewItem(it)} placeholder="ابحث عن الصنف..." />
+                <ItemSearchWidget mode="single" onSelect={it => setNewItem(it)} placeholder="ابحث عن الصنف..." />
               )}
             </div>
             <select className="input-field text-sm w-44" value={newZone}

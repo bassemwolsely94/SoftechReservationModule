@@ -333,3 +333,16 @@ WRITE_SITES = {
         tables=('picpoints',), flag='SOFTECH_PROBES_ENABLED', dry_run_default=True,
         idempotency=None, audit='report file', trigger='cmd test_sybase_vps --write-test', kind='rehearsal'),
 }
+
+
+# Writes made by typing into a SOFTECH screen (the attended Windows agent, apps/rpa): no SQL in our
+# code, so the static scan cannot find them. Keyed like WRITE_SITES on the function that hands a
+# document to the agent; test_screen_write_sites_resolve checks each key and flag.
+SCREEN_WRITE_SITES = {
+    'apps/rpa/dispatch.py::claim_next': WriteSite(
+        tables=('stktransm', 'stktrans'), flag='RPA_SOFTECH_ENTRY_ENABLED', dry_run_default=True,
+        idempotency='RPA-<id> reference + fingerprint lookup before claim; select_for_update skip_locked; '
+                    '10-min lease → needs_person, never auto-requeue',
+        audit='RpaRun + AuditLog rpa_*', trigger='Windows agent POST /api/rpa/agent/claim/',
+        kind='screen-robot'),
+}

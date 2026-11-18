@@ -202,7 +202,7 @@ class OcrTests(FileRuleCase):
 class DatedRuleTests(FileRuleCase):
     def test_every_dated_rule_queries_cleanly_on_empty_tables(self):
         """Every target and date field of the register really can be queried."""
-        for key in ('prescriptions', 'ocr_pos_rx', 'conversations', 'financial_docs', 'delivery_proof',
+        for key in ('prescriptions', 'ocr_pos_rx', 'conversations', 'financial_docs', 'delivery_proof', 'rpa_screenshots',
                     'staff_messages'):
             with self.subTest(rule=key):
                 self.assertEqual(self._paths(key), [])

@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
-import ItemSearchInput from '../../components/ItemSearchInput'
+import ItemSearchWidget from '../../components/ItemSearchWidget'
 import OrderPanel from './OrderPanel'
 import { FreshnessBar, LockBar, ScopeBar } from './AvailabilityControls'
 import ColumnMapper from './ColumnMapper'
@@ -608,7 +608,11 @@ function ItemPicks({ r, batchId, group, saving, onSetItems, locked }) {
       </table>
       <div className="max-w-md">
         <label className="text-[11px] text-content/60">إضافة صنف آخر لهذا السطر</label>
-        <ItemSearchInput onSelect={item => item?.item_id && !ids.includes(item.item_id) && onSetItems([...ids, item.item_id])}
+        {/* multi: the batch joins the picks in ONE onSetItems, each item once */}
+        <ItemSearchWidget mode="multi" onSelect={items => {
+          const next = items.reduce((acc, it) => (it?.item_id && !acc.includes(it.item_id) ? [...acc, it.item_id] : acc), ids)
+          if (next.length > ids.length) onSetItems(next)
+        }}
           placeholder="ابحث بالاسم أو الكود…" />
       </div>
     </div>
