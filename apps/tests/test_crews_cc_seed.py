@@ -1,5 +1,7 @@
-"""Crews piece 2b, Task 1: call-center crew seed, shadow rollups, one CC lookup."""
+"""Crews piece 2b: call-center crew seed (PBX agent extensions included by default — owner
+ruling C), crew rollups in KpiActualRollup, one CC lookup."""
 import pathlib
+from io import StringIO
 from datetime import date
 from decimal import Decimal
 
@@ -11,7 +13,7 @@ from django.utils import timezone
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.crews import cc_seed
-from apps.crews.models import Crew, CrewKpiRollup, CrewManualMember
+from apps.crews.models import Crew, CrewManualMember
 from apps.forecasting.call_center import legacy_cc_branch
 from apps.forecasting.management.commands.build_call_center_rollups import get_cc_branch
 from apps.forecasting.models import CallCenterConfig, KpiActualRollup
@@ -71,11 +73,13 @@ class CcSeedTests(TestCase):
         self.assertEqual((len(res['created']), len(res['skipped'])), (0, 6))
         self.assertEqual(CrewManualMember.objects.count(), 6)
         crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
-        CrewKpiRollup.objects.create(crew=crew, year=2024, month=8, metric='call_count',
-                                     value=Decimal('1'))
+        KpiActualRollup.objects.create(crew=crew, year=2024, month=8, metric='call_count',
+                                       value=Decimal('1'))
         cc_seed.reseed()
         self.assertEqual(CrewManualMember.objects.count(), 6)
-        self.assertEqual(CrewKpiRollup.objects.count(), 0)
+        # the crew's rollups are the board's figures now: a reseed keeps them (build_crew_rollups
+        # refreshes them)
+        self.assertEqual(KpiActualRollup.objects.filter(crew=crew).count(), 1)
         self.assertEqual(Crew.objects.filter(name=cc_seed.CC_CREW_NAME).count(), 1)
 
     def test_dry_run_writes_nothing(self):
@@ -83,14 +87,36 @@ class CcSeedTests(TestCase):
         self.assertEqual(len(res['created']), 6)
         self.assertFalse(Crew.objects.exists())
 
-    def test_extra_pbx_agent_extensions_opt_in(self):
+    def _agent_extensions(self):
         for ext, t in [('10', 'agent'), ('11', 'agent'), ('13', 'agent'), ('9', 'agent'),
                        ('20', 'branch')]:
             AgentExtension.objects.create(extension=ext, extension_type=t)
         AgentExtension.objects.create(extension='14', extension_type='agent', is_active=False)
+
+    def test_extra_pbx_agent_extensions_included_by_default(self):
+        self._agent_extensions()
         self.assertEqual(cc_seed.extra_pbx_agent_extensions(), ['9', '11', '13'])
-        self.assertEqual(len(cc_seed.seed_plan()), 6)
-        self.assertEqual(len(cc_seed.seed_plan(include_pbx_agent_extensions=True)), 9)
+        self.assertEqual(len(cc_seed.seed_plan()), 9)
+        self.assertEqual(len(cc_seed.seed_plan(include_pbx_agent_extensions=False)), 6)
+
+    def test_seed_adds_agent_extensions_dated_with_the_seed(self):
+        cc_with_rollup()
+        self._agent_extensions()
+        res = cc_seed.seed()
+        crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
+        self.assertEqual(len(res['created']), 9)
+        for ext in ('9', '11', '13'):
+            row = crew.manual_members.get(pbx_extension=ext)
+            self.assertEqual((row.valid_from, row.valid_to), (date(2024, 8, 1), None))
+
+    def test_command_without_pbx_agent_extensions_flag(self):
+        cc_with_rollup()
+        self._agent_extensions()
+        call_command('seed_call_center_crew', '--without-pbx-agent-extensions', stdout=StringIO())
+        crew = Crew.objects.get(name=cc_seed.CC_CREW_NAME)
+        self.assertEqual(crew.manual_members.count(), 6)
+        call_command('seed_call_center_crew', stdout=StringIO())
+        self.assertEqual(crew.manual_members.count(), 9)
 
     def test_seed_audited(self):
         cc_with_rollup()
@@ -104,7 +130,7 @@ class CcSeedTests(TestCase):
     def test_has_history_true_with_rollups(self):
         crew = Crew.objects.create(name='ط', type='custom')
         self.assertFalse(crew.has_history())
-        CrewKpiRollup.objects.create(crew=crew, year=2026, month=11, metric='x', value=1)
+        KpiActualRollup.objects.create(crew=crew, year=2026, month=11, metric='x', value=1)
         self.assertTrue(crew.has_history())
 
     def test_get_cc_branch_creates_call_center_kind(self):
@@ -119,13 +145,14 @@ class CcSeedTests(TestCase):
         mine = CrewManualMember.objects.create(
             crew=crew, mode='include', softech_usercode='99', label='x', reason='أضافه المالك',
             valid_from=date(2026, 11, 1))
-        CrewKpiRollup.objects.create(crew=crew, year=2024, month=8, metric='m', value=1)
+        KpiActualRollup.objects.create(crew=crew, year=2024, month=8, metric='m', value=1)
         cc_seed.reseed()
         self.assertTrue(CrewManualMember.objects.filter(pk=mine.pk).exists())
         self.assertEqual(crew.manual_members.count(), 7)
         log = AuditLog.objects.filter(action='crew_cc_reseeded').latest('id')
         self.assertEqual(len(log.old_data['deleted_rows']), 6)
-        self.assertEqual(log.old_data['deleted_rollups'], 1)
+        self.assertNotIn('deleted_rollups', log.old_data)
+        self.assertTrue(KpiActualRollup.objects.filter(crew=crew, metric='m').exists())
         self.assertEqual(log.old_data['deleted_rows'][0]['reason'], cc_seed.SEED_REASON)
 
     def test_command_refuses_dry_run_with_reseed(self):

@@ -9,15 +9,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true')
         parser.add_argument('--reseed', action='store_true',
-                            help='delete ONLY the seed rows (reason = seed reason) and the shadow '
-                                 'rollups, then seed again; hand-added rows survive; audited')
-        parser.add_argument('--include-pbx-agent-extensions', action='store_true',
-                            help='also seed PBX agent extensions not in CallCenterConfig')
+                            help='delete ONLY the seed rows (reason = seed reason), then seed '
+                                 'again; hand-added rows and the crew rollups survive; audited')
+        parser.add_argument('--without-pbx-agent-extensions', action='store_true',
+                            help='do not seed the PBX agent extensions missing from '
+                                 'CallCenterConfig (they are seeded by default)')
 
     def handle(self, *args, **o):
         if o['reseed'] and o['dry_run']:
             raise CommandError('--dry-run and --reseed cannot be combined.')
-        kw = {'include_pbx_agent_extensions': o['include_pbx_agent_extensions']}
+        kw = {'include_pbx_agent_extensions': not o['without_pbx_agent_extensions']}
         try:
             res = cc_seed.reseed(**kw) if o['reseed'] else cc_seed.seed(dry_run=o['dry_run'], **kw)
         except cc_seed.CcCrewNameTaken as exc:

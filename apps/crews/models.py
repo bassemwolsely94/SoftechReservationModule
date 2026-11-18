@@ -40,8 +40,9 @@ class Crew(models.Model):
         return self.name
 
     def has_history(self) -> bool:
-        """True once any live (not voided) rule or manual row reaches before today — the crew
-        then has past membership and must be archived, not deleted."""
+        """True once any live (not voided) rule or manual row reaches before today, or the crew
+        has KPI figures (forecasting.KpiActualRollup.crew, related_name kpi_rollups, PROTECT) —
+        the crew must then be archived, not deleted."""
         today = timezone.localdate()
         return (self.rules.filter(voided_at__isnull=True, valid_from__lt=today).exists()
                 or self.manual_members.filter(voided_at__isnull=True, valid_from__lt=today).exists()
@@ -108,19 +109,3 @@ class CrewManualMember(DatedRow):
                 name='crew_manual_member_has_identity'),
         ]
 
-
-class CrewKpiRollup(models.Model):
-    """One crew's monthly KPI figure (crew x year x month x metric). Shadow — read only by the
-    comparison report until the owner signs off (piece 2b gate); no target, incentive or KPI board
-    reads it. `notes` carries the reasons a value is partial or not computed."""
-    crew        = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name='kpi_rollups')
-    year        = models.IntegerField()
-    month       = models.IntegerField()
-    metric      = models.CharField(max_length=30)
-    value       = models.DecimalField(max_digits=16, decimal_places=2)
-    notes       = models.JSONField(default=list, blank=True)
-    computed_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = [('crew', 'year', 'month', 'metric')]
-        ordering = ['crew_id', 'year', 'month', 'metric']

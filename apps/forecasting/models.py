@@ -8,6 +8,7 @@ ForecastAccuracy  — back-test accuracy tracking (forecast vs actual)
 from decimal import Decimal
 
 from django.db import models
+from django.db.models import Q
 
 
 class SeasonalityIndex(models.Model):
@@ -295,6 +296,9 @@ class KpiActualRollup(models.Model):
     Long format so new metrics (call-center, etc.) need no migration. Net of returns.
     Rebuilt by `build_kpi_rollups`; the fast source for pace + backtest over the
     ~3–4M-rows/month PurchaseHistory.
+
+    A row belongs to exactly one of a branch or a crew (crews piece 2b Part B): the call-center
+    crew's rows (crew set, branch NULL) are written by build_crew_rollups.
     """
     # Metric keys — kept as constants so the resolver, rollup and targets agree.
     M_CASH_DELIVERY = 'cash_delivery'   # cash bucket total (the «cash+delivery» target)
@@ -355,8 +359,10 @@ class KpiActualRollup(models.Model):
     DISCOUNT_METRICS = {M_GROSS_SALES, M_DISCOUNT_VALUE, M_DISCOUNT_PCT,
                         M_DISCOUNT_FREQ, M_DISC_TO_MARGIN}
 
-    branch      = models.ForeignKey('branches.Branch', on_delete=models.CASCADE,
-                                    related_name='kpi_rollups', verbose_name='الفرع')
+    branch      = models.ForeignKey('branches.Branch', on_delete=models.CASCADE, null=True,
+                                    blank=True, related_name='kpi_rollups', verbose_name='الفرع')
+    crew        = models.ForeignKey('crews.Crew', on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='kpi_rollups', verbose_name='الطاقم')
     year        = models.PositiveSmallIntegerField(db_index=True, verbose_name='السنة')
     month       = models.PositiveSmallIntegerField(verbose_name='الشهر (1–12)')
     metric      = models.CharField(max_length=20, db_index=True, verbose_name='المؤشر')
@@ -371,6 +377,15 @@ class KpiActualRollup(models.Model):
         verbose_name_plural = 'المؤشرات الشهرية الفعلية'
         indexes = [
             models.Index(fields=['year', 'month', 'metric'], name='kpi_rollup_ym_metric_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(branch__isnull=False, crew__isnull=True)
+                           | Q(branch__isnull=True, crew__isnull=False)),
+                name='kpi_rollup_branch_xor_crew'),
+            # unique_together above leaves crew rows (branch NULL) free: NULLs are distinct
+            models.UniqueConstraint(fields=['crew', 'year', 'month', 'metric'],
+                                    condition=Q(crew__isnull=False), name='uniq_crew_kpi_rollup'),
         ]
 
     def __str__(self):
@@ -519,6 +534,9 @@ class ForecastResult(models.Model):
     scenario = models.ForeignKey(ForecastScenario, on_delete=models.CASCADE, related_name='results')
     branch   = models.ForeignKey('branches.Branch', null=True, blank=True,
                                  on_delete=models.CASCADE, related_name='forecast_results')
+    # The call-center crew's row (crews piece 2b Part B); NULL for branch / chain / other scopes.
+    crew     = models.ForeignKey('crews.Crew', null=True, blank=True, on_delete=models.PROTECT,
+                                 related_name='forecast_results', verbose_name='الطاقم')
     # Generic scope member (branch code / salesperson usercode / category id / 'chain').
     scope_key   = models.CharField(max_length=40, blank=True, db_index=True, verbose_name='مفتاح النطاق')
     scope_label = models.CharField(max_length=150, blank=True, verbose_name='اسم النطاق')

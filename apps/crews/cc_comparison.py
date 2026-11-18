@@ -11,13 +11,15 @@ Per month x KPI three figures:
   old_now = the old rule recomputed now: KpiResolver.compute_call_center_month over the
             CallCenterConfig usercodes, minus cc_returns_from_softech, + count_calls over the
             CallCenterConfig extensions
-  crew    = apps.crews.kpi.compute_crew_month (dated member identities)
+  crew    = apps.crews.kpi.compute_crew_month (dated member identities; returns by the owner's
+            rule: old rule + date match on r_docdate)
 and one reason code per row (REASONS; priority in _reason). Also per person (old per config code
 vs crew per member), per CC SalesTarget, the CC ForecastResult rows, and the questions only the
 owner can answer. Single scope (the call-center crew): no per-branch rows (spec §6.8).
 
 A figure that cannot be computed (SOFTECH / CDR unreachable) is None — «غير محسوب» — never 0.
-SOFTECH reads only through cc_softech / softech_returns (config.sybase); CDR through config.issabel.
+SOFTECH reads only through cc_softech / softech_returns (config.sybase, `?` parameters); CDR
+through config.issabel.
 """
 from collections import Counter, defaultdict
 from datetime import date, timedelta
@@ -53,13 +55,15 @@ METRIC_LABELS = {
 NOT_ADDITIVE_PER_PERSON = ('pic_count', 'call_count')
 PIC_NOT_ADDITIVE = ('عدد العملاء (PIC) وعدد المكالمات لكل شخص غير تجميعي: عميل أو رقم خدمه شخصان '
                     'يُعد عند كل منهما، فمجموع الأشخاص قد يزيد عن رقم الطاقم.')
-# returns_for_spans over the 400-day look-back credits a former member's return to the crew total;
-# that person has no row this month, so per-person money does not sum to the crew figure.
-FORMER_MEMBER_RETURNS = ('مرتجعات الأعضاء السابقين (من غادر الطاقم قبل الشهر) تُخصم من إجمالي الطاقم لكنها '
-                         'لا تظهر في صف أي شخص، فمجموع أعمدة المبالغ لكل شخص قد لا يساوي إجمالي الطاقم '
-                         'عند وجود مرتجعات. / Returns of former members are deducted from the crew total '
-                         'but appear in no person row, so per-person money columns may not sum to the '
-                         'total when returns apply.')
+# Returns are asked per seller code active in the month (crew total: the union of codes; a person:
+# their own codes). A code two people share has its returns deducted from each of them but once
+# from the crew, so per-person money may then not sum to the crew figure.
+SHARED_CODE_RETURNS = ('مرتجعات كل شخص تُحسب على أكواده النشطة في الشهر؛ الكود المشترك بين شخصين يُخصم '
+                       'مرتجعه عند كل منهما ومرة واحدة من إجمالي الطاقم، فمجموع أعمدة المبالغ لكل شخص قد '
+                       'لا يساوي إجمالي الطاقم. / Each person’s returns are taken on their seller codes '
+                       'active in the month; a code shared by two people has its returns deducted from '
+                       'each of them but once from the crew, so per-person money columns may not sum '
+                       'to the crew total.')
 PERSON_NOTES = {'linked_employee': 'موظف مرتبط: هويته المؤرخة تختلف عن كود الإعداد — انظر الأسئلة'}
 
 REASONS = {
@@ -75,10 +79,15 @@ REASONS = {
                              'en': 'Returns not deducted in this run (--no-returns) — gross figures'},
     'cdr_unavailable': {'ar': 'عدد المكالمات غير قابل لإعادة الحساب هنا (CDR غير متاح) — القيمة المخزنة فقط',
                         'en': 'Call count cannot be recomputed here (no CDR) — stored value only'},
-    'return_before_membership': {'ar': 'مرتجع لبيع سابق لبداية العضوية أو أقدم من 400 يوم أو برقم '
-                                       'مستند قديم مكرر',
-                                 'en': 'A return of a sale made before the membership began, older '
-                                       'than 400 days, or under a reused old document number'},
+    # Part B: the crew's returns no longer depend on membership dates or a look-back, so this now
+    # arises only when the old number-only rule counts a return the crew's date match (o.docdate =
+    # r_docdate) does not — a reused old document number. Kept under its original code so earlier
+    # reports still read.
+    'return_before_membership': {'ar': 'مرتجع برقم مستند قديم مكرر: رقم البيع الأصلي يطابق بيعًا قديمًا '
+                                       'لأحد أكواد الطاقم لكن تاريخه لا يطابق تاريخ البيع في المرتجع',
+                                 'en': 'A return under a reused old document number: the number '
+                                       'matches an older sale by a crew code but not the sale date '
+                                       'the return carries'},
     'no_stored_value': {'ar': 'لا يوجد رقم مخزن قديم', 'en': 'No stored old figure'},
 }
 
@@ -426,7 +435,7 @@ def compare(crew, start, end, *, returns=True, cdr_rows_by_month=None, cdr_from_
                 cache[member_codes] = _old_sales(resolver, y, m, member_codes, returns)
             return cache[member_codes]
 
-        cm = crew_kpi.compute_crew_month(crew, y, m, returns=returns,
+        cm = crew_kpi.compute_crew_month(crew, y, m, returns=returns, per_member=True,
                                          cdr_rows=rows if rows is not None else [])
         if cdr_missing:     # [] above only kept the crew from fetching the CDR a second time
             cm.kpis.pop(CALL_METRIC, None)
@@ -646,7 +655,7 @@ def build_workbook(result):
                num_cols=(8, 9, 10))
     ws.append([])
     ws.append([PIC_NOT_ADDITIVE])
-    ws.append([FORMER_MEMBER_RETURNS])
+    ws.append([SHARED_CODE_RETURNS])
 
     sheet('المستهدفات', ['#', 'metric', 'الفترة', 'المستهدف', 'المحقق (اللوحة)',
                          'المحقق (SalesTarget.actual_value اليوم)', 'المحقق (الطاقم)', '% اللوحة',

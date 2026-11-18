@@ -1,10 +1,10 @@
 """
 build_crew_rollups  (crews piece 2b)
 ====================================
-Shadow monthly KPIs for every live call-center crew (spec §6.8: rollups only for call-center
-crews) into CrewKpiRollup — the same figures build_call_center_rollups writes for the fake «CC»
-branch, but resolved from the crew's dated identities. Writes nothing else (money gate): the
-legacy KpiActualRollup rows stay the live source until the owner signs the comparison off.
+Monthly KPIs for every live call-center crew (spec §6.8: rollups only for call-center crews)
+into forecasting.KpiActualRollup with crew set and branch NULL (Part B, owner ruling A: every month
+is rebuilt from the crew rule). Figures from apps.crews.kpi.compute_crew_month (dated identities,
+the owner's returns rule). Only the crew's own rows are touched; branch rows are never written.
 
   python manage.py build_crew_rollups --year 2026 --month 6
   python manage.py build_crew_rollups --months 12               # last 12 completed months
@@ -12,9 +12,10 @@ legacy KpiActualRollup rows stay the live source until the owner signs the compa
   python manage.py build_crew_rollups --year 2026 --month 5 --cdr-csv path/to/cdr_may.csv
   python manage.py build_crew_rollups --crew 3 --no-returns
 
-Each row stores the month's notes (returns_unreachable, cdr_unavailable, ...). A metric that
-could not be computed is not written and its row from an earlier run is deleted (no stale
-figure); a month with nothing computed writes nothing (old rows removed) and warns. Logged to stdout only.
+The month's notes (returns_unreachable, cdr_unavailable, ...) are printed — KpiActualRollup has
+no notes column. A metric that could not be computed is not written and the crew's row from an
+earlier run is deleted (no stale figure); a month with nothing computed writes nothing (old rows
+removed) and warns. Logged to stdout only.
 """
 import csv
 from datetime import date
@@ -24,7 +25,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.crews.kpi import compute_crew_month
-from apps.crews.models import Crew, CrewKpiRollup
+from apps.crews.models import Crew
+from apps.forecasting.models import KpiActualRollup
 
 
 def _shift(y, m, delta):
@@ -33,7 +35,7 @@ def _shift(y, m, delta):
 
 
 class Command(BaseCommand):
-    help = 'Build shadow call-center crew KPI rollups (CrewKpiRollup only).'
+    help = 'Build call-center crew KPI rollups (KpiActualRollup rows with crew set, branch NULL).'
 
     def add_arguments(self, parser):
         parser.add_argument('--crew', type=int, help='one crew id (default: every live call-center crew)')
@@ -63,12 +65,13 @@ class Command(BaseCommand):
                                          cdr_rows=cdr_rows, per_member=False)
                 with transaction.atomic():
                     # a metric this run could not compute must not survive from an earlier run
-                    stale = CrewKpiRollup.objects.filter(crew=crew, year=year, month=month).exclude(
+                    stale = KpiActualRollup.objects.filter(
+                        crew=crew, year=year, month=month).exclude(
                         metric__in=list(res.kpis)).delete()[0]
                     for metric, value in res.kpis.items():
-                        CrewKpiRollup.objects.update_or_create(
-                            crew=crew, year=year, month=month, metric=metric,
-                            defaults={'value': value, 'notes': list(res.notes)})
+                        KpiActualRollup.objects.update_or_create(
+                            crew=crew, branch=None, year=year, month=month, metric=metric,
+                            defaults={'value': value})
                 if not res.kpis:
                     self.stdout.write(self.style.WARNING(
                         f"  crew {crew.pk} {year}-{month:02d}: nothing computed, nothing written, "
@@ -84,7 +87,7 @@ class Command(BaseCommand):
                     f"calls={int(k['call_count']) if 'call_count' in k else '—'} "
                     f"notes={','.join(res.notes) or '-'}")
         self.stdout.write(self.style.SUCCESS(
-            f'Done: {crews.count()} crew(s) x {len(periods)} month(s) → CrewKpiRollup only.'))
+            f'Done: {crews.count()} crew(s) x {len(periods)} month(s) → KpiActualRollup (crew rows).'))
 
     def _periods(self, o):
         today = timezone.localdate()

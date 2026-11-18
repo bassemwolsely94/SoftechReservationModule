@@ -7,16 +7,20 @@ legacy CC rollup's, reused, not rewritten:
                                             over the same base querysets, narrowed to
                                             "seller (PurchaseHistory.softech_user, never the
                                             cashier) is a member identity on the invoice day"
-  net of returns                          = apps.crews.softech_returns (cc_softech's SQL, span-dated)
+  net of returns                          = apps.crews.softech_returns.returns_for_codes over the
+                                            seller codes active in the month (owner ruling B: the
+                                            old cc_softech rule, no membership date on the original
+                                            sale, plus o.docdate = r_docdate when r_docdate is set)
   call_count                              = forecasting.callcount.count_calls over CDR rows whose
                                             src extension is a member identity on the call day
 
-With every span covering the whole month the figures equal the legacy rollup bit for bit.
-Results go to the shadow CrewKpiRollup only (money gate) — nothing else reads them yet.
-A figure that cannot be computed is left out and named in `notes`, never written as zero.
+With every span covering the whole month the sales figures equal the legacy rollup bit for bit;
+returns differ from cc_softech only on a return whose r_docdate does not match the sale's date
+(a reused document number). build_crew_rollups writes the results to KpiActualRollup (crew set,
+branch NULL). A figure that cannot be computed is left out and named in `notes`, never zero.
 """
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from functools import reduce
 from operator import or_
@@ -33,7 +37,6 @@ from .membership import identities
 
 Span = tuple[str, date, date]       # (value, valid_from, valid_to) — both inclusive
 
-RETURNS_LOOKBACK_DAYS = 400
 SALES_METRICS = (K.M_CASH_DELIVERY, K.M_GROSS_PROFIT, K.M_BEAUTY, K.M_CUSTOMERS, K.M_PIC_COUNT)
 
 NOTE_NO_MEMBERS = 'no_members'                  # no seller and no extension identity
@@ -124,7 +127,7 @@ class CrewMonth:
     per_member: dict = field(default_factory=dict)     # Identity.member_key -> {metric: Decimal}
     notes: list = field(default_factory=list)
     gross: dict = field(default_factory=dict)          # the five sales metrics before returns
-    returns: dict | None = None                        # returns_for_spans result; None = not run/unreachable
+    returns: dict | None = None                        # returns_for_codes result; None = not run/unreachable
 
 
 def _by_member(ids) -> dict:
@@ -132,6 +135,10 @@ def _by_member(ids) -> dict:
     for i in ids:
         out.setdefault(i.member_key, []).append(i)
     return out
+
+
+def _codes(spans) -> list:
+    return sorted({str(v) for v, _frm, _to in spans})
 
 
 def _subtract_returns(kpis: dict, ret: dict):
@@ -153,9 +160,11 @@ def _cdr_rows(year, month, notes):
 
 
 def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr_rows=None,
-                       per_member: bool = True) -> CrewMonth:
+                       per_member: bool = False) -> CrewMonth:
     """kpis = net figures (+ call_count); gross = the five sales metrics before returns;
-    returns = the crew's returns_for_spans result, None when not run or unreachable.
+    returns = the crew's returns_for_codes result, None when not run or unreachable.
+    Returns are asked for the seller codes with any span in the month (per member: that member's
+    codes); the original sale's date is not tied to the membership.
     No seller AND no extension identity in the month → kpis {} + 'no_members'; no seller only →
     the five sales metrics are skipped ('no_sellers') and call_count is still computed."""
     resolver = KpiResolver()
@@ -178,14 +187,10 @@ def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr
     ret_total = None
 
     if returns and sellers:
-        back = identities(crew, start - timedelta(days=RETURNS_LOOKBACK_DAYS), end)
-        back_by_member = _by_member(back)
         try:    # fetch everything first, so a failure half-way subtracts nothing
-            total = softech_returns.returns_for_spans(
-                year, month, _spans(back, 'softech_user'), RETURNS_LOOKBACK_DAYS)
-            each = {key: softech_returns.returns_for_spans(
-                        year, month, _spans(back_by_member.get(key, []), 'softech_user'),
-                        RETURNS_LOOKBACK_DAYS) for key in per}
+            total = softech_returns.returns_for_codes(year, month, _codes(sellers))
+            each = {key: softech_returns.returns_for_codes(
+                        year, month, _codes(_spans(members[key], 'softech_user'))) for key in per}
         except Exception:   # SOFTECH unreachable: the figures stay gross and say so
             notes.append(NOTE_RETURNS_UNREACHABLE)
         else:

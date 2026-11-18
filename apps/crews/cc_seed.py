@@ -3,9 +3,10 @@ apps/crews/cc_seed.py
 
 Seeds the call-center crew «الكول سنتر» from CallCenterConfig (piece 2b). One dated, open-ended
 manual include row per SOFTECH usercode and per PBX extension, starting the first day of the
-earliest month with a CC KpiActualRollup so history resolves. The rows are written directly (not
-through services.add_manual, whose month floor refuses past dates) and the seed is audited.
-CallCenterConfig stays the live source; nothing reads the crew's figures yet (money gate).
+earliest month with a CC KpiActualRollup so history resolves. Active PBX extensions typed «agent»
+that CallCenterConfig does not list join too, dated with the seed (owner ruling C, 2026-11-18;
+opt out with include_pbx_agent_extensions=False). The rows are written directly (not through
+services.add_manual, whose month floor refuses past dates) and the seed is audited.
 No SOFTECH access.
 """
 from datetime import date
@@ -17,7 +18,7 @@ from apps.audit.models import AuditLog
 from apps.hr.attendance.employee_import import normalise_code
 from apps.hr.models import Employee
 
-from .models import Crew, CrewKpiRollup, CrewManualMember
+from .models import Crew, CrewManualMember
 
 
 class CcCrewNameTaken(Exception):
@@ -75,7 +76,7 @@ def _employee_by_extension(ext):
     return found[0] if len(found) == 1 else None
 
 
-def seed_plan(include_pbx_agent_extensions=False) -> list:
+def seed_plan(include_pbx_agent_extensions=True) -> list:
     from apps.forecasting.models import CallCenterConfig
     cfg = CallCenterConfig.get_solo()
     plan = []
@@ -103,7 +104,7 @@ def _existing(crew, item) -> bool:
 
 
 @transaction.atomic
-def seed(user=None, include_pbx_agent_extensions=False, dry_run=False, _action='crew_cc_seeded',
+def seed(user=None, include_pbx_agent_extensions=True, dry_run=False, _action='crew_cc_seeded',
          _old=None) -> dict:
     plan = seed_plan(include_pbx_agent_extensions)
     start = seed_start()
@@ -145,14 +146,14 @@ def _row_snapshot(r) -> dict:
 
 @transaction.atomic
 def reseed(user=None, **kw) -> dict:
-    """Delete ONLY the seed's own manual rows (reason == SEED_REASON; rows added by hand survive)
-    and the crew's shadow rollups, then seed again. The deleted rows and the rollup count are
-    recorded as old_data on the 'crew_cc_reseeded' audit entry."""
+    """Delete ONLY the seed's own manual rows (reason == SEED_REASON; rows added by hand survive),
+    then seed again. The deleted rows are recorded as old_data on the 'crew_cc_reseeded' audit
+    entry. The crew's KpiActualRollup rows are the board's figures (Part B) and are kept;
+    build_crew_rollups refreshes them."""
     crew = _find_crew()
-    old = {'deleted_rows': [], 'deleted_rollups': 0}
+    old = {'deleted_rows': []}
     if crew is not None:
         rows = list(crew.manual_members.filter(reason=SEED_REASON))
         old['deleted_rows'] = [_row_snapshot(r) for r in rows]
         CrewManualMember.objects.filter(pk__in=[r.pk for r in rows]).delete()
-        old['deleted_rollups'] = CrewKpiRollup.objects.filter(crew=crew).delete()[0]
     return seed(user=user, _action='crew_cc_reseeded', _old=old, **kw)

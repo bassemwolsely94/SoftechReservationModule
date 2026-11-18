@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Crew, CrewKpiRollup, CrewManualMember, CrewRule
+from .models import Crew, CrewManualMember, CrewRule
 
 
 class _ReadOnly(admin.ModelAdmin):
@@ -33,8 +33,3 @@ class CrewManualMemberAdmin(_ReadOnly):
     list_display = ('crew', 'mode', 'employee', 'softech_usercode', 'pbx_extension', 'valid_from',
                     'valid_to', 'voided_at')
 
-
-@admin.register(CrewKpiRollup)
-class CrewKpiRollupAdmin(_ReadOnly):
-    list_display = ('crew', 'year', 'month', 'metric', 'value', 'computed_at')
-    list_filter = ('metric', 'year')

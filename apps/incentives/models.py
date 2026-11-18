@@ -536,9 +536,11 @@ class IncentiveCalculationLog(models.Model):
 class SalesTarget(models.Model):
     SCOPE_CHAIN = 'chain'; SCOPE_BRANCH = 'branch'
     SCOPE_SALESPERSON = 'salesperson'; SCOPE_CATEGORY = 'category'
+    SCOPE_CREW = 'crew'     # the call-center crew (crews piece 2b Part B)
     SCOPE_CHOICES = [
         (SCOPE_CHAIN, 'الشبكة كاملة'), (SCOPE_BRANCH, 'فرع'),
         (SCOPE_SALESPERSON, 'مندوب'), (SCOPE_CATEGORY, 'فئة'),
+        (SCOPE_CREW, 'طاقم'),
     ]
     METRIC_REVENUE = 'net_revenue'; METRIC_ORDERS = 'orders'
     # Branch-KPI metrics (doc 16) — actuals resolved via forecasting.KpiResolver.
@@ -569,6 +571,8 @@ class SalesTarget(models.Model):
     softech_user = models.CharField(max_length=20, blank=True, db_index=True,
                                     verbose_name='كود المندوب (SOFTECH)')
     category     = models.ForeignKey('catalog.Category', on_delete=models.CASCADE, null=True, blank=True)
+    crew         = models.ForeignKey('crews.Crew', on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='sales_targets', verbose_name='الطاقم')
     metric       = models.CharField(max_length=20, choices=METRIC_CHOICES, default=METRIC_REVENUE)
     period_start = models.DateField(verbose_name='من')
     period_end   = models.DateField(verbose_name='إلى')

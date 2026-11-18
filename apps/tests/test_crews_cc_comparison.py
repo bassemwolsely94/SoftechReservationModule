@@ -95,7 +95,7 @@ class _Base(TestCase):
     def cmp(self, crew, **kw):
         """compare with returns ON and SOFTECH mocked to no returns on both sides."""
         with mock.patch.object(C, 'cc_returns_from_softech', return_value=NO_RET), \
-                mock.patch('apps.crews.softech_returns.returns_for_spans', return_value=NO_RET):
+                mock.patch('apps.crews.softech_returns.returns_for_codes', return_value=NO_RET):
             return C.compare(crew, JUNE, JUNE, returns=True, cdr_rows_by_month={JUNE: CDR}, **kw)
 
     def rows(self, result, **match):
@@ -150,12 +150,13 @@ class ReasonTests(_Base):
         self.assertEqual((b['reason'], b['stored']), ('no_stored_value', None))
 
     def test_return_before_membership_reason(self):
-        # old rule: 62's return of a May sale counts; the crew joined in June, so it does not
+        # the old rule counts a return whose r_docnumber hits an older crew-seller sale under a
+        # reused number; the crew rule also needs the sale's date (= r_docdate), so it does not
         self.june_sales()
         self.store_old(overrides={'cash_delivery': Decimal('1700'), 'gross_profit': Decimal('700')})
         old_ret = {'amount': Decimal('100'), 'profit': Decimal('50'), 'docs': 1}
         with mock.patch.object(C, 'cc_returns_from_softech', return_value=old_ret), \
-                mock.patch('apps.crews.softech_returns.returns_for_spans', return_value=NO_RET):
+                mock.patch('apps.crews.softech_returns.returns_for_codes', return_value=NO_RET):
             res = C.compare(self.crew(), JUNE, JUNE, returns=True, cdr_rows_by_month={JUNE: CDR})
         r = self.row(res, 'cash_delivery')
         self.assertEqual(r['reason'], 'return_before_membership')
@@ -183,7 +184,7 @@ class ReasonTests(_Base):
         with mock.patch('apps.crews.cc_comparison.cdr_configured', return_value=False), \
                 mock.patch('apps.crews.kpi.cdr_configured', return_value=False), \
                 mock.patch.object(C, 'cc_returns_from_softech', side_effect=OSError('down')), \
-                mock.patch('apps.crews.softech_returns.returns_for_spans', side_effect=OSError('down')):
+                mock.patch('apps.crews.softech_returns.returns_for_codes', side_effect=OSError('down')):
             res = C.compare(self.crew(), JUNE, JUNE, returns=True)
         calls = self.row(res, 'call_count')
         self.assertEqual(calls['reason'], 'cdr_unavailable')
@@ -371,7 +372,7 @@ class LinkedEmployeeTests(_Base):
         self.assertFalse([p for p in res['people'] if p['notes']])
         self.assertEqual(self.row(res, 'cash_delivery')['reason'], 'same')
 
-    def test_person_sheet_footnote_for_former_member_returns(self):
+    def test_person_sheet_footnote_for_shared_code_returns(self):
         from openpyxl import load_workbook
         self.store_old()
         res = C.compare(self.crew(), JUNE, JUNE, returns=False, cdr_rows_by_month={JUNE: CDR})
@@ -379,7 +380,7 @@ class LinkedEmployeeTests(_Base):
         C.build_workbook(res).save(buf)
         ws = load_workbook(io.BytesIO(buf.getvalue()))['حسب الشخص']
         texts = [c.value for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
-        self.assertTrue(any('الأعضاء السابقين' in t and 'former members' in t for t in texts))
+        self.assertTrue(any('الكود المشترك' in t and 'shared by two people' in t for t in texts))
 
 
 class CommandTests(_Base):
