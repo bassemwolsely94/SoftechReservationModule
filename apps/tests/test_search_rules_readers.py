@@ -160,3 +160,36 @@ class FollowupAndChequeReaderTests(TestCase):
                                       first_due_date=datetime.date(2026, 11, 1))
         rows = _rows(client.get('/api/cheques/plans/', {'q': 'pl*pha'}))
         self.assertEqual([r['title'] for r in rows], ['Plan Alpha'])
+
+
+class SavedCriteriaStayLiteralTests(TestCase):
+    """Fix round 1: saved criteria that drive a bulk action are not search boxes — `*` must not
+    select everything; and a wildcards-only branch-request re-match adds no wq items."""
+
+    def test_billing_group_dept_name_star_assigns_nothing(self):
+        from .test_insurance_roster import _client, _claim, _group, _rx
+        claim = _claim(_client('جهة س'))
+        rx = _rx(claim, 'اسم أول ثانى ثالث')
+        rx.dept_name = 'Dept A'
+        rx.save()
+        group = _group(claim, 'تشغيل', '101')
+        group.filter_dept_name = '*'
+        group.save()
+        self.assertEqual(group.auto_assign_prescriptions(), 0)
+        rx.refresh_from_db()
+        self.assertIsNone(rx.billing_group_id)
+        group.filter_dept_name = 'dept'          # a literal contains still works
+        group.save()
+        self.assertEqual(group.auto_assign_prescriptions(), 1)
+
+    def test_branch_request_rematch_wildcards_only_adds_nothing(self):
+        from apps.supply.models import BranchRequest, BranchRequestLine
+        _, _, client = make_admin('rd_br2_admin')
+        req = BranchRequest.objects.create(branch=make_branch(), raw_text='x')
+        line = BranchRequestLine.objects.create(request=req, raw_text='something')
+        make_item('Voltaren Emulgel 50', 'RD111')
+        make_item('Cataflam 50', 'RD112')
+        for q in ('*', '%', '* %'):
+            r = client.get(f'/api/purchasing/isr/branch-requests/{req.id}/lines/{line.id}/search/', {'q': q})
+            self.assertEqual(r.status_code, 200, r.content)
+            self.assertEqual(r.data['results'], [], q)

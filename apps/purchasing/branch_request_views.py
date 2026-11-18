@@ -319,7 +319,7 @@ def branch_request_line(request, pk, lid):
 @permission_classes([IsAuthenticated, PURCHASING])
 def branch_request_search(request, pk, lid):
     from apps.catalog.models import Item
-    from apps.catalog.wildcard import WILD, wq
+    from apps.catalog.wildcard import WILD, parse, wq
     from apps.shortage.matching import find_best_matches
     from apps.supply.branch_requests import _cand, _stock_and_rate
     from apps.supply.models import BranchRequestLine as L
@@ -331,7 +331,7 @@ def branch_request_search(request, pk, lid):
     ms = find_best_matches(q, top_n=15, min_score=0.25) if q else []
     # exact id: a typed item code matches the code whole
     by_code = list(Item.objects.filter(is_active=True, softech_id=q)) if q.isdigit() else []
-    if WILD.search(q):
+    if parse(q)['segments'] and WILD.search(q):
         # a `*` / `%` pattern is answered by the shared wildcard rules first (the fuzzy matcher
         # below does not read wildcards); plain text keeps the matcher's typo tolerance
         by_code += list(Item.objects.filter(is_active=True).filter(wq(q, 'name', 'softech_id'))
