@@ -640,4 +640,6 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
         new['status'] = b.status
         _audit('rpa_portal_resolved', b, user=staff, old=old, new=new,
                note=f'basket {b.pk}: {action}')
+        if b.status == 'cancelled':          # the job may now be finished
+            recording.finish_job_if_done(b.job_id, staff=staff)
     return b
