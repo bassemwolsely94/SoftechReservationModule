@@ -72,7 +72,9 @@ class BacktestService:
         and pushed B's WAPE from ~6% to ~15%)."""
         from apps.forecasting.engine import current_ym
         from apps.forecasting.models import KpiActualRollup
-        have = set(KpiActualRollup.objects.filter(metric=metric)
+        # branch rows only: the chain actual is Σ branches, so a month the call-center crew
+        # alone has (crew rows, branch NULL) is not testable
+        have = set(KpiActualRollup.objects.filter(metric=metric, branch__isnull=False)
                    .values_list('year', 'month').distinct())
         cur = current_ym()
         out = []

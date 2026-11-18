@@ -188,7 +188,7 @@ def call_center(f, access) -> dict:
     """Per agent extension (management only): {'rows': [...], 'team_new_pics_sold': n}."""
     if not access.sees_calls_tabs:
         raise PermissionError('تبويب مركز الاتصال للإدارة فقط')
-    from apps.forecasting.models import CallCenterConfig
+    from apps.forecasting.call_center import call_center_seller_codes
 
     rows = list(calls_qs(f).exclude(agent_ext='').order_by('call_at').values_list(
         'agent_ext', 'agent_name', 'call_at', 'direction', 'status', 'billable_seconds',
@@ -255,6 +255,6 @@ def call_center(f, access) -> dict:
             'not_reached': not_reached.get(ext, 0),
         })
 
-    # the team figure: SOFTECH sales-agent user codes from the call-center config
-    codes = set(CallCenterConfig.get_solo().sales_agent_usercodes or [])
+    # the team figure: the call-center crew's SOFTECH seller codes on any day of the period
+    codes = set(call_center_seller_codes(f.start, f.end))
     return {'rows': out, 'team_new_pics_sold': _team_new_pics_sold(first_sp, codes)}

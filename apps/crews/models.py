@@ -40,11 +40,14 @@ class Crew(models.Model):
         return self.name
 
     def has_history(self) -> bool:
-        """True once any live (not voided) rule or manual row reaches before today — the crew
-        then has past membership and must be archived, not deleted."""
+        """True once any live (not voided) rule or manual row reaches before today, or the crew
+        has KPI figures, targets or forecasts (KpiActualRollup.crew / SalesTarget.crew /
+        ForecastResult.crew — all PROTECT) — the crew must then be archived, not deleted."""
         today = timezone.localdate()
         return (self.rules.filter(voided_at__isnull=True, valid_from__lt=today).exists()
-                or self.manual_members.filter(voided_at__isnull=True, valid_from__lt=today).exists())
+                or self.manual_members.filter(voided_at__isnull=True, valid_from__lt=today).exists()
+                or self.kpi_rollups.exists() or self.sales_targets.exists()
+                or self.forecast_results.exists())
 
 
 class DatedRow(models.Model):
@@ -106,3 +109,4 @@ class CrewManualMember(DatedRow):
                 condition=Q(employee__isnull=False) | ~Q(softech_usercode='') | ~Q(pbx_extension=''),
                 name='crew_manual_member_has_identity'),
         ]
+

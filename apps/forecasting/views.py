@@ -220,8 +220,9 @@ class KpiBoardView(APIView):
         m_start, m_end, data_through, total, elapsed, frac = kpi_board.month_pacing(year, month)
 
         # actuals from rollups (rebuilt daily) → {(branch_id, metric): value}
+        # branch rows only — the call-center crew's rows (branch NULL) feed its own block below
         rollups = KpiActualRollup.objects.filter(
-            year=year, month=month, metric__in=BOARD_METRICS,
+            year=year, month=month, metric__in=BOARD_METRICS, branch__isnull=False,
         ).values('branch_id', 'metric', 'value')
         actual = {(r['branch_id'], r['metric']): float(r['value']) for r in rollups}
         branch_ids_with_data = {r['branch_id'] for r in rollups}
@@ -289,17 +290,18 @@ class KpiBoardView(APIView):
     ]
 
     def _call_center_block(self, year, month, cell, m_start, m_end):
-        from apps.branches.models import Branch
+        """The call-center crew's figures (KpiActualRollup crew rows) and its crew-scope targets."""
         from apps.incentives.models import SalesTarget
-        cc = Branch.objects.filter(softech_branch_id='CC').first()
-        if not cc:
+        from apps.forecasting.call_center import call_center_crew
+        crew = call_center_crew()
+        if not crew:
             return None
         actual = {r['metric']: float(r['value']) for r in KpiActualRollup.objects.filter(
-            branch=cc, year=year, month=month, metric__in=self.CC_METRICS).values('metric', 'value')}
+            crew=crew, year=year, month=month, metric__in=self.CC_METRICS).values('metric', 'value')}
         if not actual:
             return None
         tgt = {t['metric']: (float(t['target_value'] or 0), t['id']) for t in SalesTarget.objects.filter(
-            scope_type=SalesTarget.SCOPE_BRANCH, branch=cc, metric__in=self.CC_METRICS,
+            scope_type=SalesTarget.SCOPE_CREW, crew=crew, metric__in=self.CC_METRICS,
             period_start__lte=m_end, period_end__gte=m_start).values('id', 'metric', 'target_value')}
         # CC labels: M_CUSTOMERS = order count; M_PIC_COUNT = distinct customers (PIC).
         cc_labels = dict(KpiActualRollup.METRIC_LABELS)
@@ -307,7 +309,8 @@ class KpiBoardView(APIView):
         cc_labels[KpiActualRollup.M_PIC_COUNT] = 'عدد العملاء'
         count_metrics = (KpiActualRollup.M_CUSTOMERS, KpiActualRollup.M_PIC_COUNT, KpiActualRollup.M_CALL_COUNT)
         return {
-            'branch_id': cc.id,
+            'crew_id': crew.id, 'crew_name': crew.name,
+            'scope_key': f'crew:{crew.id}',          # the forecast member key (commit-cell)
             'metrics': [{'key': m, 'label': cc_labels.get(m, m), 'is_count': m in count_metrics}
                         for m in self.CC_METRICS],
             'cells': {m: cell(actual.get(m, 0.0), *tgt.get(m, (0.0, None))) for m in self.CC_METRICS},

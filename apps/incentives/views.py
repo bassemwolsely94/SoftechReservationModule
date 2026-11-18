@@ -1775,7 +1775,7 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
     permission_classes = [_IsAuth, _TARGETS, _TargetEditors]
 
     def get_queryset(self):
-        qs = SalesTarget.objects.select_related('branch', 'category').all()
+        qs = SalesTarget.objects.select_related('branch', 'category', 'crew').all()
         # Batch 5 part 2: analytics-view branch roles (pharmacist, viewer) see their branches'
         # targets only — chain / category / salesperson targets carry company-wide attainment.
         from core import branch_scope
@@ -1789,6 +1789,14 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
             qs = qs.filter(scope_type=scope)
         return qs
 
+    @action(detail=False, methods=['get'], url_path='crews')
+    def crews(self, request):
+        """The live call-center crews a target can name. Served here (analytics permission) so a
+        target editor without the `crews` module can still pick the crew."""
+        from apps.crews.models import Crew
+        rows = Crew.objects.filter(type='call_center', is_archived=False).order_by('name', 'id')
+        return Response([{'id': c.id, 'name': c.name, 'type': c.type} for c in rows])
+
     def _guard(self):
         p = getattr(self.request.user, 'staff_profile', None)
         if not (p and p.role in _TARGET_EDIT_ROLES):
@@ -1797,7 +1805,10 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
 
     @staticmethod
     def _tgt_desc(t):
-        scope = t.branch.code if t.branch_id else (t.softech_user or t.get_scope_type_display())
+        if t.crew_id:
+            scope = t.crew.name
+        else:
+            scope = t.branch.code if t.branch_id else (t.softech_user or t.get_scope_type_display())
         return f'{scope} · {t.get_metric_display()} · {t.period_start:%Y-%m}'
 
     def perform_create(self, serializer):

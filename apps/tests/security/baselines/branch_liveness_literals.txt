@@ -11,8 +11,5 @@ apps/sync/management/commands/investigate_replication.py::Command._investigate
 apps/sync/management/commands/probe_replication_source.py::Command._investigate
 apps/sync/management/commands/test_replication_cycle.py::Command.handle
 
-# reason: PBX extension numbers, not branch codes; extension classification is piece 2 (spec 5.6)
-apps/pbx/management/commands/classify_pbx_extensions.py::<module>
-
 # reason: label of the HQ node whose server is settings.SYBASE_HOST; the retail nodes already come from Branch.objects.retail()
 apps/sync/network_health.py::<module>

@@ -404,3 +404,74 @@ class IncentivesPermissionR7Tests(_Base):
         from apps.tests.factories import make_branch2
         qm.restricted_branches.add(make_branch2())
         self.assertEqual(bearer_client(qm.user).get(f'{API}programs/').status_code, 403)
+
+
+class SalesTargetCrewApiTests(_Base):
+    """Crews piece 2b Part B Task 4: the call-center crew on the target screen."""
+
+    def setUp(self):
+        super().setUp()
+        from apps.crews.models import Crew
+        self.crew = Crew.objects.create(name='الكول سنتر', type='call_center')
+        Crew.objects.create(name='قديم', type='call_center', is_archived=True)
+        Crew.objects.create(name='صيادلة', type='job')
+        self.body = {'scope_type': 'crew', 'metric': 'call_count', 'crew': self.crew.id,
+                     'period_start': '2026-10-01', 'period_end': '2026-10-31', 'target_value': '1500'}
+
+    def test_crews_list_is_live_call_center_crews_only(self):
+        r = self.admin.get(f'{API}targets/crews/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), [{'id': self.crew.id, 'name': 'الكول سنتر', 'type': 'call_center'}])
+
+    def test_editors_without_crews_permission_get_the_list_and_create(self):
+        for role in ('supervisor', 'purchasing'):
+            c = bearer_client(make_user(f'r7inc_crew_{role}', role=role)[0])
+            self.assertEqual(c.get(f'{API}targets/crews/').json()[0]['id'], self.crew.id, role)
+            r = c.post(f'{API}targets/', self.body, format='json')
+            self.assertEqual(r.status_code, 201, (role, r.content))
+            self.assertEqual(r.json()['crew_name'], 'الكول سنتر')
+            self.assertEqual(r.json()['scope_label'], 'طاقم · الكول سنتر')
+            SalesTarget.objects.all().delete()
+
+    def test_non_editor_cannot_create_a_crew_target(self):
+        pharm = bearer_client(make_user('r7inc_crew_pharm', role='pharmacist')[0])
+        self.assertEqual(pharm.post(f'{API}targets/', self.body, format='json').status_code, 403)
+        self.assertFalse(SalesTarget.objects.exists())
+
+    def test_crew_target_lists_with_crew_label_and_audit_names_the_crew(self):
+        self.assertEqual(self.admin.post(f'{API}targets/', self.body, format='json').status_code, 201)
+        rows = self.admin.get(f'{API}targets/').json()
+        rows = rows.get('results', rows)
+        self.assertEqual(rows[0]['scope_label'], 'طاقم · الكول سنتر')
+        from apps.audit.models import AuditLog
+        self.assertIn('الكول سنتر', AuditLog.objects.get(action='sales_target_created').note)
+
+    def test_crew_target_carries_no_branch_rep_or_category(self):
+        from apps.branches.models import Branch
+        br = Branch.objects.create(softech_branch_id='971', code='971', name='B')
+        from apps.catalog.models import Category
+        cat = Category.objects.create(softech_id='CAT-CREW', name='c')
+        for extra in ({'branch': br.id}, {'softech_user': 'P1'}, {'category': cat.id}):
+            r = self.admin.post(f'{API}targets/', {**self.body, **extra}, format='json')
+            self.assertEqual(r.status_code, 400, extra)
+        self.assertFalse(SalesTarget.objects.exists())
+
+    def test_crew_target_only_on_metrics_the_crew_has(self):
+        for metric in ('net_revenue', 'orders', 'cash', 'credit'):
+            r = self.admin.post(f'{API}targets/', {**self.body, 'metric': metric}, format='json')
+            self.assertEqual(r.status_code, 400, metric)
+            self.assertIn('metric', r.json(), metric)
+        self.assertFalse(SalesTarget.objects.exists())
+        r = self.admin.post(f'{API}targets/', {**self.body, 'metric': 'cash_delivery'}, format='json')
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_patch_crew_target_metric_outside_crew_set_refused(self):
+        tid = self.admin.post(f'{API}targets/', self.body, format='json').json()['id']
+        r = self.admin.patch(f'{API}targets/{tid}/', {'metric': 'net_revenue'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_patch_crew_target_to_branch_scope_with_crew_still_set_refused(self):
+        tid = self.admin.post(f'{API}targets/', self.body, format='json').json()['id']
+        r = self.admin.patch(f'{API}targets/{tid}/', {'scope_type': 'branch'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(SalesTarget.objects.get(pk=tid).scope_type, 'crew')
