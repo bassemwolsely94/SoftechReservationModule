@@ -115,6 +115,9 @@ class PortalBasket(models.Model):
     order_ref = models.CharField(max_length=60, blank=True, default='')
     credit_seen = models.JSONField(default=dict, blank=True)
     needs_person_reason = models.CharField(max_length=255, blank=True, default='')
+    # when it last went to needs_person: an Order History read counts for a retry only if it
+    # started after this moment (apps/rpa/portal/queue.resolve)
+    needs_person_at = models.DateTimeField(null=True, blank=True)
     diff = models.JSONField(default=dict, blank=True)   # handed-over vs recorded
 
     class Meta:
@@ -164,6 +167,9 @@ class PortalRun(models.Model):
                                related_name='portal_runs')
     mode = models.CharField(max_length=8, choices=MODES, default='dry_run')
     started_at = models.DateTimeField()
+    # discovery / history runs have no basket lease, so they carry their own (fill runs use the
+    # basket's lease_until); a queued history run has device=None until a device takes it
+    lease_until = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     outcome = models.CharField(max_length=30, blank=True, default='')
     steps = models.JSONField(default=list, blank=True)

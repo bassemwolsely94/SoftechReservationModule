@@ -2300,6 +2300,17 @@ def _run_retention_watch():
         logger.error('[APScheduler] retention watch failed: %s', exc)
 
 
+def _run_portal_expire_leases():
+    """Supplier-portal robot: a basket held past its lease goes to a person (never back to the queue)."""
+    try:
+        from apps.rpa.portal.queue import expire_leases
+        n = expire_leases()
+        if n:
+            logger.info('[APScheduler] portal leases expired: %s', n)
+    except Exception as exc:
+        logger.error('[APScheduler] portal lease expiry failed: %s', type(exc).__name__)
+
+
 def _run_segment_customers():
     """Wrapper for APScheduler — calls segment_customers management command."""
     try:
@@ -3937,6 +3948,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
+    # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
+    _scheduler.add_job(
+        _run_portal_expire_leases, 'interval', minutes=5, id='rpa_portal_expire_leases',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=300,
     )
     # Dead-stock list (P-27): after each successful engine run (checked every 30 min, PG only).
     _scheduler.add_job(

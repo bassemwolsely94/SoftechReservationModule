@@ -1,6 +1,7 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import agent_views, views
+from .portal import urls as portal_urls
 
 urlpatterns = [
     # ── staff API (Task 9) ──
@@ -23,4 +24,7 @@ urlpatterns = [
     path('agent/documents/<int:pk>/heartbeat/', agent_views.HeartbeatView.as_view(), name='rpa-agent-heartbeat'),
     path('agent/documents/<int:pk>/report/', agent_views.ReportView.as_view(), name='rpa-agent-report'),
     path('agent/runs/<int:pk>/screenshot/', agent_views.ScreenshotView.as_view(), name='rpa-agent-screenshot'),
+    # supplier-portal robot: apps/rpa/portal/urls.py (staff API at portal/, agent at agent/portal/)
+    path('portal/', include(portal_urls.urlpatterns)),
+    path('agent/portal/', include(portal_urls.agent_urlpatterns)),
 ]

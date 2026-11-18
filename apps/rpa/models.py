@@ -5,6 +5,7 @@ frozen, approved recipe; these tables hold what it was asked to type and what ha
 """
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 
 class RpaScreen(models.Model):
@@ -186,9 +187,18 @@ class RpaRun(models.Model):
 
 
 class RpaScreenshot(models.Model):
-    run = models.ForeignKey(RpaRun, on_delete=models.CASCADE, related_name='shots')
+    """A step picture from a SOFTECH run (run) or a supplier-portal run (portal_run) - exactly one."""
+    run = models.ForeignKey(RpaRun, on_delete=models.CASCADE, null=True, blank=True, related_name='shots')
+    portal_run = models.ForeignKey('rpa.PortalRun', on_delete=models.CASCADE, null=True, blank=True,
+                                   related_name='shots')
     step_index = models.PositiveIntegerField(default=0)
     image = models.ImageField(upload_to='rpa/%Y/%m/')
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(run__isnull=False) ^ Q(portal_run__isnull=False),
+                                   name='rpa_screenshot_one_run'),
+        ]
 
 from .portal.models import *  # noqa: F401,F403 — portal models live in a sub-module

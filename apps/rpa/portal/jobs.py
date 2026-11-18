@@ -75,6 +75,11 @@ def create_job(buylist, *, portal, account, staff):
         raise PermissionDenied('لا تملك صلاحية إنشاء مهام المواقع')
     if account.portal_id != portal.pk:
         raise JobError('الحساب لا يخص هذا الموقع')
+    if not account.active:
+        raise JobError('الحساب غير مفعل')
+    if not (account.identity_text or '').strip():
+        # the robot checks the logged-in account against this text: without it, any account passes
+        raise JobError('اكتب اسم الحساب كما يظهر في الموقع قبل إنشاء مهمة')
     if buylist.status != 'open':
         raise JobError('القائمة مغلقة')
     if not buylist.lines.filter(chosen_supplier=str(portal.supplier_code), remaining_qty__gt=0).exists():

@@ -43,7 +43,8 @@ class JobTests(TestCase):
         cls.hq = Branch.objects.create(softech_branch_id='100', name='HQ', kind=Branch.KIND_HQ)
         cls.portal, _ = SupplierPortal.objects.get_or_create(   # seeded by migration 0002
             key='pharma_overseas', defaults={'supplier_code': '565'})
-        cls.account = PortalAccount.objects.create(portal=cls.portal, label='main')
+        cls.account = PortalAccount.objects.create(portal=cls.portal, label='main',
+                                                  identity_text='HQ 565')
         cls.vendor = VendorProfile.objects.create(name='PO', softech_personcode='565')
         cls.items = [Item.objects.create(softech_id=f'PJ{n}', name=f'item {n}', is_active=True,
                             pack_price=Decimal('10'))
