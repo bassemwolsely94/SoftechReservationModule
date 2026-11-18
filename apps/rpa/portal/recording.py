@@ -15,7 +15,9 @@ What stops an order being recorded twice:
   • a buy line already credited with this basket (its `tried` names the basket) is not credited
     again;
   • the portal's order number (`portal_key`) is unique, so one order never sits on two baskets;
-  • empty Order History lines never mean "everything was removed": that needs a person.
+  • empty Order History lines never mean "everything was removed": that needs a person; and
+    History rows the basket cannot account for (a code not in it, an unreadable code or qty)
+    send it to a person before anything is recorded or handed back as a remainder.
 
 Nothing here writes SOFTECH.
 """
@@ -91,7 +93,7 @@ def _flags(line, portal, last_cost, today):
         flags.append('short_expiry')
     if line.price is not None and last_cost and last_cost > 0:
         net = line.price * (1 - (line.discount_pct or 0) / Decimal('100'))
-        if net >= last_cost * (1 + Decimal(portal.price_jump_pct) / Decimal('100')):
+        if net >= last_cost * (1 + Decimal(str(portal.price_jump_pct)) / Decimal('100')):
             flags.append('price_jump')
     return flags
 
@@ -166,28 +168,39 @@ def record_check(basket, lines_payload):
 
 # ── record_order ─────────────────────────────────────────────────────────────────────────────
 
+def parse_qty(v):
+    """A whole, non-negative quantity (4, '4', '4.000', 4.0 → 4), else None. Never truncates:
+    2.5 or 'four' is None."""
+    if isinstance(v, bool):
+        return None
+    d = _decimal(v)
+    if d is None or d < 0 or d != d.to_integral_value():
+        return None
+    return int(d)
+
+
 def _history_map(history_lines):
-    """({canonical sku: qty}, [rows whose sku is not a supplier code]). Rows with no positive
-    qty are dropped; a row with a qty but an unreadable sku is kept aside for a person."""
+    """({canonical sku: qty}, [rows a person must read]). A row with qty 0 is dropped; a row
+    whose sku is not a supplier code or whose qty is not a whole number is kept aside, never
+    taken as "not ordered"."""
     out, unreadable = {}, []
     for row in history_lines or []:
         if not isinstance(row, dict):
+            unreadable.append({'sku': '', 'qty': str(row)[:20]})
             continue
-        try:
-            qty = int(row.get('qty'))
-        except (TypeError, ValueError):
-            continue
-        if qty <= 0:
+        qty = parse_qty(row.get('qty'))
+        if qty == 0:
             continue
         sku = canonical_sku(row.get('sku'))
-        if sku:
+        if sku and qty is not None:
             out[sku] = out.get(sku, 0) + qty
         else:
-            unreadable.append({'sku': str(row.get('sku') or '')[:40], 'qty': qty})
+            unreadable.append({'sku': str(row.get('sku') or '')[:40],
+                               'qty': qty if qty is not None else str(row.get('qty'))[:20]})
     return out, unreadable
 
 
-def _needs_person(b, reason, *, staff, now, note=''):
+def _needs_person(b, reason, *, staff, now, note='', extra=None):
     old = {'status': b.status, 'needs_person_reason': b.needs_person_reason}
     b.status = 'needs_person'
     b.needs_person_reason = str(reason)[:255]
@@ -195,7 +208,7 @@ def _needs_person(b, reason, *, staff, now, note=''):
     b.lease_until = None
     b.save(update_fields=['status', 'needs_person_reason', 'needs_person_at', 'lease_until'])
     _audit('rpa_portal_needs_person', b, user=staff, old=old,
-           new={'status': b.status, 'needs_person_reason': b.needs_person_reason},
+           new={'status': b.status, 'needs_person_reason': b.needs_person_reason, **(extra or {})},
            note=note or f'basket {b.pk}: {b.needs_person_reason}')
 
 
@@ -230,7 +243,7 @@ def _record(b, ref, history_lines, staff):
     BuyList.objects.select_for_update().get(pk=job.buylist_id)
 
     history, unreadable = _history_map(history_lines)
-    if not history:
+    if not history and not unreadable:
         raise RecordError('لا توجد أسطر من سجل الطلبات — راجع الطلب في الموقع قبل التسجيل')
     portal_key = f'{portal.key}:{ref}'
     other = PortalBasket.objects.filter(portal_key=portal_key).exclude(pk=b.pk).values_list('pk', flat=True).first()
@@ -266,6 +279,15 @@ def _record(b, ref, history_lines, staff):
         raise RecordError('الطلب مسجل من قبل بكميات مختلفة — راجع السجل')
 
     b.portal_ref, b.portal_key, b.diff = ref, portal_key, diff
+    if diff['added']:
+        # Order History holds rows this basket cannot account for (a code not in the basket, an
+        # unreadable code or qty). Nothing is recorded until a person reconciles them (link_order
+        # with corrected lines): an unmatched basket line may really have been ordered under
+        # another code, and handing it back as a remainder would order it twice. Nothing is
+        # committed either, so the reconciled lines are recorded once, by one commit_order.
+        b.save(update_fields=['portal_ref', 'portal_key', 'diff'])
+        _needs_person(b, f'history_unmatched:{ref}', staff=staff, now=now, extra={'diff': diff})
+        return b
     decisions, replayed = [], bool(prior)
     if order:
         try:
@@ -293,13 +315,7 @@ def _record(b, ref, history_lines, staff):
     old = {'status': b.status}
     b.order_ref = key
     b.status = 'recorded'
-    fields = ['portal_ref', 'portal_key', 'order_ref', 'diff', 'status']
-    if diff['added']:
-        # items on the order that were not in the basket: not ordered here, a person looks
-        b.needs_person_reason = f'history_added:{ref}'[:255]
-        b.needs_person_at = now
-        fields += ['needs_person_reason', 'needs_person_at']
-    b.save(update_fields=fields)
+    b.save(update_fields=['portal_ref', 'portal_key', 'order_ref', 'diff', 'status'])
     _audit('rpa_portal_basket_recorded', b, user=staff, old=old,
            new={'status': b.status, 'portal_ref': ref, 'order_ref': key, 'account': account.label,
                 'decisions': len(decisions), 'replayed': replayed, 'diff': diff},

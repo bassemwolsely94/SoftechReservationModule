@@ -236,15 +236,62 @@ class RecordOrderTests(_World, TestCase):
         bl = BuyListLine.objects.get(pk=lines['11'].buyline_id)
         self.assertEqual((bl.remaining_qty, bl.tried, bl.chosen_supplier), (4, [], '565'))
 
+    def _assert_held_for_a_person(self, out, lines, ref):
+        """Nothing credited to the buy list, nothing handed back as a remainder, a person flagged."""
+        self.assertEqual(out.status, 'needs_person')
+        self.assertEqual(out.needs_person_reason, f'history_unmatched:{ref}')
+        self.assertEqual((out.portal_ref, out.portal_key), (ref, f'pharma_overseas:{ref}'))
+        for ln in lines.values():
+            bl = BuyListLine.objects.get(pk=ln.buyline_id)
+            self.assertEqual((bl.remaining_qty, bl.tried, bl.chosen_supplier), (ln.wanted_qty, [], '565'))
+            self.assertEqual(PortalLine.objects.get(pk=ln.pk).status, 'ok')
+        self.assertEqual(out.job.__class__.objects.get(pk=out.job_id).status, 'approved')
+        self.assertTrue(AuditLog.objects.filter(action='rpa_portal_needs_person',
+                                                new_data__needs_person_reason=out.needs_person_reason).exists())
+
     def test_record_order_added_sku_not_ordered_and_flagged(self):
-        _, basket, lines = self.make_basket({'11': 4})
+        _, basket, lines = self.make_basket({'11': 4, '12': 3})
         out = recording.record_order(basket, order_ref='PO-6', history_lines=[
             {'sku': '11', 'qty': 4}, {'sku': '99', 'qty': 2}], staff=self.buyer)
         self.assertEqual(out.diff['added'], [{'sku': '99', 'qty': 2}])
-        self.assertEqual(SupplyDecision.objects.count(), 1)
+        self.assertEqual([r['sku'] for r in out.diff['removed']], ['12'])
+        self.assertEqual(SupplyDecision.objects.count(), 0)       # nothing recorded until reconciled
+        self._assert_held_for_a_person(out, lines, 'PO-6')          # 12 is NOT released
+
+    def test_record_order_no_history_sku_matches_holds_every_line(self):
+        _, basket, lines = self.make_basket({'11': 4})
+        out = recording.record_order(basket, order_ref='PO-14', history_lines=[{'sku': '77', 'qty': 4}],
+                                     staff=self.buyer)
+        self.assertEqual(out.diff['added'], [{'sku': '77', 'qty': 4}])
+        self.assertEqual(SupplyDecision.objects.count(), 0)
+        self._assert_held_for_a_person(out, lines, 'PO-14')
+
+    def test_record_order_unreadable_history_qty_holds_the_line(self):
+        _, basket, lines = self.make_basket({'11': 4, '12': 3})
+        out = recording.record_order(basket, order_ref='PO-15', history_lines=[
+            {'sku': '11', 'qty': '4.000'}, {'sku': '12', 'qty': '2.5'}], staff=self.buyer)
+        self.assertEqual(out.diff['added'], [{'sku': '12', 'qty': '2.5'}])
+        self._assert_held_for_a_person(out, lines, 'PO-15')
+        _, basket2, lines2 = self.make_basket({'11': 4})
+        out2 = recording.record_order(basket2, order_ref='PO-16', history_lines=[{'sku': '11', 'qty': 'four'}],
+                                      staff=self.buyer)
+        self.assertEqual(out2.diff['added'], [{'sku': '11', 'qty': 'four'}])
+        self.assertEqual(SupplyDecision.objects.filter(order_ref=f'portal-basket-{basket2.pk}').count(), 0)
+        self._assert_held_for_a_person(out2, lines2, 'PO-16')
+
+    def test_unmatched_basket_reconciled_by_a_person_records_once(self):
+        _, basket, lines = self.make_basket({'11': 4, '12': 3})
+        recording.record_order(basket, order_ref='PO-17', history_lines=[
+            {'sku': '11', 'qty': 4}, {'sku': '99', 'qty': 3}], staff=self.buyer)
+        PortalBasket.objects.filter(pk=basket.pk).update(status='submitted')   # resolve(link_order)
+        out = recording.record_order(basket, order_ref='PO-17', history_lines=[
+            {'sku': '11', 'qty': 4}, {'sku': '12', 'qty': 3}], staff=self.buyer)
         self.assertEqual(out.status, 'recorded')
-        self.assertTrue(out.needs_person_reason.startswith('history_added'))
-        self.assertIsNotNone(out.needs_person_at)
+        key = f'portal-basket-{basket.pk}'
+        self.assertEqual(sorted(SupplyDecision.objects.filter(order_ref=key).values_list('decided_qty', flat=True)),
+                         [Decimal('3'), Decimal('4')])
+        for ln in lines.values():
+            self.assertEqual(BuyListLine.objects.get(pk=ln.buyline_id).remaining_qty, 0)
 
     def test_record_order_ref_already_on_another_basket_refused(self):
         _, first, _ = self.make_basket({'11': 4})
@@ -304,4 +351,10 @@ class RecordOrderTests(_World, TestCase):
         out = recording.record_order(basket, order_ref='PO-13', history_lines=[
             {'sku': '11', 'qty': 4}, {'sku': 'AB-7', 'qty': 1}], staff=self.buyer)
         self.assertEqual(out.diff['added'], [{'sku': 'AB-7', 'qty': 1}])
-        self.assertTrue(out.needs_person_reason.startswith('history_added'))
+        self.assertEqual(out.needs_person_reason, 'history_unmatched:PO-13')
+
+    def test_queue_keeps_unreadable_history_qty(self):
+        from apps.rpa.portal import queue
+        self.assertEqual(queue._clean_history([{'sku': '11', 'qty': '4.000'}, {'sku': '12', 'qty': 2.5},
+                                               {'sku': '13', 'qty': 'x'}]),
+                         [{'sku': '11', 'qty': 4}, {'sku': '12', 'qty': '2.5'}, {'sku': '13', 'qty': 'x'}])

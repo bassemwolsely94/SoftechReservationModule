@@ -31,6 +31,7 @@ from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.rpa.models import PortalAccount, PortalBasket, PortalJob, PortalLine, PortalRun
+from apps.rpa.portal.recording import parse_qty
 from config.writers import writer_allowed
 
 logger = logging.getLogger(__name__)
@@ -100,11 +101,11 @@ def _clean_history(lines):
     for ln in lines if isinstance(lines, list) else []:
         if not isinstance(ln, dict):
             continue
-        try:
-            qty = int(ln.get('qty'))
-        except (TypeError, ValueError):
-            continue
-        out.append({'sku': str(ln.get('sku') or '')[:40], 'qty': qty})
+        raw = ln.get('qty')
+        qty = parse_qty(raw)
+        # an unreadable qty is kept as text: recording sends that order to a person, it never
+        # reads a dropped row as "not ordered"
+        out.append({'sku': str(ln.get('sku') or '')[:40], 'qty': qty if qty is not None else str(raw)[:20]})
     return out
 
 
