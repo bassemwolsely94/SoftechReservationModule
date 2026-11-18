@@ -1026,8 +1026,9 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('صندوق الإتاحة: إضافة كذا صنف للسطر مرة واحدة (Ctrl+مسافة أو Ctrl+F1)', 'Availability inbox: add several items to a line at once (Ctrl+Space or Ctrl+F1)'),
+        'updated': '2026-11-18',
+        'change_note': T('اللي اقترح طلب التوريد (ISR) مبيعتمدهوش — يعتمده زميل أو مدير النظام؛ صندوق الإتاحة: إضافة كذا صنف للسطر مرة واحدة (Ctrl+مسافة أو Ctrl+F1)',
+                         'Whoever proposed an ISR cannot approve it — a colleague or the admin approves it; availability inbox: add several items to a line at once (Ctrl+Space or Ctrl+F1)'),
     },
     {
         'key': 'purchasing.overview',

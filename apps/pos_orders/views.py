@@ -1078,7 +1078,7 @@ def customer_entities(request):
         entities = list_entities(branch.effective_db_host, type_key, q=q,
                                  db_port=branch.effective_db_port, db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'entities': [], 'note': f'تعذّر القراءة: {e}'})
+        return Response({'entities': [], 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'type': type_key, 'entities': entities})
 
 
@@ -1100,7 +1100,7 @@ def salespeople_view(request):
         people = salespeople(branch.effective_db_host, q=q, db_port=branch.effective_db_port,
                              db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'salespeople': [], 'note': f'تعذّر القراءة: {e}'})
+        return Response({'salespeople': [], 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'salespeople': people})
 
 
@@ -1121,7 +1121,7 @@ def branch_stores_view(request):
         stores = branch_stores(branch.effective_db_host, branch.softech_branch_id,
                                db_port=branch.effective_db_port, db_name=branch.db_name or 'SOFTECHDB9')
     except Exception as e:
-        return Response({'stores': [], 'note': f'تعذّر القراءة: {e}'})
+        return Response({'stores': [], 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'branch': branch.softech_branch_id, 'stores': stores})
 
 
@@ -1276,7 +1276,7 @@ def flush_now(request):
         try:
             res = writer.push_order(order, dry_run=False)
         except Exception as e:
-            failed += 1; results.append({'id': order.pk, 'error': str(e)}); continue
+            failed += 1; results.append({'id': order.pk, 'error': public_error(request, e)}); continue
         _audit_pos(request, 'softech_pos_order_pushed', order, res, via='flush_now')
         if res.get('queued'):
             queued += 1
@@ -1355,7 +1355,7 @@ def discount_suggest(request):
         finally:
             reader.close()
     except Exception as e:
-        return Response({'suggestions': {}, 'caps': {}, 'ceiling': None, 'note': f'تعذّر القراءة: {e}'})
+        return Response({'suggestions': {}, 'caps': {}, 'ceiling': None, 'note': f'تعذّر القراءة: {public_error(request, e)}'})
     return Response({'suggestions': suggestions, 'caps': caps, 'ceiling': ceiling,
                      'source': 'contract' if is_contract else 'item_pos'})
 

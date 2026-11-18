@@ -179,6 +179,10 @@ class ApprovedEntryIsFrozenApiTests(_GL):
         _, self.acct, _ = make_user('r2_gl_api', role='accountant')
         self.c = APIClient()
         self.c.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(self.acct.user)}')
+        # maker-checker (UAT W5b): a second accountant approves what r2_gl_api drafts
+        _, self.checker, _ = make_user('r2_gl_api_checker', role='accountant')
+        self.c2 = APIClient()
+        self.c2.credentials(HTTP_AUTHORIZATION=f'Bearer {AccessToken.for_user(self.checker.user)}')
 
     def body(self, amount='50.00'):
         return {'entry_date': DAY.isoformat(), 'book': 'general', 'description': 'edit', 'lines': [
@@ -205,9 +209,9 @@ class ApprovedEntryIsFrozenApiTests(_GL):
         r = self.c.post(self.BASE, self.body(), format='json')
         self.assertEqual(r.status_code, 201, r.content)
         pk = r.data['id']
-        self.assertEqual(self.c.post(f'{self.BASE}{pk}/approve/').status_code, 200)
+        self.assertEqual(self.c2.post(f'{self.BASE}{pk}/approve/').status_code, 200)
         number = LedgerEntry.objects.get(pk=pk).number
-        r = self.c.post(f'{self.BASE}{pk}/approve/')
+        r = self.c2.post(f'{self.BASE}{pk}/approve/')
         self.assertEqual(r.status_code, 409, r.content)
         self.assertEqual(LedgerEntry.objects.get(pk=pk).number, number)
 
