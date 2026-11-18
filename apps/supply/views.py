@@ -596,7 +596,9 @@ class SupplyCaseViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(branch_id=branch) if branch else qs
             else:
                 qs = case_svc.open_queue(bucket=bucket, branch_id=branch)
-            return _scope_cases(qs, self.request.user)
+            # availability_line_ids is a many=True field: one query per case without this
+            # (full audit PERF-4: 53 queries for 50 cases)
+            return _scope_cases(qs, self.request.user).prefetch_related('availability_lines')
         return _scope_cases(SupplyCase.objects.select_related('item', 'branch', 'assigned_to__user'),
                             self.request.user)
 
