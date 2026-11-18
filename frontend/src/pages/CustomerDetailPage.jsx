@@ -1363,7 +1363,7 @@ export default function CustomerDetailPage() {
 
   const deleteNoteMutation = useMutation({
     mutationFn: (noteId) => customersApi.deleteNote(id, noteId),
-    onSuccess: () => qc.invalidateQueries(['customer', id]),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['customer', id] }),
     onError: (e) => alert(e?.response?.data?.detail || 'تعذّر حذف الملاحظة'),
   })
 
@@ -1472,7 +1472,7 @@ export default function CustomerDetailPage() {
               <>
                 <NoteCompose
                   customerId={id}
-                  onPosted={() => qc.invalidateQueries(['customer', id])}
+                  onPosted={() => qc.invalidateQueries({ queryKey: ['customer', id] })}
                 />
                 <Timeline
                   notes={customer.notes || []}
@@ -1593,7 +1593,7 @@ export default function CustomerDetailPage() {
             value={chronic}
             onSaved={(v) => {
               setChronicValue(v)
-              qc.invalidateQueries(['customer', id])
+              qc.invalidateQueries({ queryKey: ['customer', id] })
             }}
           />
 

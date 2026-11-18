@@ -364,8 +364,8 @@ export default function SyncPage() {
     mutationFn: (full) => syncApi.trigger(full),
     onSuccess: () => {
       setTimeout(() => {
-        qc.invalidateQueries(['syncStatus'])
-        qc.invalidateQueries(['syncLogs'])
+        qc.invalidateQueries({ queryKey: ['syncStatus'] })
+        qc.invalidateQueries({ queryKey: ['syncLogs'] })
       }, 2000)
     },
   })

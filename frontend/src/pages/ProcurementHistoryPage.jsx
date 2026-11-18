@@ -7,7 +7,7 @@
  *   FOC / expiry / direction toggles — plus a totals bar over the full match set.
  */
 import { useState, useCallback, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import { useProcurementFilters } from '../components/ProcurementFilters'
 import useServerSort from '../hooks/useServerSort'
@@ -109,12 +109,12 @@ export default function ProcurementHistoryPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['procurement-history', params],
     queryFn:  () => procurementIntelApi.history(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
   const summaryQ = useQuery({
     queryKey: ['procurement-history-summary', params],
     queryFn:  () => procurementIntelApi.historySummary(params).then(r => r.data),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const rows = Array.isArray(data) ? data : (data?.results ?? [])

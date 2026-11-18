@@ -16,7 +16,7 @@
  *   onClose()      — called when modal should be dismissed
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import api from '../api/client'
 import Highlight from './Highlight'
 import SearchTierChip from './SearchTierChip'
@@ -195,7 +195,7 @@ export default function AdvancedItemSearchModal({ onSelect, onClose }) {
       }).then(r => r.data),
     enabled: activeParams !== null,
     staleTime: 10_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const results    = searchData?.results || []

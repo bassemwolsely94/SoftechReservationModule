@@ -5,7 +5,7 @@
  * stock/next-action come from the server. Pick → onPick(item) then onClose.
  */
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { itemsApi } from '../../api/client'
 import { BranchStockPill, Icon } from '../design'
 import useBranchNames from './useBranchNames'
@@ -33,7 +33,7 @@ export default function PosImageSearch({ open, onClose, branchId, customerId, in
       .then(r => ({ rows: r.data.results || [], asOf: r.data.stock_as_of ?? null })),
     enabled: open && dq.length >= 2,
     staleTime: 15_000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
   const rows = data?.rows || []
 
