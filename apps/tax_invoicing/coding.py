@@ -15,11 +15,14 @@ Gates for sending:
   the server's own test system: TAX_ETA_CODING_ENABLED · a typed count (as before).
 """
 import re
+from datetime import timedelta
 
 from django.db import IntegrityError, connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from config.writers import writer_allowed
+from core.errors import public_error
 
 from . import environment, eta_client, eta_coding_client, gpc
 from .models import TaxCodeRequest, TaxCodingDecision, TaxIssuerProfile, TaxItemProfile
@@ -32,6 +35,9 @@ BATCH_FLAG = 'TAX_ETA_CODING_PRODUCTION_BATCH_OK'
 FIRST_REQUEST_ONLY = 'أرسل طلباً واحداً أولاً حتى تعتمده المصلحة'
 FIRST_REQUEST_IN_FLIGHT = 'يوجد طلب للمنظومة الفعلية لدى المصلحة لم يُعتمد بعد؛ انتظر اعتماده قبل إرسال طلب آخر'
 PRODUCTION_LOCK = 'eta-coding-production'
+# a row still `sending` after this long was left by a crashed worker: refresh treats it as uncertain
+STALE_SENDING = timedelta(minutes=5)
+UNEXPECTED_STOP = 'توقف الإرسال بعد خطأ غير متوقع؛ حدّث الحالة من المصلحة أولاً'
 IN_FLIGHT = (TaxCodeRequest.SENDING, TaxCodeRequest.SUBMITTED, TaxCodeRequest.UNCERTAIN)
 MAX_PER_ACTION = 200
 GPC_BRICK = re.compile(r'^\d{8}$')
@@ -451,6 +457,13 @@ def send(request_ids, actor, confirm, *, actor_can_finalize=False):
             results['uncertain'] += 1
             results['stopped'] = 'توقف الإرسال بعد نتيجة غير مؤكدة؛ حدّث الحالة من المصلحة أولاً'
             break
+        except Exception as exc:     # noqa: BLE001 — the row is SENDING: never leave it there; ETA may hold it
+            error = public_error(None, exc)
+            TaxCodeRequest.objects.filter(pk=row.pk).update(status=TaxCodeRequest.UNCERTAIN, error=error[:2000])
+            audit('code_request_uncertain', actor=actor, entity='code_request', entity_id=row.pk, reason=error[:500])
+            results['uncertain'] += 1
+            results['stopped'] = UNEXPECTED_STOP
+            break
         with transaction.atomic():
             row.refresh_from_db()
             row.status, row.eta_response = TaxCodeRequest.SUBMITTED, body if isinstance(body, dict) else {'body': body}
@@ -528,7 +541,10 @@ def refresh(actor=None, request_ids=None, limit=100):
     # Each row is asked of its own system: codes are identical across systems, so another system's answer
     # would be about a different request. Production rows on any server (through the production client);
     # this server's own system, and a row with no system yet, as before; any other system not from here.
-    qs = (TaxCodeRequest.objects.filter(status__in=states, environment__in=sorted({_here(), '', PRODUCTION}))
+    # A row still `sending` after STALE_SENDING was left by a crashed worker: asked about like an uncertain one.
+    stale = Q(status=TaxCodeRequest.SENDING, sent_at__lt=timezone.now() - STALE_SENDING)
+    qs = (TaxCodeRequest.objects.filter(Q(status__in=states) | stale,
+                                        environment__in=sorted({_here(), '', PRODUCTION}))
           .select_related('profile'))
     if request_ids:
         qs = qs.filter(pk__in=request_ids)
@@ -547,6 +563,13 @@ def refresh(actor=None, request_ids=None, limit=100):
             continue
         with transaction.atomic():
             row = TaxCodeRequest.objects.select_for_update().select_related('profile').get(pk=row.pk)
+            if row.status == TaxCodeRequest.SENDING:
+                if row.sent_at and row.sent_at >= timezone.now() - STALE_SENDING:
+                    continue        # a live send took it back meanwhile
+                row.status = TaxCodeRequest.UNCERTAIN       # a crashed send: settled like an uncertain one
+                audit('code_request_status', actor=actor, entity='code_request', entity_id=row.pk,
+                      before={'status': TaxCodeRequest.SENDING}, after={'status': row.status},
+                      reason='طلب عالق في الإرسال')
             if found and _apply_eta_answer(row, found[0], actor):
                 changed.add(row.profile.softech_itemcode)
             elif row.status == TaxCodeRequest.UNCERTAIN:
@@ -564,7 +587,10 @@ def refresh(actor=None, request_ids=None, limit=100):
         elif row.status == TaxCodeRequest.REJECTED:
             done['rejected'] += 1
     if changed:     # held drafts and held/ready receipts carrying these items pick up their new coding
-        revalidate_drafts_for_items(changed)
+        try:
+            revalidate_drafts_for_items(changed)
+        except Exception as exc:     # noqa: BLE001 — ETA's answers are saved; the re-check can be run again
+            done['revalidate_error'] = public_error(None, exc)
     return done
 
 

@@ -183,8 +183,11 @@ class CodingClient:
         if r.status_code != 200:
             raise EtaUncertain(f'تعذر الاستعلام عن طلبات الأكواد (HTTP {r.status_code})', r.status_code)
         body = _json(r)
-        rows = body if isinstance(body, list) else (body.get('result') or body.get('items') or [])
-        return [row for row in rows if str(row.get('itemCode') or '').upper() == item_code.upper()]
+        if isinstance(body, dict):
+            body = body.get('result') or body.get('items') or []
+        rows = body if isinstance(body, list) else []
+        return [row for row in rows
+                if isinstance(row, dict) and str(row.get('itemCode') or '').upper() == item_code.upper()]
 
     def code_details(self, code_type, item_code):
         """ETA's record of one code, or None when ETA says it has no such code. Read only."""

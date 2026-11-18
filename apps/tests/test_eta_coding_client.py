@@ -3,6 +3,7 @@ ETA production item coding, S4 task 1: the per-system coding client (apps/tax_in
 and the production send gates in coding.py (production_gate, client_for, send / refresh / check_codes per system).
 ETA is mocked; no real HTTP.
 """
+from datetime import timedelta
 from unittest import mock
 
 import requests
@@ -480,3 +481,80 @@ class ProductionGateTests(_Clean, Fixture, TestCase):
         self.assertIs(coding.client_for(''), eta_client)
         with self.assertRaises(coding.TaxRuleError):
             coding.client_for('custom')
+
+
+@override_settings(**PREPROD_SERVER)
+class SendRecoveryTests(_Clean, Fixture, TestCase):
+    """S4 final review: a send that dies mid-call never leaves a request `sending`; refresh settles a stuck one."""
+
+    def setUp(self):
+        super().setUp()
+        self.build('sr')
+        self.p1 = TaxItemProfile.objects.create(softech_itemcode='71001', item_name='Panadol', gpc_code='10000454')
+        self.p2 = TaxItemProfile.objects.create(softech_itemcode='71002', item_name='Brufen', gpc_code='10000454')
+        coding.prepare([self.p1.pk, self.p2.pk], self.accountant, system='production')
+        self.rows = list(TaxCodeRequest.objects.filter(environment='production').order_by('id'))
+
+    @override_settings(TAX_ETA_CODING_PRODUCTION_BATCH_OK=True)
+    def test_unexpected_error_during_the_call_makes_the_row_uncertain_and_stops(self):
+        with mock.patch.object(eta_coding_client.requests, 'post', side_effect=[TOKEN, RuntimeError(SECRET)]) as post:
+            out = coding.send([r.pk for r in self.rows], self.admin, '2', actor_can_finalize=True)
+        self.assertEqual(post.call_count, 2)        # the second request was never sent
+        self.assertEqual((out['uncertain'], out['submitted'], out['stopped']), (1, 0, coding.UNEXPECTED_STOP))
+        first, second = (TaxCodeRequest.objects.get(pk=r.pk) for r in self.rows)
+        self.assertEqual((first.status, second.status), (TaxCodeRequest.UNCERTAIN, TaxCodeRequest.PREPARED))
+        self.assertNotIn(SECRET, first.error)
+        ev = TaxAuditEvent.objects.get(action='code_request_uncertain', entity_id=str(first.pk))
+        self.assertNotIn(SECRET, ev.reason)
+
+    def test_stale_sending_row_is_settled_by_refresh_and_a_fresh_one_is_left(self):
+        stale, fresh = self.rows
+        TaxCodeRequest.objects.filter(pk=stale.pk).update(status=TaxCodeRequest.SENDING,
+                                                          sent_at=timezone.now() - timedelta(minutes=10))
+        TaxCodeRequest.objects.filter(pk=fresh.pk).update(status=TaxCodeRequest.SENDING, sent_at=timezone.now())
+        with mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN), \
+                mock.patch.object(eta_coding_client.requests, 'get', return_value=_response(200, [])) as get:
+            out = coding.refresh(self.admin)
+        self.assertEqual(out['checked'], 1)
+        self.assertEqual([c[1]['params']['ItemCode'] for c in get.call_args_list], [stale.item_code])
+        stale.refresh_from_db()
+        fresh.refresh_from_db()
+        self.assertEqual((stale.status, fresh.status), (TaxCodeRequest.FAILED, TaxCodeRequest.SENDING))
+        self.assertTrue(TaxAuditEvent.objects.filter(action='code_request_status', entity_id=str(stale.pk),
+                                                     before={'status': 'sending'}).exists())
+
+    def test_stale_sending_row_eta_holds_is_approved(self):
+        stale = self.rows[0]
+        TaxCodeRequest.objects.filter(pk=stale.pk).update(status=TaxCodeRequest.SENDING,
+                                                          sent_at=timezone.now() - timedelta(minutes=10))
+        answer = _response(200, [{'itemCode': stale.item_code, 'status': 'Approved'}])
+        with mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN), \
+                mock.patch.object(eta_coding_client.requests, 'get', return_value=answer):
+            self.assertEqual(coding.refresh(self.admin)['approved'], 1)
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, TaxCodeRequest.APPROVED)
+
+    def test_failed_revalidation_is_reported_and_refresh_still_returns(self):
+        TaxCodeRequest.objects.filter(pk=self.rows[0].pk).update(status=TaxCodeRequest.SUBMITTED)
+        answer = _response(200, [{'itemCode': self.rows[0].item_code, 'status': 'Approved'}])
+        with mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN), \
+                mock.patch.object(eta_coding_client.requests, 'get', return_value=answer), \
+                mock.patch.object(coding, 'revalidate_drafts_for_items', side_effect=RuntimeError(SECRET)):
+            out = coding.refresh(self.admin)
+        self.assertEqual(out['approved'], 1)
+        self.assertIn('revalidate_error', out)
+        self.assertNotIn(SECRET, out['revalidate_error'])
+
+
+@override_settings(**PREPROD_SERVER)
+class MyCodeRequestsShapeTests(_Clean, SimpleTestCase):
+
+    def test_odd_bodies_give_no_rows_instead_of_an_error(self):
+        client = eta_coding_client.CodingClient('production')
+        good = {'itemCode': 'EG-1', 'status': 'Approved'}
+        for body, expected in (('text', []), (None, []), ({'result': 'x'}, []), ([1, 'a', None, good], [good]),
+                               ({'items': [good, 7]}, [good])):
+            with self.subTest(body=body):
+                with mock.patch.object(eta_coding_client.requests, 'post', return_value=TOKEN), \
+                        mock.patch.object(eta_coding_client.requests, 'get', return_value=_response(200, body)):
+                    self.assertEqual(client.my_code_requests('EG-1'), expected)

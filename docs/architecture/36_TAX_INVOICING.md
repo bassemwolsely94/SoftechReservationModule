@@ -317,7 +317,10 @@ than one production request is refused «أرسل طلباً واحداً أول
 while the first is with ETA (sending / submitted / uncertain). The check and the claim run under one advisory lock
 (`eta-coding-production`), so two senders can never both put a first request in front of ETA.
 `TAX_ETA_CODING_PRODUCTION_BATCH_OK` (writer flag, default off) lifts the rule. A timeout or 5xx makes the request
-`uncertain` and stops the batch; nothing is resent until "refresh" settles it. A row the client cannot reach is
+`uncertain` and stops the batch; nothing is resent until "refresh" settles it. Any other error during the call does
+the same (its text through `core.errors.public_error`, no secrets). A row left `sending` for more than 5 minutes
+(a killed worker) is picked up by refresh like an uncertain one: ETA's answer settles it, no trace → `failed`. A
+failed re-check of held drafts/receipts after refresh is reported as `revalidate_error`; the answers stay saved. A row the client cannot reach is
 returned in `refused: [{id, why}]` and shown on the panel.
 
 **ETA's answer.** `coding.refresh` asks production rows through the production client on any server. An approved

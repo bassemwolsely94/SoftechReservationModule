@@ -260,6 +260,21 @@ class ProductionRequestTests(Fixture, TestCase):
             r = self.api.get(url)
         self.assertEqual((r.data['enabled'], r.data['batch_ok']), (True, True))
 
+    def test_view_only_user_reads_the_panel_but_cannot_prepare(self):
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        for action, allowed in (('view', True), ('edit', False), ('approve', False), ('finalize', False)):
+            RoleModuleAccess.objects.update_or_create(role='supervisor', module='tax_invoicing', action=action,
+                                                      defaults={'is_allowed': allowed})
+        viewer, _, _ = make_user('viewer_pr', role='supervisor', branch=self.branch)
+        p = self.profile()
+        api = APIClient()
+        api.force_authenticate(viewer)
+        self.assertEqual(api.get('/api/tax-invoicing/codes/production/').status_code, 200)
+        self.assertEqual(api.post(QUEUE + 'prepare/', {'itemcodes': [p.softech_itemcode]}, format='json').status_code, 403)
+        self.assertEqual(api.post(QUEUE + 'gs1/', {'itemcode': p.softech_itemcode}, format='json').status_code, 403)
+        self.assertFalse(TaxCodeRequest.objects.exists())
+
     def test_codes_list_filters_by_system(self):
         p, q = self.profile(), self.profile()
         self.prepare(p)
