@@ -352,7 +352,9 @@ class BuildTests(_BuildMixin, TestCase):
         ws = _wb(data)['DataEntry']
         self.assertEqual(ws['N6'].value, '=IF(AND(A6="",G6=""), "1","0")')     # the row above's, translated
         self.assertTrue(ws.cell(6, 1).font.bold)
-        self.assertEqual(ws.cell(6, 7).number_format, 'mm-dd-yy')
+        # G takes a coded row's date style (the row above may be uncoded, its G not a date: real sheet s=46)
+        self.assertTrue(ws.cell(6, 7).is_date)
+        self.assertEqual(ws.cell(6, 7).number_format, ws.cell(3, 7).number_format)
         self.assertEqual(ws.tables['DataEntryTable'].ref, 'A1:P6')
         self.assertEqual(ws.auto_filter.ref, 'A1:P6')
         self.assertEqual((v.coded_rows, v.total_rows), (3, 5))
