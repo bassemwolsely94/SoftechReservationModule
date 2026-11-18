@@ -118,6 +118,8 @@ class PortalBasket(models.Model):
     # when it last went to needs_person: an Order History read counts for a retry only if it
     # started after this moment (apps/rpa/portal/queue.resolve)
     needs_person_at = models.DateTimeField(null=True, blank=True)
+    # when a person last sent it back to ready: live fill runs before this were already cleared
+    retried_at = models.DateTimeField(null=True, blank=True)
     diff = models.JSONField(default=dict, blank=True)   # handed-over vs recorded
 
     class Meta:

@@ -3,12 +3,17 @@
 What stops a supplier order being placed twice:
   • claims run one at a time under pg_advisory_xact_lock(7302001), and the basket moves
     ready → in_progress with a conditional UPDATE, so two devices never get the same basket;
-  • a device only ever gets its own operator's jobs, and one piece of work at a time;
+  • a device only ever gets its own operator's jobs, and one piece of work at a time; and no
+    fill (or Order History read) starts while another basket on the same PortalAccount is held,
+    because two robots would share one supplier cart;
   • a lease that runs out sends the basket to a person (needs_person), never back to ready;
-  • a basket that reached the Submit handover (filled_at set) is never retried on a person's
-    say-so alone: an Order History read since it got stuck must have found nothing, or a holder
-    of rpa.edit confirms nothing was ordered (confirm_none, audited). Once Submit was seen
-    (submitted_seen_at) it can only be linked to its order or cancelled;
+  • a basket that had a LIVE fill run since its last retry may have been ordered (the robot
+    may have reached the review page, where Submit is on screen, whatever it reported after),
+    unless that run ended before the cart was touched (PRE_CART). It is never retried on a
+    person's say-so alone: an Order History read since it got stuck must have found nothing, or
+    a holder of rpa.edit confirms nothing was ordered (confirm_none, audited). Once Submit was
+    seen (submitted_seen_at), whatever account the robot thought it was on, it can only be
+    linked to its order or cancelled;
   • a late "Submit seen" for a run that was already closed is still taken in, and pulls the
     basket back to a person whatever state it reached since.
 
@@ -40,6 +45,12 @@ LEASE_EXPIRED = 'lease_expired'
 PERSON_OUTCOMES = ('cart_not_empty', 'wrong_account', 'cart_mismatch', 'unknown_message',
                    'login_required_timeout', 'stopped_by_operator', 'timeout', 'error')
 HOLDING = ('in_progress', 'awaiting_submit')       # a device holds the basket under a lease
+# outcomes the driver reports before it touches the cart (spec §6.2 step 5.1: account check, then
+# empty-cart check). Any other outcome of a live fill run - including none (expired) - may have
+# left the robot on the review page with Submit on screen.
+PRE_CART = ('cart_not_empty', 'wrong_account', 'login_required_timeout')
+# a fill report whose own outcome was past the cart, but from the wrong account: not PRE_CART
+WRONG_ACCOUNT_LATE = 'wrong_account_late'
 ACTIONS = ('retry', 'link_order', 'cancel')
 _LINE_STATUSES = {v for v, _ in PortalLine.STATUS}
 
@@ -152,8 +163,20 @@ def _needs_person(basket, reason, *, user, now):
     _audit('rpa_portal_needs_person', basket, user=user, old=old,
            new={'status': basket.status, 'needs_person_reason': basket.needs_person_reason},
            note=f'basket {basket.pk}: {basket.needs_person_reason}')
-    if basket.filled_at:              # it reached the Submit handover: read Order History
+    if may_have_ordered(basket):      # it may have reached Submit: read Order History
         request_history(basket)
+
+
+def may_have_ordered(basket) -> bool:
+    """True when a live fill run since the last retry got past the empty-cart check (or never
+    said), or an order was seen. Such a basket needs an Order History read (or a person's
+    explicit word) before it may be filled again."""
+    if basket.submitted_seen_at or basket.portal_ref or basket.filled_at:
+        return True
+    runs = PortalRun.objects.filter(basket=basket, kind='fill', mode='live')
+    if basket.retried_at:
+        runs = runs.filter(started_at__gte=basket.retried_at)
+    return runs.exclude(outcome__in=PRE_CART, finished_at__isnull=False).exists()
 
 
 def request_history(basket):
@@ -180,6 +203,10 @@ def _busy(device, now):
                                         finished_at__isnull=True, lease_until__gte=now).exists())
 
 
+def _held_accounts():
+    return PortalBasket.objects.filter(status__in=HOLDING).values('job__account_id')
+
+
 def claim_next(device):
     """The next piece of work for this device's operator, or None.
 
@@ -203,6 +230,7 @@ def _claim_history(device, jobs, now, plans):
     run = (PortalRun.objects.select_related('basket')
            .filter(kind='history', device__isnull=True, finished_at__isnull=True,
                    basket__status='needs_person', basket__job__in=jobs)
+           .exclude(basket__job__account_id__in=_held_accounts())
            .order_by('started_at', 'pk').first())
     if run is None:
         return None
@@ -239,6 +267,7 @@ def _claim_discovery(device, jobs, now, plans):
 def _claim_fill(device, jobs, now, plans):
     basket = (PortalBasket.objects.select_related('job__portal', 'job__account')
               .filter(status='ready', job__in=jobs)
+              .exclude(job__account_id__in=_held_accounts())      # one robot per supplier cart
               .order_by('job__created_at', 'job_id', 'seq', 'pk').first())
     if basket is None:
         return None
@@ -308,8 +337,10 @@ def report(run, device, payload):
         job = basket.job if basket is not None else run.discovery_job
         account = job.account
         seen = _seen_identity(payload)
-        if seen is not None and _norm(seen) != _norm(account.identity_text):
-            outcome = 'wrong_account'
+        wrong_identity = seen is not None and _norm(seen) != _norm(account.identity_text)
+        if wrong_identity and outcome != 'submit_seen':     # a Submit sighting is never thrown away
+            outcome = ('wrong_account' if run.kind != 'fill' or outcome in PRE_CART
+                       else WRONG_ACCOUNT_LATE)
         credit = _save_credit(account, payload.get('credit'), now)
         steps = _clean_steps(payload.get('steps'))
         if late_sighting:
@@ -323,7 +354,7 @@ def report(run, device, payload):
             return _report_history(basket, run, outcome, payload, device, now)
         if credit is not None:
             basket.credit_seen = credit
-        return _report_fill(basket, run, outcome, payload, device, now)
+        return _report_fill(basket, run, outcome, payload, device, now, wrong_identity=wrong_identity)
 
 
 def _history_step(payload):
@@ -384,7 +415,7 @@ def _submit_seen_late(basket, run, payload, device, now):
     return basket
 
 
-def _report_fill(basket, run, outcome, payload, device, now):
+def _report_fill(basket, run, outcome, payload, device, now, *, wrong_identity=False):
     from apps.rpa.portal import recording
     user = device.staff
     if basket.status not in HOLDING or basket.claimed_by_id != device.pk:
@@ -414,6 +445,9 @@ def _report_fill(basket, run, outcome, payload, device, now):
         _close(run, outcome, now, [_history_step(payload)])
         _audit('rpa_portal_submit_seen', basket, user=user, old={'status': basket.status},
                new={'order_ref': ref, 'run_id': run.pk}, note=f'basket {basket.pk}: {ref}')
+        if wrong_identity:            # an order was placed - on which account, a person decides
+            _needs_person(basket, f'submit_seen_wrong_account:{ref or "?"}', user=user, now=now)
+            return basket
         if basket.status != 'awaiting_submit' or run.mode != 'live' or not ref:
             _needs_person(basket, f'submit_seen_unexpected:{ref}' if ref else 'submit_seen_no_ref',
                           user=user, now=now)
@@ -450,7 +484,7 @@ def _report_fill(basket, run, outcome, payload, device, now):
             _needs_person(basket, 'record_failed', user=user, now=now)
         basket.refresh_from_db()
         return basket
-    outcome = outcome if outcome in PERSON_OUTCOMES else 'error'
+    outcome = outcome if outcome in PERSON_OUTCOMES + (WRONG_ACCOUNT_LATE,) else 'error'
     _close(run, outcome, now)
     _needs_person(basket, outcome, user=user, now=now)
     return basket
@@ -515,7 +549,7 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
         if action == 'retry':
             if b.submitted_seen_at or b.portal_ref:
                 raise QueueError('ظهر رقم طلب لهذه السلة — اربطها بالطلب أو ألغها، لا تُعاد')
-            if b.filled_at and not _history_clears(b):
+            if may_have_ordered(b) and not _history_clears(b):
                 if not confirm_none:
                     raise QueueError('ربما أُرسل الطلب — راجع سجل الطلبات أولاً أو أكّد أنه لم يُرسل')
                 new['confirmed_no_order'] = True
@@ -524,7 +558,10 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
             b.claimed_at = None
             b.lease_until = None
             b.needs_person_reason = ''
-            b.save(update_fields=['status', 'claimed_by', 'claimed_at', 'lease_until', 'needs_person_reason'])
+            b.filled_at = None            # cleared by the history read / confirm_none above
+            b.retried_at = now
+            b.save(update_fields=['status', 'claimed_by', 'claimed_at', 'lease_until', 'needs_person_reason',
+                                  'filled_at', 'retried_at'])
         elif action == 'link_order':
             ref = str(order_ref or '').strip()[:60]
             if not ref:

@@ -17,6 +17,11 @@ class Migration(migrations.Migration):
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
+            model_name='portalbasket',
+            name='retried_at',
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
             model_name='portalrun',
             name='lease_until',
             field=models.DateTimeField(blank=True, null=True),

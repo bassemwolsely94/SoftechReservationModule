@@ -146,6 +146,27 @@ class QueueTests(_World, TestCase):
 
     # ── concurrency lives in ConcurrentClaimTests ───────────────────────────────────────────
 
+    def test_second_device_same_account_waits(self):
+        self.make_job(statuses=('ready', 'ready'))
+        dev2, _ = issue_device(staff=self.buyer, label='second pc', created_by=self.boss)
+        first = queue.claim_next(self.dev)
+        self.assertIsNotNone(first)
+        # same PortalAccount = same supplier cart: the second robot waits
+        self.assertIsNone(queue.claim_next(dev2))
+        # also while the first basket waits at Submit
+        PortalBasket.objects.filter(pk=first['plan']['basket_id']).update(status='awaiting_submit')
+        self.assertIsNone(queue.claim_next(dev2))
+        # a queued Order History read on the busy account waits too
+        _, (stuck,) = self.make_job(statuses=('needs_person',))
+        PortalBasket.objects.filter(pk=stuck.pk).update(needs_person_at=timezone.now())
+        stuck.refresh_from_db()
+        queue.request_history(stuck)
+        self.assertIsNone(queue.claim_next(dev2))
+        # work on another account is not held up
+        acc2 = PortalAccount.objects.create(portal=self.portal, label='second', identity_text='HQ 2')
+        _, (other,) = self.make_job(account=acc2)
+        self.assertEqual(queue.claim_next(dev2)['plan']['basket_id'], other.pk)
+
     # ── lease ────────────────────────────────────────────────────────────────────────────────
 
     def test_heartbeat_extends_lease_and_refuses_others(self):
@@ -228,7 +249,7 @@ class QueueTests(_World, TestCase):
     def test_wrong_identity_is_wrong_account(self):
         run = self._fill_run()
         b = queue.report(run, self.dev, {'outcome': 'dry_run_ok', 'account': {'identity_text': 'Other Pharmacy'}})
-        self.assertEqual((b.status, b.needs_person_reason), ('needs_person', 'wrong_account'))
+        self.assertEqual((b.status, b.needs_person_reason), ('needs_person', 'wrong_account_late'))
 
     def test_handover_in_dry_run_needs_person(self):
         run = self._fill_run()
@@ -283,6 +304,74 @@ class QueueTests(_World, TestCase):
             queue.resolve(b, staff=self.boss, action='retry', confirm_none=True)
 
     # ── resolve ──────────────────────────────────────────────────────────────────────────────
+
+    def _live_run(self):
+        SupplierPortal.objects.filter(pk=self.portal.pk).update(live=True)
+        run = self._fill_run(live=True)
+        self.assertEqual(run.mode, 'live')
+        return run
+
+    def test_live_lease_expired_in_progress_needs_history_before_retry(self):
+        run = self._live_run()                       # never reported a handover
+        PortalBasket.objects.filter(pk=run.basket_id).update(lease_until=timezone.now() - timedelta(seconds=1))
+        queue.expire_leases()
+        b = PortalBasket.objects.get(pk=run.basket_id)
+        self.assertIsNone(b.filled_at)
+        with self.assertRaises(queue.QueueError):
+            queue.resolve(b, staff=self.boss, action='retry')
+        hrun = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
+        self.assertEqual(hrun.kind, 'history')
+        queue.report(hrun, self.dev, {'outcome': 'history_none'})
+        b = queue.resolve(b, staff=self.boss, action='retry')
+        self.assertEqual(b.status, 'ready')
+        # cleared: a fresh live run that stops before the cart retries straight away
+        run2 = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
+        b = queue.report(run2, self.dev, {'outcome': 'cart_not_empty'})
+        self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready')
+
+    def test_live_error_after_claim_needs_history_before_retry(self):
+        for outcome in ('error', 'timeout', 'unknown_message', 'stopped_by_operator', 'cart_mismatch'):
+            run = self._live_run()
+            b = queue.report(run, self.dev, {'outcome': outcome})
+            self.assertIsNone(b.filled_at)
+            with self.assertRaises(queue.QueueError, msg=outcome):
+                queue.resolve(b, staff=self.boss, action='retry')
+            self.assertTrue(PortalRun.objects.filter(basket=b, kind='history', finished_at__isnull=True).exists())
+            b = queue.resolve(b, staff=self.boss, action='retry', confirm_none=True)
+            self.assertEqual(b.status, 'ready')
+            PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
+
+    def test_live_pre_cart_outcomes_retry_freely(self):
+        for outcome in ('cart_not_empty', 'login_required_timeout'):
+            run = self._live_run()
+            b = queue.report(run, self.dev, {'outcome': outcome})
+            self.assertEqual(queue.resolve(b, staff=self.boss, action='retry').status, 'ready', outcome)
+            PortalBasket.objects.filter(pk=b.pk).update(status='cancelled')
+        # a past-the-cart outcome from the wrong account is NOT pre-cart
+        run = self._live_run()
+        b = queue.report(run, self.dev, {'outcome': 'cart_mismatch', 'account': {'identity_text': 'other'}})
+        self.assertEqual(b.needs_person_reason, 'wrong_account_late')
+        with self.assertRaises(queue.QueueError):
+            queue.resolve(b, staff=self.boss, action='retry')
+
+    def test_submit_seen_wrong_identity_keeps_the_sighting(self):
+        run = self._live_run()
+        queue.report(run, self.dev, {'outcome': 'handover'})
+        b = queue.report(run, self.dev, {'outcome': 'submit_seen', 'order_ref': '4242',
+                                         'account': {'identity_text': 'Some Other Pharmacy'},
+                                         'history_lines': [{'sku': '52871', 'qty': 4}]})
+        self.assertEqual(b.status, 'needs_person')
+        self.assertIsNotNone(b.submitted_seen_at)
+        self.assertIn('4242', b.needs_person_reason)
+        self.assertEqual(PortalRun.objects.get(pk=run.pk).outcome, 'submit_seen')
+        self.assertTrue(AuditLog.objects.filter(action='rpa_portal_submit_seen').exists())
+        for kw in ({}, {'confirm_none': True}):
+            with self.assertRaises(queue.QueueError):
+                queue.resolve(b, staff=self.boss, action='retry', **kw)
+        with mock.patch('apps.rpa.portal.recording.record_order') as ro:
+            ro.side_effect = lambda basket, **kw: basket
+            queue.resolve(b, staff=self.boss, action='link_order', order_ref='4242')
+        self.assertEqual(ro.call_args.kwargs['history_lines'], [{'sku': '52871', 'qty': 4}])
 
     def test_retry_blocked_after_awaiting_submit_until_history_or_confirm(self):
         SupplierPortal.objects.filter(pk=self.portal.pk).update(live=True)
@@ -443,7 +532,11 @@ class ConcurrentClaimTests(_World, TransactionTestCase):
         self.dev_b, _ = issue_device(staff=self.buyer, label='pc b', created_by=self.boss)
 
     def test_two_claims_never_same_basket(self):
-        _, baskets = self.make_job(statuses=('ready', 'ready'))
+        # two supplier accounts, so both devices may work at once (one cart each)
+        acc2 = PortalAccount.objects.create(portal=self.portal, label='second', identity_text='HQ 2')
+        _, (a,) = self.make_job()
+        _, (b,) = self.make_job(account=acc2)
+        baskets = [a, b]
         results, errors = {}, []
         barrier = threading.Barrier(2)
 
