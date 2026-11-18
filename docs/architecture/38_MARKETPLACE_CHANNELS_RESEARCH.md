@@ -108,13 +108,20 @@ Rules that follow CLAUDE.md:
 
 1. ✅ **DECIDED 2026-11-17 (owner, after revisiting): B — credit sale to that platform's
    account.** One SOFTECH customer per platform (owner creates it); orders go through the
-   existing `contract` channel; the platform receivable and payout/commission settle against
+   existing `contract` channel (changed 2026-11-18 → `permanent` + forced آجل, see below); the platform receivable and payout/commission settle against
    that account. **Own-rider cash on delivery also posts as B (owner, 2026-11-17)** — one rule for
    every platform order. Consequence: the cash our rider brings back (`apps/delivery`
    `CashCollection`) is booked as a **receipt against the platform account**, not as a cash sale;
    the platform's commission for that order then arrives as an invoice/deduction against the same
    account. The settlement screen must show both, so each platform account nets to zero order by
    order.
+
+   **Update 2026-11-18 (owner):** the first platform account, Talabat **4292**, is classed
+   «عميل دائم» (ptclassif 30), not «تعاقدات» (10). Owner chose to keep it: platform drafts now use the
+   `permanent` channel, and because a «عميل دائم» sale otherwise defaults to cash,
+   `pos_orders/platform_accounts.py` makes any sale on a platform account (`MarketplaceChannel.softech_personcode`)
+   **100% آجل**: no tenders → one credit tender; a cash/card tender is refused by the writer and the
+   validator; a partial return refunds credit. Other «عميل دائم» customers are unchanged.
 
    History of the decision: owner first chose "cash/delivery sale", then asked for a clearer
    comparison, below.
@@ -133,7 +140,7 @@ Rules that follow CLAUDE.md:
    delivery → **A** (normal delivery sale; cash really comes to the drawer). The rule is
    deterministic per order (payment method + delivery mode from the platform payload).
    Either way the platform order number goes on the order for traceability.
-2. **Platform price:** same as shelf price, or shelf + markup to cover the ~15–25% commission?
+2. ✅ **Platform price — APPROVED 2026-11-18 (owner):** shelf price = round2(pack_price × (1 + sale_tax_pct/100)); never `pack_price_tax` (lower than the shelf price on ~12k untaxed items). A per-platform markup rule (shelf + %, rounded to the nearest quarter pound) stays available in the channel setup.
 3. **Which branches** go live first, and own riders vs platform riders per branch.
 4. **Commercial facts only the account managers can give:** Talabat — is the Partner API open to
    pharmacy vendors in Egypt, one chain token for all branches, acceptance timeout, substitution

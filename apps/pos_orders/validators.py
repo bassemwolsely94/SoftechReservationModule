@@ -139,8 +139,13 @@ def validate_order(order, *, for_push=False):
     # ── payments ──────────────────────────────────────────────────────────────
     pays = list(order.payments.all())
     pay_errs = []
+    # platform account (doc 38): 100% آجل — a cash/card row would leave the platform's balance short
+    from .platform_accounts import CREDIT_ONLY_MSG, is_platform_order
+    platform = order.doc_kind == 'sale' and is_platform_order(order)
     for i, p in enumerate(pays):
         pe = {}
+        if platform and p.pay_type != 'credit':
+            pe['pay_type'] = CREDIT_ONLY_MSG
         if p.pay_type not in PAYTYPE_TO_SOFTECH:
             pe['pay_type'] = 'طريقة سداد غير صحيحة.'
         if _d(p.amount) <= 0:

@@ -30,6 +30,7 @@ from .models import (
     SoftechSalesOrder, SoftechSalesOrderLine, SoftechSalesOrderPayment,
     PTCODE_CUSTOMER, CLAIM_CHANNELS,
 )
+from .platform_accounts import CREDIT_ONLY_MSG as PLATFORM_CREDIT_ONLY_MSG, is_platform_order
 
 logger = logging.getLogger('elrezeiky.pos_orders')
 
@@ -490,7 +491,7 @@ def build_return_from_sale(order: SoftechSalesOrder, selection=None):
     else:
         # PARTIAL (or a sale with no payment rows) → recompute the refund from the CHOSEN lines. A co-pay
         # contract splits patient-cash + company-credit; contract-0%/employee/insurance refund all credit;
-        # cash/delivery/permanent refund cash.
+        # cash/delivery/permanent refund cash — except a platform account (credit, doc 38).
         refund = []
         if order.channel == 'contract':
             try:
@@ -502,8 +503,8 @@ def build_return_from_sale(order: SoftechSalesOrder, selection=None):
                 refund = [('cash', patient), ('credit', total - patient)]
             else:
                 refund = [('credit', total)]
-        elif order.channel in ('employee', 'insurance'):
-            refund = [('credit', total)]
+        elif order.channel in ('employee', 'insurance') or is_platform_order(order):
+            refund = [('credit', total)]   # platform accounts: the sale was آجل, so is its refund
         else:
             refund = [('cash', total)]
         for pt, amt in refund:
@@ -626,6 +627,14 @@ def _prepare_order_unlocked(order: SoftechSalesOrder, tenders=None, live=False):
     # split from the contract's patient_paypercent (personsdata) so the writer emits fatstatuscode 50
     # + the two branchesales5 rows (native golden 7873). Any failure (unreachable / no rule) falls back
     # to the default 100%-credit posture below. Only meaningful for a live prepare (needs the branch DB).
+    # PLATFORM account (doc 38, owner 2026-11-18): a marketplace platform's sale is 100% آجل on the
+    # platform's account. No tenders → one credit tender; any cash/card tender is refused, never rewritten.
+    if order.doc_kind != 'return' and is_platform_order(order):
+        if tenders and any((t.get('pay_type') or 'cash') != 'credit' for t in tenders):
+            raise ValueError(PLATFORM_CREDIT_ONLY_MSG)
+        if not tenders:
+            tenders = [{'pay_type': 'credit', 'amount': doc_value}]
+
     if tenders is None and order.channel == 'contract' and live and order.doc_kind != 'return':
         try:
             tenders = _contract_copay_tenders(order, doc_value, hdr['doc_value_gross']) or None
