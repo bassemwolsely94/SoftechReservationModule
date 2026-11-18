@@ -1,5 +1,5 @@
 """Crews piece 2b: call-center crew seed (PBX agent extensions included by default — owner
-ruling C), crew rollups in KpiActualRollup, one CC lookup."""
+ruling C), crew rollups in KpiActualRollup, the call-center readers use the crew."""
 import pathlib
 from io import StringIO
 from datetime import date
@@ -14,8 +14,7 @@ from apps.audit.models import AuditLog
 from apps.branches.models import Branch
 from apps.crews import cc_seed
 from apps.crews.models import Crew, CrewManualMember
-from apps.forecasting.call_center import legacy_cc_branch
-from apps.forecasting.management.commands.build_call_center_rollups import get_cc_branch
+from apps.crews.cc_legacy import legacy_cc_branch
 from apps.forecasting.models import CallCenterConfig, KpiActualRollup
 from apps.hr.models import Employee
 from apps.pbx.models import AgentExtension
@@ -133,9 +132,9 @@ class CcSeedTests(TestCase):
         KpiActualRollup.objects.create(crew=crew, year=2026, month=11, metric='x', value=1)
         self.assertTrue(crew.has_history())
 
-    def test_get_cc_branch_creates_call_center_kind(self):
-        b = get_cc_branch()
-        self.assertEqual(b.kind, Branch.KIND_CALL_CENTER)
+    def test_legacy_cc_branch_finds_the_fake_branch(self):
+        self.assertIsNone(legacy_cc_branch())
+        b = cc_with_rollup()
         self.assertEqual(legacy_cc_branch().pk, b.pk)
 
     def test_reseed_keeps_owner_rows_and_audits_deleted(self):
@@ -173,9 +172,9 @@ class CcSeedTests(TestCase):
         cc_seed.seed()
         self.assertEqual(AuditLog.objects.filter(action='crew_cc_seeded').count(), 1)
 
-    def test_legacy_cc_branch_helper_used_everywhere(self):
+    def test_call_center_crew_helper_used_everywhere(self):
         root = pathlib.Path(__file__).resolve().parents[1] / 'forecasting'
         for name in ('views.py', 'references.py', 'kpi_export.py', 'engine.py', 'rollup_refresh.py'):
             src = (root / name).read_text(encoding='utf-8')
-            self.assertNotIn("softech_branch_id='CC'", src, name)
-            self.assertIn('legacy_cc_branch', src, name)
+            self.assertNotIn('legacy_cc_branch', src, name)
+            self.assertIn('call_center_crew', src, name)

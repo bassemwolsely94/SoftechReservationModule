@@ -127,7 +127,8 @@ def eta_recon_export():
 
 EXPORTS = [
     # the KPI board has a call-center block by design: only pending / closed must be absent
-    ('kpi_export', kpi_export, frozenset({PENDING, CLOSED})),
+    # the call-center block comes from the call-center crew now, never from a branch
+    ('kpi_export', kpi_export, ABSENT_ALL),
     ('purchasing_pivot_v2', purchasing_pivot_v2, ABSENT_ALL),
     ('isr_fulfillment_export', isr_fulfillment_export, ABSENT_ALL),
     # its branches come from the transfers passed in (only one, into '230'): presence only

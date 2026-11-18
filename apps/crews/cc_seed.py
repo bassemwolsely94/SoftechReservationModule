@@ -40,7 +40,7 @@ def _find_crew():
 
 
 def seed_start() -> date:
-    from apps.forecasting.call_center import legacy_cc_branch
+    from apps.crews.cc_legacy import legacy_cc_branch
     from apps.forecasting.models import KpiActualRollup
     cc = legacy_cc_branch()
     if cc is not None:

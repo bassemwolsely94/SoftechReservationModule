@@ -165,6 +165,8 @@ class ForecastScenarioSerializer(serializers.ModelSerializer):
                 q |= Q(year=y, month=m)
         if not q:
             return None
+        # branch rows AND the call-center crew's rows on purpose: both are scenario inputs (the
+        # crew is a forecast member), so a rebuilt crew month flags the scenario too
         last = KpiActualRollup.objects.filter(q).aggregate(t=Max('computed_at'))['t']
         return last if last and last > obj.generated_at else None
 

@@ -389,7 +389,8 @@ class KpiActualRollup(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.branch_id} {self.year}-{self.month:02d} {self.metric}={self.value}'
+        who = self.branch_id if self.branch_id else f'crew {self.crew}'
+        return f'{who} {self.year}-{self.month:02d} {self.metric}={self.value}'
 
 
 # ════════════════════════════════════════════════════════════════════════════

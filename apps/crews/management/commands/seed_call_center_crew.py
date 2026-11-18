@@ -28,3 +28,8 @@ class Command(BaseCommand):
                           f"created={len(res['created'])} skipped={len(res['skipped'])}")
         for it in res['created']:
             self.stdout.write(f"  + {it['kind']} {it['value']} employee={it['employee_id']} {it['label']}")
+        if o['reseed']:
+            # the crew's KPI rows were computed from the old membership
+            self.stdout.write(self.style.WARNING(
+                'Membership changed: run build_crew_rollups --since <first month> to rebuild the '
+                "crew's KPI rollups (the board, targets and forecasts read them)."))

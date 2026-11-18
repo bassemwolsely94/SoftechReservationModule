@@ -16,6 +16,11 @@ re-touches today/yesterday every few minutes, so the CURRENT month is additional
 throttled to once per CURRENT_MIN_AGE (a closed month rebuilds as soon as late sales land).
 Deep history is rebuilt by backfill_sales_history itself. Idempotent upserts only;
 local DB only (the call-center step reads SOFTECH/Issabel, SELECT only).
+
+The rows that decide staleness are the ones a rebuild rewrites: the retail branches'
+(build_kpi_rollups) and the call-center crew's (build_crew_rollups, crews piece 2b Part B —
+before, the crew month froze when sales synced after its build: the October 2026 cause).
+Rows nobody rebuilds (a closed / call-center branch, an archived crew) never pin a month stale.
 """
 import logging
 import threading
@@ -50,18 +55,20 @@ def _month_range(year, month):
 
 def month_status(year, month, now=None):
     """{year, month, computed_at, sales_synced_at, stale, current} for one month."""
-    from django.db.models import Max, Min
+    from django.db.models import Max, Min, Q
     from django.utils import timezone
+    from apps.branches.models import Branch
     from apps.customers.models import PurchaseHistory
+    from apps.forecasting.call_center import call_center_crew
     from apps.forecasting.models import KpiActualRollup
     now = now or timezone.now()
     today = timezone.localdate(now)
     start, end = _month_range(year, month)
-    from apps.forecasting.call_center import legacy_cc_branch
-    cc = legacy_cc_branch()
-    rollups = KpiActualRollup.objects.filter(year=year, month=month)
-    if cc is not None:
-        rollups = rollups.exclude(branch=cc)
+    rebuilt = Q(branch__in=Branch.objects.retail())
+    crew = call_center_crew()
+    if crew is not None:
+        rebuilt |= Q(crew=crew)
+    rollups = KpiActualRollup.objects.filter(rebuilt, year=year, month=month)
     computed = rollups.aggregate(m=Min('computed_at'))['m']
     synced = (PurchaseHistory.objects.filter(invoice_date__gte=start, invoice_date__lt=end)
               .aggregate(m=Max('last_synced'))['m'])
@@ -83,15 +90,15 @@ def stale_months(today=None, now=None):
 
 
 def rebuild(months):
-    """Rebuild branch + call-center rollups for the given months (oldest first)."""
+    """Rebuild branch + call-center crew rollups for the given months (oldest first)."""
     from django.core.management import call_command
     done = []
     for (y, m) in sorted(months):
         call_command('build_kpi_rollups', year=y, month=m, verbosity=0)
         try:
-            call_command('build_call_center_rollups', year=y, month=m, verbosity=0)
+            call_command('build_crew_rollups', year=y, month=m, verbosity=0)
         except Exception as exc:
-            logger.warning('[kpi-refresh] CC rollup %s-%02d skipped: %s', y, m, exc)
+            logger.warning('[kpi-refresh] call-center crew rollup %s-%02d skipped: %s', y, m, exc)
         done.append((y, m))
     return done
 

@@ -120,14 +120,19 @@ def seasonality_mode():
     return v if v in SEASONALITY_MODES else 'none'
 
 
+def crew_member_key(crew) -> str:
+    """ForecastResult.scope_key of a crew member (the call-center crew)."""
+    return f'crew:{crew.pk}'
+
+
 class ForecastEngine:
     # Metrics generated (mirror the KPI board set). call_count = Call-Center only;
     # branches have no call history so those rows are skipped (see generate()).
     METRICS = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty',
                'call_count', 'pic_count']
-    # Generated for the Call-Center member only: branches have no rollup for these
-    # (the board shows them in the CC block only), so a branch would hit the slow
-    # live resolver and get a target nobody sees.
+    # Generated for the call-center crew member only (member['crew'] set): branches have no
+    # rollup for these (the board shows them in the call-center block only), so a branch would
+    # hit the slow live resolver and get a target nobody sees.
     CC_ONLY_METRICS = {'pic_count'}
 
     # Validated v2 defaults: growth_goal + blend weights (w_lm, w_pm, w_yoy).
@@ -193,13 +198,14 @@ class ForecastEngine:
             out.append({'branch': b, 'key': b.code or b.softech_branch_id,
                         'label': getattr(b, 'name_ar', '') or b.name,
                         'kwargs': {'branch_ids': [b.id]}, 'in_chain': True})
-        # Call Center overlay — forecast as its OWN member (sales/profit/beauty/orders +
-        # call_count), but NOT summed into the chain (its sales are already in the branches).
-        from apps.forecasting.call_center import legacy_cc_branch
-        cc = legacy_cc_branch()
-        if cc:
-            out.append({'branch': cc, 'key': 'CC', 'label': 'الكول سنتر',
-                        'kwargs': {'branch_ids': [cc.id]}, 'in_chain': False})
+        # Call-center crew overlay — forecast as its OWN member (sales/profit/beauty/orders +
+        # call_count) from its KpiActualRollup crew rows, but NOT summed into the chain (its
+        # sales are already in the branches).
+        from apps.forecasting.call_center import call_center_crew
+        crew = call_center_crew()
+        if crew:
+            out.append({'branch': None, 'crew': crew, 'key': crew_member_key(crew),
+                        'label': crew.name, 'kwargs': {'crew_id': crew.id}, 'in_chain': False})
         return out
 
     def _recent_window(self, scenario):
@@ -244,6 +250,16 @@ class ForecastEngine:
 
     def _member_actual_raw(self, member, year, month, metric) -> Decimal:
         kw = member['kwargs']
+        if kw.get('crew_id'):
+            # the call-center crew: its rollup rows only (no invoice resolver for a crew) — a
+            # month without a row is 0, as the fake branch's resolver fallback used to return
+            key = (('crew', kw['crew_id']), year, month, metric)
+            if key not in self._cache:
+                from apps.forecasting.models import KpiActualRollup
+                row = KpiActualRollup.objects.filter(
+                    crew_id=kw['crew_id'], year=year, month=month, metric=metric).first()
+                self._cache[key] = Decimal(row.value) if row is not None else Decimal('0')
+            return self._cache[key]
         bids = kw.get('branch_ids')
         # branch fast-path via KpiActualRollup
         if bids and len(bids) == 1 and not kw.get('softech_user') and not kw.get('category_id'):
@@ -391,7 +407,7 @@ class ForecastEngine:
             fbench = f.benchmark if f.benchmark is not None else bench   # per-metric YoY, else global
             pf = {'w_lm': f.w_lm, 'w_pm': f.w_pm, 'w_yoy': f.w_yoy, 'bench': fbench}
             for mem in members:
-                if metric in self.CC_ONLY_METRICS and mem['key'] != 'CC':
+                if metric in self.CC_ONLY_METRICS and not mem.get('crew'):
                     continue
                 base, _ = self._signal(mem, by, bm, metric, pf)
                 lmv, lm_est = self._signal(mem, ly, lm, metric, pf)
@@ -419,7 +435,7 @@ class ForecastEngine:
                 target = round_up_step(raw_target, steps.get(metric, 1))
 
                 ForecastResult.objects.create(
-                    scenario=scenario, branch=mem['branch'],
+                    scenario=scenario, branch=mem['branch'], crew=mem.get('crew'),
                     scope_key=mem['key'], scope_label=mem['label'], metric=metric,
                     base_value=base.quantize(Q2, ROUND_HALF_UP),
                     lm_value=lmv.quantize(Q2, ROUND_HALF_UP),
@@ -447,7 +463,7 @@ class ForecastEngine:
             total_fc = chain[metric]['forecast']
             if total_fc:
                 for r in ForecastResult.objects.filter(
-                        scenario=scenario, metric=metric).exclude(scope_key__in=['chain', 'CC']):
+                        scenario=scenario, metric=metric, crew__isnull=True).exclude(scope_key='chain'):
                     r.branch_share = (r.forecast_value / total_fc).quantize(Decimal('0.0001'), ROUND_HALF_UP)
                     r.save(update_fields=['branch_share'])
 
@@ -570,7 +586,9 @@ class ForecastEngine:
             if r.target_value <= 0:
                 continue
             # scope-specific lookup keys
-            if scenario.scope_type == S.SCOPE_SALESPERSON:
+            if r.crew_id:
+                lookup = dict(scope_type=SalesTarget.SCOPE_CREW, crew_id=r.crew_id)
+            elif scenario.scope_type == S.SCOPE_SALESPERSON:
                 lookup = dict(scope_type=SalesTarget.SCOPE_SALESPERSON, softech_user=r.scope_key)
             elif scenario.scope_type == S.SCOPE_CATEGORY:
                 lookup = dict(scope_type=SalesTarget.SCOPE_CATEGORY, category_id=int(r.scope_key))
@@ -634,7 +652,9 @@ class ForecastEngine:
         label_month = f'{scenario.year}-{scenario.month:02d}'
         label = f'{scenario.name} · {label_month}'
 
-        if scenario.scope_type == S.SCOPE_SALESPERSON:
+        if r.crew_id:
+            lookup = dict(scope_type=SalesTarget.SCOPE_CREW, crew_id=r.crew_id)
+        elif scenario.scope_type == S.SCOPE_SALESPERSON:
             lookup = dict(scope_type=SalesTarget.SCOPE_SALESPERSON, softech_user=r.scope_key)
         elif scenario.scope_type == S.SCOPE_CATEGORY:
             lookup = dict(scope_type=SalesTarget.SCOPE_CATEGORY, category_id=int(r.scope_key))

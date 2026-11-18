@@ -41,12 +41,13 @@ class Crew(models.Model):
 
     def has_history(self) -> bool:
         """True once any live (not voided) rule or manual row reaches before today, or the crew
-        has KPI figures (forecasting.KpiActualRollup.crew, related_name kpi_rollups, PROTECT) —
-        the crew must then be archived, not deleted."""
+        has KPI figures, targets or forecasts (KpiActualRollup.crew / SalesTarget.crew /
+        ForecastResult.crew — all PROTECT) — the crew must then be archived, not deleted."""
         today = timezone.localdate()
         return (self.rules.filter(voided_at__isnull=True, valid_from__lt=today).exists()
                 or self.manual_members.filter(voided_at__isnull=True, valid_from__lt=today).exists()
-                or self.kpi_rollups.exists())
+                or self.kpi_rollups.exists() or self.sales_targets.exists()
+                or self.forecast_results.exists())
 
 
 class DatedRow(models.Model):

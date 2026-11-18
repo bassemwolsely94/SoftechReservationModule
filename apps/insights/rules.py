@@ -155,7 +155,8 @@ class Ctx:
     """Shared context + cached config for one run."""
     def __init__(self, period_type, start, end):
         from apps.forecasting.kpi import KpiResolver
-        from apps.forecasting.models import ChannelBucketMap as C, CallCenterConfig
+        from apps.forecasting.models import ChannelBucketMap as C
+        from apps.forecasting.call_center import call_center_seller_codes
         from apps.branches.models import Branch
         self.period_type = period_type
         self.start, self.end = start, end
@@ -184,7 +185,8 @@ class Ctx:
         self.walkin_delivery_channels = [c for c in self.cash_channels if c not in _reg]  # نقدى + توصيل + موظفين + بطاقة
         self.customer_channels = self.resolver.customer_channels
         self.beauty_types = self.resolver.beauty_types
-        self.cc_agents = CallCenterConfig.get_solo().sales_agent_usercodes or []
+        # the call-center crew's seller codes on any day of the period (dated membership)
+        self.cc_agents = call_center_seller_codes(start, end)
         from apps.forecasting.kpi import analytics_branches
         self.branches = list(analytics_branches().order_by('code'))   # retail only (excl HQ)
         # softech usercode → salesperson name (ERPUser fields are swapped: username=code, user_id=name)

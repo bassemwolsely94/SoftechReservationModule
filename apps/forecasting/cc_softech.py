@@ -10,7 +10,7 @@ when its linked original doc-115 sale was placed by a CC sales agent.
                      r_docnumber → a doc-115 sale by a CC agent  (EXISTS, no join fan-out)
   CC return profit = Σ (transprice_total − transqty·newcostprice) over the same lines
 
-Used by build_call_center_rollups to turn gross CC sales/profit into NET.
+Used by apps.crews.kpi (build_crew_rollups) to turn the crew's gross sales/profit into NET.
 Validated Jun-2026: returns 5,745 (sheet 5,105) → net 827,988 vs 828,628 (≈0.08%).
 
 The agent usercodes are `?` parameters (quotes stripped, as the old inlined list did, so the

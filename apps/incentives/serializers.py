@@ -286,7 +286,7 @@ class SalesTargetSerializer(serializers.ModelSerializer):
         model  = SalesTarget
         fields = [
             'id', 'label', 'scope_type', 'scope_label',
-            'branch', 'branch_name', 'softech_user', 'category', 'category_name',
+            'branch', 'branch_name', 'softech_user', 'category', 'category_name', 'crew',
             'metric', 'metric_label', 'period_start', 'period_end',
             'target_value', 'attainment', 'created_at',
         ]

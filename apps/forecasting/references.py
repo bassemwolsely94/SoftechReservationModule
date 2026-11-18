@@ -43,12 +43,12 @@ def _chain_series(metric):
 
 def _cc_series(metric):
     from apps.forecasting.models import KpiActualRollup as K
-    from apps.forecasting.call_center import legacy_cc_branch
-    cc = legacy_cc_branch()
-    if not cc:
+    from apps.forecasting.call_center import call_center_crew
+    crew = call_center_crew()
+    if not crew:
         return {}
     return {(r['year'], r['month']): float(r['value'])
-            for r in K.objects.filter(branch=cc, metric=metric).values('year', 'month', 'value')}
+            for r in K.objects.filter(crew=crew, metric=metric).values('year', 'month', 'value')}
 
 
 def _series(metric):

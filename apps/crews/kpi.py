@@ -208,3 +208,19 @@ def compute_crew_month(crew, year: int, month: int, *, returns: bool = True, cdr
         for key, mids in members.items():
             per[key][K.M_CALL_COUNT] = Decimal(count_calls_spans(rows, _spans(mids, 'extension')))
     return CrewMonth(kpis=kpis, per_member=per, notes=notes, gross=gross, returns=ret_total)
+
+
+def _months_overlapping(start: date, end: date) -> Q:
+    """Q over (year, month) for every calendar month that overlaps [start, end]."""
+    lo, hi = start.year * 12 + start.month - 1, end.year * 12 + end.month - 1
+    if hi < lo:
+        return Q(pk__in=[])
+    return reduce(or_, (Q(year=i // 12, month=i % 12 + 1) for i in range(lo, hi + 1)))
+
+
+def crew_actual(crew, metric: str, start: date, end: date) -> float:
+    """The board figure for a crew (owner ruling D): Σ KpiActualRollup(crew, metric) over the
+    months overlapping [start, end]. A month with no row adds nothing."""
+    total = (K.objects.filter(_months_overlapping(start, end), crew=crew, metric=metric)
+             .aggregate(s=Sum('value'))['s'])
+    return float(total or 0)

@@ -226,8 +226,11 @@ class SectionTests(_Base):
         self.assertEqual((row['pct_board'], row['pct_crew']), (75.0, 90.0))
         self.assertEqual((row['pace_board'], row['pace_crew']), ('missed', 'missed'))
         self.assertEqual(row['notes'], [])
-        self.assertTrue(any('actual_value' in q for q in res['questions']))
-        self.assertTrue(any('value-for-value' in q for q in res['questions']))
+        # owner rulings A / D are stated as decisions, no longer asked
+        self.assertTrue(any('actual_value' in q and 'قرار المالك D' in q for q in res['questions']))
+        self.assertTrue(any('value-for-value' in q and 'قرار المالك A' in q
+                            for q in res['questions']))
+        self.assertFalse(any('؟' in q for q in res['questions'] if 'قرار المالك' in q))
 
     def test_target_missing_stored_month_and_outside_range(self):
         self.june_sales()

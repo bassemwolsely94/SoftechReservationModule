@@ -27,13 +27,13 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from apps.forecasting.call_center import LEGACY_CC_KEY, legacy_cc_branch
 from apps.forecasting.callcount import count_calls
 from apps.forecasting.cc_softech import cc_returns_from_softech
 from apps.forecasting.kpi import KpiResolver
 from config.issabel import cdr_configured, fetch_cdr_rows
 
 from . import kpi as crew_kpi
+from .cc_legacy import legacy_cc_branch
 from .membership import identities
 from .unattributed import generic_rule, is_generic
 
@@ -366,9 +366,11 @@ def _targets(cc, stored, crew_values, compared) -> list:
     return out
 
 
-def _forecasts() -> list:
+def _forecasts(cc) -> list:
     from apps.forecasting.models import ForecastResult
-    qs = (ForecastResult.objects.filter(scope_key=LEGACY_CC_KEY).select_related('scenario')
+    if cc is None:
+        return []
+    qs = (ForecastResult.objects.filter(branch=cc).select_related('scenario')
           .order_by('scenario__year', 'scenario__month', 'scenario_id', 'metric'))
     return [{'scenario_id': r.scenario_id,
              'scenario': f'{r.scenario.name} ({r.scenario.year}-{r.scenario.month:02d})',
@@ -383,18 +385,19 @@ def _questions(targets, *, cdr_from_csv) -> list:
 
     from .cc_seed import extra_pbx_agent_extensions
     extra = extra_pbx_agent_extensions()
+    # owner rulings 2026-11-18 (A, C, D) are decisions now — stated, not asked
     qs = [
-        ('داخليات PBX من نوع «agent» غير مدرجة في إعداد الكول سنتر: '
-         + (', '.join(extra) if extra else 'لا يوجد حالياً')
-         + ' — هل تُضم للطاقم؟ ضمّها يغيّر عدد المكالمات التاريخي.'),
-        ('الأرقام التاريخية للكول سنتر: تُنقل قيمةً بقيمة كما هي مخزنة (value-for-value، كما في '
-         'المواصفات) أم يُعاد بناؤها من أرقام الطاقم؟'),
+        ('داخليات PBX من نوع «agent» غير المدرجة في إعداد الكول سنتر تُضم للطاقم مؤرخةً بتاريخ البذر '
+         '(قرار المالك C) — الحالية: ' + (', '.join(extra) if extra else 'لا يوجد')
+         + '. ضمّها يغيّر عدد المكالمات التاريخي.'),
+        ('الأرقام التاريخية للكول سنتر يُعاد بناؤها شهراً بشهر من قاعدة الطاقم، لا تُنقل قيمةً بقيمة '
+         '(value-for-value) — قرار المالك A.'),
     ]
     resolver_targets = [t for t in targets if t['metric'] in SalesTarget.KPI_RESOLVER_METRICS]
     qs.append(
-        f'ملاحظة: SalesTarget.actual_value() يقرأ صفراً لمستهدفات الكول سنتر المحسوبة بمحرك المؤشرات '
-        f'({len(resolver_targets)} في هذا التقرير) لأنه يبحث عن فواتير الفرع الوهمي «CC»، بينما تعرض '
-        f'لوحة المؤشرات رقم الـ rollup. أي رقم يُعتمد للحافز بعد النقل للطاقم؟')
+        f'الحافز يُحسب من رقم لوحة المؤشرات (rollup) للطاقم بعد النقل — قرار المالك D؛ '
+        f'SalesTarget.actual_value() لمستهدفات الطاقم يقرأ هذا الرقم '
+        f'({len(resolver_targets)} مستهدف بمحرك المؤشرات في هذا التقرير).')
     if cdr_from_csv:
         qs.append('عدد المكالمات من ملف CDR CSV: الطاقم يعدّ فقط صفوف أيام العضوية، بينما المسار '
                   'القديم للـ CSV كان يعدّ كل صفوف الملف — هل الملف لشهر واحد فقط؟')
@@ -485,7 +488,7 @@ def compare(crew, start, end, *, returns=True, cdr_rows_by_month=None, cdr_from_
     result = {
         'crew_id': crew.pk if crew else None, 'start': list(start), 'end': list(end),
         'returns': returns, 'months': month_rows, 'people': people, 'targets': targets,
-        'forecasts': _forecasts(), 'questions': questions,
+        'forecasts': _forecasts(cc), 'questions': questions,
     }
     result['totals'] = _totals(month_rows)
     return result
