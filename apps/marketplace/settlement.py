@@ -67,7 +67,9 @@ def _rows(file, name):
             text = data.decode('utf-8-sig')
         except UnicodeDecodeError:
             raise ValueError('unreadable')
-        rows = list(csv.DictReader(io.StringIO(text)))
+        reader = csv.DictReader(io.StringIO(text))
+        rows = list(reader)
+        header = [h.strip() for h in (reader.fieldnames or []) if h]
     else:
         import openpyxl
         from openpyxl.utils.exceptions import InvalidFileException
@@ -80,8 +82,9 @@ def _rows(file, name):
             it = wb.worksheets[0].iter_rows(values_only=True)
             header = next(it, None)
             if header is None:
-                return []
+                return [], []
             names = [str(h).strip() if h is not None else '' for h in header]
+            header = [n for n in names if n]
             rows = []
             for r in it:
                 if len(rows) > MAX_ROWS:
@@ -93,7 +96,7 @@ def _rows(file, name):
             wb.close()
     if len(rows) > MAX_ROWS:
         raise ValueError('too_many_rows')
-    return rows
+    return header, rows
 
 
 @transaction.atomic
@@ -103,7 +106,9 @@ def import_csv(channel, file, column_map, user, period_from=None, period_to=None
     if 'external_id' not in column_map:
         raise ValueError('external_id_column_required')
     name = getattr(file, 'name', '') or ''
-    rows = _rows(file, name)
+    header, rows = _rows(file, name)
+    if any(col not in header for col in column_map.values()):
+        raise ValueError('column_missing')
     today = date.today()
     batch = SettlementBatch.objects.create(
         channel=channel, period_from=period_from or today, period_to=period_to or period_from or today,
@@ -137,10 +142,13 @@ def match(batch, user=None):
               SettlementLine.AMOUNT_MISMATCH: 0, SettlementLine.NOT_IN_FILE: 0}
     seen = set()
     for line in batch.lines.all():
+        dup = line.external_id in seen
         seen.add(line.external_id)
         order = orders.get(line.external_id)
         note = line.note if BAD_AMOUNT_NOTE in line.note else ''
-        if order is None or note:
+        if dup:   # second+ row for the same order: would double-count the payout
+            status, note = SettlementLine.AMOUNT_MISMATCH, 'مكرر في الملف'
+        elif order is None or note:
             status = SettlementLine.UNMATCHED
         elif abs(order.platform_total - line.gross) <= TOLERANCE:
             status = SettlementLine.MATCHED

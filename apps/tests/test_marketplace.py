@@ -10,7 +10,7 @@ from apps.catalog.models import ItemStock
 from apps.marketplace.access import Access
 from apps.marketplace.availability import platform_price, sellable_qty, snapshot
 from apps.marketplace.eligibility import listing_problem
-from apps.marketplace.models import (ChannelListing, ChannelStore, ExternalOrder, ExternalOrderLine,
+from apps.marketplace.models import (SettlementBatch, ChannelListing, ChannelStore, ExternalOrder, ExternalOrderLine,
                                      MarketplaceChannel, PushLog)
 from apps.pos_orders.models import SoftechSalesOrder
 from apps.tests.factories import make_admin, make_branch, make_branch2, make_item, make_pharmacist
@@ -826,6 +826,48 @@ class MarketplaceSettlementTests(TestCase):
             settlement.import_csv(self.channel, self._file([], 'x.pdf'), self.cmap, None)
         with self.assertRaises(ValueError):
             settlement.import_csv(self.channel, self._file([('a',) * 5] * 1, 'x.csv'), {}, None)
+
+    def test_duplicate_file_rows_flagged(self):
+        self._order('F1', '100')
+        batch, counts = self._run([('F1', '100', '0', '0', '0'), ('F1', '100', '0', '0', '0')])
+        lines = list(batch.lines.order_by('id'))
+        self.assertEqual([l.match_status for l in lines], ['matched', 'amount_mismatch'])
+        self.assertIn('مكرر', lines[1].note)
+        self.assertEqual(counts['matched'], 1)
+
+    def test_missing_mapped_column_rejected(self):
+        from apps.marketplace import settlement
+        for bad in ({**self.cmap, 'external_id': 'nope'}, {**self.cmap, 'gross': 'nope'}):
+            with self.assertRaisesMessage(ValueError, 'column_missing'):
+                settlement.import_csv(self.channel, self._file([('A', '1', '0', '0', '0')]), bad, None)
+        self.assertEqual(SettlementBatch.objects.count(), 0)
+
+    def test_missing_mapped_column_rejected_xlsx(self):
+        import io
+        import openpyxl
+        from apps.marketplace import settlement
+        wb = openpyxl.Workbook()
+        wb.active.append(['order', 'gross'])
+        wb.active.append(['A', 5])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        buf.name = 'p.xlsx'
+        with self.assertRaisesMessage(ValueError, 'column_missing'):
+            settlement.import_csv(self.channel, buf, {'external_id': 'order', 'gross': 'oops'}, None)
+        buf.seek(0)
+        b = settlement.import_csv(self.channel, buf, {'external_id': 'order', 'gross': 'gross'}, None)
+        self.assertEqual(b.lines.get().gross, Decimal('5.00'))
+
+    def test_over_size_and_over_rows_rejected(self):
+        from apps.marketplace import settlement
+        with patch.object(settlement, 'MAX_BYTES', 50):
+            with self.assertRaisesMessage(ValueError, 'file_too_large'):
+                settlement.import_csv(self.channel, self._file([('A' * 10, '1', '0', '0', '0')] * 5),
+                                      self.cmap, None)
+        with patch.object(settlement, 'MAX_ROWS', 3):
+            with self.assertRaisesMessage(ValueError, 'too_many_rows'):
+                settlement.import_csv(self.channel, self._file([('A', '1', '0', '0', '0')] * 4), self.cmap, None)
 
     @override_settings(MARKETPLACE_ENABLED=True)
     def test_api_upload_and_read(self):
