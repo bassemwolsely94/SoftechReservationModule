@@ -612,6 +612,10 @@ POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 POS_RETURNS_ENABLED = config('POS_RETURNS_ENABLED', default=False, cast=bool)
 # D1 (UAT 2026-11-17): hours another branch's customer stays openable by id after a full-phone find.
 CUSTOMER_FOUND_HOURS = config('CUSTOMER_FOUND_HOURS', default=12, cast=int)
+# Maker-checker on ISR / GL / price-change approvals (core/maker_checker.py, UAT W5b 2026-11-17): the
+# creator never approves their own document, except the admin role while this is True (the owner
+# prepares and approves today). Set False once real roles are assigned (owner decision D4).
+SELF_APPROVAL_ADMIN_EXEMPT = config('SELF_APPROVAL_ADMIN_EXEMPT', default=True, cast=bool)
 # Usage-instructions slip (apps.usage_print, Project 5). OFF = screen hidden, API 404. Never writes SOFTECH.
 USAGE_PRINT_ENABLED = config('USAGE_PRINT_ENABLED', default=False, cast=bool)
 # HR Attendance stage 1 (apps/hr/attendance): fingerprint punch collection by the office agent. OFF =
@@ -938,6 +942,9 @@ TAX_SIGNING_WAIT_SECONDS = config('TAX_SIGNING_WAIT_SECONDS', default=60, cast=i
 # Versions of the owner's bulk EGS sheet (the Invoicer's item-code workbook, S3). Outside MEDIA_ROOT, never served
 # by URL, git-ignored; the newest 10 versions' files are kept.
 TAX_EGS_SHEET_DIR = config('TAX_EGS_SHEET_DIR', default=BASE_DIR / 'private' / 'egs_sheets', cast=Path)
+# The seal PC's agent replaces the Invoicer's live sheet only with this on (S5); off = preview: it downloads and
+# checks the version and reports what it would do, writing nothing on the seal PC. Writer flag (config/writers.py).
+TAX_EGS_SHEET_AGENT_WRITE_ENABLED = config('TAX_EGS_SHEET_AGENT_WRITE_ENABLED', default=False, cast=bool)
 # A test run must NEVER reach ETA, whatever .env says: no address, no login, every send switch off. Tests that
 # exercise the ETA path set what they need with override_settings and mocked HTTP.
 if _RUNNING_TESTS:
@@ -946,6 +953,7 @@ if _RUNNING_TESTS:
     TAX_ETA_SUBMIT_ENABLED = TAX_ERECEIPT_SUBMIT_ENABLED = TAX_ETA_CODING_ENABLED = TAX_ETA_PRODUCTION_ALLOWED = False
     TAX_SIGNER_CLASS, TAX_ALLOW_MOCK_SIGNER = 'apps.tax_invoicing.signing.NotConfiguredSigner', False
     TAX_ETA_READ_PREPROD_ENABLED = TAX_ETA_READ_PRODUCTION_ENABLED = TAX_GPC_AI_ENABLED = False
+    TAX_EGS_SHEET_AGENT_WRITE_ENABLED = False
     TAX_ETA_READ_PREPROD_CLIENT_ID = TAX_ETA_READ_PREPROD_CLIENT_SECRET = ''
     TAX_ETA_READ_PRODUCTION_CLIENT_ID = TAX_ETA_READ_PRODUCTION_CLIENT_SECRET = ''
     TAX_ETA_CODING_PRODUCTION_ENABLED = TAX_ETA_CODING_PRODUCTION_BATCH_OK = False

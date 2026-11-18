@@ -22,6 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.users.models import ROLE_CHOICES, StaffProfile
+from core.errors import public_error
 
 from . import registry, training
 from .models import HelpLearned, HelpOverride, HelpQuizAttempt, HelpRevision, HelpTrainingOverride
@@ -527,7 +528,7 @@ def remind(request):
                                       dedup_key=f'help_remind_{sid}_{timezone.localdate().isoformat()}',
                                       bypass_role_gate=True)
         except Exception as exc:
-            result['skipped'].append({'id': sid, 'reason': f'تعذّر الإرسال: {exc}'})
+            result['skipped'].append({'id': sid, 'reason': f'تعذّر الإرسال: {public_error(request, exc)}'})
             continue
         HelpReminder.objects.create(staff=target, sent_by=profile, percent=p['percent'])
         HelpPreference.objects.filter(staff=target).update(first_day_hidden_at=None)

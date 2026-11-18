@@ -2,12 +2,14 @@
  * «ملف أكواد الإيصالات (المحصّل)» — the Invoicer's bulk EGS sheet (ElRezeiky_Bulk_EGS_Items.xlsx), batch S3. Display
  * only: the server builds each version (in the background, one at a time), checks it, and says why an item was left
  * out or a build refused. This panel shows the latest version, starts a build, polls only while one runs, and
- * downloads the full file or the new rows.
+ * downloads the full file or the new rows. Below it, «الجهاز المحلي» (EgsAgentPart, batch S5): the seal PC's agent
+ * reads and writes the live sheet in D:\invoicer_mini.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
 import { ActionMsg, Btn, Failed, fmtInt, fmtTime, Loading, Notice, Section, useAction } from './ui'
+import EgsAgentPart from './EgsAgentPart'
 
 const POLL_MS = 4000
 const FULL_NAME = 'ElRezeiky_Bulk_EGS_Items.xlsx'      // the name the Invoicer reads
@@ -101,6 +103,7 @@ export default function EgsSheetPanel() {
         </div>
       )}
       <div className="mt-2"><ActionMsg msg={act.msg} /></div>
+      {!q.isLoading && !q.error && <div className="mt-3"><EgsAgentPart /></div>}
     </Section>
   )
 }

@@ -636,8 +636,9 @@ SCREENS = [
              'warn': T('اكتب الحل اللي اتعمل فعلاً — ده اللي المشرف بيراجعه.', 'Write what was actually done — that is what the supervisor reviews.'),
              'open_hint': T('بعد «✅ حل الحالة».', 'After "✅ Resolve case".')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('فتح الحالات والكتابة عليها حسب مصفوفة الصلاحيات؛ مدير الجودة يقرأ فقط', 'Opening and writing on cases follows the permission matrix; the quality manager reads only'),
+        'updated': '2026-11-18',
+        'change_note': T('فتح الحالات والكتابة عليها حسب مصفوفة الصلاحيات؛ مدير الجودة يقرأ فقط؛ الحالة الجديدة بتتفتح على طول بعد «فتح الحالة» من غير تحديث الصفحة',
+                         'Opening and writing on cases follows the permission matrix; the quality manager reads only; a new case opens straight away after creating it, without reloading the page'),
     },
     {
         'key': 'callcenter.analytics',

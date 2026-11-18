@@ -38,7 +38,8 @@ test.describe('finance ledger', () => {
     await expect(page.getByText('E2E المبيعات').first()).toBeVisible()
   })
 
-  test('a manual entry goes draft → approved → reversed and reaches the reports', async ({ page }) => {
+  test('a manual entry goes draft → approved → reversed and reaches the reports', async ({ page: drafter, browser }) => {
+    let page = drafter
     const text = `E2E قيد ${stamp()}`
     await page.goto('/finance/journal')
     await page.getByRole('button', { name: '+ قيد يدوي' }).click()
@@ -60,7 +61,16 @@ test.describe('finance ledger', () => {
     const savedRes = await saved
     expect(savedRes.status(), await savedRes.text()).toBe(201)
     await expect(page.getByText('تم حفظ المسودة')).toBeVisible()
+    const draftId = (await savedRes.json()).id
 
+    // maker-checker (UAT W5b): the drafter's own approval is refused; a colleague (admin) approves
+    const own = page.waitForResponse(r => /\/entries\/\d+\/approve\/$/.test(r.url()))
+    await page.getByRole('button', { name: 'اعتماد', exact: true }).click()
+    expect((await own).status()).toBe(403)
+
+    const checker = await browser.newContext({ storageState: stateFile('admin') })
+    page = await checker.newPage()
+    await page.goto(`/finance/journal?entry=${draftId}`)
     const approved = page.waitForResponse(r => /\/entries\/\d+\/approve\/$/.test(r.url()))
     await page.getByRole('button', { name: 'اعتماد', exact: true }).click()
     const approvedRes = await approved
@@ -93,6 +103,7 @@ test.describe('finance ledger', () => {
     const reversedRes = await reversed
     expect(reversedRes.ok(), await reversedRes.text()).toBeTruthy()
     await expect(page.getByText(/تم العكس بالقيد/)).toBeVisible()
+    await checker.close()
   })
 
   test('the review sheet previews, adds a new code, then holds back a different name', async ({ page }) => {

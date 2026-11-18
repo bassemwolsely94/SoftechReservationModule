@@ -1279,7 +1279,7 @@ def flush_now(request):
         try:
             res = writer.push_order(order, dry_run=False)
         except Exception as e:
-            failed += 1; results.append({'id': order.pk, 'error': str(e)}); continue
+            failed += 1; results.append({'id': order.pk, 'error': public_error(request, e)}); continue
         _audit_pos(request, 'softech_pos_order_pushed', order, res, via='flush_now')
         if res.get('queued'):
             queued += 1

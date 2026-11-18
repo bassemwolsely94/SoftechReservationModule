@@ -389,9 +389,12 @@ def required(path, method):
     # self-service is every employee's own filing: any hr grant (Z-9a, map by screen)
     if prefix == 'incentives' and parts[3:4] == ['targets']:
         return 'analytics', _analytics_write(method)
-    if (not safe and prefix == 'hr' and (parts[3:5] in (['attendance', 'check-in'], ['attendance', 'check-out'])
-                                         or parts[4:5] == ['submit'])):
+    if not safe and prefix == 'hr' and parts[3:5] in (['attendance', 'check-in'], ['attendance', 'check-out']):
         return 'hr', ('view',)
+    # Filing a request (leave, permit, overtime, expense, advance) needs hr create (UAT W5, owner
+    # 2026-11-17): viewer and quality_manager hold hr view only and were filing leave requests
+    if not safe and prefix == 'hr' and parts[4:5] == ['submit']:
+        return 'hr', ('create',)
     # Lost demand (Z-8c, map by screen): the demand dashboard family is an analytics page (its
     # views keep their admin / purchasing / call center role sets); pushing purchase suggestions
     # is purchasing work; the shelf QR prints from the product page (catalog)

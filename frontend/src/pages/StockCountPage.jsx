@@ -310,7 +310,7 @@ function CreateSessionModal({ onClose, onCreate }) {
 
 // ── SessionsTab ───────────────────────────────────────────────────────────────
 
-function SessionsTab({ onSelect, refresh }) {
+export function SessionsTab({ onSelect, refresh }) {
   const [sessions, setSessions]   = useState([]);
   const [loading, setLoading]     = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -344,7 +344,8 @@ function SessionsTab({ onSelect, refresh }) {
         />
         <MultiSelectFilter className="w-44" options={STATUS_OPTIONS} selected={statusFilter} onChange={setStatusFilter}
           allLabel="كل الحالات" showCode={false} dataTour="stockcount-sessions-status" />
-        <CanDo module="admin" action="create">
+        {/* same gate the session-create API enforces (stockcount create — UAT W5a) */}
+        <CanDo module="stockcount" action="create">
           <button onClick={() => setShowCreate(true)} data-tour="stockcount-sessions-new" style={{
             padding: '8px 20px', borderRadius: 6, border: 'none',
             background: '#2563eb', color: '#fff', cursor: 'pointer', fontWeight: 600,
