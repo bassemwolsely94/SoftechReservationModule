@@ -1,6 +1,6 @@
 # Performance boost — fast and light on a small VPS
 
-**Status:** DRAFT for owner approval (2026-11-19); owner chose approach A and answered the builder-check questions (§9). No code is part of this document.
+**Status:** APPROVED by the owner and Stages 1–5 BUILT, all on main (2026-11-19): #232 #235 (measure + guard), #236 (server setup, switches OFF), #233 #237 (slow screens), #242 #243 (exports as background jobs), #241 (live updates), plus #240 #247 (fail-fast SOFTECH connect for screen reads). Stage 6 = doc 40 (approved, built per table on the owner's go); Stage 7 (index cleanup) waits for a week of writer stats. Owner steps open: §8 and the list in §12.
 **Builds on:** full audit `docs/full-project-audit/07_PERFORMANCE_AUDIT.md` (PERF-1…PERF-10),
 light load test `docs/uat/light-load.md`, SOFTECH delta sync doc 40 (approved, not built),
 VPS runbook §7.3 / §13.6 / §13.7.
@@ -226,3 +226,26 @@ dropping indexes (Stage 7), and any change that alters what a cached screen show
 - Whether the shared export model lives in an existing app (e.g. `apps/sync`, which owns
   operational plumbing) or a new small one; it must follow the security definition of done.
 - Which polled values get WebSocket events first (start with the bell).
+
+## 12. Where it stands (2026-11-19, end of day)
+
+**On main and live on the office server:**
+
+| Stage | PRs | Result |
+|---|---|---|
+| 1 Measure + guard | #232, #235 | 18+ routes under CI query budgets (`apps/tests/perf/`); /sync ranks slow routes by total time; `perf_top_queries` |
+| 2 Server setup | #236 | Redis caches (limits fail closed), `DB_CONN_MAX_AGE`, web `statement_timeout`: all OFF until set in `.env` |
+| 3 Slow screens | #233, #237 | Market shortage 10–15+ s → 0.2–0.55 s warm; freshness 46 → 5 queries, dashboard 32 → 8, stock-expiry 37 → 2, incentives targets 164 → 18 |
+| 4 Exports | #242, #243 | Purchasing, ISR fulfilment, advanced/pivot, shortage, stock-audit, tax history/recon exports and PIC run as background jobs (`apps/export_jobs`); `elrezeiky-jobs` unit is an owner install |
+| 5 Polling | #241 | Bell counts + freshness pushed over the WebSocket; slow fallback polls; no polling in hidden tabs |
+| SOFTECH reads | #240, #247 | Screen reads connect with one 5 s attempt and skip a node that failed in the last 60 s; syncs and writers unchanged |
+
+**Owner steps still open (nothing above needs them to keep working as today):**
+1. #237's index migrations on the office DB (coordinator, 02:00 build).
+2. Office Postgres restart after closing for `pg_stat_statements` (`docs/deploy/2026-11-office-pg-query-stats.md`).
+3. VPS: `CACHE_REDIS_URL` + `LIMITS_REDIS_URL` (own DB, `noeviction`), then the extra web processes, then `DB_CONN_MAX_AGE` and `WEB_STATEMENT_TIMEOUT_ENABLED` (runbook §7.3, §13.6); optional `elrezeiky-jobs`.
+4. Load test at 20 then 40 users (runbook §13.7) against §4, with the export interference test.
+5. Keep the office `venv` folder "Always keep on this device" in OneDrive: a cold `import redis` took 42 s.
+
+**Not done:** Stage 6 (doc 40, per table on the owner's go), Stage 7 (index cleanup after a week of writer stats),
+the deferred Stage 1 review minors (fresh user per budget call; track ceiling on the dearer call).
