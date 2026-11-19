@@ -194,7 +194,7 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
 | P2 | The voucher OTP is in the reply to the staff screen (`whatsapp_url`, `qr_code`). | owner decision |
 | P3 | ISR push-review error showed raw JDBC text. | PR 163 |
 | P3 | Pricing approve is admin-only in code; voucher cancel hard-codes manager/admin (both stricter than the matrix). | open (stricter) |
-| P3 | GL form shows «متوازن» for a line with no account (server refuses). | open |
+| P3 | GL form shows «متوازن» for a line with no account (server refuses). | fixed, `claude/gl-form-missing-account`: «متوازن» only when every line with an amount has an account; the line and the totals say «اختر الحساب» / «سطر بدون حساب» |
 
 ### Found while fixing (owner)
 
