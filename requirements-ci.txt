@@ -44,3 +44,6 @@ setuptools>=84.1.0
 coverage>=7.4
 bandit>=1.7.8
 pip-audit>=2.7
+
+# Test tooling (CI only)
+hypothesis>=6.150,<7    # property-based money tests (apps/tests/test_money_properties.py, audit Wave 4)
