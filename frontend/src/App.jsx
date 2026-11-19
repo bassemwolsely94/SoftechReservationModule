@@ -89,6 +89,7 @@ import useNumberInputGuards from './hooks/useNumberInputGuards'
 import MobileLayout from './components/MobileLayout'
 import PageSuspense from './components/PageSuspense'
 import ItemSearchHotkeyProvider from './components/ItemSearchHotkeyProvider'
+import SessionExpiredOverlay from './components/SessionExpiredOverlay'
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'))
 const HelpManualPage = lazy(() => import('./pages/HelpManualPage'))
 const MobilePOSOrderPage = lazy(() => import('./pages/mobile/MobilePOSOrderPage'))
@@ -616,6 +617,8 @@ export default function App() {
           </Route>
         </Routes>
         </ItemSearchHotkeyProvider>
+        {/* FE-12: an expired session signs in again over the page instead of losing it */}
+        <SessionExpiredOverlay />
         </PageSuspense>
       </BrowserRouter>
     </QueryClientProvider>

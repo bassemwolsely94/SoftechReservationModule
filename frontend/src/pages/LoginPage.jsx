@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 import { authApi } from '../api/client'
+import { safeNext } from '../api/sessionExpiry'
 import TwoFactorSetup from '../components/TwoFactorSetup'
 import BrandMark from '../components/BrandMark'
 
@@ -32,7 +33,10 @@ export default function LoginPage() {
   const [code, setCode]         = useState('')
   const [remember, setRemember] = useState(false)
 
-  const finish = (user) => navigate(targetAfterAuth(user?.role))
+  // FE-12: back to the page the user was on when the session ran out (same-site paths only).
+  const [params] = useSearchParams()
+  const next = safeNext(params.get('next'))
+  const finish = (user) => navigate(next || targetAfterAuth(user?.role), { replace: !!next })
 
   const handleSubmit = async (e) => {
     e.preventDefault()

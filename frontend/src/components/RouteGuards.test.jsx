@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 
 vi.mock('../api/client', () => ({
   authApi: { login: vi.fn(), me: vi.fn(), logout: vi.fn() },
@@ -118,6 +118,22 @@ describe('RequireAuth', () => {
   it('sends a logged-out user to /login', () => {
     renderAt('/secret', guarded)
     expect(screen.getByText('login page')).toBeTruthy()
+  })
+
+  it('carries the page to /login as ?next= so login returns there (FE-12)', () => {
+    function LoginSpy() {
+      const loc = useLocation()
+      return <div>next={new URLSearchParams(loc.search).get('next')}</div>
+    }
+    render(
+      <MemoryRouter initialEntries={['/secret?tab=lines']}>
+        <Routes>
+          <Route path="/login" element={<LoginSpy />} />
+          <Route path="/secret" element={guarded} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('next=/secret?tab=lines')).toBeTruthy()
   })
 
   it('shows the page when logged in', () => {

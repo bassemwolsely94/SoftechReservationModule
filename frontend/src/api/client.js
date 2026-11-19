@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { loginUrlFor, requestRelogin } from './sessionExpiry'
 
 // Auth lives in httpOnly cookies set by the server (core/auth_cookies.py): page
 // script never sees a token. X-Requested-With marks our own requests — the
@@ -59,7 +60,17 @@ api.interceptors.response.use(
         return api(original)
       } catch {
         if (!window.location.pathname.startsWith('/login') && !url.includes('/auth/me/')) {
-          window.location.href = '/login'
+          // FE-12: sign in again over the page and retry (the 401 means the server did nothing),
+          // or — with no overlay mounted — go to the login page, which brings the user back here.
+          const relogin = requestRelogin()
+          if (relogin) {
+            try {
+              await relogin
+              return api(original)
+            } catch { /* the user gave up: the overlay has already moved them to the login page */ }
+          } else {
+            window.location.href = loginUrlFor()
+          }
         }
       }
     }
