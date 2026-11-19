@@ -131,7 +131,7 @@ def shortage_confirmed(request):
     sig, _run = S.item_signals()
     stockout = S.stockout_map()
     qs = list(Item.objects.filter(in_shortage=True)
-              .select_related('shortage_confirmed_by')
+              .select_related('shortage_confirmed_by__user')   # full_name reads .user: no query per row
               .order_by('-shortage_flagged_at'))
     # #7 back-orders: customers waiting on stock for these items (pending reservations)
     from django.db.models import Count as _Count
@@ -170,7 +170,7 @@ def shortage_confirmed(request):
 @permission_classes([IsAuthenticated, SHORTAGE])
 def shortage_dismissed(request):
     qs = (Item.objects.filter(shortage_dismissed=True)
-          .select_related('shortage_dismissed_by')
+          .select_related('shortage_dismissed_by__user')
           .prefetch_related('shortage_matching_items')
           .order_by('-shortage_dismissed_at'))
     reason_lbl = dict(Item.DISMISS_REASONS)

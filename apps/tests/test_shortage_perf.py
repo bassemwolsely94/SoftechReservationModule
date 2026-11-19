@@ -26,7 +26,7 @@ from apps.purchasing import shortage as S
 from apps.purchasing.models import DemandCalculationRun, ItemDemandMetrics, SalesTransactionLine
 from apps.tests.factories import make_admin, make_branch
 
-ENDPOINTS = ('candidates/', 'deltas/', 'confirmed/', 'med-types/')
+ENDPOINTS = ('candidates/', 'deltas/', 'confirmed/', 'med-types/', 'dismissed/')
 
 
 # ── REFERENCE: item_signals exactly as it was before Stage 3.1 (no cache, every stockable item) ──
@@ -123,13 +123,17 @@ class _Data:
             ([], 0, 3, {'in_shortage': True}),                      # confirmed, no sales, some stock
             ([], 0, 0, {}),                                         # quiet: must never be loaded
             ([10] * 12, 0, 50, {}),                                 # healthy: not a candidate
-        ] + [([10] * 12, 0, 0, {})] * n_extra
+        ] + [([10] * 12, 0, 0, {})] * n_extra           + [([10] * 12, 0, 0, {'in_shortage': True})] * n_extra           + [([], 0, 0, {'shortage_dismissed': True})] * n_extra
         self.quiet = None
         for k, (months, q30, stock, flags) in enumerate(specs):
             code, ar, en = med[k % 3]
             it = self._item(months, q30, stock, flags, code, ar, en)
             if not months and not flags:
                 self.quiet = it
+        # who confirmed / dismissed (their names read StaffProfile.user — must not cost a query per row)
+        _, staff, _ = make_admin(f'ms_by{n_extra}')
+        Item.objects.filter(in_shortage=True).update(shortage_confirmed_by=staff)
+        Item.objects.filter(shortage_dismissed=True).update(shortage_dismissed_by=staff)
         # a return line (doccode 30) and a zero line must not count
         it = Item.objects.filter(softech_id='SP1').first()
         self._line(it, self.today - timedelta(days=3), -5, doccode='30')
