@@ -89,7 +89,7 @@ class InsuranceClientViewSet(_RefuseDeleteInUse, viewsets.ModelViewSet):
         from .sybase_queries import QUERY_INSURANCE_PERSONS
         try:
             from config.sybase import get_sybase_connection
-            conn   = get_sybase_connection()
+            conn   = get_sybase_connection(interactive=True)
             cursor = conn.cursor()
             cursor.execute(QUERY_INSURANCE_PERSONS)
             rows   = cursor.fetchall()
@@ -550,7 +550,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         results = []
         try:
             from config.sybase import get_sybase_connection
-            conn = get_sybase_connection()
+            conn = get_sybase_connection(interactive=True)
             seen_motalbanos = set()
             for personcode in personcodes:
                 cursor = conn.cursor()
@@ -2002,7 +2002,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
 
         try:
             from config.sybase import get_sybase_connection
-            conn = get_sybase_connection()
+            conn = get_sybase_connection(interactive=True)
         except Exception as e:
             return Response({'error': f'فشل الاتصال بسوفتك: {public_error(request, e)}'},
                             status=status.HTTP_503_SERVICE_UNAVAILABLE)
@@ -2024,7 +2024,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
             logger.warning('personname map load failed: %s', e)
             # Non-fatal — fall back to showing personcode
             try:
-                conn = get_sybase_connection()
+                conn = get_sybase_connection(interactive=True)
             except Exception:
                 logger.debug('personname map: SOFTECH reconnect failed', exc_info=True)
 
@@ -2089,7 +2089,7 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     logger.warning('discover query failed pc=%s: %s', pc, e)
                     try:
-                        conn = get_sybase_connection()
+                        conn = get_sybase_connection(interactive=True)
                     except Exception:
                         logger.debug('discover: SOFTECH reconnect failed', exc_info=True)
                     continue
