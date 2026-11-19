@@ -33,8 +33,11 @@ RETURN_ROLES = (LIVE, RETURN)
 OPEN_STATUSES = ('draft', 'approved')
 ANSWERS = ('accepted', 'partial', 'rejected')
 IN_WINDOW = ('open', 'closes_this_month')
-CONFIDENCE_LABELS = {'exact': 'مطابق', 'month': 'نفس الشهر', 'ambiguous': 'أكثر من مورد',
-                     'none': 'مورد غير معروف'}
+CONFIDENCE_LABELS = {'exact': 'مطابق', 'month': 'نفس الشهر', 'history': 'من سجل الشراء',
+                     'ambiguous': 'أكثر من مورد', 'none': 'مورد غير معروف'}
+# C03: how far back before the expiry date a purchase counts as "who sold us this batch"
+# (SystemSetting return_window_history_months overrides).
+HISTORY_MONTHS = 36
 LOCATIONS = ('shelf', 'hq', '105')
 # Roles that see every branch's lines; everyone else sees their own branch's shelf only.
 ALL_BRANCH_ROLES = {'admin', 'purchasing', 'quality_manager', 'supervisor'}
@@ -101,18 +104,70 @@ def attribute(pairs):
             found[key][sup].add(exp)
             if name:
                 names[sup] = name
+    unmatched = [(ic, exp) for ic, exp in pairs if not found.get((ic, exp.year, exp.month))]
+    history = _purchase_history(unmatched)
     for ic, exp in pairs:
         by_sup = found.get((ic, exp.year, exp.month), {})
-        with_policy = sorted(s for s in by_sup if s in pol)
-        others = sorted(s for s in by_sup if s not in pol)
-        if not with_policy:
-            conf = 'none'
-        elif len(with_policy) > 1:
-            conf = 'ambiguous'
-        else:
-            conf = 'exact' if exp in by_sup[with_policy[0]] else 'month'
+        if by_sup:
+            with_policy = sorted(s for s in by_sup if s in pol)
+            others = sorted(s for s in by_sup if s not in pol)
+            if not with_policy:
+                conf = 'none'
+            elif len(with_policy) > 1:
+                conf = 'ambiguous'
+            else:
+                conf = 'exact' if exp in by_sup[with_policy[0]] else 'month'
+            out[(ic, exp)] = {'confidence': conf, 'suppliers': with_policy, 'others': others,
+                              'names': {s: names.get(s, '') for s in by_sup}, 'source': 'entries'}
+            continue
+        # C03: no purchase-expiry entry for this item and month → who sold us the item (most recent
+        # first). A guess, labelled as one; a person confirms before anything is sent.
+        recent = history.get((ic, exp), [])
+        with_policy = [s for s in recent if s in pol]
+        others = [s for s in recent if s not in pol]
+        conf = 'none' if not with_policy else ('history' if len(with_policy) == 1 else 'ambiguous')
         out[(ic, exp)] = {'confidence': conf, 'suppliers': with_policy, 'others': others,
-                          'names': {s: names.get(s, '') for s in by_sup}}
+                          'names': {s: history['_names'].get(s, '') for s in recent},
+                          'source': 'history' if recent else ''}
+    return out
+
+
+def history_months():
+    try:
+        return max(1, int(_setting('return_window_history_months', HISTORY_MONTHS)))
+    except (TypeError, ValueError):
+        return HISTORY_MONTHS
+
+
+def _purchase_history(pairs):
+    """{(item_code, expiry): [supplier codes, most recent purchase first], '_names': {code: name}} from
+    procurement.PurchaseLine purchases (doc 10, not returns) of the item, bought within
+    `history_months()` before the expiry date and not after it."""
+    from apps.procurement.models import PurchaseLine, SupplierProfile
+    out = {'_names': {}}
+    if not pairs:
+        return out
+    span = dt.timedelta(days=round(history_months() * 30.44))
+    lo = min(exp for _, exp in pairs) - span
+    hi = max(exp for _, exp in pairs)
+    by_item = defaultdict(list)                               # item → [(doc_date, supplier)], newest first
+    for ic, sup, d in (PurchaseLine.objects
+                       .filter(item_code__in={ic for ic, _ in pairs}, doccode='10', is_return=False,
+                               doc_date__gte=lo, doc_date__lte=hi)
+                       .exclude(supplier_code='')
+                       .order_by('-doc_date').values_list('item_code', 'supplier_code', 'doc_date')):
+        by_item[ic].append((d, sup))
+    codes = set()
+    for ic, exp in pairs:
+        seen = []
+        for d, sup in by_item.get(ic, []):
+            if exp - span <= d <= exp and sup not in seen:
+                seen.append(sup)
+        if seen:
+            out[(ic, exp)] = seen
+            codes.update(seen)
+    out['_names'] = dict(SupplierProfile.objects.filter(supplier_code__in=codes)
+                         .values_list('supplier_code', 'supplier_name'))
     return out
 
 
@@ -242,7 +297,12 @@ def calendar(today=None, month=None, supplier=None, location=None, branch_codes=
     names = {}
     if no_policy:
         from .models import PurchaseExpiryEntry
-        names = dict(PurchaseExpiryEntry.objects.filter(supplier_code__in=[s for s in no_policy if s])
+        from apps.procurement.models import SupplierProfile
+        codes = [s for s in no_policy if s]
+        # suppliers found through purchase history (C03) may have no purchase-expiry entry
+        names = dict(SupplierProfile.objects.filter(supplier_code__in=codes).exclude(supplier_name='')
+                     .values_list('supplier_code', 'supplier_name'))
+        names.update(PurchaseExpiryEntry.objects.filter(supplier_code__in=codes)
                      .exclude(supplier_name='').values_list('supplier_code', 'supplier_name').distinct())
     return {
         'today': ref.isoformat(),
