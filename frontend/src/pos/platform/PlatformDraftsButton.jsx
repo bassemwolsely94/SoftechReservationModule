@@ -17,7 +17,9 @@ const errText = e => {
   return d?.detail || e?.message || 'خطأ'
 }
 
-export default function PlatformDraftsButton({ branch, writerEnabled, mobile = false }) {
+// dataTour is passed as a literal by each page (desktop pos-platform-drafts, mobile pos-mobile-platform-drafts)
+// so test_help finds the help anchor in the source.
+export default function PlatformDraftsButton({ branch, writerEnabled, mobile = false, dataTour }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(null)
@@ -49,7 +51,7 @@ export default function PlatformDraftsButton({ branch, writerEnabled, mobile = f
   }
 
   return (
-    <div className="relative" data-tour={mobile ? 'pos-mobile-platform-drafts' : 'pos-platform-drafts'}>
+    <div className="relative" data-tour={dataTour}>
       <button onClick={() => setOpen(o => !o)} title="طلبات المنصات بانتظار الإرسال للكاشير"
               className={`${mobile ? 'w-full py-2' : 'h-8 px-2'} rounded border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}>
         🛵 {mobile ? `طلبات المنصات (${rows.length})` : rows.length}

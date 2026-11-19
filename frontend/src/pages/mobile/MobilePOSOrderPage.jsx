@@ -81,7 +81,7 @@ export default function MobilePOSOrderPage() {
           <option value="">— اختر الفرع —</option>
           {P.branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name} ({b.softech_branch_id})</option>)}
         </select>
-        <PlatformDraftsButton mobile branch={P.branch} writerEnabled={!!P.ref?.writer_enabled} />
+        <PlatformDraftsButton mobile dataTour="pos-mobile-platform-drafts" branch={P.branch} writerEnabled={!!P.ref?.writer_enabled} />
         <div className="grid grid-cols-2 gap-2">
           <select value={P.docKind} onChange={e => P.setDocKind(e.target.value)} className="border rounded px-2 py-2">
             {P.docKinds.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
