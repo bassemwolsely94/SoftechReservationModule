@@ -77,6 +77,7 @@ class Notification(models.Model):
         ('hq_exception_digest',       '💰 استثناءات الأسبوع بالجنيه'),
         ('receipt_check_digest',      '📦 استلام بدون طلب'),
         ('return_window_digest',      '📆 نوافذ مرتجع الموردين'),
+        ('ap_review_digest',          '🧾 مراجعة تسوية الموردين'),
         # ── Personal ──────────────────────────────────────────────────────────
         ('personal_reminder',         '⏰ تذكير شخصي'),
         ('gamification_level_up',     '🏆 ترقية مستوى'),
@@ -193,6 +194,7 @@ class Notification(models.Model):
         'monthly_report':       CATEGORY_REPORTS,
         'coupon_digest':        CATEGORY_REPORTS,
         'return_window_digest': CATEGORY_REPORTS,
+        'ap_review_digest': CATEGORY_REPORTS,
         'receipt_check_digest': CATEGORY_REPORTS,
         'customer_status_drift': CATEGORY_MONITORING,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────

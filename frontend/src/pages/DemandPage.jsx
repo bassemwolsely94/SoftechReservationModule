@@ -19,6 +19,8 @@ import { formatDistanceToNow } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
+import { useToast } from '../components/ui'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -502,8 +504,10 @@ function BulkBar({ count, staff, busy, onAssign, onFlag, onCancel, onClear }) {
           className="btn-secondary text-xs px-3 disabled:opacity-50">📦 إرسال للمشتريات</button>
       </CanDo>
       <CanDo module="demand" action="delete">
-        <button disabled={busy} onClick={onCancel} data-tour="demand-list-bulk-cancel"
-          className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50">إلغاء</button>
+        <ConfirmButton disabled={busy} onConfirm={onCancel} data-tour="demand-list-bulk-cancel"
+          confirmLabel={`إلغاء ${count} طلب؟`}
+          armedClassName="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold"
+          className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50">إلغاء</ConfirmButton>
       </CanDo>
       <button onClick={onClear} data-tour="demand-list-bulk-clear" className="text-xs text-gray-400 hover:text-gray-600 px-2">مسح التحديد</button>
     </div>
@@ -514,6 +518,7 @@ function BulkBar({ count, staff, busy, onAssign, onFlag, onCancel, onClear }) {
 
 export default function DemandPage() {
   const navigate      = useNavigate()
+  const toast         = useToast()
   const qc            = useQueryClient()
   const { user }      = useAuthStore()
 
@@ -604,15 +609,15 @@ useEffect(() => {
   })
 
   async function doBulk(action, assigned_to) {
-    if (action === 'cancel' && !window.confirm(`إلغاء ${selectedIds.length} طلب؟`)) return
+    // bulk cancel is confirmed by the two-step «إلغاء» button in BulkBar
     setBulkBusy(true)
     try {
       const { data } = await demandApi.bulkAction({ ids: selectedIds, action, assigned_to })
       qc.invalidateQueries({ queryKey: ['demands'] })
       setSelectedIds([])
-      if (data.skipped) alert(`تم: ${data.ok} · تم تخطّي ${data.skipped} (حالة غير صالحة للإجراء)`)
+      if (data.skipped) toast.warning(`تم: ${data.ok} · تم تخطّي ${data.skipped} (حالة غير صالحة للإجراء)`)
     } catch (e) {
-      alert(e.response?.data?.detail || 'تعذّر تنفيذ الإجراء')
+      toast.error(e.response?.data?.detail || 'تعذّر تنفيذ الإجراء')
     } finally { setBulkBusy(false) }
   }
 

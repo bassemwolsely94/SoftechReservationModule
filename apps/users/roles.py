@@ -22,6 +22,9 @@ class Role:
                                        # hq_exception_digest_recipients names nobody (C32)
     qa_inspections: bool = False       # works branch QA inspections (/api/qa/, /m/qa) on top of the
                                        # hr grant every role holds for self-service (UAT W2, 2026-11-19)
+    ap_review: bool = False            # decides A/P reconciliation exceptions and gets the weekly A/P
+                                       # review digest (C15, owner 2026-11-19); admin / pharmacist decide
+                                       # through the finance approve grant as before
 
 
 ROLES: tuple[Role, ...] = (
@@ -45,7 +48,7 @@ ROLES: tuple[Role, ...] = (
          all_branches=True, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True),
     # finance data is company-level (ruling R7, security decision B-1)
     Role('accountant', 'محاسب', 'Accountant', 'Accountant — General Ledger',
-         all_branches=True, mfa_required=False, legacy_rbac_mode=True),
+         all_branches=True, mfa_required=False, legacy_rbac_mode=True, ap_review=True),
 )
 
 ROLE_KEYS: tuple[str, ...] = tuple(r.key for r in ROLES)
@@ -56,6 +59,7 @@ MFA_REQUIRED_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.mfa_req
 LEGACY_RBAC_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.legacy_rbac_mode)
 HQ_DIGEST_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.hq_digest)
 QA_INSPECTION_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.qa_inspections)
+AP_REVIEW_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.ap_review)
 
 
 def role_label(key: str, lang: str = 'ar') -> str:
