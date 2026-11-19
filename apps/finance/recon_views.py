@@ -66,6 +66,8 @@ FINANCE_APPROVE  = _company_only(matrix_permission('finance', post=('approve',))
 FINANCE_EDIT     = _company_only(matrix_permission('finance', post=('edit',)))
 FINANCE_FINALIZE = _company_only(matrix_permission('finance', post=('finalize',)))     # SOFTECH write-back
 FINANCE_EXPORT   = _company_only(matrix_permission('finance', get=('export',)))
+# C15 exception decisions: the finance grant gates the door; _can_review_exceptions decides who acts
+FINANCE_REVIEW   = _company_only(matrix_permission('finance', post=('view',)))
 
 
 def _scope(request, qs, party_path='party'):
@@ -393,15 +395,25 @@ def _guard_write(request):
     return None
 
 
+def _can_review_exceptions(user) -> bool:
+    """C15: who records a decision on an exception — admin / pharmacist holding finance `approve`
+    (the gate for approving a match), plus the finance-department accountant (owner decision
+    2026-11-19). Only this endpoint: the accountant still cannot approve, write or reverse a match."""
+    from core.permissions import matrix_allows
+    profile = getattr(user, 'staff_profile', None)
+    if _is_admin_or_pharmacist(user):
+        return profile is None or matrix_allows(profile, 'finance', 'approve')
+    return getattr(profile, 'role', None) == 'accountant'
+
+
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_APPROVE])
+@permission_classes([IsAuthenticated, FINANCE_REVIEW])
 def decide_exceptions_view(request):
     """C15: bulk decision on exceptions — {ids, action: investigating|resolved|dismissed|open, note}.
-    Same gate as approving a match. Mirror only: nothing goes to SOFTECH, and a decision never
-    releases a held match by itself (recon_review)."""
-    denied = _guard_write(request)
-    if denied:
-        return denied
+    Mirror only: nothing goes to SOFTECH, and a decision never releases a held match by itself
+    (recon_review)."""
+    if not _can_review_exceptions(request.user):
+        return Response({'detail': 'صلاحية غير كافية لمراجعة الاستثناءات'}, status=403)
     from . import recon_review
     ids = request.data.get('ids') or []
     if not isinstance(ids, list):

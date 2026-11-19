@@ -118,9 +118,26 @@ class ApiTests(Base):
 
     def setUp(self):
         super().setUp()
+        from django.core.management import call_command
         from apps.tests.factories import make_admin, make_user
+        call_command('seed_permissions', verbosity=0)
         _, _, self.admin = make_admin('c15_admin')
         _, _, self.viewer = make_user('c15_viewer', role='viewer')
+        _, _, self.accountant = make_user('c15_accountant', role='accountant')
+
+    def test_the_accountant_decides_exceptions_but_still_cannot_approve_a_match(self):
+        # owner 2026-11-19: the accountant reviews exceptions; matches stay with admin / pharmacist
+        e = self.exc()
+        r = self.accountant.post(self.URL, {'ids': [e.pk], 'action': 'dismissed', 'note': 'مراجعة المحاسب'},
+                                 format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+        e.refresh_from_db()
+        self.assertEqual(e.status, 'dismissed')
+        _, _, cand = self.pair()
+        r = self.accountant.post(f'/api/finance/reconciliation/candidates/{cand.pk}/approve/', {}, format='json')
+        self.assertEqual(r.status_code, 403)
+        cand.refresh_from_db()
+        self.assertEqual(cand.status, 'proposed')
 
     def test_admin_decides_viewer_cannot(self):
         e = self.exc()
