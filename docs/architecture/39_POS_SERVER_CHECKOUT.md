@@ -432,12 +432,13 @@ existing cancel (pending) / return (settled) flows.
 ## 7. Stop-and-ask points
 
 The build stops and asks the owner at each of these. Owner decisions so far (2026-11-19, "approved — go with your
-recommendations on S3 and S4"): **S1, S3, S4 approved**. Every other point, **including S2**, is still open.
+recommendations on S3 and S4"; S2: "Yes, approve S2"): **S1, S2, S3, S4 approved**. Every other point is still open,
+including S5 (each golden probe run) and S8 (rollout stages and removing the old path).
 
 | # | Point | Why it needs the owner | Recommendation |
 |---|---|---|---|
 | S1 | Approve this design | Touches checkout (CLAUDE.md) | **Owner-approved 2026-11-19.** |
-| S2 | Add the nullable PG column `checkout_request_hash` on `SoftechSalesOrder` | Schema change on the order table (PG only, not synced to SOFTECH) | Approve; alternative is comparing lines field by field, which is slower and easier to get wrong. **Still open** — needs the owner's yes before PR 226 merges (migration 0019) |
+| S2 | Add the nullable PG column `checkout_request_hash` on `SoftechSalesOrder` | Schema change on the order table (PG only, not synced to SOFTECH) | Approve; alternative is comparing lines field by field, which is slower and easier to get wrong. **Owner-approved 2026-11-19** ("Yes, approve S2") — built: migration `0019_softechsalesorder_checkout_request_hash` |
 | S3 | Rule when `due ≠ expected_due` | Decides whether a sale can post at a total the cashier did not see | **Block with 409 and show the new total.** Never post silently. **Owner-approved 2026-11-19** — built: `checkout._check_expected` in Phase A; `expected_due` required for a live send (B12) |
 | S4 | Offers error with `POS_OFFERS_EXECUTION_ENABLED` ON: abort the sale, or post without the offer and say so | Sales vs promotion correctness | Abort with a clear message (the cashier can remove the offer item); today's silent skip hides lost discounts. **Owner-approved 2026-11-19** — built: `checkout._apply_offers` aborts the checkout (nothing saved) |
 | S5 | Each golden-template probe run (§4.1) | Real DML on SOFTECH, then rolled back | Off-peak, one branch, person present |
