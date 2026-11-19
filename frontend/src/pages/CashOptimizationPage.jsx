@@ -5,13 +5,15 @@
  * over-purchase (the Jutoxib pattern). A STRONG spike is auto-flagged; a human
  * confirms "unsustained burst" to make it eligible for the review-gated order cap
  * (which only cuts المطلوب when activated for the run). WATCH spikes are monitor-only.
- * Tab 2: 🧊 مخزون راكد (P-27 part A, read-only — cash/DeadStockTab.jsx). Tab 3 (فائض) is still to come.
+ * Tab 2: 🧊 مخزون راكد (P-27 part A, read-only — cash/DeadStockTab.jsx). Tab 3: 🎯 التغطية حسب الفئة (C25 / P-34,
+ * read-only — cash/CoverTiersTab.jsx). فائض is still to come.
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
 import DeadStockTab from './cash/DeadStockTab'   // P-27 part A
+import CoverTiersTab from './cash/CoverTiersTab' // C25 / P-34 (read-only)
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
@@ -129,7 +131,7 @@ export default function CashOptimizationPage() {
       <h1 className="text-xl font-bold text-gray-800 mb-1">💰 تحسين الكاش والمخزون</h1>
       <p className="text-sm text-gray-500 mb-4">رصد وتحرير الكاش المجمّد ومنع الشراء الزائد — تُظهر النتائج على شيت النواقص كتنبيهات.</p>
       <div className="flex gap-4 border-b mb-4" data-tour="purchasing-cash-tabs">
-        {[['spike', '📈 ذروة الطلب'], ['dead', '🧊 مخزون راكد'], ['overstock', '📦 فائض']].map(([k, l]) => (
+        {[['spike', '📈 ذروة الطلب'], ['dead', '🧊 مخزون راكد'], ['cover', '🎯 التغطية حسب الفئة'], ['overstock', '📦 فائض']].map(([k, l]) => (
           <button key={k} onClick={() => k !== 'overstock' && setTab(k)} disabled={k === 'overstock'}
             className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-400'} ${k === 'overstock' ? 'cursor-not-allowed' : ''}`}>
             {l}{k === 'overstock' && <span className="text-xs"> (قريبًا)</span>}
@@ -138,6 +140,7 @@ export default function CashOptimizationPage() {
       </div>
       {tab === 'spike' && <SpikeTab />}
       {tab === 'dead' && <DeadStockTab />}
+      {tab === 'cover' && <CoverTiersTab />}
     </div>
   )
 }
