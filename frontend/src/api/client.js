@@ -826,6 +826,8 @@ export const purchasingApi = {
     params,
     responseType: params.format === 'csv' ? 'blob' : 'arraybuffer',
   }),
+  // performance Stage 4: the same export as a background job (start -> /export-jobs/<id>/)
+  startExport: (params) => api.post('/purchasing/export/jobs/', null, { params }),
   advancedExport: (params) => api.get('/purchasing/advanced-export/', { params, responseType: 'arraybuffer' }),
   advancedPivotExport: (params) => api.get('/purchasing/advanced-pivot-export/', { params, responseType: 'arraybuffer' }),
 
@@ -936,6 +938,7 @@ export const supplyApi = {
   // تلبية طلبات الفروع — ISR fulfilment plan (READ-ONLY) + its Excel workbook
   isrFulfilment:       (data) => api.post('/purchasing/isr/fulfilment/', data),
   isrFulfilmentExport: (data) => api.post('/purchasing/isr/fulfilment/export/', data, { responseType: 'blob' }),
+  isrFulfilmentExportJob: (data) => api.post('/purchasing/isr/fulfilment/export/jobs/', data),
   isrFulfilmentRecent: (days) => api.get('/purchasing/isr/fulfilment/recent/', { params: { days } }),
   isrFulfilmentProposals: (data) => api.post('/purchasing/isr/fulfilment/proposals/', data),
   // «طلبات واتساب» — branch requests pasted from WhatsApp groups
@@ -3333,6 +3336,12 @@ export const hrAttendanceApi = {
 }
 
 // PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).
+// Performance Stage 4 — follow / download one's own background export (any screen; useExportJob)
+export const exportJobsApi = {
+  status: (id) => api.get(`/export-jobs/${id}/`),
+  file:   (id) => api.get(`/export-jobs/${id}/download/`, { responseType: 'blob' }),
+}
+
 export const picAnalyticsApi = {
   access:     ()                => api.get('/pic-analytics/access/'),
   options:    (params = {})     => api.get('/pic-analytics/options/', { params }),

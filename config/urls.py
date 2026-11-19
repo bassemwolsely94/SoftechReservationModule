@@ -77,6 +77,7 @@ urlpatterns = [
     path('api/stock-audit/', include('apps.stock_audit.urls')),
     path('api/hr-attendance/', include('apps.hr.attendance.urls')),   # gated in apps/hr/attendance/access.py
     path('api/pic-analytics/', include('apps.pic_analytics.urls')),   # doc 33 — gated in apps/pic_analytics/access.py
+    path('api/export-jobs/', include('apps.export_jobs.urls')),       # Stage 4 — own job only, kind's permission re-checked
     path('api/usage-print/', include('apps.usage_print.urls')),       # Project 5 — flag + RBAC in apps/usage_print/access.py
     path('api/trace/', include('apps.trace.urls')),          # P-58 — dormant; parse/ is admin-only     # doc 32 — gated in apps/stock_audit/access.py
     # Customer-facing self-service portal (external; magic-link auth, customer-scoped)

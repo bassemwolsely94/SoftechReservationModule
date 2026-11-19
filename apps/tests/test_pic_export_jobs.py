@@ -8,7 +8,8 @@ from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.pic_analytics import jobs
-from apps.pic_analytics.models import PicAnalyticsAccess, PicExportJob
+from apps.export_jobs.models import ExportJob as PicExportJob
+from apps.pic_analytics.models import PicAnalyticsAccess
 from apps.tests.factories import make_user
 from apps.tests.test_pic_api import PERIOD, ApiBase, sheet_headers
 

@@ -115,6 +115,8 @@ EXEMPT_PREFIXES = {'auth', 'notifications', 'personal', 'search', 'help', 'porta
                    'gamification',   # own points open to all; its views check gamification/*
                    'stock-audit',    # own gate apps/stock_audit/access.py: RBAC stock_audit
                    'pic-analytics',  # own gate apps/pic_analytics/access.py: RBAC pic_analytics + named grants
+                   'export-jobs',    # own gate apps/export_jobs/views.py: the requester's own job only (else 404)
+                                     # + the export kind's permission re-checked at download (Stage 4)
                    'hr-attendance',  # own gate apps/hr/attendance/access.py: RBAC hr_attendance + named grants
                    'usage-print',    # own gate apps/usage_print/access.py: flag USAGE_PRINT_ENABLED + RBAC usage_print
                    'public',         # N6 anonymous surface (apps/access/public_urls.py), no business data
@@ -258,6 +260,10 @@ def required(path, method):
     prefix = parts[2]
     if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
         return None
+    # Performance Stage 4: starting an export job (POST …/export/jobs/) asks what the direct export
+    # (GET …/export/) asked — it builds the same file; the view keeps the export's own checks.
+    if method.upper() == 'POST' and path.endswith('/export/jobs/'):
+        return required(path[:-len('jobs/')], 'GET')
     # Small daily counts (Project 2) have their own gate, like /api/stock-audit/: every salesperson
     # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
     # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)

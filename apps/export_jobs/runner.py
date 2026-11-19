@@ -85,7 +85,7 @@ def file_from_response(resp, default_name=''):
     from django.http import StreamingHttpResponse
     if isinstance(resp, Response) or resp.status_code >= 400:
         data = getattr(resp, 'data', None)
-        detail = str(data.get('detail') or '') if isinstance(data, dict) else ''
+        detail = str(data.get('detail') or data.get('error') or '') if isinstance(data, dict) else ''
         raise JobError(detail or FAILED_MSG)
     if isinstance(resp, StreamingHttpResponse):
         body = b''.join(c if isinstance(c, bytes) else str(c).encode('utf-8') for c in resp.streaming_content)
@@ -143,7 +143,7 @@ def start(kind_key, profile, params, meta=None):
     kind = get_kind(kind_key)
     try:
         cleanup()                           # opportunistic: stale -> failed, > 48 h -> deleted
-    except Exception:                       # noqa: BLE001 — housekeeping never blocks an export
+    except Exception:                       # housekeeping never blocks an export
         logger.exception('export job cleanup failed')
     active = ExportJob.objects.defer('data').filter(requested_by=profile, kind=kind_key,
                                                     status__in=ExportJob.ACTIVE)
@@ -234,7 +234,7 @@ def run_job(job_id, worker='thread'):
     try:
         if _claim(job_id, worker):
             execute(job_id)
-    except Exception:                       # noqa: BLE001 — the claim itself failed; nothing to record
+    except Exception:                       # the claim itself failed; nothing to record
         logger.exception('export job %s could not start', job_id)
     finally:
         # a worker thread owns its connection: release it (never inside a test's atomic block, where
@@ -267,7 +267,7 @@ def execute(job_id):
         ExportJob.objects.filter(pk=job_id, status=ExportJob.RUNNING).update(**fields)
     except JobError as exc:
         _fail(job_id, str(exc) or FAILED_MSG)
-    except Exception:                       # noqa: BLE001 — the user gets a safe message, the log the traceback
+    except Exception:                       # the user gets a safe message, the log the traceback
         logger.exception('export job %s failed', job_id)
         _fail(job_id, FAILED_MSG)
 
@@ -276,7 +276,7 @@ def _fail(job_id, msg):
     try:
         ExportJob.objects.filter(pk=job_id, status__in=ExportJob.ACTIVE).update(
             status=ExportJob.FAILED, error=msg[:255], finished_at=timezone.now())
-    except Exception:                       # noqa: BLE001
+    except Exception:                     
         logger.exception('export job %s: could not record the failure', job_id)
 
 

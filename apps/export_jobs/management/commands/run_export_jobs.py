@@ -14,7 +14,7 @@ import signal
 import time
 
 from django.core.management.base import BaseCommand
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 
 from apps.export_jobs import runner
 
@@ -42,11 +42,12 @@ class Command(BaseCommand):
         last_cleanup = 0.0
         done = 0
         while not self._stop:
-            close_old_connections()
+            if not connection.in_atomic_block:      # never inside a test's transaction
+                close_old_connections()
             if time.monotonic() - last_cleanup > CLEANUP_EVERY:
                 try:
                     runner.cleanup()
-                except Exception:                       # noqa: BLE001 — housekeeping never stops the service
+                except Exception:                       # housekeeping never stops the service
                     logger.exception('export jobs cleanup failed')
                 last_cleanup = time.monotonic()
             pk = runner.claim_next('service')
