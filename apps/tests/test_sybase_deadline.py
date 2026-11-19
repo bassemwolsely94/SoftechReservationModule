@@ -130,8 +130,9 @@ class LoginTimeoutAppliedTests(SimpleTestCase):
         mods, dm = _fake_java()
         seen = {}
 
-        def fake_connect(driver, url, props, label=''):
+        def fake_connect(driver, url, props, label='', **kwargs):
             seen['props'] = dict(props)
+            seen['kwargs'] = kwargs
             return mock.Mock()
         with mock.patch.dict(_sys.modules, mods), mock.patch.object(sy, '_ensure_jvm'), \
                 mock.patch.object(sy, 'jpype'), \
@@ -152,6 +153,15 @@ class LoginTimeoutAppliedTests(SimpleTestCase):
 
     def test_profile_connector(self):
         self._check(lambda: sy.SoftechConnector('prod').connect())
+
+    def test_interactive_connections_use_the_short_timeout_and_leave_the_global_alone(self):
+        # a person waiting on a screen: 5 s on this connection only; the process-wide DriverManager
+        # timeout the syncs rely on is not touched (design 2026-11-19-softech-interactive-connect)
+        for opener in (lambda: sy.get_sybase_connection(interactive=True),
+                       lambda: sy.get_branch_connection('10.0.0.9', interactive=True)):
+            props, dm = self._open(opener)
+            self.assertEqual(props.get('LOGIN_TIMEOUT'), str(sy.SYBASE_INTERACTIVE_LOGIN_TIMEOUT_SECONDS))
+            dm.setLoginTimeout.assert_not_called()
 
     def test_values_come_from_settings(self):
         for name, const, default in (('SYBASE_LOGIN_TIMEOUT', sy.SYBASE_LOGIN_TIMEOUT_SECONDS, 15),

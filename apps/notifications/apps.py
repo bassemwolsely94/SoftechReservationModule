@@ -7,6 +7,8 @@ class NotificationsConfig(AppConfig):
     verbose_name = 'الإشعارات والتذكيرات'
 
     def ready(self):
+        from .live import connect_signals
+        connect_signals()   # perf Stage 5: unread counts pushed over the socket on every change
         from apps.whatsapp import button_registry
         from .phone_alerts import inbound
         button_registry.register('alert:', inbound.handle_alert_tap)

@@ -102,10 +102,20 @@ def _ensure_jvm():
 # unaffected.
 SYBASE_LOGIN_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_LOGIN_TIMEOUT', 15))
 
+# Interactive profile (performance boost, design 2026-11-19-softech-interactive-connect): a read made
+# while a person waits on a screen asks for it with `interactive=True`. One attempt with a short login
+# timeout, and a node that just failed is skipped for SYBASE_DEAD_NODE_SECONDS (shared cache) so the
+# caller falls through to its next node at once. Background syncs and writers keep the default profile
+# (SYBASE_LOGIN_TIMEOUT × SYBASE_CONNECT_ATTEMPTS with pauses) and never read or write the memory.
+SYBASE_INTERACTIVE_LOGIN_TIMEOUT_SECONDS = int(getattr(settings, 'SYBASE_INTERACTIVE_LOGIN_TIMEOUT', 5))
+SYBASE_INTERACTIVE_CONNECT_ATTEMPTS = int(getattr(settings, 'SYBASE_INTERACTIVE_CONNECT_ATTEMPTS', 1))
+SYBASE_DEAD_NODE_SECONDS = int(getattr(settings, 'SYBASE_DEAD_NODE_SECONDS', 60))
 
-def _apply_login_timeout(props):
+
+def _apply_login_timeout(props, seconds=None):
     """Set jConnect LOGIN_TIMEOUT (in seconds) on the connection properties."""
-    props.setProperty('LOGIN_TIMEOUT', str(SYBASE_LOGIN_TIMEOUT_SECONDS))
+    secs = SYBASE_LOGIN_TIMEOUT_SECONDS if seconds is None else int(seconds)
+    props.setProperty('LOGIN_TIMEOUT', str(secs))
 
 
 # Max seconds any single query may run before the driver aborts it.  Without
@@ -199,6 +209,11 @@ class SoftechAccessDenied(RuntimeError):
     def __init__(self, message=None, reason=None):
         super().__init__(_gate().DENY_MESSAGE if message is None else message)
         self.reason = reason
+
+
+class SoftechNodeUnavailable(RuntimeError):
+    """An interactive connect skipped a node that failed in the last SYBASE_DEAD_NODE_SECONDS.
+    Raised before driver.connect(): callers' existing `except Exception` fallbacks try the next node."""
 
 
 class SoftechZoneWriteDenied(SoftechReadOnlyError):
@@ -525,21 +540,57 @@ def _connect_error_text(exc):
     return f'{str(exc)[:60]} — server: {reason[:125]}'
 
 
-def _connect_with_retry(driver, jdbc_url, props, label=''):
+_DEAD_NODE_PREFIX = 'softech:dead_node:'
+
+
+def _dead_node_until(node_key):
+    """When the interactive skip for this node ends (epoch seconds), or 0. A cache error = not dead."""
+    from django.core.cache import cache
+    try:
+        return float(cache.get(_DEAD_NODE_PREFIX + node_key) or 0)
+    except Exception:
+        return 0
+
+
+def _set_dead_node(node_key, dead):
+    from django.core.cache import cache
+    try:
+        if dead:
+            cache.set(_DEAD_NODE_PREFIX + node_key, time.time() + SYBASE_DEAD_NODE_SECONDS,
+                      SYBASE_DEAD_NODE_SECONDS + 5)
+        else:
+            cache.delete(_DEAD_NODE_PREFIX + node_key)
+    except Exception:
+        pass   # the memory is an optimisation; a cache outage only means no skipping
+
+
+def _connect_with_retry(driver, jdbc_url, props, label='', interactive=False, node_key=None):
     """driver.connect() with bounded retries for the flaky branch link.
 
     N4: the SOFTECH gate is consulted ONCE, before the loop. A refusal raises
     SoftechAccessDenied at once (no connect, no retry, no telemetry); READ wraps the
-    connection read-only (observe-only unless the gate mode is enforce); FULL is unchanged."""
+    connection read-only (observe-only unless the gate mode is enforce); FULL is unchanged.
+
+    interactive=True (a person is waiting): SYBASE_INTERACTIVE_CONNECT_ATTEMPTS attempts, no pause, and
+    a node (node_key, default label) that failed in the last SYBASE_DEAD_NODE_SECONDS is skipped with
+    SoftechNodeUnavailable before driver.connect(). Only interactive connects read or write that memory."""
     gate = _gate()
     decision = gate.check(label)
     if decision.grant == gate.NONE:
         raise SoftechAccessDenied(reason=decision.reason)
     observe_only = decision.grant == gate.READ and gate.mode_of(decision) != 'enforce'
+    node_key = node_key or label
+    if interactive and _dead_node_until(node_key) > time.time():
+        raise SoftechNodeUnavailable(f'{label or node_key}: unreachable a moment ago, skipped')
+    attempts = SYBASE_INTERACTIVE_CONNECT_ATTEMPTS if interactive else SYBASE_CONNECT_ATTEMPTS
     last_exc = None
-    for attempt in range(1, SYBASE_CONNECT_ATTEMPTS + 1):
+    for attempt in range(1, attempts + 1):
         t0, failed = time.monotonic(), False
         try:
+            if interactive:
+                # cleared before the attempt (the node was not skipped, so its window is over); a
+                # failure below sets it again. Keeps the `return _guard(` line the guard test reads.
+                _set_dead_node(node_key, False)
             return _guard(driver.connect(jdbc_url, props), zone_grant=decision.grant,
                           observe_only=observe_only, decision=decision, label=label)
         except Exception as exc:
@@ -548,18 +599,22 @@ def _connect_with_retry(driver, jdbc_url, props, label=''):
             last_exc = exc
             logger.warning(
                 '[sybase] connect attempt %d/%d failed%s: %s',
-                attempt, SYBASE_CONNECT_ATTEMPTS,
+                attempt, attempts,
                 f' [{label}]' if label else '', _connect_error_text(exc),
             )
-            if attempt < SYBASE_CONNECT_ATTEMPTS:
+            if attempt < attempts:
                 time.sleep(SYBASE_CONNECT_RETRY_DELAY)
         finally:
             if not failed:
                 _load().record_connect(label, (time.monotonic() - t0) * 1000, True)
+    if interactive:
+        _set_dead_node(node_key, True)
     raise last_exc
 
 
-def get_sybase_connection(charset=None):
+def get_sybase_connection(charset=None, interactive=False):
+    """HQ connection. interactive=True: a person is waiting — one short attempt, skip if HQ failed a
+    moment ago (see _connect_with_retry). Writers and syncs keep the default."""
     host = settings.SYBASE_HOST
     port = getattr(settings, 'SYBASE_PORT', '5000')
     user = settings.SYBASE_USER
@@ -576,18 +631,23 @@ def get_sybase_connection(charset=None):
     # Default (None) is unchanged — used only by the writeback path.
     if charset:
         props.setProperty('CHARSET', charset)
-    _apply_login_timeout(props)
-    # Belt-and-suspenders: also bound the timeout at the DriverManager level.
-    try:
-        DriverManager.setLoginTimeout(SYBASE_LOGIN_TIMEOUT_SECONDS)
-    except Exception:
-        pass
+    if interactive:
+        # per-connection only: DriverManager's login timeout is process-global, leave it alone
+        _apply_login_timeout(props, SYBASE_INTERACTIVE_LOGIN_TIMEOUT_SECONDS)
+    else:
+        _apply_login_timeout(props)
+        # Belt-and-suspenders: also bound the timeout at the DriverManager level.
+        try:
+            DriverManager.setLoginTimeout(SYBASE_LOGIN_TIMEOUT_SECONDS)
+        except Exception:
+            pass
     jdbc_url = 'jdbc:sybase:Tds:' + host + ':' + str(port) + '/SOFTECHDB9'
     driver = SybDriver()
-    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label='HQ'), node='HQ')
+    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label='HQ', interactive=interactive,
+                                                 node_key=f'HQ {host}:{port}'), node='HQ')
 
 
-def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=None):
+def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=None, interactive=False):
     """
     Open a jConnect connection to a branch-specific Sybase server.
 
@@ -616,19 +676,24 @@ def get_branch_connection(db_host, db_port=5000, db_name='SOFTECHDB9', charset=N
     # Default behaviour (charset=None) is unchanged — used only by the writeback path.
     if charset:
         props.setProperty('CHARSET', charset)
-    _apply_login_timeout(props)
-    # Branch servers are the ones most likely to be offline — bound the login
-    # handshake so an unreachable branch raises quickly instead of hanging the
-    # whole CRM sync job.
-    try:
-        from java.sql import DriverManager
-        DriverManager.setLoginTimeout(SYBASE_LOGIN_TIMEOUT_SECONDS)
-    except Exception:
-        pass
+    if interactive:
+        # a person is waiting: short per-connection timeout; DriverManager's global value is untouched
+        _apply_login_timeout(props, SYBASE_INTERACTIVE_LOGIN_TIMEOUT_SECONDS)
+    else:
+        _apply_login_timeout(props)
+        # Branch servers are the ones most likely to be offline — bound the login
+        # handshake so an unreachable branch raises quickly instead of hanging the
+        # whole CRM sync job.
+        try:
+            from java.sql import DriverManager
+            DriverManager.setLoginTimeout(SYBASE_LOGIN_TIMEOUT_SECONDS)
+        except Exception:
+            pass
     jdbc_url = f'jdbc:sybase:Tds:{db_host}:{db_port}/{db_name}'
     driver   = SybDriver()
     label = f'branch {db_host}'
-    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label=label), node=label)
+    return ConnectionWrapper(_connect_with_retry(driver, jdbc_url, props, label=label, interactive=interactive,
+                                                 node_key=f'branch {db_host}:{db_port}'), node=label)
 
 
 def probe_connection(host, port=5000, db_name='SOFTECHDB9', login_timeout=None):

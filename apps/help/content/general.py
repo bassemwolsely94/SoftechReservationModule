@@ -296,6 +296,8 @@ SCREENS = [
               'The numbers here are for quick monitoring; click any number or section to go to the detailed screen.'),
             T('لو حالة المزامنة «فشلت» أو آخر تحديث قديم، فالأرصدة قد لا تكون حديثة — بلّغ مسؤول النظام.',
               'If the sync shows "failed" or the last update is old, stock figures may be out of date — tell the system admin.'),
+            T('«آخر تحديث HH:MM» جنب التاريخ = وقت آخر مرة اتجابت فيه أرقام الصفحة. الأرقام بتتحدّث لوحدها بعد كل مزامنة من سوفتيك، ولما ترجع للصفحة، وكل 5 دقائق على الأكثر — من غير ما تعمل حاجة.',
+              '"Last updated HH:MM" next to the date = when the page\'s figures were last loaded. They refresh by themselves after every SOFTECH sync, when you come back to the page, and at least every 5 minutes — nothing to do.'),
             T('شريط «التحفيز» أعلى الصفحة يعرض مستواك ونقاط اليوم وسلسلة الأيام النظيفة وترتيبك في الفرع، وزر «بند ينتظرك» يفتح ما تبقّى عليك.',
               'The "Gamification" strip at the top shows your level, today\'s points, clean-day streak and branch rank; the "items waiting" button opens what is still on you.'),
             T('الشارة الصغيرة في أعلى الشاشة تقول من أين تتصل الآن وحالة جهازك: «داخل الشبكة — جهاز معتمد» أو «داخل الشبكة — جهاز غير معتمد» أو «خارج الشبكة — جهاز معتمد» أو «خارج الشبكة — جهاز غير معتمد». وتحت الشريط العلوي قد يظهر شريط هادئ: «جهاز غير معتمد — اطلب اعتماده من المدير» معناه إن جهازك لسه ما اتعتمدش؛ و«جهاز غير معتمد — للعرض فقط» (أصفر) يظهر بس لما السياسة مطبّقة فعلاً ودورك على الجهاز ده للعرض بس — تشوف ولا تعدّل لحد ما المدير يعتمد الجهاز؛ و«خارج شبكة الشركة» للعلم.',
@@ -502,8 +504,8 @@ SCREENS = [
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('انتهاء الجلسة لا يضيّع الصفحة: ادخل تاني فوقها وكمّل؛ وكل خانات البحث بنفس القواعد: * و% بدل أي حروف والكلمات بأي ترتيب؛ وشريط أحمر لما بيانات الصفحة ما تتحمّلش.',
-                         'An ended session no longer loses the page: sign in again over it and carry on; every search box follows the same rules: * and % wildcards, words in any order; and a red strip when page data fails to load.'),
+        'change_note': T('«آخر تحديث HH:MM» جنب التاريخ، والأرقام بتتحدّث لوحدها بعد كل مزامنة؛ انتهاء الجلسة لا يضيّع الصفحة؛ وكل خانات البحث بنفس القواعد: * و% بدل أي حروف والكلمات بأي ترتيب؛ وشريط أحمر لما بيانات الصفحة ما تتحمّلش.',
+                         '"Last updated HH:MM" next to the date, and the figures refresh by themselves after every sync; an ended session no longer loses the page; every search box follows the same rules: * and % wildcards, words in any order; and a red strip when page data fails to load.'),
     },
     {
         'key': 'general.me',
@@ -831,6 +833,8 @@ SCREENS = [
               '"Snooze" hides the notification for an hour then brings it back — handy when you will act later and don\'t want to forget.'),
             T('لو رفضت إذن الإشعارات في المتصفح، فعّله من إعدادات المتصفح نفسه ثم ارجع هنا.',
               'If you denied notification permission in the browser, enable it from the browser settings then come back here.'),
+            T('رقم الجرس بيتحدّث لحظياً: إشعار جديد، أو قراءة أو تأجيل أو حذف من أي تابة مفتوحة عندك، بيظهر فوراً في كل التابات. لو الاتصال اللحظي اتقطع، الجرس بيتحدّث كل دقيقتين لحد ما يرجع.',
+              'The bell number updates live: a new notification, or a read, snooze or delete in any of your open tabs, shows at once in every tab. If the live connection drops, the bell refreshes every two minutes until it is back.'),
         ],
         'related': ['general.announcements'],
         'tour': [
@@ -904,9 +908,9 @@ SCREENS = [
              'text': T('على الموبايل: يعلّم كل الإشعارات مقروءة مرة واحدة.', 'On the phone: marks every notification read at once.'),
              'open_hint': T('على الموبايل، ويظهر لما يكون فيه غير مقروء.', 'On the phone, when something is unread.')},
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('مدة حفظ الإشعارات والتحكم في توجيهها', 'Notification retention and routing'),
+        'updated': '2026-11-19',
+
+        'change_note': T('رقم الجرس بيتحدّث لحظياً في كل التابات', 'The bell number updates live in every tab'),
     },
     {
         'key': 'general.announcements',

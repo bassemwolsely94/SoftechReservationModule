@@ -556,7 +556,8 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
   }, [branch])
   useEffect(() => {
     refreshQueue()
-    const t = setInterval(refreshQueue, 20000)
+    // a cashier watches this live: keep 20 s, but not while the tab is hidden (perf Stage 5)
+    const t = setInterval(() => { if (!document.hidden) refreshQueue() }, 20000)
     return () => clearInterval(t)
   }, [refreshQueue])
 

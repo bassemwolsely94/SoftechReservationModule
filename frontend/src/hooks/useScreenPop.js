@@ -21,6 +21,19 @@ const REFUSED_MS   = 60000     // 4001 auth / 4403 not allowed from this place (
 let _ws = null
 let _listeners = new Set()
 
+/** Is the shared PBX socket open right now? (CallPopBanner polls slowly while it is.) */
+export function isPbxSocketOpen() {
+  return !!_ws && _ws.readyState === WebSocket.OPEN
+}
+
+/** Listen to every PBX socket frame (incoming_call / call_answered / call_ended …). Opens the shared
+ *  socket if needed; returns the unsubscribe function. */
+export function subscribePbxEvents(cb) {
+  _connect()
+  _listeners.add(cb)
+  return () => _listeners.delete(cb)
+}
+
 function _connect() {
   if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
