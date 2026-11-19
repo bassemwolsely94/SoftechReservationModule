@@ -91,6 +91,7 @@ def build_item_queryset(filters: dict) -> list:
     # ── Producer / manufacturer filter ────────────────────────────────────────
     producer = (filters.get('producer_name') or '').strip()
     if producer:
+        # saved criterion for a bulk action, not a search box; stays literal contains (S4)
         qs = qs.filter(producer_name__icontains=producer)
 
     # ── ABC class filter (from latest demand run) ─────────────────────────────

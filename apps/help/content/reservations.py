@@ -636,6 +636,8 @@ SCREENS = [
             T('الحجز في حالة نهائية (تم التسليم / ملغي) لا يمكن تغيير حالته.', 'A reservation in a final state (fulfilled / cancelled) cannot change status.'),
             T('المطابقة مع SOFTECH تُعاد بعد فترة انتظار قصيرة بين كل محاولة؛ لو «غير موجود» تأكد من رقم المستند.',
               'The SOFTECH match can be retried after a short wait between attempts; if "not found", check the document number.'),
+            T('المطابقة بتدوّر على الفاتورة في فرع الحجز. لو الرقم لقيته تحت فرع تاني بس، النتيجة «جزئي» مش «متطابق» — راجع المستند بنفسك؛ ولو الرقم موجود في أكتر من فرع تاني، النتيجة «غير موجود».',
+              'The match looks for the invoice at the branch of the reservation. If the number is found only under another branch, the result is "Partial", not "Matched" — check the document yourself; if it exists at more than one other branch, the result is "Not found".'),
         ],
         'related': ['reservations.board', 'customers.detail', 'transfers.detail'],
         'tour': [
@@ -794,7 +796,8 @@ SCREENS = [
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('صنف إضافي ما اتحفظش وقت الإنشاء بيظهر في تنبيه بدل ما يختفي.', 'An extra item that failed to save at creation now shows in a notice instead of vanishing.'),
+        'change_note': T('مطابقة SOFTECH بقت بالفرع ونوع المستند: فاتورة بنفس الرقم في فرع تاني بقت «جزئي» مش «متطابق». صنف إضافي ما اتحفظش وقت الإنشاء بيظهر في تنبيه بدل ما يختفي.',
+                         'The SOFTECH match now uses branch and document type: an invoice with the same number at another branch is "Partial", not "Matched". An extra item that failed to save at creation now shows in a notice instead of vanishing.'),
     },
     {
         'key': 'reservations.mobile_list',

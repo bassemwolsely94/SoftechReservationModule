@@ -17,6 +17,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.catalog.wildcard import wq
 from apps.pos_orders.permissions import CanViewPos
 
 from apps.chronic.models import IngredientClass
@@ -80,7 +81,7 @@ class IngredientClassViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=True)
         q = self.request.query_params.get('q')
         if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(name_ar__icontains=q) | Q(key__icontains=q))
+            qs = qs.filter(wq(q, 'name', 'name_ar', 'key'))
         return qs
 
     def _guard_edit(self, request):
@@ -142,7 +143,7 @@ class SoftechIngredientRawViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset()
         q = self.request.query_params.get('q')
         if q:
-            qs = qs.filter(Q(ainame__icontains=q) | Q(aicode__icontains=q))
+            qs = qs.filter(wq(q, 'ainame', 'aicode'))
         if self.request.query_params.get('used_only'):
             qs = qs.filter(item_count__gt=0)
         return qs.order_by('ainame')
@@ -181,13 +182,10 @@ class IngredientParseCandidateViewSet(viewsets.ReadOnlyModelViewSet):
                 pass
         molecule = p.get('molecule')
         if molecule:
-            qs = qs.filter(
-                Q(raw_ainame__icontains=molecule) |
-                Q(parsed_components__icontains=molecule)
-            )
+            qs = qs.filter(wq(molecule, 'raw_ainame', 'parsed_components'))
         q = p.get('q')
         if q:
-            qs = qs.filter(raw_ainame__icontains=q)
+            qs = qs.filter(wq(q, 'raw_ainame'))
         return qs.order_by('-confidence', 'raw_ainame')
 
     # ── review write-actions (RBAC: catalog/edit) ────────────────────────────
@@ -371,8 +369,9 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
         p = self.request.query_params
         molecule = p.get('molecule')
         if molecule:
+            # exact id: ?exact=1 asks for the molecule name whole (iexact), as before
             qs = (qs.filter(molecule__iexact=molecule) if p.get('exact')
-                  else qs.filter(molecule__icontains=molecule))
+                  else qs.filter(wq(molecule, 'molecule')))
         sv = p.get('strength_value')
         if sv:
             try:
@@ -390,7 +389,7 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
         if forms:
             any_form = Q()
             for f in forms:
-                any_form |= Q(dosage_form__icontains=f)
+                any_form |= wq(f, 'dosage_form')
             qs = qs.filter(any_form)
         if p.get('class_id'):
             qs = qs.filter(ingredient_class_id=p['class_id'])
@@ -399,7 +398,7 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(source=p['source'])
         q = p.get('q')
         if q:
-            qs = qs.filter(Q(molecule__icontains=q) | Q(item_name__icontains=q))
+            qs = qs.filter(wq(q, 'molecule', 'item_name'))
         return qs.order_by('molecule', 'item_name')
 
     @action(detail=False, methods=['get'])
@@ -408,7 +407,7 @@ class IngredientSearchViewSet(viewsets.ReadOnlyModelViewSet):
         q = (request.query_params.get('q') or '').strip()
         qs = ItemMoleculeIndex.objects.all()
         if q:
-            qs = qs.filter(molecule__icontains=q)
+            qs = qs.filter(wq(q, 'molecule'))
         data = (qs.values('molecule')
                   .annotate(items=Count('item_softech_id', distinct=True))
                   .order_by('-items', 'molecule')[:50])

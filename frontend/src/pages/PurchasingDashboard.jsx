@@ -29,6 +29,7 @@ import useClosedBranches from '../hooks/useClosedBranches'
 import SharedSortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import { wildcardMatch } from '../utils/wildcard'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
 // useColWidths(defaults: number[]) → [widths, onResizeStart(e, colIndex)]
@@ -1116,9 +1117,9 @@ function MultiSelect({ label, options = [], value = [], onChange,
   }, [])
   if (!options.length) return null
   const sel = new Set(value)
-  const ql  = q.trim().toLowerCase()
+  const ql  = q.trim()
   const list = (searchable && ql)
-    ? options.filter(o => `${getLabel(o)} ${getVal(o)}`.toLowerCase().includes(ql))
+    ? options.filter(o => wildcardMatch([getLabel(o), getVal(o)], ql))
     : options
   const toggle = v => onChange(sel.has(v) ? value.filter(x => x !== v) : [...value, v])
 

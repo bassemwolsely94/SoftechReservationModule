@@ -13,6 +13,7 @@ from .engine import InsightEngine
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky')
+# Only while the `analytics` matrix rows are not seeded (a fresh database): the pre-matrix list.
 ANALYST_ROLES = {'admin', 'supervisor', 'purchasing', 'quality_manager'}
 
 from core.permissions import matrix_permission                     # noqa: E402
@@ -190,8 +191,18 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
     def _guard(self):
+        # Generating a report only computes: analytics create, edit or export, the rule for compute
+        # POSTs (Z-11a). Was a role list; same roles today (admin, supervisor, purchasing, quality
+        # manager), now the matrix decides (UAT W3, owner 2026-11-19).
+        # matrix_allows fails open on an unseeded module: until `analytics` rows exist the old list decides.
+        from core.middleware import module_access
+        from core.permissions import matrix_allows
         sp = getattr(self.request.user, 'staff_profile', None)
-        if not (sp and sp.role in ANALYST_ROLES):
+        if 'analytics' not in module_access.seeded_modules():
+            allowed = bool(sp and sp.is_active and sp.role in ANALYST_ROLES)
+        else:
+            allowed = matrix_allows(sp, 'analytics', 'create', 'edit', 'export')
+        if not allowed:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('غير مصرح')
 

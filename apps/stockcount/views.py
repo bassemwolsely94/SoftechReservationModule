@@ -43,7 +43,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import StockCountSession, StockCountSnapshot, DOCCODE_LABELS
-from django.db.models import Q
 from apps.catalog.wildcard import wq
 from core.errors import public_error
 from core.multi_filter import filter_in, multi_values
@@ -552,7 +551,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
 
         search = request.query_params.get('search', '').strip()
         if search:
-            qs = qs.filter(Q(item_code__icontains=search) | wq(search, 'item_name'))
+            qs = qs.filter(wq(search, 'item_code', 'item_name'))
 
         paginator = SnapshotPagination()
         page      = paginator.paginate_queryset(qs, request)

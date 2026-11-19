@@ -16,6 +16,7 @@ import { insuranceApi } from '../api/client'
 import DataTable from '../components/DataTable'
 import ClaimFiscalStatus from '../components/ClaimFiscalStatus'
 import { wildcardMatch } from '../utils/wildcard'
+import { filterClaimItems } from '../utils/claimItemsSearch'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
@@ -3328,8 +3329,7 @@ function RevisionTab({ claimId }) {
     .filter(r => !statusFilter
       || (statusFilter === 'pending' && !r.review_approved)
       || (statusFilter === 'approved' && r.review_approved))
-    .filter(r => !q || wildcardMatch(r.item_name, q) || (r.itemcode || '').includes(q)
-      || wildcardMatch(r.patient_name, q) || String(r.docnumber || '').includes(q))
+    .filter(r => !q || wildcardMatch([r.item_name, r.itemcode, r.patient_name, r.docnumber], q))
   const { sorted, headerProps } = useSortableRows(rows, { defaultSort: { key: 'net_amount', dir: 'desc', type: 'number' } })
   // keyboard flow (shared review-grid keys): Enter approves the line and moves on, Space
   // toggles approve / un-approve
@@ -4394,22 +4394,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   if (!data)   return null
 
   let items = data.items
-  if (q.trim()) {
-    const s = q.trim().toLowerCase()
-    const contains = (v) => {
-      v = (v || '').toString().toLowerCase()
-      if (matchMode === 'begins') return v.startsWith(s)
-      if (matchMode === 'ends')   return v.endsWith(s)
-      return v.includes(s)   // 'contains' and 'notcontains' both use includes
-    }
-    // any in-scope field matches (code and/or name)
-    const anyMatch = (it) =>
-      (searchIn !== 'name' && contains(it.item_code)) ||
-      (searchIn !== 'code' && contains(it.item_name))
-    items = matchMode === 'notcontains'
-      ? items.filter(it => !anyMatch(it))   // keep rows that do NOT contain the term
-      : items.filter(anyMatch)
-  }
+  items = filterClaimItems(items, q, matchMode, searchIn)   // search rules; «*» alone = no filter
   if (catFilter === 'mixed') items = items.filter(it => it.is_mixed)
   else if (catFilter)        items = items.filter(it => it.category === catFilter)
   const ITEM_DEFAULT_SORT = { key: 'gross', dir: 'desc', type: 'number' }

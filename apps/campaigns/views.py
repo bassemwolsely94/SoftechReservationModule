@@ -16,6 +16,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.customers.models import Customer, PurchaseHistory
 from apps.users.models import StaffProfile
 
@@ -119,6 +120,7 @@ def _build_audience_qs(target_filter: dict):
     # ── LEGACY: free-text chronic_conditions (kept for backward compat) ───────
     chronic_category = target_filter.get('chronic_category', '').strip()
     if chronic_category:
+        # saved criterion for a bulk action, not a search box; stays literal contains (S4)
         qs = qs.filter(
             Q(chronic_conditions__icontains=chronic_category)
         )
@@ -300,7 +302,7 @@ class CampaignListCreateView(generics.ListCreateAPIView):
             qs = qs.filter(status=status_param)
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(name__icontains=q)
+            qs = qs.filter(wq(q, 'name'))
         return qs
 
     def perform_create(self, serializer):

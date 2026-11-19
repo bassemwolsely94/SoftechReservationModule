@@ -95,8 +95,7 @@ const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'ت
 const matchFilter = (r, med, q) => {
   if (med.length && !med.includes(r.med_type_code || '')) return false   // med: ticked categories (none = all)
   if (q) {
-    const s = q.trim().toLowerCase()
-    if (!(wildcardMatch(r.name, q) || `${r.code}`.toLowerCase().includes(s))) return false
+    if (!wildcardMatch([r.name, r.code], q)) return false
   }
   return true
 }

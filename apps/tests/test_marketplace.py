@@ -759,6 +759,22 @@ class MarketplaceApiTests(TestCase):
         self.assertEqual(c.status_code, 201, c.content[:300])
         self.assertFalse(ChannelListing.objects.get(pk=c.json()['id']).approved)
 
+    def test_listings_search_follows_the_search_rules(self):
+        # S4: ?q= is a search box — * / % wildcards in typed order on the item name; an item
+        # code / SKU stays exact.
+        other = ChannelListing.objects.create(channel=self.channel, item=make_item('PANADOL EXTRA 500', 'API005'),
+                                              external_sku='SKU9')
+
+        def ids(q):
+            r = self.client_admin.get('/api/marketplace/listings/', {'channel': self.channel.id, 'q': q})
+            self.assertEqual(r.status_code, 200, r.content[:300])
+            return {row['id'] for row in r.json()['results']}
+        self.assertEqual(ids('pan*500'), {other.id})
+        self.assertEqual(ids('500 panadol'), {other.id})          # any order
+        self.assertEqual(ids('SKU1'), {self.listing.id})          # exact SKU
+        self.assertEqual(ids('API001'), {self.listing.id})        # exact item code
+        self.assertEqual(ids('SKU'), set())                       # a SKU part is not a search
+
     def test_stores_branch_scoped(self):
         _, _, client = make_pharmacist('api_ph_store', branch=self.branch)
         r = client.get('/api/marketplace/stores/')

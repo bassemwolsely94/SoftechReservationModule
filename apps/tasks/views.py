@@ -11,6 +11,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.notifications.models import Notification
 from apps.notifications.phone_alerts import hooks as phone_alert_hooks
 from core import branch_scope
@@ -187,11 +188,7 @@ class TaskListCreateView(generics.ListCreateAPIView):
             )
 
         if q := p.get('search'):
-            qs = qs.filter(
-                Q(title__icontains=q) |
-                Q(task_number__icontains=q) |
-                Q(tags__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'title', 'task_number', 'tags'))
 
         if date_from := p.get('date_from'):
             qs = qs.filter(created_at__date__gte=date_from)

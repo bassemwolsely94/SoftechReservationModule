@@ -104,7 +104,6 @@ class ConversationListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, WHATSAPP]
 
     def get_queryset(self):
-        from django.db.models import Q
         qs = (WAConversation.objects.select_related('customer', 'assigned_to__user')
               .exclude(account__is_staff_alerts=True))
         status_filter = self.request.query_params.get('status')
@@ -117,11 +116,7 @@ class ConversationListView(generics.ListAPIView):
                 qs = qs.filter(assigned_to=profile)
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                Q(wa_id__icontains=q) |
-                wq(q, 'customer__name') |
-                Q(customer__phone__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'wa_id', 'customer__name', 'customer__phone'))
         return qs.order_by('-last_message_at')
 
 

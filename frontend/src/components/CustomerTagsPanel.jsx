@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { customersApi, tagsApi } from '../api/client'
+import { wildcardMatch } from '../utils/wildcard'
 
 const TYPE_ICONS = {
   doctor:    '👨‍⚕️',
@@ -56,7 +57,7 @@ function TagSearch({ existingTagIds, onAdd }) {
 
   const filtered = allTags.filter(t =>
     !existingTagIds.includes(t.id) &&
-    (t.name.includes(q) || t.name_en?.toLowerCase().includes(q.toLowerCase()))
+    wildcardMatch([t.name, t.name_en], q)
   )
 
   async function handleCreateAndAdd() {

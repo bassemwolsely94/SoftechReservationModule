@@ -7,6 +7,7 @@ from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, generics, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 
 from core import branch_scope
@@ -48,7 +49,7 @@ class ExternalPaymentListView(branch_scope.BranchScopedMixin, generics.ListCreat
     POST /api/payments/  — create new payment record
     """
     permission_classes = [IsAuthenticated, FINANCE]
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['customer_name', 'reference_number', 'softech_invoice_code', 'customer_phone']
     ordering_fields    = ['created_at', 'payment_date', 'amount', 'status']
     ordering           = ['-created_at']
