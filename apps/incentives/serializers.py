@@ -266,13 +266,19 @@ from .models import SalesTarget   # noqa: E402
 
 class SalesTargetSerializer(serializers.ModelSerializer):
     attainment   = serializers.SerializerMethodField()
-    scope_label  = serializers.CharField(source='get_scope_type_display', read_only=True)
+    scope_label  = serializers.SerializerMethodField()
+    crew_name    = serializers.CharField(source='crew.name', read_only=True, default=None)
     metric_label = serializers.CharField(source='get_metric_display', read_only=True)
     branch_name  = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
 
     def get_attainment(self, obj):
         return obj.attainment()
+
+    def get_scope_label(self, obj):
+        if obj.crew_id:
+            return f'{obj.get_scope_type_display()} · {obj.crew.name}'
+        return obj.get_scope_type_display()
 
     def get_branch_name(self, obj):
         if not obj.branch_id:
@@ -286,8 +292,35 @@ class SalesTargetSerializer(serializers.ModelSerializer):
         model  = SalesTarget
         fields = [
             'id', 'label', 'scope_type', 'scope_label',
-            'branch', 'branch_name', 'softech_user', 'category', 'category_name',
+            'branch', 'branch_name', 'softech_user', 'category', 'category_name', 'crew', 'crew_name',
             'metric', 'metric_label', 'period_start', 'period_end',
             'target_value', 'attainment', 'created_at',
         ]
         read_only_fields = ['created_at']
+
+    CREW_REQUIRED = 'اختر طاقم الكول سنتر'
+
+    def validate(self, data):
+        """A crew target names a live call-center crew; any other scope carries no crew
+        (crews piece 2b Part B — the call center's targets live on the crew)."""
+        inst = self.instance
+        scope = data.get('scope_type', getattr(inst, 'scope_type', SalesTarget.SCOPE_BRANCH))
+        crew = data['crew'] if 'crew' in data else getattr(inst, 'crew', None)
+        if scope == SalesTarget.SCOPE_CREW:
+            if crew is None or crew.is_archived or crew.type != 'call_center':
+                raise serializers.ValidationError({'crew': self.CREW_REQUIRED})
+            branch = data['branch'] if 'branch' in data else getattr(inst, 'branch', None)
+            user = data['softech_user'] if 'softech_user' in data else getattr(inst, 'softech_user', '')
+            cat = data['category'] if 'category' in data else getattr(inst, 'category', None)
+            if branch is not None or user or cat is not None:
+                raise serializers.ValidationError(
+                    {'scope_type': 'هدف الطاقم لا يحمل فرعًا ولا كود مندوب ولا فئة'})
+            metric = data.get('metric', getattr(inst, 'metric', SalesTarget.METRIC_REVENUE))
+            if metric not in SalesTarget.CREW_METRICS:
+                labels = dict(SalesTarget.METRIC_CHOICES)
+                allowed = '، '.join(f'«{labels[m]}»' for m in SalesTarget.CREW_METRICS)
+                raise serializers.ValidationError(
+                    {'metric': f'هدف الطاقم يكون على أحد مقاييس الطاقم فقط: {allowed}'})
+        elif crew is not None:
+            raise serializers.ValidationError({'crew': 'الطاقم يُحدَّد لمستهدف من نوع «طاقم» فقط'})
+        return data

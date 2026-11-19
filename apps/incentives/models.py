@@ -536,9 +536,11 @@ class IncentiveCalculationLog(models.Model):
 class SalesTarget(models.Model):
     SCOPE_CHAIN = 'chain'; SCOPE_BRANCH = 'branch'
     SCOPE_SALESPERSON = 'salesperson'; SCOPE_CATEGORY = 'category'
+    SCOPE_CREW = 'crew'     # the call-center crew (crews piece 2b Part B)
     SCOPE_CHOICES = [
         (SCOPE_CHAIN, 'الشبكة كاملة'), (SCOPE_BRANCH, 'فرع'),
         (SCOPE_SALESPERSON, 'مندوب'), (SCOPE_CATEGORY, 'فئة'),
+        (SCOPE_CREW, 'طاقم'),
     ]
     METRIC_REVENUE = 'net_revenue'; METRIC_ORDERS = 'orders'
     # Branch-KPI metrics (doc 16) — actuals resolved via forecasting.KpiResolver.
@@ -562,6 +564,10 @@ class SalesTarget(models.Model):
     }
     # Metrics with no PurchaseHistory source — actuals read from KpiActualRollup (CDR).
     ROLLUP_ONLY_METRICS = {'call_count'}
+    # The call-center crew's board metrics (build_crew_rollups) — a crew target may only name
+    # one of these; any other metric would read 0 forever (crews piece 2b Part B).
+    CREW_METRICS = ('cash_delivery', 'gross_profit', 'beauty', 'customer_count', 'pic_count',
+                    'call_count')
 
     label        = models.CharField(max_length=120, blank=True, verbose_name='الاسم')
     scope_type   = models.CharField(max_length=12, choices=SCOPE_CHOICES, default=SCOPE_BRANCH)
@@ -569,6 +575,8 @@ class SalesTarget(models.Model):
     softech_user = models.CharField(max_length=20, blank=True, db_index=True,
                                     verbose_name='كود المندوب (SOFTECH)')
     category     = models.ForeignKey('catalog.Category', on_delete=models.CASCADE, null=True, blank=True)
+    crew         = models.ForeignKey('crews.Crew', on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='sales_targets', verbose_name='الطاقم')
     metric       = models.CharField(max_length=20, choices=METRIC_CHOICES, default=METRIC_REVENUE)
     period_start = models.DateField(verbose_name='من')
     period_end   = models.DateField(verbose_name='إلى')
@@ -600,6 +608,14 @@ class SalesTarget(models.Model):
         from django.db.models import Sum
         from apps.customers.models import PurchaseHistoryLine
 
+        # A crew target (the call center) reads the KPI board's rollup figure for the crew —
+        # owner ruling D (crews piece 2b Part B): incentives use the board's number, every metric.
+        if self.scope_type == self.SCOPE_CREW:
+            if not self.crew_id:
+                return 0.0
+            from apps.crews.kpi import crew_actual
+            return crew_actual(self.crew, self.metric, self.period_start, self.period_end)
+
         # Branch-KPI metrics (doc 16) resolve via the channel-bucket engine.
         # Scopes: branch (branch_ids), salesperson (softech_user), category (category_id).
         if self.metric in self.KPI_RESOLVER_METRICS:
@@ -613,11 +629,21 @@ class SalesTarget(models.Model):
                 softech_user=softech_user, category_id=category_id,
             ))
         if self.metric in self.ROLLUP_ONLY_METRICS:
+            from django.db.models import Q
             from apps.forecasting.models import KpiActualRollup
             qs = KpiActualRollup.objects.filter(metric=self.metric).filter(
                 year__gte=self.period_start.year, year__lte=self.period_end.year)
             if self.scope_type == self.SCOPE_BRANCH and self.branch_id:
                 qs = qs.filter(branch_id=self.branch_id)
+            else:
+                # chain (and any other non-branch scope): the analytics branches' rows plus each
+                # live call-center crew's rows, each once (Review Focus 2). call_count exists only
+                # for the call center, so a chain call_count target = the call-center crew; a
+                # legacy call-center / closed branch row is never added on top of its crew row.
+                from apps.forecasting.call_center import call_center_crew_ids
+                from apps.forecasting.kpi import analytics_branches
+                qs = qs.filter(Q(branch__in=analytics_branches())
+                               | Q(crew_id__in=call_center_crew_ids()))
             lo = (self.period_start.year, self.period_start.month)
             hi = (self.period_end.year, self.period_end.month)
             return float(sum(r.value for r in qs if lo <= (r.year, r.month) <= hi))

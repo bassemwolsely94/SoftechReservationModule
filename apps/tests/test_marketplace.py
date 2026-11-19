@@ -212,7 +212,7 @@ class MarketplaceAvailabilityTests(TestCase):
         self._stock(10)
         l = self._listing()
         pos = SoftechSalesOrder.objects.create(branch=self.branch, status=SoftechSalesOrder.STATUS_SETTLED,
-                                               channel='contract', softech_branchcode='1', store_code='100')
+                                               channel='permanent', softech_branchcode='1', store_code='100')
         order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
                                              external_id='S1', status=ExternalOrder.STATUS_READY, pos_order=pos)
         ExternalOrderLine.objects.create(order=order, listing=l, item=self.item, qty=Decimal('2'))
@@ -499,11 +499,11 @@ class MarketplaceToPosTests(TestCase):
                             [IncomingLine('K', 'صنف', Decimal('2'), Decimal('10'))], {})
         self.order, _ = intake.ingest(self.channel, inc, source='api')
 
-    def test_convert_creates_contract_draft_on_platform_account(self):
+    def test_convert_creates_permanent_draft_on_platform_account(self):
         from apps.audit.models import AuditLog
         from apps.marketplace import to_pos
         draft = to_pos.convert(self.order, self.staff)
-        self.assertEqual((draft.channel, draft.status, draft.doc_kind), ('contract', 'draft', 'sale'))
+        self.assertEqual((draft.channel, draft.status, draft.doc_kind), ('permanent', 'draft', 'sale'))
         self.assertEqual(draft.cust_branch_code, 'PL01')
         self.assertEqual(draft.branch, self.branch)
         self.assertEqual(draft.softech_branchcode, self.branch.softech_branch_id)
@@ -951,7 +951,7 @@ class MarketplaceReservationTests(TestCase):
         self.n += 1
         pos = None
         if pos_status:
-            pos = SoftechSalesOrder.objects.create(branch=self.branch, status=pos_status, channel='contract',
+            pos = SoftechSalesOrder.objects.create(branch=self.branch, status=pos_status, channel='permanent',
                                                    softech_branchcode='1', store_code='100')
         o = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
                                          external_id=f'RS{self.n}', status=status, pos_order=pos)
@@ -1002,7 +1002,7 @@ class MarketplaceToPosLinkTests(TestCase):
         self.token = uuid.uuid5(uuid.NAMESPACE_URL, 'marketplace:lk_test:L1')
 
     def _existing(self, **kw):
-        data = dict(branch=self.branch, status=SoftechSalesOrder.STATUS_DRAFT, channel='contract',
+        data = dict(branch=self.branch, status=SoftechSalesOrder.STATUS_DRAFT, channel='permanent',
                     cust_branch_code='PL01', softech_branchcode='B01', store_code='B01', client_token=self.token)
         data.update(kw)
         return SoftechSalesOrder.objects.create(**data)
@@ -1367,7 +1367,7 @@ class MarketplaceReReviewTests(TestCase):
         from apps.audit.models import AuditLog
         from apps.marketplace import intake
         pos = SoftechSalesOrder.objects.create(branch=self.branch, status=SoftechSalesOrder.STATUS_DRAFT,
-                                               channel='contract', cust_branch_code='PL01',
+                                               channel='permanent', cust_branch_code='PL01',
                                                softech_branchcode='B01', store_code='B01')
         order = ExternalOrder.objects.create(channel=self.channel, store=self.store, branch=self.branch,
                                              external_id='RR1', status=ExternalOrder.STATUS_READY, pos_order=pos)

@@ -31,10 +31,9 @@ class Command(BaseCommand):
         from apps.forecasting.kpi import KpiResolver
         from apps.forecasting.models import KpiActualRollup
 
-        # resolve branches — retail only. NEVER the Call Center (kind call_center): its sales
-        # are attributed to CC agents across all branches (not to the CC branch id), so a
-        # branch-level rollup would wrongly write 0 and clobber build_call_center_rollups'
-        # agent-based values.
+        # resolve branches — retail only. NEVER a call-center branch: call-center sales are
+        # attributed to the call-center crew's sellers across all branches (build_crew_rollups
+        # writes them as crew rows), never to a branch id.
         branches = Branch.objects.retail()
         if opts.get('branch'):
             keys = set(map(str, opts['branch']))

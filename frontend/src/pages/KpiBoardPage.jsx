@@ -124,8 +124,12 @@ function SubHeaders({ metrics, sort, onSort }) {
   )
 }
 
+// The call-center crew's block: its targets are crew-scope (scope_type 'crew'), its forecast
+// member key is cc.scope_key ('crew:<id>') — never a branch.
 function CallCenterBlock({ cc, canEdit, onSave, onPull, pullingKey }) {
   const metrics = cc.metrics || []
+  const saveCrew = p => onSave({ ...p, branch_id: undefined, crew_id: cc.crew_id })
+  const pullCrew = onPull ? p => onPull({ metric: p.metric, scope_key: cc.scope_key }) : null
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto mt-4" data-tour="analytics-kpi-board-call-center">
       <div className="px-4 pt-3 pb-1 font-bold text-gray-800 text-sm">📞 الكول سنتر</div>
@@ -148,9 +152,9 @@ function CallCenterBlock({ cc, canEdit, onSave, onPull, pullingKey }) {
                 <Fragment key={m.key}>
                   <td className="px-2 py-2.5 text-center tabular-nums text-gray-800 border-r border-gray-50">{fmt(c.actual, m.is_count)}</td>
                   <MtdTarget c={c} isCount={m.is_count} />
-                  <TargetCell c={c} branchId={cc.branch_id} metric={m.key} isCount={m.is_count}
-                    canEdit={canEdit} onSave={onSave} onPull={onPull}
-                    pulling={pullingKey === `${cc.branch_id}:${m.key}`} />
+                  <TargetCell c={c} branchId={null} metric={m.key} isCount={m.is_count}
+                    canEdit={canEdit} onSave={saveCrew} onPull={pullCrew}
+                    pulling={pullingKey === `${cc.scope_key}:${m.key}`} />
                   <MetricPct c={c} />
                 </Fragment>
               )
@@ -198,9 +202,9 @@ export default function KpiBoardPage() {
   const monthEnd   = `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`
 
   const saveTarget = useMutation({
-    mutationFn: ({ target_id, branch_id, metric, value }) => target_id
+    mutationFn: ({ target_id, branch_id, crew_id, metric, value }) => target_id
       ? targetsApi.update(target_id, { target_value: value })
-      : targetsApi.create({ scope_type: 'branch', branch: branch_id, metric,
+      : targetsApi.create({ ...(crew_id ? { scope_type: 'crew', crew: crew_id } : { scope_type: 'branch', branch: branch_id }), metric,
           period_start: monthStart, period_end: monthEnd, target_value: value,
           label: `${MONTHS[month - 1]} ${year}` }),
     onSuccess: () => { setMsg('تم حفظ الهدف'); qc.invalidateQueries({ queryKey: ['kpi-board', year, month] }) },
@@ -214,8 +218,9 @@ export default function KpiBoardPage() {
   // per-cell pull: set ONE target from the selected scenario's forecast for that branch×metric
   const [pullingKey, setPullingKey] = useState('')
   const pullCell = useMutation({
-    mutationFn: ({ branch_id, metric }) => forecastApi.commitCell(pullSid, { branch_id, metric }),
-    onMutate: ({ branch_id, metric }) => setPullingKey(`${branch_id}:${metric}`),
+    mutationFn: ({ branch_id, scope_key, metric }) => forecastApi.commitCell(pullSid,
+      scope_key ? { scope_key, metric } : { branch_id, metric }),
+    onMutate: ({ branch_id, scope_key, metric }) => setPullingKey(`${scope_key || branch_id}:${metric}`),
     onSuccess: () => { setMsg('تم اعتماد هذا الهدف من النموذج'); qc.invalidateQueries({ queryKey: ['kpi-board', year, month] }) },
     onError: (e) => setMsg(e?.response?.data?.detail || 'تعذّر اعتماد الهدف من النموذج'),
     onSettled: () => setPullingKey(''),

@@ -15,6 +15,16 @@ const PACE = {
   missed: { label: 'لم يتحقق', cls: 'bg-red-100 text-red-700' },
 }
 const fmt = n => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+// The call-center crew's board metrics — the only ones a crew target may name
+// (SalesTarget.CREW_METRICS; the server refuses any other).
+const CREW_METRICS = [
+  ['cash_delivery', 'نقدى + توصيل'],
+  ['gross_profit', 'معامل الربحية'],
+  ['beauty', 'التجميل'],
+  ['customer_count', 'عدد العملاء'],
+  ['pic_count', 'عدد العملاء (PIC)'],
+  ['call_count', 'عدد المكالمات'],
+]
 
 export default function TargetsPage() {
   const qc = useQueryClient()
@@ -96,13 +106,20 @@ export default function TargetsPage() {
 
 function TargetForm({ onDone }) {
   const [f, setF] = useState({
-    label: '', scope_type: 'branch', branch: '', softech_user: '',
+    label: '', scope_type: 'branch', branch: '', softech_user: '', crew: '',
     metric: 'net_revenue', period_start: '', period_end: '', target_value: '',
   })
   const { data: branches = [] } = useQuery({
     queryKey: ['branches'],
     queryFn: () => branchesApi.list().then(r => r.data.results || r.data),
   })
+  const { data: crews = [] } = useQuery({
+    queryKey: ['target-crews'],
+    queryFn: () => targetsApi.crews().then(r => r.data),
+    enabled: f.scope_type === 'crew',
+  })
+  // exactly one call-center crew: choose it for the user
+  const crewId = f.crew || (crews.length === 1 ? String(crews[0].id) : '')
   const create = useMutation({ mutationFn: (data) => targetsApi.create(data), onSuccess: onDone })
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
 
@@ -112,29 +129,44 @@ function TargetForm({ onDone }) {
       period_start: f.period_start, period_end: f.period_end,
       target_value: f.target_value,
       branch: f.scope_type === 'branch' ? f.branch || null : null,
+      crew: f.scope_type === 'crew' ? Number(crewId) || null : null,
       softech_user: f.scope_type === 'salesperson' ? f.softech_user : '',
     }
     create.mutate(payload)
   }
   const valid = f.period_start && f.period_end && f.target_value &&
-    (f.scope_type !== 'branch' || f.branch) && (f.scope_type !== 'salesperson' || f.softech_user)
+    (f.scope_type !== 'branch' || f.branch) && (f.scope_type !== 'salesperson' || f.softech_user) &&
+    (f.scope_type !== 'crew' || crewId)
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 grid gap-2 md:grid-cols-3" data-tour="analytics-targets-form">
       <input className="input-field" placeholder="اسم الهدف" value={f.label} onChange={e => set('label', e.target.value)} />
-      <select className="input-field" value={f.scope_type} onChange={e => set('scope_type', e.target.value)} data-tour="analytics-targets-scope">
+      <select className="input-field" value={f.scope_type} onChange={e => setF(s => ({ ...s, scope_type: e.target.value, metric: e.target.value === 'crew' ? 'cash_delivery' : 'net_revenue' }))} data-tour="analytics-targets-scope">
         <option value="chain">الشبكة كاملة</option>
         <option value="branch">فرع</option>
         <option value="salesperson">مندوب</option>
+        <option value="crew">طاقم</option>
       </select>
       <select className="input-field" value={f.metric} onChange={e => set('metric', e.target.value)} data-tour="analytics-targets-metric">
-        <option value="net_revenue">صافي المبيعات</option>
-        <option value="orders">عدد الفواتير</option>
+        {f.scope_type === 'crew'
+          ? CREW_METRICS.map(([v, l]) => <option key={v} value={v}>{l}</option>)
+          : (
+            <>
+              <option value="net_revenue">صافي المبيعات</option>
+              <option value="orders">عدد الفواتير</option>
+            </>
+          )}
       </select>
       {f.scope_type === 'branch' && (
         <select className="input-field" value={f.branch} onChange={e => set('branch', e.target.value)}>
           <option value="">اختر الفرع…</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name}</option>)}
+        </select>
+      )}
+      {f.scope_type === 'crew' && (
+        <select className="input-field" value={crewId} onChange={e => set('crew', e.target.value)} data-tour="analytics-targets-crew">
+          <option value="">اختر الطاقم…</option>
+          {crews.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       )}
       {f.scope_type === 'salesperson' && (

@@ -12,6 +12,7 @@ import ScreenUsageTab from '../components/ScreenUsageTab'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import QueryState from '../components/QueryState'
 
 const LOG_SORT_KEYS = ['action', 'user_name', 'model_name', 'created_at']
 
@@ -133,8 +134,9 @@ function AuditLogsTab() {
   const [ordering, setOrdering] = useState('')      // server-side: the list is a paged top-100
   const { headerProps } = useServerSort(ordering, setOrdering, { allowed: LOG_SORT_KEYS })
 
-  const { data: logs = [], isLoading } = useQuery({
+  const logsQ = useQuery({
     queryKey: ['audit-logs', filters, ordering],
+    meta: { ownErrorState: true },
     queryFn:  () => auditApi.logs({
       action: filters.action.length ? filters.action.join(',') : undefined,
       search: filters.search || undefined,
@@ -143,6 +145,8 @@ function AuditLogsTab() {
     }).then(r => r.data.results || r.data),
     refetchInterval: 60_000,
   })
+  const logs = logsQ.data ?? []
+  const isLoading = logsQ.isLoading
 
   const ACTION_FILTERS = [
     { code: 'reservation_created',       name: 'إنشاء حجوزات' },
@@ -178,12 +182,10 @@ function AuditLogsTab() {
         <div className="space-y-2 animate-pulse">
           {[1,2,3,4,5].map(i => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
         </div>
-      ) : logs.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <div className="text-4xl mb-2">📋</div>
-          <div>لا توجد سجلات</div>
-        </div>
       ) : (
+        // a failed read says so instead of «لا توجد سجلات» (FE-7)
+        <QueryState q={logsQ} isEmpty={logs.length === 0} className="text-center py-12"
+          empty={<><div className="text-4xl mb-2">📋</div><div>لا توجد سجلات</div></>}>
         <div data-tour="admin-audit-log-table" className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
@@ -208,6 +210,7 @@ function AuditLogsTab() {
             </tbody>
           </table>
         </div>
+        </QueryState>
       )}
     </div>
   )

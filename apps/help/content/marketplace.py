@@ -159,13 +159,13 @@ SCREENS = [
                        'items, and "❄ allow" is set by a supervisor only (it approves the item too). ↑↓ to move and Enter '
                        'to approve or unapprove the row.')},
             {'key': 'channels', 'title': T('🔌 المنصات والفروع', '🔌 Platforms & branches'),
-             'body': T('إعداد كل منصة: الاسم، كود حسابها في SOFTECH (كل طلباتها تُسجَّل بيعًا آجلًا عليه)، قاعدة السعر '
+             'body': T('إعداد كل منصة: الاسم، كود حسابها في SOFTECH — عميل دائم (كل طلباتها تُسجَّل بيعًا آجلًا بالكامل عليه، ونقطة البيع ترفض أي سداد نقدي أو بطاقة على هذا الحساب)، قاعدة السعر '
                        '(سعر الرف = سعر العبوة + ضريبته مقربًا للقرش، أو سعر الرف + نسبة مقربًا لأقرب ربع جنيه)، احتياطي '
                        'المخزون وأقصى كمية للصنف. كود المنصة لا يتغير بعد وصول طلبات عليها، والفرع المغلق لا يُربط. '
                        'تحتها فروع المنصة: كود المتجر عند '
                        'المنصة وطريقة التوصيل وتفعيله. «إرسال المخزون» يرسل الكميات المتاحة؛ وطالما مفتاح الإرسال مقفول يظهر '
                        '«تجريبي — لا يُرسل» ولا يخرج شيء. سجل الإرسال تحته.',
-                       'Each platform’s setup: name, its SOFTECH account code (all its orders post as a credit sale on it), '
+                       'Each platform’s setup: name, its SOFTECH account code — a «permanent customer» account (all its orders post as a 100% credit sale on it; the POS refuses any cash or card payment on that account), '
                        'the price rule (shelf price = pack price plus its tax, to the piastre; or shelf price + a '
                        'percentage, to the nearest quarter pound), the stock buffer and the most per item. The platform '
                        'code is fixed once orders exist, and a closed branch cannot be linked. '

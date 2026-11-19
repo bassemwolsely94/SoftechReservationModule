@@ -17,7 +17,10 @@ MODULE = {
         'تختاره، ولا يمكن أن يبدأ قبل أول الشهر الحالي، فلا يغيّر الشهور المقفلة أبدًا. الشخص غير الموجود في كشف '
         'الرواتب (كود مستخدم SOFTECH أو رقم داخلي فقط) يظهر بعلامة «خارج كشف الرواتب». تبويب «بائع غير محدد» '
         'يبيّن نسبة المبيعات المسجلة على حساب عام أو حساب جهاز كاشير بدل البائع الحقيقي؛ إصلاحها أمر تشغيلي '
-        '(أن يسجل كل بائع بحسابه) وليس من هذه الشاشة. كل تغيير يُسجّل في سجل المراجعة، والشاشة لا تقرأ من SOFTECH ولا تكتب فيه.',
+        '(أن يسجل كل بائع بحسابه) وليس من هذه الشاشة. طاقم «الكول سنتر» من نوع كول سنتر يُبنى بأمر seed_call_center_crew من أكواد البائعين '
+        'والأرقام الداخلية في إعداد الكول سنتر، مؤرخًا من أول شهر له أرقام: أرقامه هي مبيعات أعضائه (بائع الفاتورة لا الكاشير) '
+        'داخل تواريخ عضويتهم ومكالمات أرقامهم الداخلية. وبقرار المالك (2026-11-18) صار هذا الطاقم مصدر لوحة المؤشرات '
+        'والمستهدفات والتنبؤات والحوافز للكول سنتر، وأُغلق فرع «الكول سنتر» القديم. كل تغيير يُسجّل في سجل المراجعة، والشاشة لا تقرأ من SOFTECH ولا تكتب فيه.',
         'A crew says "who" and a branch says "where": a crew is a set of people who work together, such as the call '
         'center or all pharmacists, and its members come from rules (job title, branch, department, section) and from '
         'manual additions or exclusions. Membership is dated: every rule and every manual row has a start and an end '
@@ -25,7 +28,10 @@ MODULE = {
         'start before the first of the current month, so closed months never change. Someone not on the payroll (a '
         'SOFTECH user code or a phone extension only) carries an «off payroll» badge. The "Unknown seller" tab shows the '
         'share of sales recorded on a generic or cashier-station account instead of the real seller; fixing it is an '
-        'operations matter (every seller signing in with their own account), not something this screen does. Every '
+        'operations matter (every seller signing in with their own account), not something this screen does. The call-center crew «الكول سنتر» is created by the seed_call_center_crew command from the seller codes '
+        'and extensions in the call-center settings, dated from its first month with figures: its figures are its members’ sales '
+        '(the invoice seller, never the cashier) inside their membership dates and the calls of their extensions. By the owner\'s '
+        'decision (2026-11-18) this crew now feeds the call-center figures of the KPI board, targets, forecasts and incentives, and the old call-center branch is closed. Every '
         'change is written to the audit log, and the screen never reads from or writes to SOFTECH.'),
     'journeys': [
         {'key': 'build_crew', 'shell': 'desktop', 'roles': ['admin'],
@@ -181,6 +187,6 @@ SCREENS = [
                        'The biggest accounts by amount. "Generic account" counts the account as unknown.'),
              'open_hint': _UNATTRIBUTED_TAB},
         ],
-        'updated': '2026-11-13',
+        'updated': '2026-11-18',
     },
 ]
