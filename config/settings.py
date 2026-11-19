@@ -889,6 +889,15 @@ REFILL_REMINDER_SEND_ENABLED = config('REFILL_REMINDER_SEND_ENABLED', default=Fa
 REFILL_REMINDER_TEMPLATE     = config('REFILL_REMINDER_TEMPLATE', default='refill_reminder')
 REFILL_REMINDER_LANGUAGE     = config('REFILL_REMINDER_LANGUAGE', default='ar')
 REFILL_REMINDER_DAILY_CAP    = config('REFILL_REMINDER_DAILY_CAP', default=300, cast=int)
+# C09 follow-ups nightly (apps/followups/nightly.py): auto-close, stale → missed, generation. Local DB only.
+FOLLOWUPS_NIGHTLY_ENABLED   = config('FOLLOWUPS_NIGHTLY_ENABLED', default=True, cast=bool)
+FOLLOWUPS_STALE_AFTER_DAYS  = config('FOLLOWUPS_STALE_AFTER_DAYS', default=3, cast=int)
+# C08 refill-due call list (apps/followups/refill_due.py) — the "regular buyer" rule; owner questions in the PR.
+FOLLOWUPS_REFILL_DUE_MIN_PURCHASES    = config('FOLLOWUPS_REFILL_DUE_MIN_PURCHASES', default=3, cast=int)
+FOLLOWUPS_REFILL_DUE_WINDOW_DAYS      = config('FOLLOWUPS_REFILL_DUE_WINDOW_DAYS', default=365, cast=int)
+FOLLOWUPS_REFILL_DUE_OVERDUE_DAYS_MIN = config('FOLLOWUPS_REFILL_DUE_OVERDUE_DAYS_MIN', default=0, cast=int)
+FOLLOWUPS_REFILL_DUE_CHANNELS         = config('FOLLOWUPS_REFILL_DUE_CHANNELS', default='91,90')   # cash, delivery
+FOLLOWUPS_REFILL_DUE_CONSENT          = config('FOLLOWUPS_REFILL_DUE_CONSENT', default='opt_in')  # or not_withdrawn
 # Project 4 (doc 34): staff drug assistant, pharmacist-approved counselling sheets, WhatsApp counselling card.
 DRUG_ASSISTANT_ENABLED      = config('DRUG_ASSISTANT_ENABLED', default=False, cast=bool)
 COUNSELLING_CONTENT_ENABLED = config('COUNSELLING_CONTENT_ENABLED', default=False, cast=bool)
