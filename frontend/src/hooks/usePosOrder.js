@@ -189,7 +189,43 @@ const rebalanceToNet = (ts, net) => {
   return next
 }
 
-export default function usePosOrder() {
+// ── D-18 server checkout helpers (pure, unit-tested in usePosOrder.checkout.test.js) ───────────────
+// Is the new path on for this branch? ids: null = every branch, [] / missing = off.
+export const serverCheckoutOn = (allow, ref, branch) => {
+  if (!allow || !ref) return false
+  const ids = ref.server_checkout_branch_ids
+  if (ids === null) return true
+  return Array.isArray(ids) && ids.map(Number).includes(Number(branch))
+}
+
+// The cashier's INTENT for the نقدى/آجل split — never amounts the server should trust.
+export const tenderIntentFor = ({ docKind, isClaim, patientPayment, tenders }) => {
+  if (docKind === 'return') return { kind: 'default' }
+  if (isClaim && patientPayment !== '' && patientPayment != null)
+    return { kind: 'patient_copay', patient: Number(patientPayment || 0).toFixed(2) }
+  const credit = (tenders || []).filter(t => t.pay_type === 'credit' && Number(t.amount) > 0)
+    .reduce((s, t) => s + Number(t.amount), 0)
+  if (credit > 0) return { kind: 'credit_portion', credit: credit.toFixed(2) }
+  return { kind: 'default' }
+}
+
+// POST checkout/ body: the create payload + the checkout block.
+export const checkoutBody = (payload, { live, expectedDue, intent }) => ({
+  ...payload,
+  checkout: {
+    mode: live ? 'live' : 'dry_run', ...(live ? { confirm: true } : {}),
+    expected_due: String(expectedDue), tender_intent: intent, tender_extras: {},
+  },
+})
+
+// What the screen does with a checkout reply: 'busy' | 'queued' | 'sent' | 'dry_run'.
+export const checkoutOutcome = (res) => (
+  res?.busy ? 'busy' : res?.queued ? 'queued'
+    : (res?.status === 'pushed' || res?.status === 'settled') ? 'sent' : 'dry_run')
+
+// allowServerCheckout: only the desktop POS screen opts in to D-18 (doc 39). The mobile POS keeps the
+// old endpoints until a separate decision, whatever the server switch says.
+export default function usePosOrder({ allowServerCheckout = false } = {}) {
   const [allBranches, setAllBranches] = useState([])
   const [ref, setRef] = useState(null)
   // header band
@@ -1494,7 +1530,136 @@ export default function usePosOrder() {
     } finally { setBusy(false) }
   }
 
+  // The order create payload — shared by the old path (POST /pos-orders/) and the D-18 server checkout,
+  // so both send the very same basket fields.
+  const _createPayload = (clientToken) => ({
+    client_token: clientToken,
+    branch: Number(branch), channel, doc_kind: docKind, store_code: storeCode || undefined,
+    // Claim channels bill the ACCOUNT (contract/insurance entity) → keep it as the
+    // order customer; the PIC is only the patient (softech_pic). Retail: the PIC
+    // individual is the customer. softech_pic always carries the actual person.
+    customer: (isClaim ? (customer?.id || picCustomer?.id) : (picCustomer?.id || customer?.id)) || null,
+    softech_pic: picCustomer?.softech_pic || customer?.softech_pic || '',
+    customer_name: customer?.name || picCustomer?.name || 'Walk-In Customer',
+    seller_usercode: salesperson || undefined,   // مسئول البيع — usercode ONLY to the ERP
+    referral_doctor_name: doctorName, referral_doctor_code: doctorCode,
+    return_of_invoice: docKind === 'return' && returnInvoice ? Number(returnInvoice) : null,
+    // SOFTECH header extras (now real columns)
+    doc_date: docDate || null, change_discount: Number(changeDiscount || 0),
+    payment_method: paymentMethod,
+    // ما يسدده المريض flows via the tenders (cash co-pay + credit remainder); the server
+    // derives patient_payment from them — see setPatientCopay / pricing.split_payment.
+    alt_price: altPrice, sell_at_cost: sellAtCost,
+    print_receipt: printReceipt, items_reservation: itemsReservation,
+    notes,
+    ...(isClaim && claim.patientname ? { claim } : {}),
+    // مرتجع: which sale lines (+ qty) to return. The backend mirrors the sale authoritatively; sending
+    // the current basket lets the user drop lines / reduce qty → a PARTIAL return (else full mirror).
+    ...(docKind === 'return'
+      ? { return_lines: lines.map(l => ({ dblitemflag: l.dblitemflag, qty: Number(l.qty) })) }
+      : {}),
+    lines: lines.map(l => ({
+      item: l.item, softech_itemcode: l.softech_itemcode, item_name: l.item_name,
+      qty: Number(l.qty), item_sale_price: Number(l.item_sale_price),
+      cust_discp: Number(l.cust_discp), sale_tax_pct: Number(l.sale_tax_pct || 0),
+      item_expiry: l.item_expiry || null,
+      barcode: l.barcode || '', bonus_qty: Number(l.bonus || 0),
+      pkg_price: Number(l.pkg_price || 0), batchno: l.batchno || '',
+      is_reservation: !!l.is_reservation,
+    })),
+  })
+
+  // ── D-18 server-side checkout (doc 39) — only when the server switch lists this branch ────────────
+  // The server owns the money: it prices the basket, splits نقدى/آجل from the cashier's INTENT and posts
+  // through the same writer. The browser sends no tender amounts on this path.
+  const serverCheckout = useMemo(() => serverCheckoutOn(allowServerCheckout, ref, branch),
+    [allowServerCheckout, ref, branch])
+  const tenderIntent = () => tenderIntentFor({ docKind, isClaim, patientPayment, tenders })
+  const [serverQuote, setServerQuote] = useState(null)     // {totals, tenders, offers, ready_errors}
+  const [quotePending, setQuotePending] = useState(false)
+  const quoteKey = serverCheckout && docKind === 'sale' && branch && lines.length
+    ? JSON.stringify({ p: _createPayload(null), i: tenderIntent() }) : ''
+  useEffect(() => {
+    if (!quoteKey) { setServerQuote(null); setQuotePending(false); return undefined }
+    const ctl = new AbortController()
+    setQuotePending(true)
+    const t = setTimeout(() => {
+      const { p, i } = JSON.parse(quoteKey)
+      api.post('/pos-orders/checkout/preview/', { ...p, checkout: { tender_intent: i } }, { signal: ctl.signal })
+        .then(({ data }) => { setServerQuote(data); setQuotePending(false) })
+        .catch((e) => { if (e?.code !== 'ERR_CANCELED') { setServerQuote(null); setQuotePending(false) } })
+    }, 300)
+    return () => { clearTimeout(t); ctl.abort() }
+  }, [quoteKey])
+
+  async function submitServer(live) {
+    setMsg(''); setPlan(null); setErrs([])
+    // the tender checks are the server's on this path (it splits نقدى/آجل itself)
+    const ce = clientValidate(live).filter(e => e.tab !== 'payment')
+    if (ce.length) { setErrs(ce); return }
+    if (live && !window.confirm('سيتم إرسال أمر بيع فعلي إلى شاشة الكاشير في SOFTECH. هل أنت متأكد؟')) return
+    setBusy(true)
+    try {
+      if (selTimerRef.current) clearTimeout(selTimerRef.current)
+      _flushSelections()
+      const clientToken = cartTokenRef.current
+      const shownDue = serverQuote?.totals?.due ?? Number(totals.net).toFixed(2)
+      const body = checkoutBody(_createPayload(clientToken),
+                                { live, expectedDue: shownDue, intent: tenderIntent() })
+      const { data: res } = await api.post('/pos-orders/checkout/', body)
+      if (rx && res.order_id) {
+        try {
+          const fd = new FormData()
+          fd.append('prescription_image', rx)
+          await api.post(`/pos-orders/${res.order_id}/prescription/`, fd,
+                         { headers: { 'Content-Type': 'multipart/form-data' } })
+        } catch { /* prescription upload is advisory — keep the sale going */ }
+      }
+      const doc = res.softech?.docnumber
+      const outcome = checkoutOutcome(res)
+      if (outcome === 'busy') {
+        setMsg('⏳ ' + (res.detail || 'الطلب قيد الإرسال — انتظر لحظة.'))
+      } else if (outcome === 'queued') {
+        setMsg(`⏳ الفرع غير متصل — حُفظ الأمر #${res.order_id} في الطابور وسيُرسل تلقائياً عند عودة الاتصال.`)
+        reset()
+      } else if (outcome === 'sent') {
+        setMsg(`✅ تم الإرسال إلى الكاشير — مستند SOFTECH ${doc || ''} (أمر #${res.order_id}).`)
+        reset()
+      } else {
+        setPlan(res.plan || null)
+        setMsg(`أمر #${res.order_id} — وضع تجريبي (لم يُكتب في SOFTECH). معاينة الحمولة بالأسفل.`)
+      }
+    } catch (e) {
+      const d = e.response?.data
+      if (d?.totals_changed) {
+        // S3: never post at a total the cashier did not see — show the new one, keep the basket
+        setServerQuote(q => ({ ...(q || {}), totals: d.totals, tenders: d.tenders }))
+        setMsg(d.detail)
+      } else if (d?.errors) {
+        const flat = []
+        for (const [k, v] of Object.entries(d.errors)) {
+          if (Array.isArray(v)) v.forEach(x => flat.push(typeof x === 'object' ? JSON.stringify(x) : `${k}: ${x}`))
+          else flat.push(`${k}: ${v}`)
+        }
+        setErrs(flat); setMsg(d.detail || 'فشل التحقق من البيانات.')
+      } else setMsg('خطأ: ' + (d?.detail || e.message))
+    } finally { setBusy(false); refreshQueue() }
+  }
+
+  // What the screen shows: the server's numbers when the new path is on and a quote is in, else today's.
+  const shownTotals = useMemo(() => {
+    const st = serverCheckout && serverQuote?.totals
+    if (!st) return totals
+    const paid = Number(totals.paid)
+    return {
+      ...totals, gross: st.gross, discount: st.discount, tax: st.tax, net: st.due,
+      patientPays: st.patient_pays, claimAmount: st.claim_amount,
+      change: (paid - Number(st.due)).toFixed(2), fromServer: true,
+    }
+  }, [serverCheckout, serverQuote, totals])
+
   async function submit(live) {
+    if (serverCheckout) return submitServer(live)
     setMsg(''); setPlan(null); setErrs([])
     const ce = clientValidate(live)
     if (ce.length) { setErrs(ce); return }
@@ -1508,42 +1673,7 @@ export default function usePosOrder() {
       if (selTimerRef.current) clearTimeout(selTimerRef.current)
       _flushSelections()                       // land any buffered selections before submit
       const clientToken = cartTokenRef.current
-      const payload = {
-        client_token: clientToken,
-        branch: Number(branch), channel, doc_kind: docKind, store_code: storeCode || undefined,
-        // Claim channels bill the ACCOUNT (contract/insurance entity) → keep it as the
-        // order customer; the PIC is only the patient (softech_pic). Retail: the PIC
-        // individual is the customer. softech_pic always carries the actual person.
-        customer: (isClaim ? (customer?.id || picCustomer?.id) : (picCustomer?.id || customer?.id)) || null,
-        softech_pic: picCustomer?.softech_pic || customer?.softech_pic || '',
-        customer_name: customer?.name || picCustomer?.name || 'Walk-In Customer',
-        seller_usercode: salesperson || undefined,   // مسئول البيع — usercode ONLY to the ERP
-        referral_doctor_name: doctorName, referral_doctor_code: doctorCode,
-        return_of_invoice: docKind === 'return' && returnInvoice ? Number(returnInvoice) : null,
-        // SOFTECH header extras (now real columns)
-        doc_date: docDate || null, change_discount: Number(changeDiscount || 0),
-        payment_method: paymentMethod,
-        // ما يسدده المريض flows via the tenders (cash co-pay + credit remainder); the server
-        // derives patient_payment from them — see setPatientCopay / pricing.split_payment.
-        alt_price: altPrice, sell_at_cost: sellAtCost,
-        print_receipt: printReceipt, items_reservation: itemsReservation,
-        notes,
-        ...(isClaim && claim.patientname ? { claim } : {}),
-        // مرتجع: which sale lines (+ qty) to return. The backend mirrors the sale authoritatively; sending
-        // the current basket lets the user drop lines / reduce qty → a PARTIAL return (else full mirror).
-        ...(docKind === 'return'
-          ? { return_lines: lines.map(l => ({ dblitemflag: l.dblitemflag, qty: Number(l.qty) })) }
-          : {}),
-        lines: lines.map(l => ({
-          item: l.item, softech_itemcode: l.softech_itemcode, item_name: l.item_name,
-          qty: Number(l.qty), item_sale_price: Number(l.item_sale_price),
-          cust_discp: Number(l.cust_discp), sale_tax_pct: Number(l.sale_tax_pct || 0),
-          item_expiry: l.item_expiry || null,
-          barcode: l.barcode || '', bonus_qty: Number(l.bonus || 0),
-          pkg_price: Number(l.pkg_price || 0), batchno: l.batchno || '',
-          is_reservation: !!l.is_reservation,
-        })),
-      }
+      const payload = _createPayload(clientToken)
       const { data: order } = await api.post('/pos-orders/', payload)
 
       // Attach the prescription image (multipart) if one was picked — PG-only metadata,
@@ -1661,7 +1791,8 @@ export default function usePosOrder() {
     // two-level customer + branch stores
     custTypes, custType, setCustType, typeCfg,
     entities, entityQuery, setEntityQuery, selectEntity, stores,
-    tenders, setTender, addTender, removeTender, totals, activeTab, setActiveTab,
+    tenders, setTender, addTender, removeTender, totals: shownTotals, activeTab, setActiveTab,
+    serverCheckout, serverQuote, quotePending,
     workflow,
     submit, reset, busy, plan, setPlan, msg, setMsg, errs,
   }

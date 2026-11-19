@@ -237,7 +237,10 @@ WRITE_SITES = {
         idempotency="PG status + 'POS<pk>' vf2 adopt; atomic claim, one flush job (P-11)",
         audit='SoftechSalesOrder erp_payload/readback + AuditLog softech_pos_order_pushed (who) — P-16 (views)',
         trigger='POST pos-orders <pk>/push/ + flush/ (CanPushPosOrders); jobs pos_orders_flush + pos_flush_queued; '
-                'cmds flush_pos_orders / pos_probe --commit / pos_writer_live_test; replacement legs'),
+                'cmds flush_pos_orders / pos_probe --commit / pos_writer_live_test; replacement legs; '
+                'D-18 POST pos-orders checkout/ (CanOperate + CanPush, POS_SERVER_CHECKOUT switch, same '
+                'push_order — client_token advisory lock + basket hash in front); cmd pos_checkout_golden '
+                '(rollback probe, SOFTECH_PROBES_ENABLED, never commits)'),
     'apps/pos_orders/writer.py::probe_cancel': WriteSite(
         tables=('stktransm5', 'stktrans5', 'branchesales5', 'companiesitems5', 'branchesalescc5'),
         flag='SOFTECH_PROBES_ENABLED', dry_run_default=None, idempotency=None, audit='logger',

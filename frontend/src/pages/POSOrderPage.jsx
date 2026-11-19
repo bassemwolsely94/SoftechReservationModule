@@ -36,7 +36,7 @@ import PlatformDraftsButton from '../pos/platform/PlatformDraftsButton'
 const NUMKEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '+/-', '0', '.']
 
 export default function POSOrderPage() {
-  const P = usePosOrder()
+  const P = usePosOrder({ allowServerCheckout: true })   // D-18: server checkout when the switch lists the branch
   const [showCust, setShowCust] = useState(false)
   const [showPic, setShowPic] = useState(false)
   const [picPhone, setPicPhone] = useState('')     // call screen-pop → new PIC with the caller's phone
@@ -662,7 +662,9 @@ function ModeColumn({ P, onCollapse }) {
       </div>
       <div className="border-t mt-2 pt-2 text-center">
         <div className="text-[11px] text-gray-500">إجمالي المطلوب</div>
-        <div className="text-2xl font-bold tabular-nums" style={{ color: '#022871' }}>{money(P.totals.net)}</div>
+        <div className={`text-2xl font-bold tabular-nums${P.quotePending ? ' opacity-50' : ''}`}
+             style={{ color: '#022871' }} data-testid="pos-due">{money(P.totals.net)}</div>
+        {P.serverCheckout && <div className="text-[10px] text-gray-400">يحسبه الخادم</div>}
       </div>
       <KeyboardLegend />
     </div>

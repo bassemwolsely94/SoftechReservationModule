@@ -95,6 +95,10 @@ class SoftechSalesOrder(models.Model):
     # replayed offline create (same token) can't make a duplicate PG order — Postgres
     # treats NULLs as distinct, so legacy rows without a token are unaffected.
     client_token = models.UUIDField(editable=False, null=True, blank=True, unique=True)
+    # D-18 server checkout (doc 39 §2.5): SHA-256 of the basket a checkout request was made with, so a
+    # replay with the same client_token but a DIFFERENT basket is refused instead of overwriting it.
+    # PostgreSQL only — never synced to or from SOFTECH. Null for orders made by the old path.
+    checkout_request_hash = models.CharField(max_length=64, null=True, blank=True, editable=False)
 
     # ── target branch ───────────────────────────────────────────────────────
     branch = models.ForeignKey('branches.Branch', on_delete=models.PROTECT,

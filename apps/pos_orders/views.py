@@ -23,6 +23,7 @@ from .permissions import CanOperatePosOrders, CanPushPosOrders, CanViewPos
 from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
+from . import checkout as _checkout
 from core import branch_scope
 from core.errors import public_error
 from core.multi_filter import filter_in, multi_ids, multi_values
@@ -84,6 +85,18 @@ def _pos_branch(request, branch_id):
     return branch, None
 
 
+def _channel_refusal(request):
+    """POS channel RBAC (server-authoritative) — a member may only create orders on the sales channels
+    they're allowed. Managers get all; empty allow-list = all. Shared by create and the D-18 checkout."""
+    sp = _staff(request.user)
+    channel = (request.data.get('channel') or '').strip()
+    if sp and channel and not sp.can_pos_channel(channel):
+        return Response({'detail': 'غير مصرّح لك بالبيع على هذه القناة.',
+                         'errors': {'channel': ['قناة بيع غير مصرّح بها لهذا المستخدم.']}},
+                        status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
 def _valid_uuid(token):
     """Return the canonical UUID string if `token` is a valid UUID, else None — so a
     malformed client_token is ignored (fresh order) instead of 500-ing the UUIDField query."""
@@ -125,14 +138,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 if not branch_scope.allows(request.user, existing.branch_id):
                     return Response({'detail': 'client_token مستخدم.'}, status=status.HTTP_409_CONFLICT)
                 return Response(OrderSerializer(existing).data, status=status.HTTP_200_OK)
-        # ── POS channel RBAC (server-authoritative) — a member may only create orders on
-        # the sales channels they're allowed. Managers get all; empty allow-list = all.
-        sp = _staff(request.user)
-        channel = (request.data.get('channel') or '').strip()
-        if sp and channel and not sp.can_pos_channel(channel):
-            return Response({'detail': 'غير مصرّح لك بالبيع على هذه القناة.',
-                             'errors': {'channel': ['قناة بيع غير مصرّح بها لهذا المستخدم.']}},
-                            status=status.HTTP_403_FORBIDDEN)
+        refused = _channel_refusal(request)
+        if refused is not None:
+            return refused
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -293,6 +301,12 @@ def ready_order(request, pk):
     order = branch_scope.get_or_404(SoftechSalesOrder, request.user, pk=pk)
     tenders = request.data.get('tenders')   # [{pay_type, amount}, ...] or None
     live = bool(request.data.get('live', settings.POS_LIVE_PRICING))
+    return _ready_checks(request, order, tenders, live) or Response(OrderSerializer(order).data)
+
+
+def _ready_checks(request, order, tenders, live):
+    """The /ready/ body, shared with the D-18 server checkout (checkout.py) so both paths run the same
+    guards in the same order. Returns an error Response, or None when the order is ready."""
     try:
         writer.prepare_order(order, tenders=tenders, live=live)
     except ValueError as e:
@@ -323,7 +337,7 @@ def ready_order(request, pk):
             return Response({'detail': 'الخصم يتجاوز الصلاحية المسموح بها.',
                              'errors': {'discount_authority': disc_errs}},
                             status=status.HTTP_400_BAD_REQUEST)
-    return Response(OrderSerializer(order).data)
+    return None
 
 
 @api_view(['POST'])
@@ -339,6 +353,14 @@ def push_order(request, pk):
     """
     order = branch_scope.get_or_404(SoftechSalesOrder, request.user, pk=pk)
     want_live = (request.data.get('dry_run') is False)
+    return _push_checks(request, order, want_live=want_live, confirm=bool(request.data.get('confirm')),
+                        confirmed_not_landed=bool(request.data.get('confirmed_not_landed')))
+
+
+def _push_checks(request, order, *, want_live, confirm, confirmed_not_landed):
+    """The /push/ body, shared with the D-18 server checkout (checkout.py): offer-approval gate →
+    validation → confirm token → offer usage pre-check → writer.push_order (unchanged) → audit →
+    offer uses. Always returns a Response."""
     dry = (not writer.writer_enabled()) or (not want_live)
 
     # Offer approval gate (Phase 3): a live push of an order carrying an unapproved
@@ -358,7 +380,7 @@ def push_order(request, pk):
                         status=status.HTTP_400_BAD_REQUEST)
 
     # A real cashier write demands an explicit confirmation token (anti-fat-finger).
-    if not dry and not request.data.get('confirm'):
+    if not dry and not confirm:
         return Response({'detail': 'الإرسال الفعلي إلى الكاشير يتطلب تأكيداً.', 'requires_confirm': True},
                         status=status.HTTP_409_CONFLICT)
 
@@ -376,7 +398,7 @@ def push_order(request, pk):
 
     try:
         # «راجعت SOFTECH ولم يُحفظ» — the only way to re-push an outcome-unknown order (audit S-1); audited
-        confirmed = bool(request.data.get('confirmed_not_landed')) and not dry
+        confirmed = bool(confirmed_not_landed) and not dry
         result = writer.push_order(order, dry_run=dry, confirmed_not_landed=confirmed)
         if confirmed:
             result['confirmed_not_landed'] = True
@@ -1428,6 +1450,9 @@ def reference_data(request):
         # D2: the branches this user may sell for (None = every branch); the picker lists only these
         'pos_branch_ids': (lambda ids: None if ids is None else sorted(ids))(branch_scope.branch_ids(request.user)),
         'returns_enabled': bool(getattr(settings, 'POS_RETURNS_ENABLED', False)),   # D3: offer «مرتجع»?
+        # D-18: server-side checkout switch (POS_SERVER_CHECKOUT). The screen uses POST checkout/ only for a
+        # branch listed here: None = every branch, [] = off (today's create → ready → push path).
+        'server_checkout_branch_ids': _checkout.enabled_branch_ids(),
         'note': 'SOFTECH writes are disabled (no test instance). /push returns a dry-run plan.',
     })
 

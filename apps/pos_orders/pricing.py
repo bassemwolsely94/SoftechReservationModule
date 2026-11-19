@@ -109,3 +109,76 @@ def split_payment(channel, doc_value, tenders=None):
     # employee 7024 patient=0, cash 7021 / delivery 7831 patient=0.
     patient_payment = Decimal('0.00') if channel in ('cash', 'delivery') else doc_value_pay
     return doc_value_pay, patient_payment, norm
+
+
+# ── D-18 server checkout: the نقدى / آجل split from the cashier's INTENT (doc 39 §2.6) ──────────────
+# The browser no longer sends tender amounts on the new path, only what the cashier meant: the channel
+# default, a fixed آجل amount, or ما يسدده المريض. The amounts are worked out here, in Decimal, so they
+# add up to the amount due exactly (no ±0.01). Tenders stay نقدى / آجل only (POS screen scope).
+TENDER_INTENT_KINDS = ('default', 'credit_portion', 'patient_copay')
+_COLLECT_NOW_CHANNELS = ('cash', 'delivery')          # walk-in channels: no آجل
+_CREDIT_DEFAULT_CHANNELS = ('contract', 'employee')   # split_payment's 100% آجل default
+
+
+def _intent_amount(intent, key, label):
+    raw = (intent or {}).get(key)
+    if raw is None or str(raw).strip() == '':
+        raise ValueError(f'أدخل {label}.')
+    try:
+        return _r2(Decimal(str(raw).strip()))
+    except Exception:
+        raise ValueError(f'{label} غير صحيح.')
+
+
+def resolve_tenders(channel, doc_value, change_discount, intent, *, is_platform=False, claim_channels=()):
+    """Pure (no DB, no I/O). Returns a list of {'pay_type', 'amount': Decimal} or None.
+
+    None means "let writer.prepare_order apply today's rules" — channel default and the contract
+    co-pay from personsdata — and is returned only when that default already equals the amount due
+    (intent default, no خصم فكة, not a platform account). Otherwise the rows add up to
+    due = doc_value − change_discount exactly: the first row is rounded and the second is due − first,
+    so rounding can never break the sum. No zero rows, at most one نقدى and one آجل row, never a
+    negative amount. Out-of-range intents raise ValueError with an Arabic message.
+    """
+    kind = str((intent or {}).get('kind') or 'default')
+    if kind not in TENDER_INTENT_KINDS:
+        raise ValueError('طريقة سداد غير معروفة.')
+    cd = _r2(change_discount)
+    if cd < 0:
+        raise ValueError('خصم الفكة لا يمكن أن يكون سالباً.')
+    if is_platform and kind != 'default':
+        raise ValueError('حساب المنصة يُسجّل آجل بالكامل — لا يمكن تعديل السداد.')
+    if kind == 'default' and cd == 0 and not is_platform:
+        return None
+    due = _r2(doc_value) - cd
+    if due <= 0:
+        raise ValueError('لا يوجد مبلغ مستحق للسداد (خصم الفكة يساوي قيمة الفاتورة أو يزيد عليها).')
+
+    def _rows(first_type, first_amount, second_type):
+        rows = []
+        if first_amount > 0:
+            rows.append({'pay_type': first_type, 'amount': first_amount})
+        rest = due - first_amount
+        if rest > 0:
+            rows.append({'pay_type': second_type, 'amount': rest})
+        return rows
+
+    if is_platform:
+        return [{'pay_type': 'credit', 'amount': due}]
+    if kind == 'default':
+        pay_type = 'credit' if channel in _CREDIT_DEFAULT_CHANNELS else 'cash'
+        return [{'pay_type': pay_type, 'amount': due}]
+    if kind == 'credit_portion':
+        if channel in _COLLECT_NOW_CHANNELS:
+            raise ValueError('لا يُسمح بالآجل في قناة نقدى/توصيل.')
+        credit = _intent_amount(intent, 'credit', 'مبلغ الآجل')
+        if credit < 0 or credit > due:
+            raise ValueError(f'مبلغ الآجل يجب أن يكون بين 0 و {due}.')
+        return _rows('cash', due - credit, 'credit')
+    # patient_copay
+    if channel not in claim_channels:
+        raise ValueError('ما يسدده المريض متاح لقنوات التعاقد فقط.')
+    patient = _intent_amount(intent, 'patient', 'ما يسدده المريض')
+    if patient < 0 or patient > due:
+        raise ValueError(f'ما يسدده المريض يجب أن يكون بين 0 و {due}.')
+    return _rows('cash', patient, 'credit')

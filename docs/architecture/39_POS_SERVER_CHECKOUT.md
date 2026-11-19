@@ -1,6 +1,6 @@
 # 39 · POS server-side checkout (D-18 / FE-3) — design + test plan
 
-Status: **DESIGN ONLY — awaiting owner approval.** No production code is written until this document is approved.
+Status: **APPROVED 2026-11-19 ("Yes, start the build") — BUILT behind `POS_SERVER_CHECKOUT=False`.** See §9 for what the build decided where this document left a choice. Owner confirms before merge.
 Decision: D-18 in `docs/full-project-audit/14_DECISION_REGISTER.md`; finding FE-3 in `05_FRONTEND_UX_AUDIT.md`.
 Owner choice 2026-11-19: "Design first", then build behind a switch.
 
@@ -459,3 +459,49 @@ The build stops and asks the owner at each of these. None is decided by this doc
   `PERMISSION_MATRIX.md` regenerated.
 - Unchanged by design: `writer.py`, `validators.py`, `discount_authority.py`, `points.py`, `stock.py`,
   `apps/offers/*`, `config/writers.py`, `core/middleware/idempotency.py`.
+
+---
+
+## 9. Build notes (2026-11-19)
+
+What was built, and every place the build had to choose. Nothing here changes the old path, `writer.py`,
+`pricing.compute_*`, `split_payment`, the ±0.01 tolerance, the `vf2` tag or what SOFTECH receives.
+
+| # | Point | What the build does | Why |
+|---|---|---|---|
+| B1 | Where the shared helpers live | `views._ready_checks` / `views._push_checks` (the old view bodies, lines unchanged) instead of `checkout.py` | Keeps the move line-for-line so PR 215 (D-11/D-12, which edits those bodies) still merges cleanly. `checkout.py` holds the endpoint and the orchestration. |
+| B2 | Double click / two tabs | A PostgreSQL session advisory lock on the `client_token` (`pg_try_advisory_lock`, namespace 7301018) around Phase A + B; the second request answers **202 busy** at once | The row lock in §2.5 only exists once the order exists; two first submits would race on the unique index. The writer's PUSHING claim stays the real guard. |
+| B3 | Tenders need the net before pricing | When the intent needs an amount (آجل / co-pay / خصم فكة), `prepare_order` runs once inside a **savepoint that is always rolled back** to learn the net, then for real with the resolved rows | Reuses prepare_order (live prices, contract discounts, blocked items) instead of re-implementing pricing. Costs a second branch price read only for those intents when live pricing is on. |
+| B4 | `default` intent with خصم فكة | One row of the channel's default type (`credit` for contract/employee, else `cash`) for exactly the amount due. With no خصم فكة: `None` — today's rules, including the contract co-pay from personsdata | `split_payment`'s default is `doc_value`, which would fail the balance check when خصم فكة > 0 (true on the old path too). |
+| B5 | `patient_copay` blank | Treated as `default` (the contract rule, i.e. 100 % آجل or the personsdata co-pay), as §2.2 says | The old screen showed a blank co-pay as "patient pays all"; on the new path the screen shows the server's split from the preview. |
+| B6 | Offer needs approval | Stops before prepare **only for a live send** (order kept `draft`, 409); a dry run continues, as the old screen does. The push gate still blocks any live push of an unapproved offer | Matches today's dry-run behaviour. |
+| B7 | An order made by the old path under the same token (no hash) | 409 `token_reused` unless it is already pushed/settled (then `replayed`) | Never takes over an order whose basket we cannot compare. |
+| B8 | `cancelled` under the token | 409 `token_reused` | Not listed in §2.5. |
+| B9 | Currency | Only L.E / rate 1 on the new path (anything else → 400) | Tenders are نقدى / آجل only. |
+| B10 | Mobile POS | Uses the same hook but never opts in (`usePosOrder({allowServerCheckout})`, desktop page only) | §6: mobile keeps the old endpoints. |
+| B11 | Rollout list | `POS_SERVER_CHECKOUT_BRANCHES` holds **SOFTECH branch codes** (e.g. `130`), like `POS_RESERVATION_BRANCHES` | Stable across databases; e2e turns it on for test branch `992` only. |
+| B12 | Live mode without `expected_due` | 400 — the total the cashier saw is required for a live send | S3. |
+
+**F2 measured** (`apps/tests/test_pos_checkout_tenders.py::BrowserVsServerTotalTests`, seeded): the browser's
+float total differs from the server's Decimal total in **≈13 % of whole-pack baskets (worst 0.06)** and
+**≈55 % of strip-quantity baskets (worst 0.05)**. Whole packs: `toFixed` on a float unit price misses the
+half-piaster cases the server rounds up, ×qty, over several lines. Strips: the browser multiplies an
+already-rounded unit price by the fraction without rounding the line. On the old path these show up as
+«مجموع طرق السداد لا يساوي المطلوب» (> 0.01) or as payment rows one piaster off `docvalue` (≤ 0.01).
+
+**Files:** `apps/pos_orders/checkout.py` (endpoints), `pricing.resolve_tenders`, `golden.py` + command
+`pos_checkout_golden` (§4.1, prepared, not run), migration `0018_softechsalesorder_checkout_request_hash`,
+`frontend/src/hooks/usePosOrder.js` (new branch; old `submit` body unchanged except the shared payload builder),
+`frontend/e2e/pos-checkout.spec.js`, tests `apps/tests/test_pos_checkout*.py`.
+
+**Golden probe — how to run (person, owner OK per run, off-peak, one branch, writer instance):**
+
+```
+python manage.py pos_checkout_golden --basket basket.json --user <seller> --plan-only          # no SOFTECH statement
+SOFTECH_PROBES_ENABLED=True python manage.py pos_checkout_golden --basket basket.json --user <seller>     --native <pending docnumber> --live-pricing --confirm-rollback-probe --title "cash 1 item"
+```
+
+`basket.json` is the checkout request body (create payload + `checkout.tender_intent`). The command turns the
+switch on for that process and branch only, runs the new endpoint in dry run, reads the native pending rows,
+runs the writer's own `_execute_write` inside one transaction, reads our rows back, **always rolls back**, and
+appends a field-by-field section to `39a_POS_SERVER_CHECKOUT_GOLDEN.md`.

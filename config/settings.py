@@ -749,6 +749,14 @@ POS_DEFAULT_SELLER_USERCODE = config('POS_DEFAULT_SELLER_USERCODE', default='')
 # Read authoritative branch prices/tax/cost live from the branch DB when preparing
 # an order (SELECT only). Default False → use the catalog mirror (offline-safe).
 POS_LIVE_PRICING = config('POS_LIVE_PRICING', default=False, cast=bool)
+# D-18 server-side checkout (docs/architecture/39_POS_SERVER_CHECKOUT.md). OFF = the POS screen runs
+# today's create → offers → ready → push sequence unchanged. ON = one POST /api/pos-orders/checkout/
+# that prices, splits نقدى/آجل on the server and hands the order to the SAME writer. Not a SOFTECH
+# writer flag: the write itself stays behind POS_WRITER_ENABLED (doc 39 §3, S6).
+POS_SERVER_CHECKOUT = config('POS_SERVER_CHECKOUT', default=False, cast=bool)
+# Optional one-branch rollout: comma list of SOFTECH branch codes (e.g. "130"). Empty = every branch.
+POS_SERVER_CHECKOUT_BRANCHES = [b.strip() for b in config('POS_SERVER_CHECKOUT_BRANCHES', default='').split(',')
+                                if b.strip()]
 # Connection charset for the POS writeback path. MUST be 'iso_1': the writer pre-encodes each string to
 # cp1256 bytes carried as latin-1 and sends them through this connection so Arabic (patientname, comments,
 # batch labels…) lands verbatim in the cp1256 columns. CHARSET='cp1256' GARBLES Arabic to '?' (verified);
