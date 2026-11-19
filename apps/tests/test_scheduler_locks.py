@@ -193,6 +193,8 @@ SCHEDULER_JOB_GUARDS = {
         'conditional UPDATE to escalated; only the winner logs and notifies (dedup_once)'),
     'inflation_reminder': ('once_per_period_check', 'apps.sync.tasks._run_inflation_reminder', "dedup_key=f'inflation_reminder_{date.today():%Y-%m}'",
         'send_to_admins has no dedup_once: the monthly key only suppresses an UNREAD copy younger than 5 min (racy, not really once a month); web push'),
+    'ap_review_digest': ('once_per_period_check', 'apps.finance.recon_review.weekly_digest', 'dedup_once=True',
+        'C15: one in-app A/P review digest per recipient per ISO week (dedup_key ap_review_<year>_<week>, check-then-create, racy); read-only on the recon mirror, no sends, no SOFTECH'),
     'return_window_digest': ('once_per_period_check', 'apps.batches.return_calendar.monthly_digest', 'dedup_once=True',
         'snapshot get_or_create (unique) + per-month dedup_once digest, check-then-create (racy); web push'),
     'receipt_check_daily': ('once_per_period_check', 'apps.procurement.receipt_check.send_digest', "dedup_key=f'receipt_check_{today.isoformat()}', dedup_once=True",

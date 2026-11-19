@@ -46,6 +46,7 @@ urlpatterns = [
     path('reconciliation/payments/',    recon_views.PaymentListView.as_view(),      name='recon-payments'),
     path('reconciliation/candidates/',  recon_views.CandidateListView.as_view(),    name='recon-candidates'),
     path('reconciliation/exceptions/',  recon_views.ExceptionListView.as_view(),    name='recon-exceptions'),
+    path('reconciliation/exceptions/decide/', recon_views.decide_exceptions_view, name='recon-exceptions-decide'),   # C15
     path('reconciliation/workbench/',   recon_views.reconciliation_workbench,  name='recon-workbench'),
     path('reconciliation/runs/',        recon_views.ReconRunListView.as_view(),     name='recon-runs'),
     # actions (Phase E) — mirror mutations only, no SOFTECH write

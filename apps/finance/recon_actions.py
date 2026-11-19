@@ -293,16 +293,13 @@ def auto_approve(party_type='supplier', user=None, classes=('high', 'medium', 'l
     evidence first. Mirror only — the gated writer records them in SOFTECH.
     """
     from django.conf import settings
-    from .models import ReconException
     if not getattr(settings, 'AP_RECONCILE_AUTO_APPROVE', True):
         return {'approved': 0, 'held': 0, 'skipped_capacity': 0, 'not_in_policy': 0,
                 'paused': True}
-    flagged = set(ReconException.objects.filter(
-        status='open', payment__isnull=False, party__party_type=party_type,
-        exception_type__in=[ReconException.TYPE_DUPLICATE_PAYMENT,
-                            ReconException.TYPE_MISALLOCATION,
-                            ReconException.TYPE_SUSPECT_AMOUNT],
-    ).values_list('payment_id', flat=True))
+    # C15: open, under investigation or decided by a person — a person's decision never releases a
+    # held match by itself (recon_review.holding_payment_ids)
+    from .recon_review import holding_payment_ids
+    flagged = holding_payment_ids(party_type)
     from .recon_returns import open_returned_by_purchase
     returned_open = open_returned_by_purchase(party_type=party_type)
     # pairs linked by SOFTECH itself (not by our writer) — a further amount is a review item
@@ -442,13 +439,11 @@ def flag_written_for_review(party_type: str = 'supplier') -> dict:
     (they were approved before a rule existed). Not proven wrong, so NOT reversed —
     tagged 'مكتوب — يحتاج مراجعة: <reason>' so a reviewer can confirm or revert them
     («↩ عكس من SOFTECH»). Sub-1-EGP rounding rows are ignored. Idempotent."""
-    from .models import ReconException
     from .recon_returns import open_returned_by_purchase
-    flagged = set(ReconException.objects.filter(
-        status='open', payment__isnull=False, party__party_type=party_type,
-        exception_type__in=[ReconException.TYPE_DUPLICATE_PAYMENT, ReconException.TYPE_MISALLOCATION,
-                            ReconException.TYPE_SUSPECT_AMOUNT],
-    ).values_list('payment_id', flat=True))
+    # C15: open, under investigation or decided by a person — a person's decision never releases a
+    # held match by itself (recon_review.holding_payment_ids)
+    from .recon_review import holding_payment_ids
+    flagged = holding_payment_ids(party_type)
     returned_open = open_returned_by_purchase(party_type=party_type)
     # the voucher's own reference names ANOTHER invoice of exactly this amount (2026-09-29:
     # 5,529 links shifted by the old conflict bug)
