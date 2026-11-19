@@ -10,8 +10,8 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
     Closed stores are never counted anywhere."""
     import datetime as _d
     from django.db.models import Sum, Count
-    from .models import StockExpiryBalance
-    from .expiry_audit import _item_attr_map
+    from apps.batches.models import StockExpiryBalance
+    from apps.batches.expiry_audit import _item_attr_map
 
     today = _d.date.today()
     scope = StockExpiryBalance.objects.exclude(store_role=CLOSED)

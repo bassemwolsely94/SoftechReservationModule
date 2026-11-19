@@ -209,7 +209,7 @@ def _probes_eta_history(key, system):
 
 
 # source → (shape, probes)
-_SOURCES = {
+_SOURCE_PROBES = {
     'expiry':            ('run', _probes_expiry),
     'ap_reconciliation': ('run', _probes_ap_reconciliation),
     'purchases':         ('run', _probes_purchases),
@@ -232,7 +232,7 @@ _SOURCES = {
 def _read_sources(sources):
     """{source: {last_success_at, last_attempt_at, last_run_failed}} for the given custom sources,
     in one query."""
-    probes = [p for s in sources for p in _SOURCES[s][1]()]
+    probes = [p for s in sources for p in _SOURCE_PROBES[s][1]()]
     rows = {}
     if probes:
         for tag, a, b, status in probes[0].union(*probes[1:], all=True):
@@ -240,7 +240,7 @@ def _read_sources(sources):
 
     out = {}
     for s in sources:
-        if _SOURCES[s][0] == 'at':
+        if _SOURCE_PROBES[s][0] == 'at':
             at = _newest(t for t, _ in rows.get(f'{s}:at', ()))
             out[s] = {'last_success_at': at, 'last_attempt_at': at, 'last_run_failed': False}
         else:
@@ -250,6 +250,10 @@ def _read_sources(sources):
                       'last_run_failed': bool(last and last[0][1] == 'failed')}
     return out
 
+
+# source → reader of that one source ({last_success_at, last_attempt_at, last_run_failed}); kept for
+# callers and tests that read a single source. get_freshness reads them all at once.
+_SOURCES = {s: (lambda s=s: _read_sources([s])[s]) for s in _SOURCE_PROBES}
 
 def _sync_log_times(tables):
     """{table_name: (last success, last attempt)} from the main sync's per-table log, one query."""

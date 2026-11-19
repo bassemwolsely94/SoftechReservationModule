@@ -717,18 +717,47 @@ class SalesTarget(models.Model):
         if any(t.scope_type != cls.SCOPE_CREW and t.metric in cls.KPI_RESOLVER_METRICS for t in targets):
             from apps.forecasting.kpi import KpiResolver
             resolver = KpiResolver()
-        groups = defaultdict(list)
+        groups, legacy = defaultdict(list), defaultdict(list)
         for t in targets:
-            if t.scope_type == cls.SCOPE_BRANCH and t.branch_id and t.metric in cls.KPI_RESOLVER_METRICS:
+            if t.scope_type != cls.SCOPE_BRANCH or not t.branch_id:
+                continue
+            if t.metric in cls.KPI_RESOLVER_METRICS:
                 groups[(t.metric, t.period_start, t.period_end)].append(t)
+            elif t.metric in (cls.METRIC_REVENUE, cls.METRIC_ORDERS):
+                legacy[(t.period_start, t.period_end)].append(t)
         out = {}
         for (metric, start, end), group in groups.items():
             by_branch = resolver.resolve_by_branch(metric, sorted({t.branch_id for t in group}), start, end)
             if by_branch is not None:
                 out.update({t.id: float(by_branch[t.branch_id]) for t in group})
+        for (start, end), group in legacy.items():
+            out.update(cls._legacy_branch_actuals(group, start, end))
         for t in targets:
             if t.id not in out:
                 out[t.id] = t.actual_value(resolver=resolver)
+        return out
+
+    @classmethod
+    def _legacy_branch_actuals(cls, group, start, end):
+        """actual_value() of branch targets on net_revenue / orders over one period, in one query
+        grouped by branch: the same sums and count as _actuals_qs per target."""
+        from django.db.models import Count, Q, Sum
+        from apps.customers.models import PurchaseHistory
+        rows = {r['branch_id']: r for r in (
+            PurchaseHistory.objects.filter(invoice_date__date__gte=start, invoice_date__date__lte=end,
+                                           branch_id__in={t.branch_id for t in group})
+            .values('branch_id')
+            .annotate(sale=Sum('total_amount', filter=Q(doc_code='115')),
+                      ret=Sum('total_amount', filter=Q(doc_code='30')),
+                      orders=Count('id', filter=Q(doc_code='115')))
+            .order_by())}
+        out = {}
+        for t in group:
+            r = rows.get(t.branch_id) or {}
+            if t.metric == cls.METRIC_ORDERS:
+                out[t.id] = r.get('orders') or 0
+            else:
+                out[t.id] = float(r.get('sale') or 0) - float(r.get('ret') or 0)
         return out
 
     def attainment(self, actual=None):

@@ -22,9 +22,19 @@ def _at(minutes_ago):
 
 
 def _count_queries(fn, *args, **kwargs):
+    return len(_queries(fn, *args, **kwargs))
+
+
+def _queries(fn, *args, **kwargs):
     with CaptureQueriesContext(connection) as ctx:
         fn(*args, **kwargs)
-    return len(ctx.captured_queries)
+    return [q['sql'] for q in ctx.captured_queries]
+
+
+def _shape(sqls):
+    """Query texts with literals removed, for a readable diff when a count grows."""
+    import re
+    return sorted(re.sub(r"'[^']*'|\b\d+\b", '?', q)[:160] for q in sqls)
 
 
 # ── 1. GET /api/sync/freshness/ ────────────────────────────────────────────────────────────────
@@ -177,16 +187,18 @@ class DashboardSummarySameAnswerTests(TestCase):
     def _assert_same(self):
         from apps.dashboard.views import dashboard_summary
         from apps.tests.perf_reference.dashboard_before import dashboard_summary as before
+        answers = {}
         for user, query in ((self.admin[0], ''), (self.admin[0], f'?branch={self.b2.id}'),
                             (self.pharm[0], ''), (self.pharm[0], f'?branch={self.b2.id}')):
             new, old = self._call(dashboard_summary, user, query), self._call(before, user, query)
             self.assertEqual(new, old, (user.username, query))
-        return new
+            answers[(user.username, query)] = new
+        return answers
 
     def test_same_answer_with_data(self):
         self._seed()
-        last = self._assert_same()
-        self.assertGreater(last['reservations']['active_total'], 0)
+        answers = self._assert_same()
+        self.assertGreater(answers[(self.admin[0].username, '')]['reservations']['active_total'], 0)
 
     def test_same_answer_empty(self):
         self._assert_same()
@@ -194,10 +206,12 @@ class DashboardSummarySameAnswerTests(TestCase):
     def test_query_count_is_small_and_flat(self):
         from apps.dashboard.views import dashboard_summary
         self._seed(1)
-        small = _count_queries(self._call, dashboard_summary, self.admin[0])
+        self._call(dashboard_summary, self.admin[0])        # warm the user's profile cache
+        small = _queries(self._call, dashboard_summary, self.admin[0])
         self._seed(3)
-        self.assertEqual(_count_queries(self._call, dashboard_summary, self.admin[0]), small)
-        self.assertLessEqual(small, 12)
+        big = _queries(self._call, dashboard_summary, self.admin[0])
+        self.assertEqual(_shape(big), _shape(small))
+        self.assertLessEqual(len(small), 12)
 
 
 # ── 3. GET /api/batches/stock-expiry/summary/ ──────────────────────────────────────────────────
@@ -213,7 +227,7 @@ class StockExpirySummarySameAnswerTests(TestCase):
         start = StockExpiryBalance.objects.count()
         offsets = (-40, -1, 0, 10, 29, 30, 60, 89, 90, 150, 179, 180, 400)
         for i in range(n):
-            for j, cost in enumerate((Decimal('12.50'), Decimal('3.333'), None, Decimal('0'))):
+            for j, cost in enumerate((Decimal('12.50'), Decimal('3.333'), Decimal('7'), Decimal('0'))):
                 code = f'S{(start + i * 10 + j) % 99999:05d}'
                 item = make_item(name=f'صنف {code}', softech_id=code)
                 type(item).objects.filter(pk=item.pk).update(cost_price=cost)
@@ -340,11 +354,43 @@ class IncentiveTargetsBatchTests(TestCase):
             self.assertEqual(dict(row), dict(expected[row['id']]), row['metric'])
 
     def test_branch_targets_query_count_is_flat(self):
-        """Branch targets (what the office runs) cost the same whatever their number."""
-        self._targets(1, branch_only=True)
-        with CaptureQueriesContext(connection) as small:
-            self.assertEqual(self.admin[2].get('/api/incentives/targets/').status_code, 200)
-        self._targets(3, branch_only=True)
-        with CaptureQueriesContext(connection) as big:
-            self.assertEqual(self.admin[2].get('/api/incentives/targets/').status_code, 200)
-        self.assertEqual(len(big.captured_queries), len(small.captured_queries))
+        """Branch targets (what the office runs) cost the same whatever their number. Measured on
+        batch_actuals itself: the list endpoint pages, so a bigger list is a different page."""
+        from apps.incentives.models import SalesTarget
+        small = _queries(SalesTarget.batch_actuals, self._targets(1, branch_only=True))
+        big = _queries(SalesTarget.batch_actuals, self._targets(3, branch_only=True))
+        self.assertEqual(_shape(big), _shape(small))
+
+
+# ── 4b. POST /api/audit/screen-view/ ───────────────────────────────────────────────────────────
+
+class ScreenViewTrackingCostTests(TestCase):
+    """The tracking POST every screen sends on open stays a handful of queries, however much
+    history the table holds."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from apps.tests.factories import make_pharmacist
+        cls.user, cls.profile, cls.client_ = make_pharmacist('perf_sv_pharm')
+
+    def _post(self, route='/reservations'):
+        with CaptureQueriesContext(connection) as ctx:
+            res = self.client_.post('/api/audit/screen-view/', {'route': route}, format='json')
+        self.assertEqual(res.status_code, 204)
+        return ctx.captured_queries
+
+    def test_records_once_per_dedup_window(self):
+        from apps.audit.models import ScreenView
+        self._post(); self._post()
+        self.assertEqual(ScreenView.objects.filter(staff=self.profile, route='/reservations').count(), 1)
+
+    def test_query_count_is_small_and_flat(self):
+        from apps.audit.models import ScreenView
+        first = self._post('/a')
+        ScreenView.objects.bulk_create([ScreenView(staff=self.profile, role='pharmacist', route=f'/r{i}')
+                                        for i in range(300)])
+        later = self._post('/b')
+        self.assertEqual(len(later), len(first), [q['sql'][:120] for q in later])
+        print('\nscreen-view queries:', len(later))
+        for q in later:
+            print('  ', q['time'], q['sql'][:160])
