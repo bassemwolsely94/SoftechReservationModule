@@ -120,6 +120,7 @@ class PortalWebDriver:
         self.headless = headless
         self.timeout_ms = timeout_ms
         self._pw = None
+        self.history_proof = {'complete': False}     # set by order_history (R21)
         self.context = None
         self._page = None
         self._deny = [re.compile(re.escape(d), re.I) for d in self.recipe.DENY]
@@ -427,8 +428,16 @@ class PortalWebDriver:
         the read stops with PortalError (an order on page 2 must never read as "none"). When an
         order's details have more pages, or fewer rows than the count the page shows, a row with
         no code is added: the server holds that order for a person, never reads the missing rows
-        as "not ordered"."""
+        as "not ordered".
+
+        After the read, history_proof['complete'] says whether the window is known to be read whole
+        (recipe.HISTORY_PAGING_CONFIRMED, ruling R21); a failed read leaves it False, and so does a
+        row in the window whose order number cannot be read (it is sent with an empty number)."""
         r = self.recipe
+        # R21: the proof that the whole window was read (no further page) is set only at the end of
+        # a read that did not fail, and only when the recipe's paging locators were confirmed on
+        # the real site; anything else leaves it False (the run then never reports "none")
+        self.history_proof = {'complete': False}
         self.goto('order_history')
         rows = self._read_table(r.HISTORY_TABLE, r.HISTORY_COLUMNS)
         wanted = []
@@ -437,12 +446,20 @@ class PortalWebDriver:
             ref = _norm(row.get('order_ref'))
             day = parse_date(row.get('date'), r.DATE_FORMATS, strict=True)
             last_day = day
-            if ref and (ref == keep_ref or day is None or day >= since):
+            if (ref and ref == keep_ref) or day is None or day >= since:
+                # a row in (or maybe in) the window whose number cannot be read is kept too, with
+                # an empty number: it is never dropped as "no order"
                 wanted.append((ref, day))
         if rows and self._paged(r.HISTORY_TABLE) and (last_day is None or last_day >= since):
             raise PortalError('Order History has more pages inside the window')
         out = []
+        unreadable = False
         for ref, day in wanted:
+            if not ref:                      # no link to open: the server holds it for a person
+                unreadable = True
+                out.append({'order_ref': '', 'date': day.isoformat() if day else '',
+                            'lines': [{'sku': '', 'qty': 'order number unreadable'}]})
+                continue
             self.goto('order_history')
             self._click(self._table(r.HISTORY_TABLE).get_by_role('link', name=ref, exact=True))
             details = self.page.get_by_role('table', name=r.DETAILS_TABLE, exact=True)
@@ -454,6 +471,8 @@ class PortalWebDriver:
             if self._paged(r.DETAILS_TABLE) or (shown and shown != str(len(lines))):
                 lines.append({'sku': '', 'qty': 'more rows than read'})
             out.append({'order_ref': ref, 'date': day.isoformat() if day else '', 'lines': lines})
+        self.history_proof = {'complete': getattr(r, 'HISTORY_PAGING_CONFIRMED', False) is True
+                              and not unreadable}
         return out
 
     # ── screenshots ───────────────────────────────────────────────────────────────────────

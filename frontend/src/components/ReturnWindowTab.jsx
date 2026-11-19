@@ -26,7 +26,9 @@ const STATES = [
   { key: 'missed',            label: 'فاتت النافذة',    cls: 'bg-gray-200 text-gray-600' },
 ]
 const STATE_CLS = Object.fromEntries(STATES.map(s => [s.key, s.cls]))
+// «من سجل الشراء» (C03): the supplier is a guess from who sold us the item — check before requesting
 const CONF_CLS = { exact: 'bg-green-50 text-green-700', month: 'bg-amber-50 text-amber-700',
+                   history: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
                    ambiguous: 'bg-orange-100 text-orange-700', none: 'bg-gray-100 text-gray-500' }
 const LOC_LABEL = { shelf: 'رف فرع', hq: 'مخزن رئيسي', '105': 'مخزن 105' }
 const LOC_OPTIONS = [{ code: 'shelf', name: 'رفوف الفروع' }, { code: 'hq', name: 'مخازن الرئيسي' },

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 
 vi.mock('../api/client', () => ({
   authApi: { login: vi.fn(), me: vi.fn(), logout: vi.fn() },
@@ -105,6 +105,40 @@ describe('RequireRole with a matrix module (UAT D5)', () => {
   })
 })
 
+describe('RequireRole with a module only (UAT W2 unhandled-403 screens)', () => {
+  const guarded = <RequireRole module="insurance"><div>secret page</div></RequireRole>
+
+  it('a role without the module view goes to the dashboard instead of an empty screen', () => {
+    useAuthStore.setState({ user: { role: 'pharmacist' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: { pos: { view: true } } })
+    renderAt('/secret', guarded)
+    expect(screen.getByText('dashboard page')).toBeTruthy()
+  })
+
+  it('a role holding the module view opens it', () => {
+    useAuthStore.setState({ user: { role: 'purchasing' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: { insurance: { view: true } } })
+    renderAt('/secret', guarded)
+    expect(screen.getByText('secret page')).toBeTruthy()
+  })
+
+  it('a capability flag admits on its own (named branch managers on /stock-count)', () => {
+    const counted = <RequireRole module="stockcount" cap="can_stock_audit"><div>secret page</div></RequireRole>
+    useAuthStore.setState({ user: { role: 'salesperson', can_stock_audit: true }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: {} })
+    renderAt('/secret', counted)
+    expect(screen.getByText('secret page')).toBeTruthy()
+  })
+
+  it('without the flag the module still decides', () => {
+    const counted = <RequireRole module="stockcount" cap="can_stock_audit"><div>secret page</div></RequireRole>
+    useAuthStore.setState({ user: { role: 'salesperson', can_stock_audit: false }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: {} })
+    renderAt('/secret', counted)
+    expect(screen.getByText('dashboard page')).toBeTruthy()
+  })
+})
+
 describe('RequireAuth', () => {
   const guarded = <RequireAuth><div>secret page</div></RequireAuth>
 
@@ -118,6 +152,22 @@ describe('RequireAuth', () => {
   it('sends a logged-out user to /login', () => {
     renderAt('/secret', guarded)
     expect(screen.getByText('login page')).toBeTruthy()
+  })
+
+  it('carries the page to /login as ?next= so login returns there (FE-12)', () => {
+    function LoginSpy() {
+      const loc = useLocation()
+      return <div>next={new URLSearchParams(loc.search).get('next')}</div>
+    }
+    render(
+      <MemoryRouter initialEntries={['/secret?tab=lines']}>
+        <Routes>
+          <Route path="/login" element={<LoginSpy />} />
+          <Route path="/secret" element={guarded} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('next=/secret?tab=lines')).toBeTruthy()
   })
 
   it('shows the page when logged in', () => {

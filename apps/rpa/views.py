@@ -231,7 +231,7 @@ class RecipeListCreateView(generics.ListAPIView):
         return [IsAuthenticated(), RpaAdminOnly()]
 
     def get_queryset(self):
-        qs = RpaRecipe.objects.select_related('screen', 'created_by__user', 'approved_by__user')
+        qs = RpaRecipe.objects.select_related('screen', 'created_by__user', 'edited_by__user', 'approved_by__user')
         if self.request.method not in SAFE_METHODS:
             return qs
         return qs.order_by(*explicit_order_by(self.request.query_params.get('ordering'), RECIPE_SORT_KEYS,
@@ -274,7 +274,7 @@ def recipe_edit(request, pk):
     recipe = generics.get_object_or_404(RpaRecipe, pk=pk)
     body = _body(request)
     workflow.edit_recipe(recipe, _profile(request), {k: body[k] for k in body})
-    recipe = RpaRecipe.objects.select_related('screen', 'created_by__user', 'approved_by__user').get(pk=pk)
+    recipe = RpaRecipe.objects.select_related('screen', 'created_by__user', 'edited_by__user', 'approved_by__user').get(pk=pk)
     return Response(RecipeSerializer(recipe).data)
 
 
@@ -283,7 +283,7 @@ def recipe_edit(request, pk):
 def recipe_approve(request, pk):
     recipe = generics.get_object_or_404(RpaRecipe.objects.select_related('screen'), pk=pk)
     workflow.approve_recipe(recipe, _profile(request))
-    recipe = RpaRecipe.objects.select_related('screen', 'created_by__user', 'approved_by__user').get(pk=pk)
+    recipe = RpaRecipe.objects.select_related('screen', 'created_by__user', 'edited_by__user', 'approved_by__user').get(pk=pk)
     return Response(RecipeSerializer(recipe).data)
 
 

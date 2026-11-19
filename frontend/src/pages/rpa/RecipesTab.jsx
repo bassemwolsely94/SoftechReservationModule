@@ -2,7 +2,8 @@
  * RecipesTab — الوصفات (admin only): the recorded SOFTECH screen recipes. A draft recipe is
  * uploaded from a .dld recording with its field map; an admin completes the DRAFT inline (cancel
  * keys, popup rules, checklist, reference cells — a .dld carries none of them) and a SECOND admin
- * approves it (four-eyes, enforced by the server, which also refuses a recipe that cannot end a
+ * approves it (four-eyes, enforced by the server: neither the importer nor anyone who ever edited it
+ * may approve — «آخر من عدّلها» shows the latest editor; it also refuses a recipe that cannot end a
  * dry run safely). Approved content is frozen; this screen never edits it. The screen switch only
  * enables or stops the robot for the screen; live entry cannot be turned on in Stage 1.
  */
@@ -193,6 +194,7 @@ export default function RecipesTab() {
               <SortTh {...headerProps('status')} className="p-2 text-start">الحالة</SortTh>
               <SortTh {...headerProps('source_filename')} className="p-2 text-start">الملف</SortTh>
               <SortTh {...headerProps('created_by_name')} className="p-2 text-start">رفعها</SortTh>
+              <SortTh {...headerProps('edited_by_name')} className="p-2 text-start">آخر من عدّلها</SortTh>
               <SortTh {...headerProps('approved_by_name')} className="p-2 text-start">اعتمدها</SortTh>
               <SortTh {...headerProps('approved_at', 'date')} className="p-2 text-start">وقت الاعتماد</SortTh>
               <th className="p-2" />
@@ -207,6 +209,7 @@ export default function RecipesTab() {
                   <td className="p-2"><Badge map={RECIPE_STATUS} value={r.status} /></td>
                   <td className="p-2 text-muted" dir="ltr">{r.source_filename || '—'}</td>
                   <td className="p-2">{r.created_by_name || '—'}</td>
+                  <td className="p-2" title={r.edited_at ? fmtTime(r.edited_at) : undefined}>{r.edited_by_name || '—'}</td>
                   <td className="p-2">{r.approved_by_name || '—'}</td>
                   <td className="p-2 text-xs whitespace-nowrap">{fmtTime(r.approved_at)}</td>
                   <td className="p-2 text-end whitespace-nowrap">
@@ -225,14 +228,14 @@ export default function RecipesTab() {
                 </tr>
                 {editing === r.id && r.status === 'draft' && (
                   <tr className="border-b border-line">
-                    <td colSpan={8} className="p-2"><DraftEditor recipe={r} onDone={() => setEditing(null)} /></td>
+                    <td colSpan={9} className="p-2"><DraftEditor recipe={r} onDone={() => setEditing(null)} /></td>
                   </tr>
                 )}
               </Fragment>
             ))}
-            {q.isLoading && <tr><td colSpan={8} className="p-6 text-center text-muted">جارٍ التحميل…</td></tr>}
-            {q.isError && <tr><td colSpan={8} className="p-6 text-center text-red-600">تعذّر تحميل الوصفات.</td></tr>}
-            {!q.isLoading && !q.isError && !rows.length && <tr><td colSpan={8} className="p-6 text-center text-muted">لا توجد وصفات.</td></tr>}
+            {q.isLoading && <tr><td colSpan={9} className="p-6 text-center text-muted">جارٍ التحميل…</td></tr>}
+            {q.isError && <tr><td colSpan={9} className="p-6 text-center text-red-600">تعذّر تحميل الوصفات.</td></tr>}
+            {!q.isLoading && !q.isError && !rows.length && <tr><td colSpan={9} className="p-6 text-center text-muted">لا توجد وصفات.</td></tr>}
           </tbody>
         </table>
       </div>

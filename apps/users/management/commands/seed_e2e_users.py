@@ -79,5 +79,24 @@ class Command(BaseCommand):
             profile.branch = branch
             profile.is_active = True
             profile.save()
+        self._seed_approvals()
         self.stdout.write(self.style.SUCCESS(
             f'[OK] {len(settings.E2E_USERS)} e2e users ready in {settings.DATABASES["default"]["NAME"]}'))
+
+    def _seed_approvals(self):
+        """Three requests from the pharmacist waiting for the supervisor (full audit FE-10: bulk
+        approve). A one-step e2e-only workflow; re-running the seed tops them back up to three."""
+        from apps.approvals.models import ApprovalRequest, ApprovalStepDefinition, ApprovalWorkflowDefinition
+        from apps.approvals.service import ApprovalService
+        from apps.users.models import StaffProfile
+
+        wf, _ = ApprovalWorkflowDefinition.objects.update_or_create(code='e2e_bulk', defaults={
+            'category': 'operational', 'name': 'E2E bulk approve', 'name_ar': 'اختبار الموافقة الجماعية',
+            'is_active': True})
+        ApprovalStepDefinition.objects.update_or_create(workflow=wf, order=1, defaults={
+            'name': 'Supervisor', 'name_ar': 'المشرف', 'approver_role': 'supervisor'})
+        requester = StaffProfile.objects.get(user__username=settings.E2E_USERS['pharmacist'])
+        open_ = ApprovalRequest.objects.filter(workflow=wf, status__in=['pending', 'in_review']).count()
+        for n in range(open_, 3):
+            ApprovalService.submit(workflow_code=wf.code, subject_object=requester,
+                                   title=f'E2E طلب للموافقة {n + 1}', requested_by=requester)

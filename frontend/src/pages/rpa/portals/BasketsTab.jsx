@@ -165,6 +165,11 @@ function ResolvePanel({ basket }) {
           ربما أُرسل الطلب (وصل الروبوت لصفحة Submit). لا تُعاد المحاولة قبل قراءة سجل الطلبات أو تأكيدك أنه لم يُرسل.
         </div>
       )}
+      {String(basket.needs_person_reason || '').startsWith('history_unclear') && (
+        <div className="text-amber-700 dark:text-amber-300 text-xs">
+          سجل الطلبات لم يستطع التأكد أنه لا يوجد طلب لهذه السلة. راجع سجل الطلبات في الموقع، ثم اربطها بطلبها أو أكّد «لم يُرسل» واكتب السبب.
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <label className="sr-only" htmlFor={`pr-reason-${basket.id}`}>السبب</label>
         <input id={`pr-reason-${basket.id}`} className="input-field text-sm w-64" maxLength={250} value={reason}

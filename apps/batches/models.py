@@ -128,7 +128,7 @@ class StockBatch(models.Model):
 
     @property
     def days_to_expiry(self):
-        return (self.expiry_date - timezone.now().date()).days
+        return (self.expiry_date - timezone.localdate()).days
 
     @property
     def expiry_value(self):
@@ -140,7 +140,7 @@ class StockBatch(models.Model):
         return self.current_qty > 0 and not self.is_expired and not self.is_quarantined
 
     def flag_expired(self):
-        if not self.is_expired and self.expiry_date < timezone.now().date():
+        if not self.is_expired and self.expiry_date < timezone.localdate():
             self.is_expired = True
             self.save(update_fields=['is_expired', 'updated_at'])
 

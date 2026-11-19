@@ -395,10 +395,9 @@ SCREENS = [
              'text': T('يفتح قوالب الطباعة: رأس الصفحة والخطوط والعلامة المائية لكل جهة.', 'Opens the print templates: page header, fonts and watermark per payer.'),
              'when': T('قبل أول طباعة لجهة جديدة، أو لو الجهة طلبت شكل مختلف.', 'Before the first print for a new payer, or if the payer asks for another layout.')},
         ],
-        'updated': '2026-11-15',
+        'updated': '2026-11-19',
 
-        'change_note': T('بحث بالروشتة أو اسم المريض: «مطالبة | روشتة | مريض» بجانب البحث يبيّن كل مطالبة فيها الروشتة وحالتها فيها',
-                         'Search by receipt or patient name: "Claim | Receipt | Patient" next to the search shows every claim holding a receipt and its state there'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'insurance.claim',
@@ -878,8 +877,8 @@ SCREENS = [
              'open_hint': T('تبويب «تحليل البيانات»، بعد ظهور نتيجة.', 'The "Data analysis" tab, once a result shows.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('بحث «أصناف المطالبة» بقى بقواعد * و% وترتيب الكلمات؛ المطالبة المقدَّمة متقفلة: مبترجعش مسودة إلا من مدير النظام وبسبب مكتوب، والتعديل بملحق؛ تعديل البنود: تقدر تلاقي الصنف الجديد بالاسم، والكود بيتملى لوحده',
-                         'The "Claim items" search now takes * and % wildcards and any word order; a submitted claim is locked: only the admin can return it to draft, with a written reason; changes go through a supplement; line editing: find the new item by name and its code is filled in'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية؛ بحث «أصناف المطالبة» بقى بقواعد * و% وترتيب الكلمات؛ المطالبة المقدَّمة متقفلة: مبترجعش مسودة إلا من مدير النظام وبسبب مكتوب، والتعديل بملحق؛ تعديل البنود: تقدر تلاقي الصنف الجديد بالاسم، والكود بيتملى لوحده',
+                         'Without access to this screen you go back to the dashboard instead of an empty screen; the "Claim items" search now takes * and % wildcards and any word order; a submitted claim is locked: only the admin can return it to draft, with a written reason; changes go through a supplement; line editing: find the new item by name and its code is filled in'),
     },
     {
         'key': 'insurance.print',
@@ -1054,9 +1053,9 @@ SCREENS = [
              'warn': T('الأكواد بتحدد روشتات مين تدخل المطالبة — كود ناقص يسقط روشتات، وزيادة تدخّل غريبة.', 'The codes decide whose receipts enter the claim — a missing code drops receipts, an extra one lets strangers in.'),
              'open_hint': T('اختار جهة، ثم «+ فئة» أو ✏️ على فئة.', 'Pick a payer, then "+ Category" or ✏️ on a category.')},
         ],
-        'updated': '2026-11-01',
+        'updated': '2026-11-19',
     
-        'change_note': T('ربط الجهة بشركتها الأم', 'Link a payer to its parent company'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'insurance.item_overrides',
@@ -1136,9 +1135,9 @@ SCREENS = [
              'warn': T('التعديل بيأثر على المطالبات اللي بتتطبّق عليها بعد كده — شوف «المطالبات المتأثرة».', 'The change affects the claims it is applied to from now on — check "Affected claims".')},
         ],
         'tips': [T('تصويب جديد: اكتب الكود، أو ابحث بالاسم واختار الصنف فيتملى الكود ويتعمل «بحث بالكتالوج» لوحده.', 'New override: type the code, or search by name and pick the item; the code is filled and «Catalog lookup» runs by itself.')],
-        'updated': '2026-11-17',
+        'updated': '2026-11-19',
     
-        'change_note': T('تصويب جديد: تقدر تلاقي الصنف بالاسم والكود بيتملى لوحده', 'New override: find the item by name and its code is filled in'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'insurance.reports',
@@ -1174,8 +1173,8 @@ SCREENS = [
              'text': T('حدّد مطالبات (أو لا شىء = كل المعروض) — ورقة «مجمع» صف لكل صنف عبر المطالبات، و«تفصيلى» صنف × مطالبة.', 'Tick claims (or none = all listed) — sheet "Combined" has one row per item across the claims, "Detail" has item × claim.'),
              'open_hint': T('تبويب «المطالبات».', 'The "Claims" tab.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('الجهة والفئة والحالة تقبل أكثر من اختيار — علّم عدة جهات معاً', 'Payer, category and status take several choices — tick several payers at once'),
+        'updated': '2026-11-19',
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'insurance.rosters',
@@ -1212,8 +1211,8 @@ SCREENS = [
                        'Names recorded as not belonging to the payer (a reviewer decision or a "patient not ours" deduction).'),
              'open_hint': T('يظهر عند وجود أسماء مستبعدة.', 'Appears when names were ruled out.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شاشة جديدة: سجل مرضى كل جهة', 'New screen: each payer\'s patient roster'),
+        'updated': '2026-11-19',
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'insurance.separation_lists',
@@ -1317,8 +1316,8 @@ SCREENS = [
              'when': T('لموظف اتضاف بالغلط أو رجع للخدمة.', 'For an employee added by mistake or back in service.'),
              'warn': T('الحذف نهائي، وروشتاته الجاية هتعدّي من غير تنبيه. اللي استبعدته قبل كده بيفضل مستبعد.', 'Deletion is final and his future receipts pass without a flag. What you excluded before stays excluded.')},
         ],
-        'updated': '2026-11-02',
-        'change_note': T('ربط القائمة بفئة فوترة داخل الجهة', 'Link a list to a billing group inside the payer'),
+        'updated': '2026-11-19',
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'insurance.print_profiles',
@@ -1384,8 +1383,8 @@ SCREENS = [
              'text': T('يحذف ملف الطباعة؛ مطالباته ترجع للافتراضي العام.', 'Deletes the print profile; its claims fall back to the general default.'),
              'warn': T('لا رجوع: تضيع الترويسة والألوان والشعار المحفوظة.', 'No undo: the saved header, colours and logo are lost.')},
         ],
-        'updated': '2026-10-30',
+        'updated': '2026-11-19',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
 ]

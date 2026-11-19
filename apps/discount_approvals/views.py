@@ -856,7 +856,7 @@ def discount_impact(request):
     except (TypeError, ValueError):
         return Response({'detail': 'window / min_after_days must be whole numbers'}, status=400)
     branch = (request.query_params.get('branch') or '').strip()
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     DISCOUNT_FIELDS = {'pos_discp', 'pharmacy_discp', 'additional_discp', 'special_discp'}
 

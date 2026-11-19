@@ -16,13 +16,20 @@ import ZoneBanner from './ZoneBanner'
 import QueryErrorStrip from './QueryErrorStrip'
 import ModuleNotificationBell from './ModuleNotificationBell'
 import ThemeToggle from './ThemeToggle'
-import DrugAssistantDrawer from '../counselling/DrugAssistantDrawer'
-import CommandPalette from './CommandPalette'
-import CustomerDrawer from './CustomerDrawer'
+import LoadOnDemand from './LoadOnDemand'
 import BrandMark from './BrandMark'
 import HelpButton from '../help/HelpButton'
 import HelpPanel from '../help/HelpPanel'
 import useScreenUsage from '../hooks/useScreenUsage'
+
+// FE-19: not in the entry bundle — each loads the first time it is opened (LoadOnDemand).
+const loadPalette = () => import('./CommandPalette')
+const loadCustomerDrawer = () => import('./CustomerDrawer')
+const loadDrugAssistant = () => import('../counselling/DrugAssistantDrawer')
+const PALETTE_EVENTS = ['palette:open']
+const CUSTOMER_EVENTS = ['customer360:open']
+const DRUG_EVENTS = ['drug-assistant:open']
+const isPaletteKey = (e) => (e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -432,14 +439,14 @@ export default function Layout() {
         </div>
       </main>
 
-      {/* Global Ctrl+K command palette + universal search */}
-      <CommandPalette />
-      {/* In-app help panel (F1 / "؟" / window 'help:open') */}
+      {/* Global Ctrl+K command palette + universal search — loaded on first Ctrl+K (FE-19) */}
+      <LoadOnDemand load={loadPalette} events={PALETTE_EVENTS} keys={isPaletteKey} />
+      {/* In-app help panel (F1 / "؟" / window 'help:open') — always loaded: tours and hints run while it is closed */}
       <HelpPanel />
-      {/* Global Customer-360 side-drawer (opens on window 'customer360:open') */}
-      <CustomerDrawer />
+      {/* Global Customer-360 side-drawer (opens on window 'customer360:open') — loaded on first open */}
+      <LoadOnDemand load={loadCustomerDrawer} events={CUSTOMER_EVENTS} />
       {/* Drug assistant side-drawer (Ctrl+K Shift+Enter on an item → window 'drug-assistant:open') */}
-      <DrugAssistantDrawer />
+      <LoadOnDemand load={loadDrugAssistant} events={DRUG_EVENTS} />
     </div>
   )
 }

@@ -66,7 +66,7 @@ class Command(BaseCommand):
             from datetime import date
             target_date = date.fromisoformat(date_str)
         else:
-            target_date = timezone.now().date()
+            target_date = timezone.localdate()
 
         self.stdout.write(f'📅 Follow-up reminders for {target_date}')
         total_sent = 0

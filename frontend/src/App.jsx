@@ -84,11 +84,14 @@ const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
 const DeliveryAnalyticsPage = lazy(() => import('./pages/DeliveryAnalyticsPage'))
 const DriverDeliveryApp = lazy(() => import('./pages/DriverDeliveryApp'))
 const DispatchBoard = lazy(() => import('./pages/DispatchBoard'))
-import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
-import MobileLayout from './components/MobileLayout'
+// FE-19: the phone (/m) and rider (/rider) shells load only when one of their routes opens;
+// they render inside <PageSuspense>, like the pages.
+const RiderLayout = lazy(() => import('./components/RiderLayout'))
+const MobileLayout = lazy(() => import('./components/MobileLayout'))
 import PageSuspense from './components/PageSuspense'
 import ItemSearchHotkeyProvider from './components/ItemSearchHotkeyProvider'
+import SessionExpiredOverlay from './components/SessionExpiredOverlay'
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'))
 const HelpManualPage = lazy(() => import('./pages/HelpManualPage'))
 const MobilePOSOrderPage = lazy(() => import('./pages/mobile/MobilePOSOrderPage'))
@@ -329,7 +332,7 @@ export default function App() {
             <Route path="transfers/new"     element={<MobileNewTransferPage />} />
             <Route path="transfers/:id"     element={<MobileTransferDetailPage />} />
             <Route path="approvals"         element={<MobileApprovalsPage />} />
-            <Route path="shortage"          element={<MobileShortagePage />} />
+            <Route path="shortage"          element={<RequireRole module="shortage"><MobileShortagePage /></RequireRole>} />
             <Route path="shortage/new"      element={<MobileNewShortagePage />} />
             <Route path="shortage/:id"      element={<MobileShortageDetailPage />} />
             <Route path="delivery"          element={<MobileDeliveryPage />} />
@@ -344,8 +347,8 @@ export default function App() {
             <Route path="gamification"      element={<MobileGamificationPage />} />
             <Route path="tasks"             element={<MobileTasksPage />} />
             <Route path="tasks/:id"         element={<MobileTaskDetailPage />} />
-            <Route path="vouchers"          element={<MobileVoucherRedeemPage />} />
-            <Route path="stock-count"       element={<MobileStockCountPage />} />
+            <Route path="vouchers"          element={<RequireRole module="vouchers"><MobileVoucherRedeemPage /></RequireRole>} />
+            <Route path="stock-count"       element={<RequireRole module="stockcount"><MobileStockCountPage /></RequireRole>} />
             <Route path="stock-count/:id"   element={<MobileStockCountDetailPage />} />
             <Route path="daily-count"       element={<MobileDailyCountPage />} />
             <Route path="qa"                element={<MobileQAPage />} />
@@ -434,8 +437,8 @@ export default function App() {
             <Route path="customers/merge"    element={<CustomerMergePage />} />
             <Route path="customers/pic-analytics" element={<PicAnalyticsPage />} />
             <Route path="customers/:id"      element={<CustomerDetailPage />} />
-            <Route path="vouchers"           element={<VouchersPage />} />
-            <Route path="offers"             element={<OffersPage />} />
+            <Route path="vouchers"           element={<RequireRole module="vouchers"><VouchersPage /></RequireRole>} />
+            <Route path="offers"             element={<RequireRole module="offers"><OffersPage /></RequireRole>} />
             <Route path="chronic-classifier" element={<ChronicClassifierPage />} />
             <Route path="composition"        element={<CompositionPage />} />
             <Route path="ingredient-search"  element={<IngredientSearchPage />} />
@@ -460,8 +463,8 @@ export default function App() {
             <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']} module="pos"><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />
-            <Route path="stock-count"        element={<StockCountPage />} />
-            <Route path="shortage"           element={<ShortagePage />} />
+            <Route path="stock-count"        element={<RequireRole module="stockcount" cap="can_stock_audit"><StockCountPage /></RequireRole>} />
+            <Route path="shortage"           element={<RequireRole module="shortage"><ShortagePage /></RequireRole>} />
             <Route path="purchasing"         element={<PurchasingDashboard />} />
             <Route path="market-shortage"    element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><MarketShortagePage /></RequireRole>} />
             <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><PhantomSalesPage /></RequireRole>} />
@@ -474,7 +477,7 @@ export default function App() {
                 /procurement/segments     → SupplierSegmentationPage
                 /procurement/foc          → FocAnalysisPage
             ─────────────────────────────────────────────────────────── */}
-            <Route path="procurement" element={<ProcurementHubPage />}>
+            <Route path="procurement" element={<RequireRole module="purchasing"><ProcurementHubPage /></RequireRole>}>
               <Route index element={<Navigate to="overview" replace />} />
               <Route path="overview"     element={<ProcurementDashboard />} />
               <Route path="history"      element={<ProcurementHistoryPage />} />
@@ -502,17 +505,17 @@ export default function App() {
             <Route path="rpa/portals" element={<SupplierPortalsPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
-            <Route path="insurance"                           element={<InsuranceClaimsPage />} />
+            <Route path="insurance"                           element={<RequireRole module="insurance"><InsuranceClaimsPage /></RequireRole>} />
             <Route path="commerce"                            element={<CommerceDocumentsPage />} />
             <Route path="commerce/documents/:id"              element={<CommerceDocumentEditorPage />} />
-            <Route path="insurance/clients"                   element={<InsuranceClientsPage />} />
-            <Route path="insurance/item-overrides"            element={<InsuranceItemOverridesPage />} />
-            <Route path="insurance/separation-lists"          element={<InsuranceSeparationListsPage />} />
-            <Route path="insurance/rosters"                   element={<InsuranceRostersPage />} />
-            <Route path="insurance/reports"                   element={<InsuranceReportsPage />} />
-            <Route path="insurance/print-profiles"            element={<InsurancePrintProfilesPage />} />
-            <Route path="insurance/claims/:id"                element={<InsuranceClaimDetailPage />} />
-            <Route path="insurance/claims/:id/print"          element={<InsurancePrintPage />} />
+            <Route path="insurance/clients"                   element={<RequireRole module="insurance"><InsuranceClientsPage /></RequireRole>} />
+            <Route path="insurance/item-overrides"            element={<RequireRole module="insurance"><InsuranceItemOverridesPage /></RequireRole>} />
+            <Route path="insurance/separation-lists"          element={<RequireRole module="insurance"><InsuranceSeparationListsPage /></RequireRole>} />
+            <Route path="insurance/rosters"                   element={<RequireRole module="insurance"><InsuranceRostersPage /></RequireRole>} />
+            <Route path="insurance/reports"                   element={<RequireRole module="insurance"><InsuranceReportsPage /></RequireRole>} />
+            <Route path="insurance/print-profiles"            element={<RequireRole module="insurance"><InsurancePrintProfilesPage /></RequireRole>} />
+            <Route path="insurance/claims/:id"                element={<RequireRole module="insurance"><InsuranceClaimDetailPage /></RequireRole>} />
+            <Route path="insurance/claims/:id/print"          element={<RequireRole module="insurance"><InsurancePrintPage /></RequireRole>} />
 
             {/* ── Analytics hub (2 tabs) ────────────────────────────────
                 /analytics              → redirects to /analytics/sales
@@ -618,6 +621,8 @@ export default function App() {
           </Route>
         </Routes>
         </ItemSearchHotkeyProvider>
+        {/* FE-12: an expired session signs in again over the page instead of losing it */}
+        <SessionExpiredOverlay />
         </PageSuspense>
       </BrowserRouter>
     </QueryClientProvider>

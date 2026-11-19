@@ -337,7 +337,7 @@ class RewardCatalog(models.Model):
 
     @property
     def is_available(self) -> bool:
-        today = timezone.now().date()
+        today = timezone.localdate()   # the Cairo day (BE-15, owner 2026-11-19)
         if not self.is_active:
             return False
         if self.valid_from and today < self.valid_from:

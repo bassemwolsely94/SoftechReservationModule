@@ -107,7 +107,7 @@ class CommerceDocumentViewSet(_FlagGate, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         dt = serializer.validated_data['doc_type']
         staff = getattr(self.request.user, 'staff_profile', None)
-        doc_date = serializer.validated_data.get('doc_date') or timezone.now().date()
+        doc_date = serializer.validated_data.get('doc_date') or timezone.localdate()
         serializer.save(
             number=next_document_number(dt, on_date=doc_date),
             vat_rate=serializer.validated_data.get('vat_rate') or dt.default_vat_rate,

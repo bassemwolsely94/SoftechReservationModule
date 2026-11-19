@@ -39,6 +39,17 @@ class RpaModelsTests(TestCase):
         recipe.save()
         self.assertEqual(RpaRecipe.objects.get(pk=recipe.pk).status, 'retired')
 
+    def test_approved_recipe_keeps_its_last_editor(self):
+        # the editor is the four-eyes evidence: frozen with the content once approved
+        staff = self._staff()
+        recipe = RpaRecipe.objects.create(
+            screen=RpaScreen.objects.get(key='issue_125'), version=1, status='approved',
+            created_by=staff, edited_by=staff)
+        recipe.edited_by = None
+        with self.assertRaisesMessage(ValidationError, 'recipe is immutable once approved'):
+            recipe.save()
+        self.assertEqual(RpaRecipe.objects.get(pk=recipe.pk).edited_by_id, staff.id)
+
     def test_draft_recipe_is_editable(self):
         recipe = RpaRecipe.objects.create(screen=RpaScreen.objects.get(key='issue_125'), version=1,
                                           created_by=self._staff())

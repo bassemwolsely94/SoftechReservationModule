@@ -29,7 +29,7 @@ class RpaRecipe(models.Model):
     CONTENT_FIELDS = (
         'screen_id', 'version', 'window_title', 'cell_delay', 'form_delay', 'header_checklist',
         'line_cells', 'ref_cells', 'save_keys', 'cancel_keys', 'popups', 'source_filename',
-        'created_by_id',
+        'created_by_id', 'edited_by_id', 'edited_at',   # who wrote the content is frozen with it
     )
 
     screen = models.ForeignKey(RpaScreen, on_delete=models.PROTECT, related_name='recipes')
@@ -49,6 +49,10 @@ class RpaRecipe(models.Model):
     approved_by = models.ForeignKey('users.StaffProfile', on_delete=models.PROTECT, null=True, blank=True,
                                     related_name='rpa_recipes_approved')
     approved_at = models.DateTimeField(null=True, blank=True)
+    # the last admin who edited the draft (workflow.edit_recipe); four-eyes: that admin cannot approve it
+    edited_by = models.ForeignKey('users.StaffProfile', on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='rpa_recipes_edited')
+    edited_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [

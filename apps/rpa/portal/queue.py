@@ -16,12 +16,16 @@ What stops a supplier order being placed twice:
     linked to its order or cancelled;
   • a late "Submit seen" for any closed fill run of the device is still taken in, and pulls the
     basket back to a person whatever state it reached since (a recorded basket with the same
-    order number is left as it is; with another number it keeps a reason a person must clear);
+    order number is left as it is; with another number it keeps a reason a person must clear; a
+    cancelled basket whose lines were not held has them held now, R19);
   • a basket that may have ordered is cancelled only with an explicit, reasoned confirmation, and
     its buy lines then leave the supplier (chosen_supplier cleared, a «may have ordered» note in
     `tried`): nothing orders them again until a person re-picks them;
   • an Order History read reports every order in its window; only orders not already on another
     basket and sharing a code with this basket (or with a row that cannot be read) count as found.
+    It is "none" (the basket may be retried) only when SURE: the robot proved the whole window was
+    read (`complete` true, R21), it was not cut at the cap (R20), and every order in it is already
+    on another basket (R17). Any doubt is history_unclear: the basket stays with a person.
 
 Fill runs live on the basket's lease. Discovery and Order History runs have no basket claim, so
 they carry their own (PortalRun.lease_until). Nothing here writes SOFTECH.
@@ -69,9 +73,12 @@ PRE_CART_STEPS = frozenset({'check_account', 'check_cart_empty'})
 HISTORY_MARGIN = timedelta(hours=2)
 ACTIONS = ('retry', 'link_order', 'cancel', 'acknowledge')
 # a needs_person reason that says an order was (or may have been) placed for this basket
-ORDER_REASONS = ('history_found', 'record_failed', 'history_unmatched', 'submit_seen', 'need_check',
-                 'order_ref_conflict')
+ORDER_REASONS = ('history_found', 'history_unclear', 'record_failed', 'history_unmatched', 'submit_seen',
+                 'need_check', 'order_ref_conflict')
 MAX_HISTORY_ORDERS = 50
+# an Order History read's settled outcomes. history_none ("no order, it may be retried") is given
+# only when the read is SURE; any doubt is history_unclear and a person decides (rulings R17-R21)
+HISTORY_OUTCOMES = ('history_found', 'history_none', 'history_unclear')
 _LINE_STATUSES = {v for v, _ in PortalLine.STATUS}
 
 
@@ -177,7 +184,7 @@ def _close(run, outcome, now, extra_steps=()):
     run.save(update_fields=['outcome', 'finished_at', 'steps'])
 
 
-def _needs_person(basket, reason, *, user, now):
+def _needs_person(basket, reason, *, user, now, read=True):
     old = {'status': basket.status, 'needs_person_reason': basket.needs_person_reason}
     basket.status = 'needs_person'
     basket.needs_person_reason = str(reason)[:255]
@@ -188,7 +195,7 @@ def _needs_person(basket, reason, *, user, now):
     _audit('rpa_portal_needs_person', basket, user=user, old=old,
            new={'status': basket.status, 'needs_person_reason': basket.needs_person_reason},
            note=f'basket {basket.pk}: {basket.needs_person_reason}')
-    if may_have_ordered(basket):      # it may have reached Submit: read Order History
+    if read and may_have_ordered(basket):      # it may have reached Submit: read Order History
         request_history(basket)
 
 
@@ -286,7 +293,9 @@ def discovery_state(job) -> dict:
             'needs_person': bool(missing) and not ok and failed >= MAX_FAILED_READS}
 
 
-HISTORY_SETTLED = ('history_none', 'history_found')
+# a settled read is not asked for again daily (an unclear one waits for a person, who may ask for a
+# fresh read with «افحص سجل الطلبات»). Settled is NOT "cleared": only _history_clears allows a retry.
+HISTORY_SETTLED = HISTORY_OUTCOMES
 
 
 def daily_history_check() -> int:
@@ -460,7 +469,8 @@ def report(run, device, payload):
     - except a late "submit_seen" on any closed fill run of this device (lease expiry, a person,
     a refused retried handover, the operator's stop, an error...), which is always taken in.
     Order History reports carry `orders` (every order in the window; _report_history decides
-    which may be this basket's)."""
+    which may be this basket's), `complete` (true only with the robot's proof that no further page
+    exists) and `truncated` (the read was cut at the cap)."""
     if not isinstance(payload, dict):
         raise QueueError('طلب غير صالح')
     now = timezone.now()
@@ -473,7 +483,11 @@ def report(run, device, payload):
         outcome = str(payload.get('outcome') or '')
         # a Submit sighting is never thrown away: any closed fill run of this device takes it
         late_sighting = run.kind == 'fill' and run.finished_at is not None and outcome == 'submit_seen'
-        if run.finished_at is not None and not late_sighting:
+        # nor is an Order History result whose read a person's decision closed meanwhile (resolve
+        # closes open runs as 'resolved'): an order it finds pulls the basket back to a person
+        late_history = (run.kind == 'history' and run.finished_at is not None and run.outcome == 'resolved'
+                        and outcome in HISTORY_OUTCOMES)
+        if run.finished_at is not None and not (late_sighting or late_history):
             raise RunConflict()
         job = basket.job if basket is not None else run.discovery_job
         account = job.account
@@ -494,7 +508,7 @@ def report(run, device, payload):
         if run.kind == 'discovery':
             return _report_discovery(job, run, outcome, payload, now)
         if run.kind == 'history':
-            return _report_history(basket, run, outcome, payload, device, now)
+            return _report_history(basket, run, outcome, payload, device, now, late=late_history)
         if credit is not None:
             basket.credit_seen = credit
         return _report_fill(basket, run, outcome, payload, device, now, wrong_identity=wrong_identity)
@@ -553,46 +567,136 @@ def _may_be_ours(lines, mine) -> bool:
 
 
 def _orders_for(basket, orders):
-    """The orders in the window that may be this basket's: its own order number when it has one;
-    else those not already recorded on another basket (portal_key) that share a code with it."""
+    """(found, unclear): the orders in the window that may be this basket's - its own order number
+    when it has one, else those not already recorded on another basket (portal_key) that share a
+    code with it (or have a row that cannot be read) - and the other orders no basket owns (R17:
+    nothing proves they are not this basket's, so a person confirms)."""
     if basket.portal_ref:
         own = [o for o in orders if o['order_ref'] == basket.portal_ref]
         if own:
-            return own
+            return own, []
     key = basket.job.portal.key
     taken = set(PortalBasket.objects.filter(portal_key__in=[f'{key}:{o["order_ref"]}' for o in orders])
                 .exclude(pk=basket.pk).values_list('portal_key', flat=True))
     mine = set(basket.lines.exclude(supplier_key='').values_list('supplier_key', flat=True))
-    return [o for o in orders if f'{key}:{o["order_ref"]}' not in taken and _may_be_ours(o['lines'], mine)]
+    free = [o for o in orders if f'{key}:{o["order_ref"]}' not in taken]
+    found = [o for o in free if _may_be_ours(o['lines'], mine)]
+    return found, [o for o in free if o not in found]
 
 
-def _report_history(basket, run, outcome, payload, device, now):
-    orders = _history_orders(payload) if outcome in ('history_found', 'history_none') else []
-    if outcome == 'history_found' and not orders:
+def _unreadable_orders(payload) -> int:
+    """Entries of the robot's `orders` list that _history_orders drops (not an object, or no order
+    number): an order row we could not read is never taken as "no order"."""
+    raw = payload.get('orders')
+    if not isinstance(raw, list):
+        return 0
+    return sum(1 for o in raw if not (isinstance(o, dict) and str(o.get('order_ref') or '').strip()))
+
+
+def _history_doubts(outcome, payload, unclear) -> list:
+    """Why a read that found none of this basket's orders still cannot say "none" (any one is
+    enough): the robot itself was unsure; no positive proof that the whole window was read (R21:
+    `complete` must be exactly true - the robot sends it only once the recipe's paging locators
+    were confirmed on the site); the read hit the cap (R20); order rows whose number could not be
+    read; orders no basket owns (R17). Kept on found reads too, for the audit."""
+    doubts = []
+    if outcome == 'history_unclear':
+        doubts.append('robot_unclear')
+    if payload.get('complete') is not True:
+        doubts.append('not_complete')
+    raw = payload.get('orders')
+    # any truthy `truncated` counts (fail safe); cap-many orders count even when the robot says not
+    if payload.get('truncated') or (isinstance(raw, list) and len(raw) >= MAX_HISTORY_ORDERS):
+        doubts.append('truncated')
+    if _unreadable_orders(payload):
+        doubts.append('unreadable_orders')
+    if unclear:
+        doubts.append('other_orders')
+    return doubts
+
+
+# a basket a found / unclear read pulls back to a person: it left needs_person (a person's decision,
+# a retry, a claim...) but its order was not recorded (recorded / submitted / dry_run_ok stay)
+PULL_BACK = ('pending', 'ready', 'in_progress', 'awaiting_submit', 'cancelled')
+
+
+def _report_history(basket, run, outcome, payload, device, now, *, late=False):
+    """Settle an Order History read. `late`: the run was closed by a person's decision while the
+    robot read; its result is still taken in when it finds (or cannot rule out) an order."""
+    reading = outcome in HISTORY_OUTCOMES
+    orders = _history_orders(payload) if reading else []
+    if outcome == 'history_found' and not orders and not (reading and _unreadable_orders(payload)):
         outcome = 'error'                    # "found" with nothing readable proves nothing
-    if outcome in ('history_found', 'history_none'):
-        found = _orders_for(basket, orders)
-        step = {'i': None, 'label': 'order_history', 'at': now.isoformat(), 'ok': True, 'note': '',
-                'order_ref': found[0]['order_ref'] if len(found) == 1 else '',
-                'history_lines': found[0]['lines'] if len(found) == 1 else [],
-                'orders': orders, 'matched': [o['order_ref'] for o in found]}
-        if not found:
-            step['note'] = f'{len(orders)} order(s) in the window, none this basket\'s'
-            _close(run, 'history_none', now, [step])
-            return basket
-        _close(run, 'history_found', now, [step])
-        if basket.status == 'needs_person':
-            refs = ','.join(o['order_ref'] for o in found)
-            old = {'needs_person_reason': basket.needs_person_reason}
-            basket.needs_person_reason = f'history_found:{refs}'[:255]
-            basket.save(update_fields=['needs_person_reason'])
-            _audit('rpa_portal_needs_person', basket, user=device.staff, old=old,
-                   new={'needs_person_reason': basket.needs_person_reason, 'run_id': run.pk,
-                        'orders_read': [o['order_ref'] for o in orders]},
-                   note=f'basket {basket.pk}: Order History found {refs}')
+    if outcome not in HISTORY_OUTCOMES:
+        if late:                             # e.g. the wrong account: proves nothing, not taken in
+            raise RunConflict()
+        else:
+            _close(run, outcome if outcome in PERSON_OUTCOMES else 'error', now)
         return basket
-    _close(run, outcome if outcome in PERSON_OUTCOMES else 'error', now)
+    found, unclear = _orders_for(basket, orders)
+    doubts = _history_doubts(outcome, payload, unclear)
+    step = {'i': None, 'label': 'order_history', 'at': now.isoformat(), 'ok': True, 'note': '',
+            'order_ref': found[0]['order_ref'] if len(found) == 1 else '',
+            'history_lines': found[0]['lines'] if len(found) == 1 else [],
+            'orders': orders, 'matched': [o['order_ref'] for o in found],
+            'unclear': [o['order_ref'] for o in unclear],
+            'complete': payload.get('complete') is True, 'truncated': bool(payload.get('truncated')),
+            'doubts': doubts}
+    if found:
+        refs = ','.join(o['order_ref'] for o in found)
+        settled, reason, note = 'history_found', f'history_found:{refs}', f'Order History found {refs}'
+    elif doubts:
+        # no colon: _reason_refs must not read the doubts as order numbers to link
+        settled = 'history_unclear'
+        reason = f'history_unclear ({", ".join(doubts)})'
+        note = f'Order History unclear: {", ".join(doubts)}'
+        step['note'] = f'{len(orders)} order(s) in the window; unclear: {", ".join(doubts)}'
+    else:
+        settled, reason, note = 'history_none', '', ''
+        step['note'] = f'{len(orders)} order(s) in the window, all on other baskets'
+    pull_back = settled != 'history_none' and basket.status in PULL_BACK
+    if late and not (pull_back or (settled != 'history_none' and basket.status == 'needs_person')):
+        # nothing to act on (no order, or the order is recorded): kept for the record, once - any
+        # further such answer (a lost reply, retried) is refused, so the run never grows without end
+        if any(isinstance(s, dict) and s.get('label') == 'order_history' and 'orders' in s
+               for s in run.steps or []):
+            raise RunConflict()
+        step['note'] = f'{step["note"]} (read closed by a person before it came)'.strip()
+        run.steps = list(run.steps or []) + [step]
+        run.save(update_fields=['steps'])
+        return basket
+    _close(run, settled, now, [step])
+    if settled == 'history_none':
+        return basket
+    detail = {'run_id': run.pk, 'orders_read': [o['order_ref'] for o in orders], 'doubts': doubts,
+              'unclear_orders': step['unclear']}
+    if basket.status == 'needs_person':
+        old = {'needs_person_reason': basket.needs_person_reason}
+        basket.needs_person_reason = reason[:255]
+        basket.save(update_fields=['needs_person_reason'])
+        _audit('rpa_portal_needs_person', basket, user=device.staff, old=old,
+               new={'needs_person_reason': basket.needs_person_reason, **detail},
+               note=f'basket {basket.pk}: {note}')
+    elif pull_back:
+        _pull_back(basket, reason, device, now, detail, note)
     return basket
+
+
+def _pull_back(basket, reason, device, now, detail, note):
+    """A found / unclear read came for a basket that left needs_person without its order being
+    recorded: back to a person; a fill it is in stops at its next heartbeat; a cancelled one has
+    its lines held and newer baskets of the same lines pulled too (as a late Submit would)."""
+    old = {'status': basket.status, 'needs_person_reason': basket.needs_person_reason}
+    was_cancelled = basket.status == 'cancelled'
+    PortalRun.objects.filter(basket=basket, finished_at__isnull=True).update(outcome='resolved', finished_at=now)
+    basket.claimed_by = None
+    basket.save(update_fields=['claimed_by'])
+    _needs_person(basket, reason, user=device.staff, now=now, read=False)   # this read is the read
+    _audit('rpa_portal_needs_person', basket, user=device.staff, old=old,
+           new={'needs_person_reason': basket.needs_person_reason, 'pulled_back': True, **detail},
+           note=f'basket {basket.pk}: {note} after it moved on')
+    if was_cancelled:
+        _cancelled_may_have_ordered(basket, '', device, now)
 
 
 def _submit_seen_late(basket, run, payload, device, now):
@@ -627,12 +731,95 @@ def _submit_seen_late(basket, run, payload, device, now):
     reason = f'submit_seen:{ref or "?"}'
     if basket.status == 'needs_person' and basket.needs_person_reason:
         reason = f'{basket.needs_person_reason}; {reason}'
+    was_cancelled = basket.status == 'cancelled'
     PortalRun.objects.filter(basket=basket, finished_at__isnull=True).exclude(kind='history').update(
         outcome='resolved', finished_at=now)          # a re-claimed fill stops at its next heartbeat
     basket.claimed_by = None
     basket.save(update_fields=['claimed_by'])
     _needs_person(basket, reason, user=device.staff, now=now)
+    if was_cancelled:
+        _cancelled_may_have_ordered(basket, ref, device, now)
     return basket
+
+
+# a basket that may still be filled and sent from its buy lines (it holds no order of its own yet)
+LIVE_BASKETS = ('pending', 'ready', 'in_progress', 'awaiting_submit')
+
+
+# a newer basket of the same lines that already has a person or an order: flagged, status kept
+FLAG_BASKETS = ('needs_person', 'submitted', 'recorded')
+
+
+def _cancelled_may_have_ordered(basket, ref, device, now):
+    """A cancelled basket turned out to have (maybe) ordered: pull every newer basket of the same
+    lines to a person, then hold its lines (R19), in this same transaction. Baskets are locked
+    before buy lines, as in resolve's cancel."""
+    _pull_other_baskets(basket, device, now)
+    _hold_after_late_sighting(basket, ref, device, now)
+
+
+def _pull_other_baskets(basket, device, now):
+    """R19: after this cancelled basket was let go, its buy lines may have been re-picked into a
+    newer job at the same portal. A newer basket that may still be sent would order the same items
+    again: it goes to a person (submit_seen_other:<this basket's id>), whatever it is doing; a fill
+    it is in is closed and stops at its next heartbeat. A newer basket already with a person, or
+    already ordered (submitted / recorded: a possible double order), keeps its status and gets the
+    same marker added to its reason. Each is audited, and the whole on this basket."""
+    ids = list(basket.lines.values_list('buyline_id', flat=True))
+    pks = list(PortalBasket.objects.filter(job__portal_id=basket.job.portal_id, pk__gt=basket.pk,
+                                           status__in=LIVE_BASKETS + FLAG_BASKETS, lines__buyline_id__in=ids)
+               .values_list('pk', flat=True).distinct())
+    if not pks:
+        return []
+    marker = f'submit_seen_other:{basket.pk}'
+    pulled, flagged = [], []
+    for other in (PortalBasket.objects.select_for_update()
+                  .filter(pk__in=pks, status__in=LIVE_BASKETS + FLAG_BASKETS).order_by('pk')):
+        if other.status in LIVE_BASKETS:
+            PortalRun.objects.filter(basket=other, finished_at__isnull=True).exclude(kind='history').update(
+                outcome='resolved', finished_at=now)
+            other.claimed_by = None
+            other.save(update_fields=['claimed_by'])
+            _needs_person(other, marker, user=device.staff, now=now)
+            pulled.append(other.pk)
+            continue
+        if marker in (other.needs_person_reason or ''):
+            continue
+        old = {'status': other.status, 'needs_person_reason': other.needs_person_reason}
+        other.needs_person_reason = (f'{other.needs_person_reason}; {marker}' if other.needs_person_reason
+                                     else marker)[:255]
+        other.save(update_fields=['needs_person_reason'])
+        _audit('rpa_portal_needs_person', other, user=device.staff, old=old,
+               new={'status': other.status, 'needs_person_reason': other.needs_person_reason,
+                    'late_sighting_basket': basket.pk},
+               note=f'basket {other.pk}: basket {basket.pk} may have ordered the same items')
+        flagged.append(other.pk)
+    if pulled or flagged:
+        _audit('rpa_portal_needs_person', basket, user=device.staff,
+               new={'late_sighting_basket': basket.pk, 'baskets': pulled, 'flagged': flagged,
+                    'shared_buylines': ids},
+               note=f'basket {basket.pk}: may have ordered after its cancel - newer baskets {pulled + flagged}')
+    return pulled + flagged
+
+
+def _hold_after_late_sighting(basket, ref, device, now):
+    """R19: a basket cancelled without holding its lines (a plain cancel: nothing said it had
+    ordered), its job maybe finished, turns out to have reached Submit. Its buy lines are held
+    now as a confirmed cancel of a may-have-placed basket would have held them (R18: off the
+    portal's own supplier code, a «may have ordered» note), so neither the buy list nor the
+    Remainders offers them again until a person decides. A basket whose lines were already held
+    (a confirmed cancel) is left as the person set it. Audited with each line's supplier before."""
+    from apps.rpa.models import BuyListLine
+    ids = list(basket.lines.values_list('buyline_id', flat=True))
+    if any(_held_for(bl, basket.pk) for bl in BuyListLine.objects.filter(pk__in=ids)):
+        return []
+    before = {}
+    held = _hold_lines(basket, now=now, ref=ref or None, before=before)
+    _audit('rpa_portal_needs_person', basket, user=device.staff,
+           old={'status': 'cancelled', 'chosen_supplier': before},
+           new={'held_buylines': held, 'order_ref': ref, 'late': True},
+           note=f'basket {basket.pk}: late Submit on a cancelled basket - lines held')
+    return held
 
 
 def _report_fill(basket, run, outcome, payload, device, now, *, wrong_identity=False):
@@ -736,20 +923,28 @@ def expire_leases(now=None) -> int:
 # ── resolve (a person decides on a needs_person basket) ──────────────────────────────────────
 
 def _history_clears(basket):
-    """An Order History read since the basket got stuck found nothing, and none found an order."""
+    """An Order History read since the basket got stuck was SURE it found nothing (history_none),
+    none found an order, and no unclear read came after the last sure one. A history_unclear read
+    is never permission to retry (R17-R21); a later sure read of the same window settles it."""
+    if basket.needs_person_at is None:
+        return False
     since = PortalRun.objects.filter(basket=basket, kind='history', finished_at__isnull=False,
                                      started_at__gte=basket.needs_person_at)
-    return (basket.needs_person_at is not None and since.filter(outcome='history_none').exists()
-            and not since.filter(outcome='history_found').exists())
+    if since.filter(outcome='history_found').exists():
+        return False
+    last = since.filter(outcome__in=('history_none', 'history_unclear')).order_by('-pk').first()
+    return last is not None and last.outcome == 'history_none'
 
 
 def _history_found_stands(basket) -> bool:
     """An Order History read since the basket got stuck found an order that may be this basket's,
-    or its reason still names one (history_found:<ref>)."""
-    if 'history_found' in (basket.needs_person_reason or ''):
+    or could not rule one out (history_unclear), or its reason still says so. A person's
+    "nothing was ordered" over it needs a written reason."""
+    if any(m in (basket.needs_person_reason or '') for m in ('history_found', 'history_unclear')):
         return True
     return basket.needs_person_at is not None and PortalRun.objects.filter(
-        basket=basket, kind='history', outcome='history_found', started_at__gte=basket.needs_person_at).exists()
+        basket=basket, kind='history', outcome__in=('history_found', 'history_unclear'),
+        started_at__gte=basket.needs_person_at).exists()
 
 
 def _reason_refs(reason) -> set:
@@ -759,7 +954,10 @@ def _reason_refs(reason) -> set:
     for part in str(reason or '').split(';'):
         if ':' not in part:
             continue
-        for ref in part.split(':', 1)[1].replace('/', ',').split(','):
+        key, value = part.split(':', 1)
+        if key.strip() == 'submit_seen_other':      # another basket's id, not an order number
+            continue
+        for ref in value.replace('/', ',').split(','):
             ref = ref.strip()
             if ref and ref != '?':
                 refs.add(ref)
@@ -835,19 +1033,29 @@ def _person_history_lines(lines):
     return out
 
 
-def _hold_lines(b, *, now):
+def _held_for(bl, basket_id) -> bool:
+    return any(isinstance(t, dict) and t.get('basket') == basket_id and t.get('may_have_ordered')
+               for t in bl.tried or [])
+
+
+def _hold_lines(b, *, now, ref=None, before=None):
     """A basket that may have ordered was cancelled: its buy lines leave this supplier (so no job
     or order list takes them again) and carry a note in `tried`, until a person re-picks them.
-    The remaining quantity is not touched. Returns the buy-line ids held."""
+    The remaining quantity is not touched. A line already held for this basket is not noted
+    again. `before`, when given, collects each line's chosen_supplier before (for the audit).
+    Returns the buy-line ids held."""
     from apps.rpa.models import BuyListLine
     code = str(b.job.portal.supplier_code)
-    ref = b.portal_ref or suggested_order_ref(b)
+    ref = ref or b.portal_ref or suggested_order_ref(b)
     held = []
     for bl in (BuyListLine.objects.select_for_update()
                .filter(pk__in=b.lines.values_list('buyline_id', flat=True)).order_by('pk')):
-        bl.tried = list(bl.tried or []) + [{
-            'supplier': code, 'accepted': 0, 'at': now.isoformat(), 'basket': b.pk, 'cancelled': True,
-            'may_have_ordered': True, 'portal_ref': ref}]
+        if before is not None:
+            before[str(bl.pk)] = bl.chosen_supplier
+        if not _held_for(bl, b.pk):
+            bl.tried = list(bl.tried or []) + [{
+                'supplier': code, 'accepted': 0, 'at': now.isoformat(), 'basket': b.pk, 'cancelled': True,
+                'may_have_ordered': True, 'portal_ref': ref}]
         if bl.chosen_supplier == code:
             bl.chosen_supplier = ''
         bl.save(update_fields=['tried', 'chosen_supplier'])
@@ -883,14 +1091,23 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
         if reason:
             new['reason'] = reason
         if action == 'retry':
+            # a read the robot is doing now may still find this basket's order: wait for it (a read
+            # only queued, which no robot holds yet, is closed below and proves nothing either way)
+            if PortalRun.objects.filter(basket=b, kind='history', finished_at__isnull=True,
+                                        device__isnull=False).exists():
+                raise QueueError('الروبوت يقرأ سجل الطلبات لهذه السلة الآن — انتظر نتيجة القراءة ثم أعد المحاولة')
             if b.submitted_seen_at or b.portal_ref:
                 raise QueueError('ظهر رقم طلب لهذه السلة — اربطها بالطلب أو ألغها، لا تُعاد')
-            if may_have_ordered(b) and not _history_clears(b):
+            # a reason that names an order (or another basket's possible order, submit_seen_other)
+            # gates a retry like a fill that may have reached Submit, even on a basket that never ran
+            # (pulled back by a late read, or by another basket's late Submit) - with a written why
+            order_reason = any(m in (b.needs_person_reason or '') for m in ORDER_REASONS)
+            if (may_have_ordered(b) or order_reason) and not _history_clears(b):
                 if not confirm_none:
                     raise QueueError('ربما أُرسل الطلب — راجع سجل الطلبات أولاً أو أكّد أنه لم يُرسل')
-                if _history_found_stands(b) and not reason:
-                    raise QueueError('سجل الطلبات وجد طلباً قد يكون لهذه السلة — اربطها به، أو اكتب سبب '
-                                     'تأكيدك أنه ليس لها')
+                if (order_reason or _history_found_stands(b)) and not reason:
+                    raise QueueError('ربما يوجد طلب لهذه السلة (سجل الطلبات أو سلة أخرى أشارت إليه، أو لم يُتأكد) — '
+                                     'اربطها به، أو اكتب سبب تأكيدك أنه لم يُرسل طلب لها')
                 new['confirmed_no_order'] = True
             b.status = 'ready'
             b.claimed_by = None
