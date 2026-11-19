@@ -198,3 +198,60 @@ class DashboardSummarySameAnswerTests(TestCase):
         self._seed(3)
         self.assertEqual(_count_queries(self._call, dashboard_summary, self.admin[0]), small)
         self.assertLessEqual(small, 12)
+
+
+# ── 3. GET /api/batches/stock-expiry/summary/ ──────────────────────────────────────────────────
+
+class StockExpirySummarySameAnswerTests(TestCase):
+    """New stock_expiry_summary == the pre-change one on the same mirror, in 2 queries at any size."""
+
+    def _seed(self, n=1):
+        from apps.batches.models import StockExpiryBalance
+        from apps.batches.store_roles import CLOSED, COSMETICS, LIVE, RETURN, WRITE_OFF
+        from apps.tests.factories import make_item
+        today = datetime.date.today()
+        start = StockExpiryBalance.objects.count()
+        offsets = (-40, -1, 0, 10, 29, 30, 60, 89, 90, 150, 179, 180, 400)
+        for i in range(n):
+            for j, cost in enumerate((Decimal('12.50'), Decimal('3.333'), None, Decimal('0'))):
+                code = f'S{(start + i * 10 + j) % 99999:05d}'
+                item = make_item(name=f'صنف {code}', softech_id=code)
+                type(item).objects.filter(pk=item.pk).update(cost_price=cost)
+                for k, (role, branch, store) in enumerate((
+                        (LIVE, 'B01', '1'), (LIVE, 'B02', '1'), (RETURN, 'B01', '102'),
+                        (WRITE_OFF, 'B02', '103'), (COSMETICS, 'B01', '105'), (CLOSED, 'B01', '110'),
+                        ('', 'B02', '9'))):
+                    for off in offsets[(j + k) % 4::3]:
+                        StockExpiryBalance.objects.create(
+                            branch_code=branch, store_code=store, item_code=code, store_role=role,
+                            batch_no=f'{i}-{k}-{off}', expiry_date=today + datetime.timedelta(days=off),
+                            qty=Decimal('1.25') * (k + 1) + Decimal(off % 7))
+            # an item the catalog does not know
+            StockExpiryBalance.objects.create(branch_code='B01', store_code='1', item_code=f'X{i:05d}',
+                                              store_role=LIVE, expiry_date=today, qty=Decimal('2'))
+
+    def _assert_same(self):
+        from apps.batches.stock_expiry import stock_expiry_summary
+        from apps.tests.perf_reference.stock_expiry_before import stock_expiry_summary as before
+        for kwargs in ({}, {'include_quarantine': True}, {'branch_codes': ['B02']},
+                       {'store_codes': ['1', '102']}, {'branch_codes': ['B01'], 'include_quarantine': True}):
+            self.assertEqual(stock_expiry_summary(**kwargs), before(**kwargs), kwargs)
+
+    def test_same_answer_with_data(self):
+        from apps.batches.stock_expiry import stock_expiry_summary
+        self._seed()
+        self._assert_same()
+        got = stock_expiry_summary(include_quarantine=True)
+        self.assertGreater(got['lt_30']['value'], 0)
+        self.assertGreater(got['expired']['items'], 0)
+
+    def test_same_answer_empty(self):
+        self._assert_same()
+
+    def test_query_count_is_flat(self):
+        from apps.batches.stock_expiry import stock_expiry_summary
+        self._seed(1)
+        small = _count_queries(stock_expiry_summary, include_quarantine=True)
+        self._seed(3)
+        self.assertEqual(_count_queries(stock_expiry_summary, include_quarantine=True), small)
+        self.assertLessEqual(small, 2)
