@@ -410,8 +410,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('إضافة كذا صنف مرة واحدة: Ctrl+مسافة أو Ctrl+F1 ثم «إضافة المحدد»', 'Add several items at once: Ctrl+Space, or Ctrl+F1 then «Add selected»'),
+        'updated': '2026-11-19',
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'vouchers.mobile',
@@ -475,6 +475,6 @@ SCREENS = [
                  'Only active vouchers show here, with their code and value. Tap the one the customer wants to use to open the customer-details step.\n• If the list is empty, there are no active vouchers right now.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('التبويب يظهر الآن لكل من له صلاحية القسائم في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives vouchers access'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
 ]
