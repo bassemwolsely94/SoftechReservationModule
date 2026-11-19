@@ -575,7 +575,7 @@ SCREENS = [
             {'target': 'omni-automations-edit', 'label': T('✏️', '✏️'),
              'text': T('يفتح القاعدة للتعديل.', 'Opens the rule for editing.')},
             {'target': 'omni-automations-delete', 'label': T('🗑️', '🗑️'),
-             'text': T('يحذف القاعدة بعد تأكيد.', 'Deletes the rule after a confirmation.'),
+             'text': T('يحذف القاعدة. اضغط مرتين: أول ضغطة الزر يحمرّ «حذف؟» لمدة 4 ثواني، والتانية تنفّذ.', 'Deletes the rule. Press twice: the first press turns it red ("Delete?") for 4 s; the second does it.'),
              'warn': T('الحذف نهائي. «معطّلة» أأمن لو ممكن ترجعلها.', 'Deleting is final. "Disabled" is safer if you may need it again.')},
             {'target': 'omni-automations-trigger', 'label': T('عند حدوث', 'When'),
              'text': T('الحدث: رسالة واردة، مكالمة، مكالمة فائتة، حجز، أو تحليل ذكي.', 'The trigger: incoming message, call, missed call, reservation or AI analysis.'),
@@ -621,7 +621,7 @@ SCREENS = [
                  '«عند: …» الحدث اللي بيشغّلها، وبعده عدد الإجراءات، و«نُفّذت X مرة».\n• عدّاد التنفيذ بيقولك القاعدة شغالة فعلاً ولا لأ: لو صفر بعد أيام راجع الكلمات المفتاحية أو الشروط.\n• لو بيزيد بسرعة غريبة، ممكن الشروط واسعة زيادة.',
                  '"When: …" is the triggering event, then the number of actions and "ran X times".\n• The run counter tells you if the rule actually works: still zero after days → review the keywords or conditions.\n• If it climbs oddly fast, the conditions may be too broad.')},
         ],
-        'updated': '2026-10-26',
+        'updated': '2026-11-19',
         'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
     },
     {

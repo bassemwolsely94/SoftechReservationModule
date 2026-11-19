@@ -25,6 +25,7 @@ import {
 import { useThemeMode } from '../theme/useThemeMode'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import { useConfirm } from '../components/InlineConfirm'
 
 // ── i18n helpers ──────────────────────────────────────────────────────────────
 // Most labels come from the DB (Arabic), English shown as sub-labels where provided.
@@ -286,6 +287,7 @@ function BranchHours({ branch, settings, isAdmin, onRefresh, showToast }) {
 
 // ── BranchCard ────────────────────────────────────────────────────────────────
 function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [editMode, setEditMode]   = useState(false)
   const [draft,    setDraft]      = useState({ name_ar: branch.name_ar || '', phone: branch.phone || '', address: branch.address || '', latitude: branch.latitude ?? '', longitude: branch.longitude ?? '' })
   const [saving,   setSaving]     = useState(false)
@@ -358,6 +360,7 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
   return (
     <div className={`bg-white rounded-2xl border-2 overflow-hidden transition-all
       ${dimmed ? 'border-red-100 opacity-75' : 'border-gray-200 hover:border-brand-200'}`}>
+      {confirmUi}
 
       {/* Header */}
       <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-2">
@@ -388,9 +391,10 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
             <div className="col-span-2">
               <label className="text-[11px] text-gray-500 mb-1 block">التصنيف</label>
               <select value={branch.kind || 'retail'} disabled={saving}
-                onChange={e => {
-                  const label = (KIND_OPTIONS.find(([v]) => v === e.target.value) || [])[1] || e.target.value
-                  if (window.confirm(`تغيير تصنيف ${branch.display_name || branch.name} إلى «${label}»؟ يغيّر هذا ظهور الفرع في كل الشاشات والتقارير.`)) saveField({ kind: e.target.value })
+                onChange={async e => {
+                  const v = e.target.value   // the select is controlled: «إلغاء» leaves the saved kind
+                  const label = (KIND_OPTIONS.find(([k]) => k === v) || [])[1] || v
+                  if (await confirmInline(`تغيير تصنيف ${branch.display_name || branch.name} إلى «${label}»؟ يغيّر هذا ظهور الفرع في كل الشاشات والتقارير.`, { confirmLabel: 'تغيير' })) saveField({ kind: v })
                 }}
                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-400">
                 {KIND_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -524,6 +528,7 @@ function BranchCard({ branch, isAdmin, onRefresh, showToast }) {
 
 // ── DropdownEditor ────────────────────────────────────────────────────────────
 function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [adding, setAdding] = useState(false)
   const [form,   setForm]   = useState({ label: '', label_en: '', value: '', icon: '', order: 0 })
   const [saving, setSaving] = useState(false)
@@ -544,7 +549,7 @@ function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
 
   const remove = async (opt) => {
     if (opt.is_system) return
-    if (!confirm(`حذف "${opt.label}"؟`)) return
+    if (!await confirmInline(`حذف "${opt.label}"؟`, { tone: 'danger', confirmLabel: 'حذف' })) return
     await configApi.deleteDropdown(opt.id)
     onRefresh()
   }
@@ -556,6 +561,7 @@ function DropdownEditor({ dropdownKey, options, onRefresh, isAdmin }) {
 
   return (
     <div>
+      {confirmUi}
       <div className="space-y-1.5 mb-3">
         {options.length === 0 && (
           <div className="text-sm text-gray-400 py-4 text-center">لا توجد خيارات</div>

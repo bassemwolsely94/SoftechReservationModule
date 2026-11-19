@@ -14,6 +14,7 @@ import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import { useToast } from '../components/ui'
+import { ConfirmButton } from '../components/InlineConfirm'
 import { fa, ba } from '../utils/flowArrow'
 
 const TYPES = [
@@ -168,7 +169,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
        .catch(e => toast?.error?.(e?.response?.data?.detail || 'فشل الحفظ — تحقق من الصلاحية والحقول'))
        .finally(() => setSaving(false))
   }
-  const remove = () => { if (o.id && confirm('حذف العرض؟')) offersApi.remove(o.id).then(onDone) }
+  const remove = () => { if (o.id) offersApi.remove(o.id).then(onDone) }   // «حذف» is a two-step ConfirmButton
 
   const t = o.offer_type
   return (
@@ -176,7 +177,7 @@ function OfferEditor({ draft, fields, toast, onDone, onCancel }) {
       <div className="flex items-center justify-between mb-4">
         <button onClick={onCancel} className="text-sm text-muted hover:text-content">{ba()} رجوع للقائمة</button>
         <div className="flex gap-2">
-          {o.id && <button onClick={remove} data-tour="pos-offers-delete" className="btn-danger text-xs">حذف</button>}
+          {o.id && <ConfirmButton onConfirm={remove} data-tour="pos-offers-delete" confirmLabel="حذف العرض؟" className="btn-danger text-xs">حذف</ConfirmButton>}
           <button data-tour="pos-offers-done" onClick={onDone} className="btn-secondary text-xs">تم</button>
           <button onClick={save} disabled={saving} data-tour="pos-offers-save" className="btn-primary">{saving ? '…' : 'حفظ العرض'}</button>
         </div>

@@ -11,6 +11,8 @@ import { useProcurementFilters } from '../components/ProcurementFilters'
 import RefreshButton from '../components/RefreshButton'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import { useConfirm } from '../components/InlineConfirm'
+import { notify } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -124,6 +126,7 @@ function AlertRow({ alert, onResolve }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ProcurementDashboard() {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const navigate = useNavigate()
   const { params } = useProcurementFilters()
   const [data, setData]         = useState(null)
@@ -154,13 +157,13 @@ export default function ProcurementDashboard() {
   const { sorted: topSuppliers, headerProps: tsH } = useSortableRows(data?.top_suppliers || [], {})
 
   const handleTrigger = async () => {
-    if (!confirm('تشغيل محرك المشتريات الآن؟')) return
+    if (!await confirmInline('تشغيل محرك المشتريات الآن؟', { confirmLabel: 'تشغيل' })) return
     setTriggering(true)
     try {
       await procurementIntelApi.triggerEngine({ days: 365 })
       setTimeout(load, 3000)
     } catch (e) {
-      alert(e.response?.data?.detail || 'فشل التشغيل')
+      notify.error(e.response?.data?.detail || 'فشل التشغيل')
     } finally {
       setTriggering(false)
     }
@@ -193,6 +196,7 @@ export default function ProcurementDashboard() {
 
   return (
     <div className="p-6 space-y-6 font-cairo" dir="rtl">
+      {confirmUi}
 
       {/* Header */}
       <div data-tour="purchasing-overview-header" className="flex items-center justify-between">

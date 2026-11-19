@@ -9,6 +9,7 @@
  *   import { printHRRequest } from '../components/HRPrint'
  *   <button onClick={() => printHRRequest('leave', row)}>طباعة</button>
  */
+import { notify } from './ui'
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 function fmtDate(d) {
@@ -204,7 +205,7 @@ export function printHRRequest(kind, row) {
 </body></html>`
 
   const win = window.open('', '_blank', 'width=800,height=900')
-  if (!win) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة'); return }
+  if (!win) { notify.warning('يرجى السماح بالنوافذ المنبثقة للطباعة'); return }
   win.document.write(doc)
   win.document.close()
   win.onload = () => { setTimeout(() => { win.focus(); win.print() }, 500) }
