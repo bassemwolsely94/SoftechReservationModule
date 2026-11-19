@@ -240,7 +240,7 @@ def field_values(request):
     values (e.g. all producers). ?field=producer_code&q=<filter>."""
     from .targeting import FIELDS
     from apps.catalog.models import Item
-    from django.db.models import Q
+    from apps.catalog.wildcard import wq
     field = request.query_params.get('field')
     if field not in FIELD_VALUE_PAIRS or field not in FIELDS:
         return Response({'detail': 'حقل غير مدعوم'}, status=status.HTTP_400_BAD_REQUEST)
@@ -250,7 +250,7 @@ def field_values(request):
           .values(code_col, label_col).distinct())
     q = request.query_params.get('q')
     if q:
-        qs = qs.filter(Q(**{f'{code_col}__icontains': q}) | Q(**{f'{label_col}__icontains': q}))
+        qs = qs.filter(wq(q, *[c for c in (code_col, label_col) if c]))
     rows, seen = [], set()
     for r in qs.order_by(label_col or code_col)[:400]:
         v = str(r[code_col])

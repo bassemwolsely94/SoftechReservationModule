@@ -4399,7 +4399,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
       v = (v || '').toString().toLowerCase()
       if (matchMode === 'begins') return v.startsWith(s)
       if (matchMode === 'ends')   return v.endsWith(s)
-      return v.includes(s)   // 'contains' and 'notcontains' both use includes
+      return wildcardMatch(v, q)   // 'contains' / 'notcontains': the search rules (* and % wildcards, word order)
     }
     // any in-scope field matches (code and/or name)
     const anyMatch = (it) =>

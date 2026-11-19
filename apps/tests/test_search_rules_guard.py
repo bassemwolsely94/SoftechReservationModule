@@ -14,8 +14,10 @@ from django.test import SimpleTestCase
 REPO = Path(__file__).resolve().parents[2]
 SKIP_DIRS = {'tests', 'migrations', 'management'}
 
-# any `<field>__icontains=<non-literal>` (a variable, attribute or subscript; quoted literals are fine)
-ICONTAINS = re.compile(r"""[\w.]*__icontains=\s*[A-Za-z_][\w.\[\]'"]*""")
+# any `<field>__icontains=<non-literal>` (a variable, attribute or subscript; quoted literals are fine),
+# also with spaces around `=` and as a dict / f-string key: `{'name__icontains': q}`,
+# `{f'{col}__icontains': q}`, `{f + '__icontains': v}`
+ICONTAINS = re.compile(r"""[\w.]*__icontains['"]?\s*[=:]\s*[A-Za-z_][\w.\[\]'"]*""")
 SEARCH_FILTER = re.compile(r"filters\.SearchFilter|(?<![\w.])SearchFilter\b")
 
 ALLOW_SEARCH_FILTER = {
@@ -49,6 +51,10 @@ ALLOW = {
         'rule keywords come from config, not typed in a search box',
     'apps/insurance/models.py::dept_name__icontains=self.filter_dept_name':
         'saved billing-group dept filter followed by a bulk update; wildcard-only text must not match everything',
+    'apps/images/pipeline.py::producer_name__icontains=producer':
+        'saved criterion for a bulk action, not a search box; stays literal contains (S4)',
+    "apps/offers/targeting.py::__icontains': v":
+        "saved offer rule's 'contains' operator, not a search box; stays literal contains (S4)",
     'apps/insurance/views.py::patient_name__icontains=probe':
         'internal patient-name probing while matching imports, not a user search',
     'apps/insurance/views.py::patient_name__icontains=toks[':
@@ -128,6 +134,9 @@ class SearchRulesGuardTests(SimpleTestCase):
             self.assertTrue(SEARCH_FILTER.search(src), src)
         self.assertFalse(SEARCH_FILTER.search('filter_backends = [WildcardSearchFilter]'))
         for src in ('qs.filter(name__icontains=q)', 'qs.filter(name__icontains=params["q"])',
-                    'qs.filter(a__b__icontains=self.text)'):
+                    'qs.filter(a__b__icontains=self.text)', 'qs.filter(name__icontains = q)',
+                    "qs.filter(**{'name__icontains': q})", "Q(**{f'{col}__icontains': q})",
+                    "Q(**{f + '__icontains': v})"):
             self.assertTrue(ICONTAINS.search(src), src)
         self.assertFalse(ICONTAINS.search("qs.filter(name__icontains='literal')"))
+        self.assertFalse(ICONTAINS.search("qs.filter(**{'name__icontains': 'literal'})"))

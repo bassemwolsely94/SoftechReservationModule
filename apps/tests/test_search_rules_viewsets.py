@@ -128,3 +128,65 @@ class WildcardListSearchTests(TestCase):
         ERPUser.objects.create(username='zed')
         rows = self._search('/api/users/erp-users/', 'pha*ali')
         self.assertEqual([r['username'] for r in rows], ['pharm_ali'])
+
+
+class ToManySearchFieldTests(TestCase):
+    """S4 final review item 3: a search field that crosses a to-many relation
+    (transfers' `items__item__name`, ERP's `lines__item_code`) must give ONE row per parent with
+    its best tier — not one row per matching line tier, and not an inflated count."""
+
+    def setUp(self):
+        self.user, self.profile, self.client = make_admin('s4_tomany')
+        self.branch = make_branch()
+        self.other = make_branch('فرع آخر', 'B78')
+        self.seq = 0
+
+    def _transfer(self, number, *names):
+        tr = TransferRequest.objects.create(
+            requesting_branch=self.branch, supplying_branch=self.other,
+            created_by=self.profile, request_number=number)
+        for name in names:
+            self.seq += 1
+            TransferRequestItem.objects.create(request=tr, item=make_item(name, f'S4M{self.seq:02d}'), quantity=1)
+        return tr
+
+    def test_two_line_transfer_matching_at_two_tiers_is_one_row(self):
+        # line 1 = the literal text (tier 0), line 2 = the words in any order only (tier 2)
+        tr = self._transfer('TR-S4-1', 'PANADOL EXTRA', 'PANADOL COLD EXTRA')
+        self._transfer('TR-S4-2', 'ASPIRIN')
+        resp = self.client.get('/api/transfers/', {'search': 'panadol extra', 'page_size': 100})
+        rows = _rows(resp)
+        self.assertEqual([r['id'] for r in rows], [tr.id])
+        if hasattr(resp.data, 'get') and 'count' in resp.data:
+            self.assertEqual(resp.data['count'], 1)
+
+    def test_parent_takes_its_best_tier(self):
+        any_order = self._transfer('TR-S4-3', 'EXTRA PANADOL')          # any order only
+        literal = self._transfer('TR-S4-4', 'ASPIRIN', 'PANADOL EXTRA')  # literal on line 2
+        from apps.catalog.wildcard import filter_and_rank
+        qs = filter_and_rank(TransferRequest.objects.order_by('id'), 'panadol extra',
+                             ['request_number', 'items__item__name'])
+        self.assertEqual([(t.id, t._wild_rank) for t in qs], [(literal.id, 0), (any_order.id, 2)])
+
+    def test_erp_transaction_with_lines_at_two_tiers_is_one_row(self):
+        hit = ERPTransaction.objects.create(transaction_id='s4-tm-1', doccode='115',
+                                            transaction_date=timezone.now())
+        miss = ERPTransaction.objects.create(transaction_id='s4-tm-2', doccode='115',
+                                             transaction_date=timezone.now())
+        for code in ('AB CD', 'CD AB'):                                  # literal + any order
+            hit.lines.create(item_code=code, item_name='x', store_code='1')
+        miss.lines.create(item_code='ZZ', item_name='x', store_code='1')
+        request = APIRequestFactory().get('/', {'search': 'ab cd', 'page_size': 100})
+        force_authenticate(request, user=self.user)
+        rows = _rows(ERPTransactionViewSet.as_view({'get': 'list'})(request))
+        self.assertEqual([r['transaction_id'] for r in rows], ['s4-tm-1'])
+
+    def test_single_valued_fields_keep_the_plain_join_free_path(self):
+        from apps.catalog.models import Item
+        from apps.catalog.wildcard import crosses_to_many
+        self.assertFalse(any(crosses_to_many(Item, f) for f in ('name', 'name_scientific', 'category__name')))
+        self.assertTrue(crosses_to_many(TransferRequest, 'items__item__name'))
+        self.assertTrue(crosses_to_many(ERPTransaction, 'lines__item_code'))
+        from apps.catalog.wildcard import filter_and_rank
+        sql = str(filter_and_rank(Item.objects.all(), 'panadol extra', ['name']).query)
+        self.assertNotIn(' IN (SELECT', sql)

@@ -237,15 +237,53 @@ def rank_case(q: str, fields, fold: bool = False) -> Case:
                 default=Value(2), output_field=IntegerField())
 
 
+def crosses_to_many(model, field: str) -> bool:
+    """True when the search path `field` walks a to-many relation (reverse FK / M2M), e.g.
+    transfers' `items__item__name` — one parent then joins to many rows."""
+    for part in field.split('__'):
+        try:
+            f = model._meta.get_field(part)
+        except Exception:                     # a lookup / transform, or not a model field
+            return False
+        if f.many_to_many or f.one_to_many:
+            return True
+        if not f.is_relation or f.related_model is None:
+            return False
+        model = f.related_model
+    return False
+
+
+def _to_many_rank(qs, q: str, fields) -> Case:
+    """rank_case for a search reaching to-many fields: each tier is a `pk IN (subquery)` so the
+    parent is not joined to its lines — one row per parent, with its BEST tier."""
+    base = qs.model._base_manager.all()
+
+    def pks(cond):
+        return base.filter(cond).values('pk')
+    return Case(When(pk__in=pks(_any(fields, 'ulike', literal_pattern(q, False))), then=Value(0)),
+                When(pk__in=pks(ordered_q(q, *fields, fold=False)), then=Value(1)),
+                default=Value(2), output_field=IntegerField())
+
+
 def filter_and_rank(qs, q: str, fields, *, extra_q: Q | None = None):
     """Filter a queryset with the shared rules and order it literal → ordered → any-order
-    (then the queryset's own ordering)."""
+    (then the queryset's own ordering).
+
+    When a search field crosses a to-many relation the match and the rank run as `pk IN
+    (subquery)`, so a parent whose lines match at different tiers comes back ONCE with its best
+    tier (a join would give one row per matching line and inflate GROUP BY counts). Single-valued
+    fields keep the plain filter + CASE, unchanged."""
     if not parse(q)['segments']:
         return qs
+    order = list(qs.query.order_by) or list(qs.model._meta.ordering or [])
+    if any(crosses_to_many(qs.model, f) for f in fields):
+        cond = Q(pk__in=qs.model._base_manager.filter(wq(q, *fields)).values('pk'))
+        if extra_q is not None:
+            cond |= extra_q
+        return qs.filter(cond).annotate(_wild_rank=_to_many_rank(qs, q, fields)).order_by('_wild_rank', *order)
     cond = wq(q, *fields)
     if extra_q is not None:
         cond |= extra_q
-    order = list(qs.query.order_by) or list(qs.model._meta.ordering or [])
     return qs.filter(cond).annotate(_wild_rank=rank_case(q, fields)).order_by('_wild_rank', *order)
 
 

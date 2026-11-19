@@ -52,6 +52,14 @@ class SalesPriorityTests(TestCase):
         self.assertGreater(ranks[self.both.id]['score'], ranks[self.value.id]['score'])
         self.assertNotIn(self.unsold.id, ranks)
 
+    def test_producer_is_a_saved_literal_criterion(self):
+        # S4 final review: the producer filter feeds bulk image jobs (launch_batch / revise_all),
+        # so it stays literal contains — '*' must never widen it to every item.
+        Item.objects.filter(pk=self.both.pk).update(producer_name='MSD Egypt')
+        self.assertEqual(build_item_queryset({'scope': 'all', 'producer_name': 'msd', 'limit': 10}), [self.both])
+        self.assertEqual(build_item_queryset({'scope': 'all', 'producer_name': '*', 'limit': 10}), [])
+        self.assertEqual(build_item_queryset({'scope': 'all', 'producer_name': 'ms*eg', 'limit': 10}), [])
+
     def test_no_image_scope_skips_items_already_done(self):
         self._approve_image(self.both)
         got = build_item_queryset({'scope': 'no_image', 'limit': 10})

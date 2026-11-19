@@ -59,6 +59,17 @@ class FieldValuesApiTests(TestCase):
         self.assertEqual(rq.status_code, 200)
         self.assertEqual({x['value'] for x in rq.data}, {'P2'})
 
+    def test_field_values_q_follows_the_search_rules(self):
+        # S4: the value picker's ?q= box takes * / % wildcards (code or label)
+        _item('C', producer_code='GSK01', producer_name='GLAXO SMITH KLINE')
+        _item('D', producer_code='NOV02', producer_name='NOVARTIS PHARMA')
+        _, _, client = make_user('fv_user3', role='purchasing')
+        r = client.get('/api/offers/field-values/', {'field': 'producer_code', 'q': 'gla*kline'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual({x['value'] for x in r.data}, {'GSK01'})
+        r = client.get('/api/offers/field-values/', {'field': 'producer_code', 'q': 'nov*02'})
+        self.assertEqual({x['value'] for x in r.data}, {'NOV02'})
+
     def test_unsupported_field_rejected(self):
         _, _, client = make_user('fv_user2', role='purchasing')     # offers module (Z-5a)
         r = client.get('/api/offers/field-values/?field=pack_price')

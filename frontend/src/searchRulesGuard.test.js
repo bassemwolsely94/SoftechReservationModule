@@ -9,11 +9,16 @@ import { join, relative, sep } from 'node:path'
 const SRC = join(process.cwd(), 'src')
 const PATTERNS = [
   /\.toLowerCase\(\)\s*\.includes\(/g,
-  /\.includes\(\s*(?:q|search|query|needle|term|ql|filter)\s*\)/g,
+  /\.includes\(\s*(?:q|search|query|needle|term|ql|filter|s)\s*\)/g,
+  /\.toLowerCase\(\)\s*\.indexOf\(/g,
+  /\.indexOf\(\s*(?:q|search|query|s)\s*\)/g,
 ]
 
 const ALLOW = {
   'pages/supply/AvailabilityInboxTab.jsx::.includes(filter)': 'flag list membership (state filter chips), not a search',
+  'components/AnalyticsFilterPanel.jsx::.includes(s)': 'toggles a code in the selected-codes array, list membership, not a search',
+  'components/ItemOperationalFiltersBar.jsx::.includes(s)': 'toggles a code in the selected-codes array, list membership, not a search',
+  'pages/finance/gl/PeriodClosePage.jsx::.includes(s)': 'is this import status one of the selectable statuses, not a search',
 }
 
 function walk(dir, out = []) {
@@ -44,9 +49,10 @@ function scan(files) {
 
 describe('search rules guard', () => {
   it('the patterns catch the shapes they guard', () => {
-    for (const src of ['a.name.toLowerCase().includes(q)', "x.toLowerCase() .includes('a')", 'list.includes(search)', 'ids.includes( term )'])
+    for (const src of ['a.name.toLowerCase().includes(q)', "x.toLowerCase() .includes('a')", 'list.includes(search)', 'ids.includes( term )',
+    'v.includes(s)', "x.toLowerCase().indexOf('a')", 'hay.indexOf(q)', 'hay.indexOf( search )'])
       expect(PATTERNS.some(re => { re.lastIndex = 0; return re.test(src) }), src).toBe(true)
-    for (const src of ['list.includes(x)', 'a.toLowerCase() === b']) {
+    for (const src of ['list.includes(x)', 'a.toLowerCase() === b', 'arr.indexOf(x)']) {
       expect(PATTERNS.some(re => { re.lastIndex = 0; return re.test(src) }), src).toBe(false)
     }
   })
