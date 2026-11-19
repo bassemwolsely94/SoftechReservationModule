@@ -1375,6 +1375,38 @@ def return_window_reconcile(request):
 
 # ── C04 / P-28 near-expiry action worklist («🧭 قائمة عمل قرب الانتهاء») — advisory, no SOFTECH write ──
 
+def _catalog_allows_strict(profile, *actions):
+    """matrix_allows on catalog that never fails open: when the module has no matrix rows at all,
+    the seed's default grants decide (a viewer holds catalog view only) instead of letting everyone
+    through. Used for the worklist's decisions (C04)."""
+    if profile is None or not profile.is_active:
+        return False
+    from core.middleware import module_access
+    if 'catalog' in module_access.seeded_modules() or module_access.is_enforced(profile.role):
+        return matrix_allows(profile, 'catalog', *actions)
+    from apps.users.management.commands.seed_permissions import PERMISSIONS
+    return bool(set(PERMISSIONS.get(profile.role, {}).get('catalog', ())) & set(actions))
+
+
+class CanDecideNearExpiry(BasePermission):
+    """Choose / request return / link a transfer on the near-expiry worklist: catalog edit or approve."""
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        return _catalog_allows_strict(getattr(request.user, 'staff_profile', None), 'edit', 'approve')
+
+
+class CanCheckNearExpiryOutcomes(BasePermission):
+    """«قياس النتائج الآن»: catalog edit, fail-closed (as CanRefreshExpiry, minus the open fallback)."""
+    message = CanRefreshExpiry.message
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        return user.is_staff or _catalog_allows_strict(getattr(user, 'staff_profile', None), 'edit')
+
+
 def _near_expiry_scope(request):
     """The caller's SOFTECH branch codes (core.branch_scope); None = every branch."""
     codes = branch_scope.branch_codes(request.user)
@@ -1397,16 +1429,15 @@ def near_expiry_worklist(request):
     p = request.query_params
     data = worklist(scope_codes=_near_expiry_scope(request), branch=multi_values(p, 'branch') or None,
                     action=(p.get('action') or '').strip() or None)
-    profile = getattr(request.user, 'staff_profile', None)
-    data['can_choose'] = matrix_allows(profile, 'catalog', 'edit', 'approve')
+    data['can_choose'] = CanDecideNearExpiry().has_permission(request, None)
     data['can_create_transfer'] = CanCreateTransfer().has_permission(request, None)
-    data['can_check_outcomes'] = CanRefreshExpiry().has_permission(request, None)
+    data['can_check_outcomes'] = CanCheckNearExpiryOutcomes().has_permission(request, None)
     data['branch_only'] = _near_expiry_scope(request) is not None
     return Response(data)
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, BATCH_DISPOSAL])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL, CanDecideNearExpiry])
 def near_expiry_choose(request):
     """POST {lots: [lot key], action: return|move|sell_first|accept_loss, note} — record the chosen action
     (one open action per lot; choosing again changes it). Lots outside the caller's branches are skipped."""
@@ -1423,7 +1454,7 @@ def near_expiry_choose(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, BATCH_DISPOSAL])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL, CanDecideNearExpiry])
 def near_expiry_request_return(request):
     """POST {lots: [lot key]} — «طلب مرتجع»: the P-29 return record (idempotent) linked to the lot's action."""
     from .near_expiry import request_return
@@ -1443,7 +1474,7 @@ class _CanCreateTransferPerm(BasePermission):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, BATCH_DISPOSAL, _CanCreateTransferPerm])
+@permission_classes([IsAuthenticated, BATCH_DISPOSAL, CanDecideNearExpiry, _CanCreateTransferPerm])
 def near_expiry_link_transfer(request):
     """POST {key, transfer_id} — link a draft transfer (made through /transfers/) to the lot's «move» action.
     The server checks the transfer is open, leaves this lot's branch and carries this item."""
@@ -1473,7 +1504,7 @@ def near_expiry_outcomes(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, CanRefreshExpiry])
+@permission_classes([IsAuthenticated, CanCheckNearExpiryOutcomes])
 def near_expiry_check_outcomes(request):
     """POST — run the outcome check now (the daily job does the same; local mirrors only)."""
     from .near_expiry import evaluate_outcomes

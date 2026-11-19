@@ -469,6 +469,13 @@ def _class_of(line, chosen, hq_codes):
 
 
 def evaluate_outcomes(today=None):
+    """The scheduler / button entry: one transaction that row-locks the open actions, so a second
+    concurrent run waits, then re-reads them as closed and does nothing (no ledger line used twice)."""
+    with transaction.atomic():
+        return _evaluate_outcomes(today)
+
+
+def _evaluate_outcomes(today=None):
     """Close the open actions that are due (N days passed, expiry passed, or the lot left the mirror).
     Each ledger line is used once across all actions (ledger_refs keeps {line key: qty used}); lots of
     the same item at a branch take lines earliest expiry first (FEFO), and a line that carries an
@@ -479,7 +486,7 @@ def evaluate_outcomes(today=None):
     from .store_roles import LIVE
 
     today = today or timezone.localdate()
-    open_acts = list(NearExpiryAction.objects.filter(status='open'))
+    open_acts = list(NearExpiryAction.objects.select_for_update().filter(status='open').order_by('pk'))
     if not open_acts:
         return {'closed': 0, 'open': 0}
     now_qty = defaultdict(float)
