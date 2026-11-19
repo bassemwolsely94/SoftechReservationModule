@@ -253,14 +253,14 @@ class PurchasingExportJobTests(TestCase):
         from apps.branches.models import Branch
         from apps.purchasing.models import DemandCalculationRun, ItemDemandMetrics
         from apps.tests.factories import make_item
-        cls.run = DemandCalculationRun.objects.create(status='success')
+        cls.calc_run = DemandCalculationRun.objects.create(status='success')
         items = [make_item(f'XJ{i}', f'S{i}') for i in range(6)]
         for code, kind, order in [('100', Branch.KIND_HQ, 0), ('160', Branch.KIND_RETAIL, 1),
                                   ('170', Branch.KIND_RETAIL, 2)]:
             b = Branch.objects.create(softech_branch_id=code, code=code, name=f'B{code}', name_ar=f'فرع {code}',
                                       kind=kind, display_order=order)
             for n, it in enumerate(items):
-                ItemDemandMetrics.objects.create(run=cls.run, item=it, branch=b, calc_date=date(2026, 11, 1),
+                ItemDemandMetrics.objects.create(run=cls.calc_run, item=it, branch=b, calc_date=date(2026, 11, 1),
                                                  current_stock=n, monthly_avg=10 + n, gap=n % 3, abc_class='ABC'[n % 3])
         cls.user, cls.prof, cls.c = make_admin('xj_buyer')
 
