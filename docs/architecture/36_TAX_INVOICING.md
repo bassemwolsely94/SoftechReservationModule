@@ -184,7 +184,10 @@ treatment the accountant already confirmed.
 reads `codetypes/requests/my` (read only; `--probe` fetches one page, prints its shape, writes nothing). Rows are
 kept as the best per code by status rank (approved/active 3, submitted/pending 2, other 1); a partial fetch never
 downgrades a row. `eta_codes.report()` buckets: on ETA but not in the sheet, in the sheet but not on ETA, and counts
-(usages, active, matched, unmatched, sheet).
+(usages, active, matched, unmatched, sheet). `itemcode` (the matched SOFTECH code) is as long as `item_code`: ETA
+holds EGS codes whose tail is not one SOFTECH code (124510124197 = two codes joined, ASSET100); before migration
+0023 (2026-11-19) the field was 10 long and Postgres' `bulk_update` cast cut those tails to 10 characters. They match
+no item, so the sheet build lists them as "no tax profile".
 
 **GPC GS1 load.** `manage.py load_gpc_bricks --gs1-json PATH` loads the GS1 brick list (May 2026) with `source` set;
 the workbook's own bricks keep `source='workbook'`. `gpc.known(code, official_only=True)` accepts only a brick from a
