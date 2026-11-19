@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
 import { fa } from '../utils/flowArrow'
+import { useToast } from '../components/ui'
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 
@@ -43,6 +44,7 @@ const TEMPLATES = [
 ]
 
 export default function InsurancePrintPage() {
+  const toast = useToast()
   const { id }   = useParams()
   const navigate = useNavigate()
   const [claim, setClaim]     = useState(null)
@@ -85,7 +87,7 @@ export default function InsurancePrintPage() {
       document.body.removeChild(link)
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
-      alert('فشل التصدير: ' + (err?.message || 'خطأ غير متوقع'))
+      toast.error('فشل التصدير: ' + (err?.message || 'خطأ غير متوقع'))
     } finally {
       setExporting(null)
     }
@@ -105,7 +107,7 @@ export default function InsurancePrintPage() {
       document.body.appendChild(link); link.click(); document.body.removeChild(link)
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
-      alert('فشل التصدير: ' + (err?.message || 'خطأ غير متوقع'))
+      toast.error('فشل التصدير: ' + (err?.message || 'خطأ غير متوقع'))
     } finally {
       setExporting(null)
     }

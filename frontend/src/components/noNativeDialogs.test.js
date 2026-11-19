@@ -29,6 +29,11 @@ const CONVERTED = [
   'pages/FollowUpsPage.jsx',
   // batch 4
   'pages/DiscountAlignmentPage.jsx',
+  'pages/CasesPage.jsx',
+  'pages/ForecastScenarioPage.jsx',
+  'pages/ImageEnrichmentPage.jsx',
+  'pages/InsurancePrintPage.jsx',
+  'pages/InsurancePrintProfilesPage.jsx',
   'components/InlineConfirm.jsx',
 ]
 

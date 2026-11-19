@@ -18,6 +18,8 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import { wildcardMatch } from '../utils/wildcard'
+import { useToast } from '../components/ui'
+import { useConfirm } from '../components/InlineConfirm'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card  = { background: '#fff', borderRadius: 10, padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 }
@@ -572,6 +574,8 @@ function HistoryTab() {
 
 // ── Gallery: Right panel — item image manager ─────────────────────────────────
 function ItemImageManager({ item, onClose }) {
+  const toast = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const qc            = useQueryClient()
   const [panel, setPanel] = useState('approved')   // 'approved' | 'candidates' | 'upload' | 'search'
   const [busy,  setBusy]  = useState(false)
@@ -601,7 +605,7 @@ function ItemImageManager({ item, onClose }) {
   }
 
   const handleDelete = async (mediaId, isPrimary) => {
-    if (!window.confirm(isPrimary ? 'هذه الصورة الافتراضية — هل تريد حذفها؟' : 'هل تريد حذف هذه الصورة؟')) return
+    if (!await confirmInline(isPrimary ? 'هذه الصورة الافتراضية — هل تريد حذفها؟' : 'هل تريد حذف هذه الصورة؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     setBusy(true)
     try { await imageApi.deleteImage(itemId, mediaId); refresh() }
     finally { setBusy(false) }
@@ -642,8 +646,8 @@ function ItemImageManager({ item, onClose }) {
     try {
       await imageApi.createJob({ item_id: itemId, priority: 3, auto_approve_threshold: 0.78, force_rerun: true })
       qc.invalidateQueries({ queryKey: ['img-report'] })
-      alert('تم إطلاق مهمة البحث')
-    } catch(e) { alert('فشل الإطلاق') }
+      toast.success('تم إطلاق مهمة البحث')
+    } catch(e) { toast.error('فشل الإطلاق') }
     finally { setBusy(false) }
   }
 
@@ -667,6 +671,7 @@ function ItemImageManager({ item, onClose }) {
 
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%'}}>
+      {confirmUi}
 
       {/* Header */}
       <div style={{padding:'12px 16px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc',
