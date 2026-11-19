@@ -229,22 +229,20 @@ SCREENS = [
              'text': T('سجّل قرارك. التجاهل والتصعيد وإعادة الفتح تحتاج ملاحظة مكتوبة.', 'Record your decision. Dismiss, escalate and reopen need a written note.'),
              'open_hint': T('افتح ملاحظة من القائمة.', 'Open a finding from the list.')},
             {'target': 'stock-audit-main-task', 'label': T('📋 مهمة + جرد مستهدف', '📋 Task + targeted count'),
-             'text': T('يحوّل الملاحظة لمهمة على الفرع وجلسة جرد فيها أصناف الملاحظة بس. المهمة تروح لمدير الفرع المسموح له بالاسم، '
-                       'ولو مفيش فلصيدلي الفرع. لما جلسة الجرد تتقفل: لو كل الأصناف مطابقة الملاحظة تتقفل «تمت المراجعة»، '
-                       'ولو فيه فرق تفضل مفتوحة والفرق مكتوب عليها.',
-                       'Turns the finding into a task for the branch and a count session holding only the finding’s items. The task goes '
-                       'to the branch’s named branch manager, or the branch pharmacist if there is none. When the count session is closed: '
-                       'if every item matched the finding closes as "Reviewed"; if not it stays open with the difference written on it.'),
+             'text': T('يعمل مهمة لمدير الفرع (أو صيدلي الفرع) وجلسة جرد فيها أصناف الملاحظة بس. إغلاق الجرد يقفل الملاحظة بنتيجته.',
+                       'Makes a task for the branch manager (or branch pharmacist) and a count of just this finding’s items. Closing the count settles it.'),
              'when': T('لما الملاحظة محتاجة حد في الفرع يعدّ الصنف فعلاً قبل القرار.',
                        'When the finding needs someone at the branch to actually count the item before deciding.'),
-             'more': T('• مهمة مفتوحة واحدة بس لكل ملاحظة — الضغط تاني يرجّع نفس المهمة.\n• إلغاء المهمة من شاشة المهام يسمح بعمل مهمة جديدة.\n'
-                       '• الجرد بيتعمل من شاشة جرد المخزون (أخذ اللقطة ثم العد ثم الإغلاق). مفيش أي كتابة في SOFTECH.',
-                       '• Only one open task per finding — pressing again returns the same task.\n• Cancelling the task on the tasks screen lets you make a new one.\n'
+             'more': T('• كل الأصناف مطابقة ← الملاحظة «تمت المراجعة». فيه فرق ← تفضل مفتوحة والفرق مكتوب عليها.\n'
+                       '• مهمة مفتوحة واحدة بس لكل ملاحظة — الضغط تاني يرجّع نفس المهمة. إلغاء المهمة يسمح بمهمة جديدة.\n'
+                       '• الجرد بيتعمل من شاشة جرد المخزون (لقطة ثم عد ثم إغلاق). مفيش أي كتابة في SOFTECH.',
+                       '• Every item matched → the finding becomes "Reviewed". A difference → it stays open with the difference written on it.\n'
+                       '• Only one open task per finding — pressing again returns the same task. Cancelling the task allows a new one.\n'
                        '• The count is done on the stock count screen (snapshot, count, close). Nothing is written to SOFTECH.'),
              'open_hint': T('افتح ملاحظة مفتوحة أو مصعّدة من القائمة.', 'Open an open or escalated finding from the list.')},
             {'target': 'stock-audit-main-bulk-task', 'label': T('📋 مهمة + جرد للمحددة', '📋 Task + count for selected'),
-             'text': T('مهمة لكل ملاحظة محددة، وجلسة جرد واحدة لكل فرع فيها أصناف ملاحظاته. اللي ليها مهمة مفتوحة بتتساب زي ما هي.',
-                       'One task per selected finding, and one count session per branch holding its findings’ items. Findings that already have an open task are left as they are.'),
+             'text': T('مهمة لكل ملاحظة محددة وجرد واحد لكل فرع. اللي ليها مهمة مفتوحة بتتساب.',
+                       'A task per selected finding and one count per branch. Findings that already have an open task are skipped.'),
              'open_hint': T('حدد ملاحظات مفتوحة (حتى 100 في المرة).', 'Tick open findings (up to 100 at a time).')},
             {'target': 'stock-audit-main-bulk', 'label': T('محددة', 'Selected'),
              'text': T('نفس القرار والملاحظة لكل الملاحظات المحددة مرة واحدة.', 'The same decision and note for all selected findings at once.'),
