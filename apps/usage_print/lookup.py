@@ -93,11 +93,16 @@ def from_mirror(branch, docnumber, docdate):
 
 
 def _connections(branch):
-    """Selling branch's own server first (today's sales land there first), then HQ."""
+    """Selling branch's own server first (today's sales land there first), then HQ.
+
+    interactive=True: a person is waiting on this screen, so each node gets one short attempt and a
+    node that failed a moment ago is skipped (config.sybase, performance boost 2026-11-19); before,
+    a dead branch cost ~48 s of retries before HQ was even tried."""
     from config.sybase import get_branch_connection, get_sybase_connection
     if (branch.db_host or '').strip():
-        yield lambda: get_branch_connection(branch.effective_db_host, branch.effective_db_port, 'SOFTECHDB9')
-    yield get_sybase_connection
+        yield lambda: get_branch_connection(branch.effective_db_host, branch.effective_db_port, 'SOFTECHDB9',
+                                            interactive=True)
+    yield lambda: get_sybase_connection(interactive=True)
 
 
 def _read_live(branch, docnumber, docdate):
