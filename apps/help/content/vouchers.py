@@ -419,7 +419,7 @@ SCREENS = [
         'title': T('صرف قسيمة (موبايل)', 'Redeem a voucher (mobile)'),
         'summary': T('صرف قسيمة من الموبايل: اختر القسيمة ← هاتف العميل وقيمة الطلب ← إرسال رمز التحقق ← أدخل الرمز ← يُنشأ مستند الصرف.',
                      'Redeem on the phone: pick the voucher → customer phone and order value → send the code → enter it → the redemption document is created.'),
-        'audience': T('الصيادلة والمندوبون.', 'Pharmacists and salespeople.'),
+        'audience': T('الصيادلة والمندوبون، وكل من له صلاحية القسائم (الاسترداد يحتاج صلاحية الاعتماد).', 'Pharmacists and salespeople, and anyone with vouchers access (redeeming needs approve).'),
         'steps': [T('بعد «تم التحقق» استخدم رقم المستند في نقطة البيع خلال 15 دقيقة.', 'After "verified", use the document number at the POS within 15 minutes.')],
         'related': ['vouchers.main'],
         'tour': [
@@ -474,7 +474,7 @@ SCREENS = [
                  'هنا بتظهر القسائم الفعّالة بس، بالكود والقيمة. اضغط القسيمة اللي العميل عايز يستخدمها عشان تفتح خطوة بيانات العميل.\n• لو القائمة فاضية يبقى مفيش قسائم فعّالة دلوقتي.',
                  'Only active vouchers show here, with their code and value. Tap the one the customer wants to use to open the customer-details step.\n• If the list is empty, there are no active vouchers right now.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية القسائم في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives vouchers access'),
     },
 ]

@@ -954,8 +954,8 @@ SCREENS = [
              'when': T('لما الشريط يقول إن البيانات قديمة وإنت محتاج أرقام دلوقتي.', 'When the bar says the data is old and you need current figures.'),
              'open_hint': T('للمدير ومسؤول النظام بس.', 'Admins and system staff only.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('رابط جديد في قائمة التحليلات «تحليلات الطلب الضائع» لكل من له صلاحية التحليلات (منهم المشتريات)', 'New Analytics menu link «تحليلات الطلب الضائع» for anyone with analytics access (purchasing included)'),
     },
     {
         'key': 'demand.recovery',
@@ -1056,7 +1056,7 @@ SCREENS = [
         'title': T('الطلب الضائع (موبايل)', 'Lost demand (mobile)'),
         'summary': T('قائمة طلبات فرعك على الموبايل مع شرائح الحالة وعلامة تجاوز SLA، وزر لتسجيل طلب من على الكاونتر.',
                      'Your branch\'s requests on the phone with status chips and SLA-breach flags, and a button to record a request at the counter.'),
-        'audience': T('العاملون في الفرع.', 'Branch staff.'),
+        'audience': T('موظفو الفروع، وكل من له صلاحية الطلب الضائع.', 'Branch staff, and anyone with lost-demand access.'),
         'steps': [
             T('زر «تسجيل طلب ضائع» لتسجيل الطلب فوراً أمام العميل.', '"Record lost demand" to record the request in front of the customer.'),
             T('اضغط طلباً لعرض تفاصيله وكتابة ملاحظة.', 'Tap a request to see it and add a note.'),
@@ -1094,8 +1094,8 @@ SCREENS = [
                  'بيفتح نموذج سريع لتسجيل الطلب قدام العميل على الكاونتر.\n• الهاتف إجباري، والأصناف من البحث أو مكتوبة يدوي.',
                  'Opens a quick form to record the request in front of the customer at the counter.\n• The phone is required; items come from search or are typed in.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية الطلب الضائع في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives lost-demand access'),
     },
     {
         'key': 'demand.mobile_new',

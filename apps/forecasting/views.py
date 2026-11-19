@@ -65,6 +65,18 @@ class CanUseForecasting(BasePermission):
         return request.method in SAFE_METHODS or bool(sp and sp.role in ANALYST_ROLES)
 
 
+class CanSeeSalespersonBoard(CanUseForecasting):
+    """The salesperson board (each rep's sales against target) is for the analysts who set the
+    targets — reads too, as its menu entry (UAT W2, owner 2026-11-19). analytics view alone let
+    call center, pharmacists, viewers and the quality manager open it by URL."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        sp = _staff(request)
+        return bool(sp and sp.role in ANALYST_ROLES)
+
+
 class SeasonalityIndexViewSet(viewsets.ModelViewSet):
     serializer_class   = SeasonalityIndexSerializer
     permission_classes = [IsAuthenticated, CanUseForecasting]
@@ -324,7 +336,7 @@ class SalespersonBoardView(APIView):
     the complete days of the month; % is achievement vs the target pro-rated to the latest
     complete data day (same convention as the branch board). Only reps with ≥1 target show,
     which keeps the live-resolver work bounded to the assigned set."""
-    permission_classes = [IsAuthenticated, CanUseForecasting]
+    permission_classes = [IsAuthenticated, CanSeeSalespersonBoard]
     METRICS = BOARD_METRICS
 
     def get(self, request):

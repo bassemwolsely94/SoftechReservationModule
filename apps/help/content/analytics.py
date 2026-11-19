@@ -521,8 +521,8 @@ SCREENS = [
                        'The latest 200 completed lines: approved, received and the difference. Click a row to open the transfer.'),
              'open_hint': T('تبويب «⚠️ تقرير التباينات» — للأدمن والمشتريات والمشرفين.', 'The "⚠️ Discrepancy report" tab — admin, purchasing and supervisors.')},
         ],
-        'updated': '2026-10-29',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التقرير يحتاج صلاحية التحليلات؛ صلاحية التحويلات وحدها لا تكفي', 'The report needs analytics access; transfers access alone is not enough'),
     },
     {
         'key': 'analytics.forecasting',
@@ -796,8 +796,8 @@ SCREENS = [
                        'It overwrites manual targets for the same month. The change is audited.'),
              'open_hint': T('اختار سيناريو من القائمة جنبه الأول.', 'Pick a scenario in the list next to it first.')},
         ],
-        'updated': '2026-11-09',
-        'change_note': T('شاشة جديدة: متابعة المندوبين اليومية (تارجت/تحقيق) محسوبة لحظياً', 'New screen: daily salesperson follow-up (target/achievement), computed live'),
+        'updated': '2026-11-19',
+        'change_note': T('الشاشة للأدمن والمشرف والمشتريات فقط، حتى لو اتفتحت بالرابط', 'Admin, supervisors and purchasing only, even when opened by link'),
     },
     {
         'key': 'analytics.scenarios',

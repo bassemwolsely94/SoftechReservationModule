@@ -541,7 +541,7 @@ SCREENS = [
                      'يعمل بدون إنترنت مؤقتاً — يُسجَّل عند عودة الاتصال.',
                      'The list of count sessions, and inside a session live counting in the aisle: scan or search the item, type the counted quantity, and the difference vs the snapshot shows at once. '
                      'Works briefly offline — it is saved when the connection returns.'),
-        'audience': T('العادّون في الفرع.', 'Counters at the branch.'),
+        'audience': T('العدّادون في الفرع، وكل من له صلاحية الجرد.', 'Counters at the branch, and anyone with stock-count access.'),
         'tips': [T('بتشوف جلسات جرد فرعك بس.', "You see your own branch's count sessions only.")],
         'steps': [
             T('افتح الجلسة (يجب أن تكون اللقطة مأخوذة من الكمبيوتر).', 'Open the session (the snapshot must already be taken on the desktop).'),
@@ -603,8 +603,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية الجرد في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives stock-count access'),
     },
     {
         'key': 'stockcount.daily_mobile',
