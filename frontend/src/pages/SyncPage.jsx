@@ -204,13 +204,18 @@ function WriterSwitchesPanel() {
   )
 }
 
-// P-56 "measure before optimising": the 10 slowest API endpoints by p95 (admin only —
-// the server returns 403 for anyone else and the card then stays hidden).
+// P-56 "measure before optimising": the slowest API routes (admin only — the server
+// returns 403 for anyone else and the card then stays hidden). Two rankings: p95 (the
+// slowest single calls) or total time (a little slow but called all day costs more).
+const SLOW_SORTS = [['p95', 'الأبطأ'], ['total', 'الأكثر استهلاكًا للوقت']]
+
 function SlowRequestsPanel() {
+  const [sort, setSort] = useState('p95')
   const { data, error } = useQuery({
-    queryKey: ['slowRequests'],
-    queryFn: () => syncApi.slowRequests(14).then(r => r.data),
+    queryKey: ['slowRequests', sort],
+    queryFn: () => syncApi.slowRequests(14, sort, 25).then(r => r.data),
     retry: false,
+    placeholderData: prev => prev,
   })
   const { sorted: endpoints, headerProps } = useSortableRows(data?.endpoints || [], {
     getValue: (r, k) => (k === 'path' ? `${r.path} ${r.method}` : r[k]),
@@ -218,31 +223,51 @@ function SlowRequestsPanel() {
   if (error || !data) return null
   return (
     <div data-tour="admin-sync-slow-requests" className="bg-white rounded-2xl border border-gray-200 p-4">
-      <SectionTitle icon="🐢">أبطأ الطلبات (آخر {data.days} يوم)</SectionTitle>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <SectionTitle icon="🐢">أبطأ الطلبات (آخر {data.days} يوم)</SectionTitle>
+        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5" role="group" aria-label="ترتيب أبطأ الطلبات">
+          {SLOW_SORTS.map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setSort(k)} aria-pressed={sort === k}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md ${sort === k ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="text-xs text-gray-500 mb-2">
-        بيتسجّل بس أي طلب أبطأ من {data.threshold_ms} مللي ثانية. الترتيب بزمن ٩٥٪ من المرات (p95). الترتيب بالعناوين على أبطأ ١٠ مسارات المعروضة فقط.
+        بيتسجّل بس أي طلب أبطأ من {data.threshold_ms} مللي ثانية.{' '}
+        {data.sort === 'total'
+          ? 'الترتيب بمجموع الوقت اللي الطلب ده خده في كل مرّاته (الإجمالي بالثواني) — اللي بطيء شوية بس بيتطلب طول اليوم بيطلع فوق.'
+          : 'الترتيب بزمن ٩٥٪ من المرات (p95) — أبطأ المسارات في المرة الواحدة.'}{' '}
+        الترتيب بالعناوين على المسارات المعروضة فقط.
       </p>
       {data.endpoints.length === 0 ? (
         <div className="text-sm text-gray-400">مفيش طلبات بطيئة متسجّلة.</div>
       ) : (
-        <table className="w-full text-sm">
-          <thead className="text-xs text-gray-500"><tr>
-            <SortTh {...headerProps('path')} className="text-right p-1.5">المسار</SortTh>
-            <SortTh {...headerProps('count', 'number')} className="p-1.5">مرات بطيئة</SortTh>
-            <SortTh {...headerProps('p95_ms', 'number')} className="p-1.5">p95 (مللي)</SortTh>
-            <SortTh {...headerProps('max_ms', 'number')} className="p-1.5">أقصى (مللي)</SortTh>
-          </tr></thead>
-          <tbody>
-            {endpoints.map(r => (
-              <tr key={r.method + r.path} className="border-t border-gray-100">
-                <td className="p-1.5 font-mono text-xs" dir="ltr">{r.method} /{r.path}</td>
-                <td className="p-1.5 text-center tabnum">{r.count}</td>
-                <td className="p-1.5 text-center tabnum font-bold">{r.p95_ms}</td>
-                <td className="p-1.5 text-center tabnum">{r.max_ms}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-gray-500"><tr>
+              <SortTh {...headerProps('path')} className="text-right p-1.5">المسار</SortTh>
+              <SortTh {...headerProps('count', 'number')} className="p-1.5">مرات بطيئة</SortTh>
+              <SortTh {...headerProps('p50_ms', 'number')} className="p-1.5">p50 (مللي)</SortTh>
+              <SortTh {...headerProps('p95_ms', 'number')} className="p-1.5">p95 (مللي)</SortTh>
+              <SortTh {...headerProps('max_ms', 'number')} className="p-1.5">أقصى (مللي)</SortTh>
+              <SortTh {...headerProps('total_s', 'number')} className="p-1.5">الإجمالي (ث)</SortTh>
+            </tr></thead>
+            <tbody>
+              {endpoints.map(r => (
+                <tr key={r.method + r.path} className="border-t border-gray-100">
+                  <td className="p-1.5 font-mono text-xs" dir="ltr">{r.method} /{r.path}</td>
+                  <td className="p-1.5 text-center tabnum">{r.count}</td>
+                  <td className="p-1.5 text-center tabnum">{r.p50_ms}</td>
+                  <td className={`p-1.5 text-center tabnum ${data.sort === 'p95' ? 'font-bold' : ''}`}>{r.p95_ms}</td>
+                  <td className="p-1.5 text-center tabnum">{r.max_ms}</td>
+                  <td className={`p-1.5 text-center tabnum ${data.sort === 'total' ? 'font-bold' : ''}`}>{r.total_s}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

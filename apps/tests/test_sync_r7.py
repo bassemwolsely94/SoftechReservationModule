@@ -181,7 +181,8 @@ class SyncViewTests(_Base):
         r = self.admin_c.get(API + 'slow-requests/', {'days': '99'})
         self.assertEqual(r.data['days'], 30)
         self.assertEqual(r.data['endpoints'], [{'path': 'api/x/', 'method': 'GET', 'count': 3,
-                                                'p95_ms': 9000, 'max_ms': 9000}])
+                                                'p50_ms': 2500, 'p95_ms': 9000, 'max_ms': 9000,
+                                                'total_s': 13.0}])
 
     def test_writer_switches_admin_only(self):
         self.assertEqual(self.pharm_c.get(API + 'writer-switches/').status_code, 403)

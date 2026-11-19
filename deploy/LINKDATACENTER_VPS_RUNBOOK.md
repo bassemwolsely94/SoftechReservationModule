@@ -787,11 +787,23 @@ wal_compression = on
 max_wal_size = 4GB
 timezone = 'Africa/Cairo'
 log_min_duration_statement = 2000      # log queries slower than 2 s
+# query statistics for `manage.py perf_top_queries` (performance stage 1)
+shared_preload_libraries = 'pg_stat_statements'
+track_io_timing = on
+pg_stat_statements.track = top
 EOF
 sudo systemctl restart postgresql
-sudo -u postgres psql -Atc "SELECT name, setting, unit FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','work_mem','listen_addresses','TimeZone')"
+sudo -u postgres psql -Atc "SELECT name, setting, unit FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','work_mem','listen_addresses','TimeZone','random_page_cost','shared_preload_libraries','track_io_timing')"
 ```
 (`shared_buffers` is shown in 8 kB pages: 196608 = 1536 MB.)
+
+After the databases exist (§7.1), create the extension in the app database once:
+```bash
+sudo -u postgres psql -d elrezeiky_db -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+```
+Check later, as the app user: `python manage.py perf_top_queries --limit 5` prints the heaviest
+queries (it says "not enabled" if the library or the extension is missing). Office PC steps:
+`docs/deploy/2026-11-office-pg-query-stats.md`.
 
 ---
 

@@ -422,7 +422,8 @@ export const syncApi = {
   branchHealth: (probe = false) => api.get('/sync/branch-health/', probe ? { params: { probe: 1 } } : undefined),
   schedulerStatus: () => api.get('/sync/scheduler-status/'),
   softechLoad:  (hours = 24) => api.get('/sync/softech-load/', { params: { hours } }),
-  slowRequests: (days = 14) => api.get('/sync/slow-requests/', { params: { days } }),   // P-56
+  slowRequests: (days = 14, sort = 'p95', limit = 10) =>                               // P-56 + perf stage 1
+    api.get('/sync/slow-requests/', { params: { days, sort, limit } }),
   writerSwitches: () => api.get('/sync/writer-switches/'),                              // P-54
   // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
