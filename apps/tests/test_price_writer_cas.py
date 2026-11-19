@@ -140,9 +140,12 @@ class _Base(TestCase):
 
     def _approve(self, req, table):
         conn = _Conn(table)
-        with mock.patch('config.sybase.get_sybase_connection', return_value=conn):
+        with mock.patch('config.sybase.get_sybase_connection', return_value=conn) as connect:
             r = self.admin.post(f'{BASE}{req.pk}/approve/', {}, format='json')
-        self.assertTrue(conn.closed, 'connection left open')
+        if r.status_code in (400, 409):             # refused before SOFTECH: never connected
+            connect.assert_not_called()
+        else:
+            self.assertTrue(conn.closed, 'connection left open')
         req.refresh_from_db()
         return r
 
