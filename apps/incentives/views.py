@@ -42,7 +42,7 @@ from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from core.permissions import MatrixPermission, matrix_allows
+from core.permissions import IsAdminRole, MatrixPermission, matrix_allows
 from .permissions import IncentivesPayrollAccess
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -53,7 +53,7 @@ from core.multi_filter import filter_in, multi_values
 from .models import (
     IncentiveProgram, IncentiveRule, IncentiveRuleItem,
     IncentiveTransaction, IncentiveSettlement,
-    AdjustmentEntry, IncentiveCalculationLog,
+    AdjustmentEntry, IncentiveCalculationLog, IncentiveAuditEvent,
 )
 from .serializers import (
     IncentiveProgramListSerializer,
@@ -110,7 +110,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
     rbac_module = 'incentives'
     rbac_actions = {
         'simulate': ('view',), 'calculate': ('edit',), 'finalize': ('finalize',),
-        'clone': ('create',), 'export_settlements': ('export',),
+        'clone': ('create',), 'export_settlements': ('export',), 'archive': ('edit',),
     }
 
     def get_queryset(self):
@@ -130,6 +130,50 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         profile = getattr(self.request.user, 'staff_profile', None)
         serializer.save(created_by=profile)
+
+    # ── DELETE / archive (D-17, owner 2026-11-19 "Protect") ───────────────────
+    # A program's transactions, settlements, adjustments, calculation logs and audit events are
+    # PROTECTed: a program that has any of them is archived (is_active=False), never deleted.
+    ARCHIVE_INSTEAD = ('لا يمكن حذف برنامج له حركات أو تسويات أو تسويات يدوية أو سجلات احتساب — '
+                       'هذه سجلات تدقيق. يمكنك أرشفة البرنامج (إيقافه) بدلاً من الحذف.')
+
+    @staticmethod
+    def _has_audit_rows(program) -> bool:
+        return any(rel.exists() for rel in (
+            program.transactions, program.settlements, program.adjustments,
+            program.calculation_logs, program.audit_events,
+        ))
+
+    def destroy(self, request, *args, **kwargs):
+        from django.db.models.deletion import ProtectedError
+        program = self.get_object()
+        refusal = {'detail': self.ARCHIVE_INSTEAD, 'can_archive': program.is_active,
+                   'archive_url': f'/api/incentives/programs/{program.pk}/archive/'}
+        if self._has_audit_rows(program):
+            return Response(refusal, status=status.HTTP_409_CONFLICT)
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:      # a row landed between the check and the delete
+            return Response(refusal, status=status.HTTP_409_CONFLICT)
+
+    @action(detail=True, methods=['post'])
+    def archive(self, request, pk=None):
+        """Deactivate a program and keep every audit row. Body: {"reason": "..."} (optional)."""
+        from django.db import transaction as db_transaction
+        program = self.get_object()
+        if not program.is_active:
+            return Response({'detail': 'البرنامج مؤرشف (موقف) بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
+        profile = self._get_profile()
+        reason = (request.data.get('reason') or '').strip()
+        with db_transaction.atomic():
+            program.is_active = False
+            program.save(update_fields=['is_active', 'updated_at'])
+            IncentiveAuditEvent.objects.create(
+                action='program_archived', program=program, actor=profile,
+                actor_name=profile.full_name if profile else request.user.get_username(),
+                reason=reason, before={'is_active': True}, after={'is_active': False},
+            )
+        return Response({'detail': 'تمت أرشفة البرنامج — كل سجلاته محفوظة', 'is_active': False})
 
     # ── Shared helpers ────────────────────────────────────────────────────────
 
@@ -167,7 +211,9 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
             "force":        false
           }
 
-        Returns 409 if period is finalized and force is not set.
+        Returns 409 if the period has finalized settlements and force is not set. With force the
+        people whose settlement is still open are recalculated; finalized settlements and their
+        transactions are never touched (D-16) — an admin unlocks a settlement first to change it.
         """
         program = self.get_object()
         try:
@@ -178,7 +224,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
 
         force = bool(request.data.get('force', False))
         if force and not matrix_allows(self._get_profile(), 'incentives', 'finalize'):
-            return Response({'detail': 'إعادة الاحتساب الإجباري تفتح التسويات المعتمدة — تحتاج صلاحية «إنهاء» الحوافز'},
+            return Response({'detail': 'إعادة الاحتساب للمفتوح فقط مع وجود تسويات مُعتمدة تحتاج صلاحية «إنهاء» الحوافز'},
                             status=status.HTTP_403_FORBIDDEN)
 
         try:
@@ -207,6 +253,7 @@ class IncentiveProgramViewSet(viewsets.ModelViewSet):
             'skipped_person_codes': result.skipped_person_codes,
             'simulated':            result.simulated,
             'log_id':               result.log_id,
+            'kept_finalized_user_ids': result.finalized_user_ids,
         })
 
     # ── POST .../programs/{id}/simulate/ ─────────────────────────────────────
@@ -1336,7 +1383,44 @@ class IncentiveTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 class IncentiveSettlementViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, MatrixPermission, IncentivesPayrollAccess]
     rbac_module = 'incentives'
+    rbac_actions = {'unlock': ('finalize',)}
     serializer_class   = IncentiveSettlementSerializer
+
+    # ── POST .../settlements/{id}/unlock/  (D-16, admin only) ─────────────────
+    # A finalized settlement is never changed by a recalculation. To change one an admin unlocks it
+    # with a written reason; before/after go to IncentiveAuditEvent. The next recalculation then
+    # rebuilds that person's transactions, and the period is finalized again from the report tab.
+    UNLOCK_MIN_REASON = 5
+
+    @action(detail=True, methods=['post'],
+            permission_classes=[IsAuthenticated, MatrixPermission, IncentivesPayrollAccess, IsAdminRole])
+    def unlock(self, request, pk=None):
+        from django.db import transaction as db_transaction
+        reason = (request.data.get('reason') or '').strip()
+        if len(reason) < self.UNLOCK_MIN_REASON:
+            return Response({'detail': 'اكتب سبب فتح الاعتماد (5 أحرف على الأقل)'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        profile = getattr(request.user, 'staff_profile', None)
+        target = self.get_object()
+        with db_transaction.atomic():
+            sett = IncentiveSettlement.objects.select_for_update().get(pk=target.pk)
+            if not sett.is_finalized:
+                return Response({'detail': 'التسوية غير مُعتمدة — لا يوجد ما يُفتح'},
+                                status=status.HTTP_409_CONFLICT)
+            before = _settlement_snapshot(sett)
+            sett.is_finalized = False
+            sett.finalized_at = None
+            sett.finalized_by = None
+            sett.save(update_fields=['is_finalized', 'finalized_at', 'finalized_by', 'updated_at'])
+            event = IncentiveAuditEvent.objects.create(
+                action='settlement_unlocked', program_id=sett.program_id, settlement=sett,
+                actor=profile, actor_name=profile.full_name if profile else request.user.get_username(),
+                reason=reason, before=before, after=_settlement_snapshot(sett),
+            )
+        logger.warning('incentive settlement %s unlocked by staff %s (event %s)', sett.pk,
+                       getattr(profile, 'pk', None), event.pk)
+        return Response({'detail': 'تم فتح اعتماد التسوية — يمكن إعادة احتسابها ثم اعتمادها من جديد',
+                         'id': sett.pk, 'is_finalized': False, 'audit_event_id': event.pk})
 
     def get_queryset(self):
         qs = IncentiveSettlement.objects.select_related('program', 'user', 'finalized_by')
@@ -1408,6 +1492,22 @@ class IncentiveSettlementViewSet(viewsets.ReadOnlyModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 # Calculation Log (read-only audit trail)
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _settlement_snapshot(sett) -> dict:
+    """JSON-safe before/after picture of a settlement for IncentiveAuditEvent."""
+    return {
+        'is_finalized':      sett.is_finalized,
+        'finalized_at':      sett.finalized_at.isoformat() if sett.finalized_at else None,
+        'finalized_by':      sett.finalized_by_id,
+        'total_incentive':   str(sett.total_incentive),
+        'total_adjustments': str(sett.total_adjustments),
+        'final_payout':      str(sett.final_payout),
+        'transaction_count': sett.transaction_count,
+        'user':              sett.user_id,
+        'period_start':      sett.period_start.isoformat(),
+        'period_end':        sett.period_end.isoformat(),
+    }
+
 
 class IncentiveCalculationLogViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, MatrixPermission, IncentivesPayrollAccess]
