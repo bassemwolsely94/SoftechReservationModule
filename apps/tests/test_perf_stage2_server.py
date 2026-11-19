@@ -5,6 +5,7 @@ Shared Redis caches: `default` fails OPEN (a Redis error is a cache miss), `limi
 (a Redis error refuses the request with 503 + Arabic "try again shortly"; owner decision §9).
 Web-only statement timeout: off by default, set on request threads only when the flag is on.
 """
+import json
 import threading
 from unittest import mock
 
@@ -212,7 +213,9 @@ class BulkReadFailClosedTests(TestCase):
     def test_enforce_refuses_when_counter_cannot_be_written(self):
         r = self._run('enforce')
         self.assertEqual(r.status_code, 503)
-        self.assertIn(limits.LIMITS_UNAVAILABLE_MESSAGE, r.content.decode())
+        body = json.loads(r.content)       # JsonResponse escapes Arabic as \uXXXX
+        self.assertEqual(body['detail'], limits.LIMITS_UNAVAILABLE_MESSAGE)
+        self.assertEqual(body['code'], limits.LIMITS_UNAVAILABLE_CODE)
 
     def test_log_mode_keeps_the_response(self):
         r = self._run('log')
