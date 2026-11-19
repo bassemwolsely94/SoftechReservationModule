@@ -115,7 +115,7 @@ class _Data(TestCase):
         from apps.purchasing.models import DemandCalculationRun, ItemDemandMetrics
         cls.b130, cls.b140 = _branch('130'), _branch('140')
         cls.closed = _branch('110', kind='closed')
-        cls.run = DemandCalculationRun.objects.create(status='success', calc_date=dt.date(2026, 11, 18))
+        cls.calc_run = DemandCalculationRun.objects.create(status='success', calc_date=dt.date(2026, 11, 18))
 
         def item(code, cost, **kw):
             return Item.objects.create(softech_id=code, name=f'صنف {code}', cost_price=D(cost), is_active=True, **kw)
@@ -138,7 +138,7 @@ class _Data(TestCase):
         hq = make_hq('100')
         rows.append((cls.fast, hq, '50', '500', '0', '0'))     # HQ is not a cover target
         for it, b, rate, value, stock, transit in rows:
-            ItemDemandMetrics.objects.create(run=cls.run, item=it, branch=b, calc_date=cls.run.calc_date,
+            ItemDemandMetrics.objects.create(run=cls.calc_run, item=it, branch=b, calc_date=cls.calc_run.calc_date,
                                              monthly_avg=D(rate), monthly_value=D(value), current_stock=D(stock),
                                              in_transit_qty=D(transit))
 
