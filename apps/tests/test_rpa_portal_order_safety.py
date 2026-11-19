@@ -114,7 +114,7 @@ class OrderSafetyTests(_World, TestCase):
             queue.resolve(b, staff=self.boss, action='cancel')
         # an Order History read that found nothing clears it: a plain cancel then
         hrun = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
-        queue.report(hrun, self.dev, {'outcome': 'history_none', 'account': ACC})
+        queue.report(hrun, self.dev, {'outcome': 'history_none', 'complete': True, 'account': ACC})
         b = queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='cancel')
         self.assertEqual(b.status, 'cancelled')
         self.assertEqual(self._buyline(b.lines.get()).chosen_supplier, '565')
@@ -267,9 +267,13 @@ class OrderSafetyTests(_World, TestCase):
         b, hrun, ln = self._stuck_live()
         PortalBasket.objects.create(job=b.job, seq=9, status='recorded', portal_ref='PO-A',
                                     portal_key=f'{self.portal.key}:PO-A')
+        PortalBasket.objects.create(job=b.job, seq=10, status='recorded', portal_ref='PO-X',
+                                    portal_key=f'{self.portal.key}:PO-X')
         orders = [{'order_ref': 'PO-A', 'lines': [{'sku': ln.supplier_key, 'qty': 4}]},
                   {'order_ref': 'PO-X', 'lines': [{'sku': '77777', 'qty': 2}]}]
-        queue.report(hrun, self.dev, {'outcome': 'history_found', 'account': ACC, 'orders': orders})
+        # (an order no basket owns makes the read unclear: test_rpa_portal_prelive_gates R17)
+        queue.report(hrun, self.dev, {'outcome': 'history_found', 'account': ACC, 'orders': orders,
+                                      'complete': True})
         self.assertEqual(PortalRun.objects.get(pk=hrun.pk).outcome, 'history_none')
         b = queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='retry')
         self.assertEqual(b.status, 'ready')

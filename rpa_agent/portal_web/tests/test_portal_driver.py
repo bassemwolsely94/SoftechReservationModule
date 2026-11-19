@@ -23,7 +23,7 @@ BROWSER = os.environ.get("RPA_PORTAL_TEST_BROWSER", "")
 FIX = pathlib.Path(__file__).resolve().parent / "fixtures"
 # keys apps/rpa/portal/queue.report reads; nothing else is sent
 REPORT_KEYS = {"outcome", "steps", "lines", "credit", "discovery", "order_ref", "history_lines", "orders",
-               "account"}
+               "account", "complete", "truncated"}
 # the server's answer to an accepted handover (apps/rpa/portal/agent_views.ReportView)
 ACCEPTED = {"run_id": 1, "outcome": "handover", "basket": 9, "status": "awaiting_submit"}
 PRE_CART_STEPS = {"check_account", "check_cart_empty"}
@@ -429,8 +429,13 @@ class PortalDriverTests(unittest.TestCase):
         self.assertEqual(result["orders"], [{"order_ref": "2104322530", "date": "2026-11-18",
                                              "lines": [{"sku": SKU, "qty": 4}]}])
         self.assertNotIn("order_ref", result)          # no ref asked: the server picks, never orders[0]
+        self.assertEqual((result["complete"], result["truncated"]), (False, False))
+        # R21: nothing in the window, but paging not confirmed on the real site: a person decides
         result = self.go(d, dict(plan, since="2026-11-19T00:00:00+02:00"))
-        self.assertEqual(result["outcome"], "history_none")
+        self.assertEqual((result["outcome"], result["complete"]), ("history_unclear", False))
+        d.recipe.HISTORY_PAGING_CONFIRMED = True              # after the on-site check only
+        result = self.go(d, dict(plan, since="2026-11-19T00:00:00+02:00"))
+        self.assertEqual((result["outcome"], result["complete"]), ("history_none", True))
 
     def test_history_reports_every_order_in_the_window(self):
         orders = [{"ref": "2104300010", "date": "18/11/2026", "lines": [{"sku": SKU, "qty": 4}]},
