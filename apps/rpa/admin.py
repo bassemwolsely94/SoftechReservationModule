@@ -21,7 +21,7 @@ class RpaScreenAdmin(ReadOnlyAdmin):
 
 @admin.register(models.RpaRecipe)
 class RpaRecipeAdmin(ReadOnlyAdmin):
-    list_display = ('screen', 'version', 'status', 'approved_by', 'approved_at')
+    list_display = ('screen', 'version', 'status', 'created_by', 'edited_by', 'approved_by', 'approved_at')
 
 
 @admin.register(models.RpaJob)

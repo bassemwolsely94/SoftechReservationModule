@@ -223,6 +223,40 @@ class RecipeContentTests(_Base):
             workflow.approve_recipe(recipe, editor)
         self.assertEqual(workflow.approve_recipe(recipe, self.approver).status, 'approved')
 
+    def test_edit_records_the_last_editor_on_the_recipe(self):
+        recipe = self._recipe(1, 'draft')
+        self.assertIsNone(recipe.edited_by_id)
+        editor = _staff('t5_ed2')
+        workflow.edit_recipe(recipe, editor, {'header_checklist': ['المخزن 101']})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.edited_by_id, editor.id)
+        self.assertIsNotNone(recipe.edited_at)
+        workflow.edit_recipe(recipe, self.approver, {'header_checklist': ['المخزن 102']})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.edited_by_id, self.approver.id)
+
+    def test_last_editor_is_refused_even_without_the_audit_log(self):
+        # four-eyes rests on the recipe row, not on AuditLog (which retention may prune)
+        recipe = self._recipe(1, 'draft')
+        editor = _staff('t5_ed3')
+        workflow.edit_recipe(recipe, editor, {'header_checklist': ['المخزن 101']})
+        AuditLog.objects.filter(action='rpa_recipe_edited').delete()
+        with self.assertRaises(PermissionDenied) as ctx:
+            workflow.approve_recipe(recipe, editor)
+        self.assertIn('عدّلتها', str(ctx.exception.detail))
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.status, 'draft')
+
+    def test_an_earlier_editor_may_approve_after_someone_else_edited_last(self):
+        recipe = self._recipe(1, 'draft')
+        first, last = _staff('t5_ed4'), _staff('t5_ed5')
+        workflow.edit_recipe(recipe, first, {'header_checklist': ['أ']})
+        workflow.edit_recipe(recipe, last, {'header_checklist': ['ب']})
+        with self.assertRaises(PermissionDenied):
+            workflow.approve_recipe(recipe, last)
+        approved = workflow.approve_recipe(recipe, first)
+        self.assertEqual((approved.status, approved.edited_by_id), ('approved', last.id))
+
     def test_edit_refused_for_approved_non_admin_unknown_and_invalid(self):
         approved = self._recipe(1)
         with self.assertRaises(ValidationError):

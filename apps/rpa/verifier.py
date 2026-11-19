@@ -22,11 +22,13 @@ _Q5 = Decimal('0.00001')
 
 # Header columns read: docnumber, usercode, cust_branch_code, docdate, comments (fixed text, all
 # values bound as ? parameters).
-# LIKE '%RPA-12%' also hits RPA-120.., RPA-1200..: the cap is wide and newest-first so our own
-# document is not crowded out, and Python keeps only an exact RPA-<id> (no digit after it).
+# The reference match is exact in SQL: RPA-<id> followed by a non-digit, or at the end of the
+# comments (_ref_patterns). So RPA-120.. never reaches the row cap and cannot crowd RPA-12 out;
+# Python still re-checks each row (`own` in find_issue_document) as a second guard.
 _REF_SQL = ('SET ROWCOUNT 50 SELECT docnumber, usercode, cust_branch_code, docdate, comments '
             'FROM SOFTECHDB9.dbo.stktransm '
-            "WHERE branchcode=? AND doccode='125' AND comments LIKE ? ORDER BY docnumber DESC")
+            "WHERE branchcode=? AND doccode='125' AND (comments LIKE ? OR comments LIKE ?) "
+            'ORDER BY docnumber DESC')
 _FINGERPRINT_SQL = ('SET ROWCOUNT 50 SELECT docnumber, usercode, cust_branch_code, docdate, comments '
                     'FROM SOFTECHDB9.dbo.stktransm '
                     "WHERE branchcode=? AND doccode='125' AND usercode=? AND cust_branch_code=? "
@@ -80,6 +82,12 @@ def _read_headers(cur, sql, params):
 _REF_IN_COMMENT = re.compile(r'RPA-(\d+)')
 
 
+def _ref_patterns(reference):
+    """Sybase ASE LIKE patterns for exactly `reference` (RPA-<id>, no digit after it): inside the
+    comments, or at their very end. Bound as parameters, never formatted into the SQL text."""
+    return [f'%{reference}[^0-9]%', f'%{reference}']
+
+
 def _names_other_document(comments, document):
     return any(f'RPA-{n}' != document.reference for n in _REF_IN_COMMENT.findall(comments))
 
@@ -125,8 +133,8 @@ def find_issue_document(document):
     cur = None
     try:
         cur = conn.cursor()
-        own = re.compile(rf'{re.escape(document.reference)}(?!\d)')   # LIKE also hits RPA-120 for RPA-12
-        for row in _read_headers(cur, _REF_SQL, [bcode, f'%{document.reference}%']):
+        own = re.compile(rf'{re.escape(document.reference)}(?!\d)')   # second guard behind the SQL match
+        for row in _read_headers(cur, _REF_SQL, [bcode, *_ref_patterns(document.reference)]):
             if own.search(_s(row[4])):
                 docnumber = int(Decimal(_s(row[0])))
                 return _found(row, 'reference', _lines_of(cur, bcode, docnumber), docnumber)

@@ -145,3 +145,43 @@ class DispatchFixTests(_World, TestCase):
         self.assertIn('سيرفر', doc.needs_person_reason)
         self.find.assert_not_called()
         self.assertEqual(RpaDocument.objects.get(pk=doc.pk).claimed_by_id, None)
+
+
+@override_settings(**ON)
+class ScheduledLeaseSweepTests(_World, TestCase):
+    """A lost robot's document goes to a person on the 5-minute scheduler job, not only when some
+    device next asks for work (claim_next): with every agent down nothing else would sweep it."""
+
+    def setUp(self):
+        self.build_world('SW')
+        self.dev, _ = self.device()
+        p = mock.patch(FIND, return_value=None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_scheduler_registers_the_lease_sweep_every_5_minutes(self):
+        from apps.tests.test_scheduler_locks import _registered
+        job = _registered()['rpa_expire_leases']
+        self.assertEqual(job.get('minutes'), 5)
+        self.assertEqual((job.get('max_instances'), job.get('coalesce')), (1, True))
+
+    def test_scheduled_run_sends_an_expired_lease_to_a_person(self):
+        from apps.sync import tasks
+        doc = self.make_doc()
+        run = dispatch.claim_next(self.dev).run
+        RpaDocument.objects.filter(pk=doc.pk).update(lease_until=timezone.now() - datetime.timedelta(seconds=1))
+        with override_settings(RPA_SOFTECH_ENTRY_ENABLED=False):     # the sweep never needs the switch
+            tasks._run_rpa_expire_leases()
+        doc.refresh_from_db()
+        run.refresh_from_db()
+        self.assertEqual((doc.status, run.outcome), ('needs_person', 'timeout'))
+        tasks._run_rpa_expire_leases()                                # a second run finds nothing
+        self.assertEqual(AuditLog.objects.filter(action='rpa_document_needs_person',
+                                                 object_id=str(doc.pk)).count(), 1)
+
+    def test_a_failing_sweep_is_logged_not_raised(self):
+        from apps.sync import tasks
+        with mock.patch('apps.rpa.dispatch.sweep_expired_leases', side_effect=RuntimeError('db 01012345678')), \
+                self.assertLogs('elrezeiky.sync', 'ERROR') as logs:
+            tasks._run_rpa_expire_leases()
+        self.assertNotIn('01012345678', '\n'.join(logs.output))     # type only, never the message text

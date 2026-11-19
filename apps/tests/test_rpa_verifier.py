@@ -19,6 +19,25 @@ from apps.tests.security import static_scan
 from apps.users.models import StaffProfile
 
 
+def _like(pattern):
+    """Sybase ASE LIKE as a regex: % any run, _ one char, [..] / [^..] a character class."""
+    out, i = [], 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == '%':
+            out.append('.*')
+        elif ch == '_':
+            out.append('.')
+        elif ch == '[':
+            end = pattern.index(']', i)
+            out.append(pattern[i:end + 1])
+            i = end
+        else:
+            out.append(re.escape(ch))
+        i += 1
+    return re.compile(''.join(out), re.S)
+
+
 class _Cur:
     def __init__(self, conn):
         self.conn, self._rows = conn, []
@@ -31,7 +50,7 @@ class _Cur:
         if m:                                   # the session keeps the cap until it is reset
             self.conn.rowcount = int(m.group(1))
         if 'dbo.stktransm' in sql:
-            self._rows = self.conn.headers_for(sql)
+            self._rows = self.conn.headers_for(sql, params)
             if 'ORDER BY docnumber DESC' in sql:  # the server sorts before the cap applies
                 self._rows = sorted(self._rows, key=lambda r: r[0], reverse=True)
         elif 'dbo.stktrans ' in sql:
@@ -52,8 +71,12 @@ class _Conn:
         self.by_ref, self.by_print, self.lines = list(by_ref), list(by_print), lines or {}
         self.calls, self.closed, self.rowcount = [], False, 0
 
-    def headers_for(self, sql):
-        return self.by_ref if 'LIKE' in sql else self.by_print
+    def headers_for(self, sql, params):
+        if 'LIKE' not in sql:
+            return self.by_print
+        # the server applies the LIKE patterns: a row is kept when its comments match any of them
+        patterns = [_like(p) for p in params if isinstance(p, str) and '%' in p]
+        return [r for r in self.by_ref if any(p.fullmatch(str(r[4])) for p in patterns)]
 
     def cursor(self):
         return _Cur(self)
@@ -94,8 +117,24 @@ class VerifierTests(TestCase):
         conn = _Conn(by_ref=[_hdr(77, comments=self.doc.reference)], lines={77: self._good_lines()})
         found = self._find(conn)
         self.assertEqual((found['docnumber'], found['matched_by']), (77, 'reference'))
-        self.assertEqual(conn.calls[0][1], ['B01', f'%{self.doc.reference}%'])
+        ref = self.doc.reference
+        self.assertEqual(conn.calls[0][1], ['B01', f'%{ref}[^0-9]%', f'%{ref}'])
+        self.assertIn('(comments LIKE ? OR comments LIKE ?)', conn.calls[0][0])
         self.assertTrue(conn.closed)
+
+    def test_reference_pattern_is_exact_in_sql(self):
+        ref = self.doc.reference
+        conn = _Conn()
+        self._find(conn)
+        sql, params = [c for c in conn.calls if 'LIKE' in c[0]][0]
+        # fixed SQL text, every value bound; never TOP (Sybase ASE takes SET ROWCOUNT)
+        self.assertNotIn(ref, sql)
+        self.assertNotIn('TOP', sql.upper())
+        self.assertEqual(params, ['B01', f'%{ref}[^0-9]%', f'%{ref}'])
+        for comments, hit in ((ref, True), (f'نقل {ref} للفرع', True), (f'{ref}/2', True),
+                              (f'{ref}0', False), (f'{ref}05 نقل', False), (f'X{ref}9', False)):
+            self.assertEqual(any(_like(p).fullmatch(comments) for p in params[1:]), hit, comments)
+        self.assertIn('SET ROWCOUNT 0', [c[0] for c in conn.calls])        # the cap is lifted again
 
     def test_found_by_fingerprint_when_no_reference(self):
         conn = _Conn(by_print=[_hdr(78)], lines={78: self._good_lines()})
@@ -122,15 +161,17 @@ class VerifierTests(TestCase):
         self.assertIn('أصناف أو كميات الإذن لا تطابق المطلوب', res['problems'])
 
     def test_own_reference_found_among_many_longer_references(self):
+        # more longer references (RPA-<id>0..) than the row cap, all newer than ours: the SQL itself
+        # leaves them out, so the cap can never crowd our document out
         ref = self.doc.reference
-        longer = [_hdr(100 + n, comments=f'{ref}{n}') for n in range(6)]   # RPA-<id>0 .. RPA-<id>5
+        longer = [_hdr(1000 + n, comments=f'{ref}{n % 10}{n}') for n in range(80)]
         conn = _Conn(by_ref=longer + [_hdr(60, comments=f'نقل {ref} للفرع')],
                      lines={60: self._good_lines()})
         found = self._find(conn)
         self.assertEqual(found['docnumber'], 60)
         sql = [c[0] for c in conn.calls if 'LIKE' in c[0]][0]
         self.assertIn('ORDER BY docnumber DESC', sql)
-        self.assertGreaterEqual(int(re.match(r'SET ROWCOUNT (\d+)', sql).group(1)), 50)
+        self.assertEqual(int(re.match(r'SET ROWCOUNT (\d+)', sql).group(1)), 50)
 
     def test_branch_without_softech_code_or_server_is_refused(self):
         self.assertEqual(verifier.branch_lookup_problem(self.src), '')
@@ -162,6 +203,14 @@ class VerifierTests(TestCase):
     def test_reference_prefix_does_not_match_longer_reference(self):
         other = f'{self.doc.reference}0'
         conn = _Conn(by_ref=[_hdr(80, comments=other)], lines={80: self._good_lines()})
+        self.assertIsNone(self._find(conn))
+
+    def test_python_guard_still_drops_a_longer_reference_the_server_returned(self):
+        # second guard: even if the server's LIKE let RPA-<id>0 through, it is not our document
+        class _LooseConn(_Conn):
+            def headers_for(self, sql, params):
+                return self.by_ref if 'LIKE' in sql else self.by_print
+        conn = _LooseConn(by_ref=[_hdr(80, comments=f'{self.doc.reference}0')], lines={80: self._good_lines()})
         self.assertIsNone(self._find(conn))
 
     def test_fingerprint_skips_document_naming_another_rpa_reference(self):
