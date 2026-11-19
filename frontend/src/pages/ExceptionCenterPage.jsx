@@ -230,11 +230,122 @@ export default function ExceptionCenterPage() {
         </p>
       )}
 
+      <LiveCheckGapsPanel branchIds={branchIds} />
+
       <LostSalesTrendsPanel branchCodes={branchCodes} filtered={branchIds.length > 0} />
       <LostSalesPanel branch={singleBranch} several={branchIds.length > 1} />
 
       {detailId && <OrderDetailDrawer id={detailId} onClose={() => setDetailId(null)} />}
     </div>
+  )
+}
+
+/** D-11 (owner 2026-11-19, «Allow + flag»): sales that went through while a live branch check could not
+ *  run — the discount authority at «جاهز», or the points schedule at the send (sold with 0 points).
+ *  Supervisors only (the server answers 403 to everyone else, and the panel then stays hidden). The
+ *  server decides everything: closing needs a note; «إضافة النقاط» first shows the server's dry run,
+ *  then a second press confirms (credited once — the server guards retries). */
+function LiveCheckGapsPanel({ branchIds }) {
+  const qc = useQueryClient()
+  const [notes, setNotes] = useState({})
+  const [preview, setPreview] = useState({})       // gap id → points from the server's dry run
+  const [msg, setMsg] = useState('')
+  const { data, error } = useQuery({
+    queryKey: ['pos-live-check-gaps', branchIds],
+    queryFn: async () => (await api.get('/pos-orders/live-check-gaps/',
+                          { params: branchIds.length ? { branch: branchIds.join(',') } : {} })).data,
+    refetchInterval: 30000,
+    retry: false,
+  })
+  const rows = data?.results || []
+  const sorter = useSortableRows(rows, { getValue: (g, k) => (k === 'branch' ? (g.branch_name || g.branch) : g[k]) })
+  const done = () => qc.invalidateQueries({ queryKey: ['pos-live-check-gaps'] })
+  const review = useMutation({
+    mutationFn: ({ id, note }) => api.post(`/pos-orders/live-check-gaps/${id}/review/`, { note }),
+    onSuccess: (_, v) => { setNotes(n => ({ ...n, [v.id]: '' })); setMsg('') },
+    onError: (e) => setMsg(e?.response?.data?.detail || 'تعذّر الحفظ'),
+    onSettled: done,
+  })
+  const credit = useMutation({
+    mutationFn: ({ id, confirm }) => api.post(`/pos-orders/live-check-gaps/${id}/credit-points/`, { confirm }),
+    onSuccess: (r, v) => {
+      if (!v.confirm) { setPreview(p => ({ ...p, [v.id]: r.data.points })); setMsg('') }
+      else { setPreview(p => ({ ...p, [v.id]: undefined })); setMsg(`أُضيفت ${r.data.points ?? 0} نقطة.`) }
+    },
+    onError: (e) => setMsg(e?.response?.data?.detail || 'تعذّر إضافة النقاط'),
+    onSettled: (_, __, v) => { if (v.confirm) done() },
+  })
+  if (error || !data) return null                   // 403 for non-supervisors → nothing to show
+  return (
+    <section className="border rounded-lg overflow-hidden" data-tour="pos-exceptions-unchecked">
+      <header className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+        <div className="flex items-center gap-2">
+          <Badge tone="warn" icon="alert" label="مبيعات بدون فحص مباشر" />
+          <span className="text-sm font-bold">{data.count}</span>
+        </div>
+        <span className="text-xs text-gray-600">
+          البيع تمّ كالمعتاد — راجِع الخصم، وأضف النقاط الناقصة بعد التحصيل.
+        </span>
+      </header>
+      {msg && <div className="px-3 py-1.5 text-xs text-amber-700 bg-amber-50 border-b">{msg}</div>}
+      {rows.length === 0
+        ? <div className="px-3 py-3 text-sm text-gray-500">لا توجد مبيعات مفتوحة بدون فحص.</div>
+        : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-gray-500 text-xs border-b">
+              <tr>
+                <SortTh {...sorter.headerProps('order_id', 'number')} className="text-right px-3 py-1.5">أمر</SortTh>
+                <SortTh {...sorter.headerProps('kind_display', 'text')} className="text-right px-3 py-1.5">ما لم يُفحص</SortTh>
+                <SortTh {...sorter.headerProps('branch', 'text')} className="text-right px-3 py-1.5">الفرع</SortTh>
+                <SortTh {...sorter.headerProps('cashier', 'text')} className="text-right px-3 py-1.5">البائع</SortTh>
+                <SortTh {...sorter.headerProps('discount_given', 'number')} className="text-right px-3 py-1.5">الخصم</SortTh>
+                <SortTh {...sorter.headerProps('doc_value', 'number')} className="text-right px-3 py-1.5">الصافي</SortTh>
+                <SortTh {...sorter.headerProps('created_at', 'date')} className="text-right px-3 py-1.5">الوقت</SortTh>
+                <th className="text-right px-3 py-1.5">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorter.sorted.map(g => (
+                <tr key={g.id} className="border-b last:border-0 hover:bg-gray-50 align-top">
+                  <td className="px-3 py-1.5 font-mono">POS-{g.order_id}
+                    <div className="text-xs text-gray-400">{g.status_display}</div></td>
+                  <td className="px-3 py-1.5">{g.kind_display}
+                    {g.detail && <div className="text-xs text-gray-400">{g.detail}</div>}</td>
+                  <td className="px-3 py-1.5">{g.branch_name || g.branch || '—'}</td>
+                  <td className="px-3 py-1.5">{g.cashier || g.seller_usercode || '—'}</td>
+                  <td className="px-3 py-1.5 tabular-nums">{money(g.discount_given)}</td>
+                  <td className="px-3 py-1.5 tabular-nums">{money(g.doc_value)}</td>
+                  <td className="px-3 py-1.5 text-xs">{g.created_at ? new Date(g.created_at).toLocaleString('ar-EG') : '—'}</td>
+                  <td className="px-3 py-1.5 space-y-1 min-w-[14rem]">
+                    {g.status === 'open' && (
+                      <div className="flex items-center gap-1">
+                        <input value={notes[g.id] || ''} placeholder="ملاحظة المراجعة"
+                               onChange={e => setNotes(n => ({ ...n, [g.id]: e.target.value }))}
+                               className="border rounded px-2 py-0.5 text-xs w-36" />
+                        <button disabled={!(notes[g.id] || '').trim() || review.isPending}
+                                onClick={() => review.mutate({ id: g.id, note: notes[g.id] })}
+                                className="px-2 py-0.5 rounded border text-xs disabled:opacity-50">تمت المراجعة</button>
+                      </div>
+                    )}
+                    {g.can_credit && (preview[g.id] === undefined
+                      ? <button disabled={credit.isPending} onClick={() => credit.mutate({ id: g.id, confirm: false })}
+                                className="px-2 py-0.5 rounded border text-xs disabled:opacity-50">إضافة النقاط…</button>
+                      : <button disabled={credit.isPending || !data.recovery_enabled}
+                                title={data.recovery_enabled ? '' : 'إضافة النقاط المؤجلة غير مفعّلة'}
+                                onClick={() => credit.mutate({ id: g.id, confirm: true })}
+                                className="px-2 py-0.5 rounded bg-blue-600 text-white text-xs disabled:opacity-50">
+                          تأكيد إضافة {preview[g.id]} نقطة</button>)}
+                    {g.kind === 'points_rate' && g.status === 'open' && !g.can_credit && (
+                      <div className="text-xs text-gray-400">النقاط تُضاف بعد تحصيل الكاشير.</div>)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }
 

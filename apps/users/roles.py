@@ -22,6 +22,8 @@ class Role:
                                        # hq_exception_digest_recipients names nobody (C32)
     qa_inspections: bool = False       # works branch QA inspections (/api/qa/, /m/qa) on top of the
                                        # hr grant every role holds for self-service (UAT W2, 2026-11-19)
+    branch_lead: bool = False          # default owner of a branch's stock-audit finding tasks when no
+                                       # named branch manager exists (C13, apps/stock_audit/assignment.py)
     ap_review: bool = False            # decides A/P reconciliation exceptions and gets the weekly A/P
                                        # review digest (C15, owner 2026-11-19); admin / pharmacist decide
                                        # through the finance approve grant as before
@@ -33,7 +35,8 @@ ROLES: tuple[Role, ...] = (
     Role('call_center', 'كول سنتر', 'Call center', 'Call Center — All Branches',
          all_branches=True, mfa_required=False, legacy_rbac_mode=True),
     Role('pharmacist', 'صيدلاني', 'Pharmacist', 'Pharmacist — Own Branch',
-         all_branches=False, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True),
+         all_branches=False, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True,
+         branch_lead=True),
     Role('salesperson', 'مندوب مبيعات', 'Salesperson', 'Sales Person — Own Branch',
          all_branches=False, mfa_required=False, legacy_rbac_mode=True),
     Role('purchasing', 'مشتريات', 'Purchasing', 'Purchasing — HQ Only',
@@ -59,6 +62,7 @@ MFA_REQUIRED_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.mfa_req
 LEGACY_RBAC_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.legacy_rbac_mode)
 HQ_DIGEST_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.hq_digest)
 QA_INSPECTION_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.qa_inspections)
+BRANCH_LEAD_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.branch_lead)
 AP_REVIEW_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.ap_review)
 
 

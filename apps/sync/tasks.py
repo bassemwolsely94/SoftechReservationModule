@@ -2825,6 +2825,16 @@ def _run_sales_history_catchup(days=7):
                 pass
 
 
+def _run_followups_nightly():
+    """C09: daily follow-up pipeline — ERP auto-close, stale → missed, generate the newly due refill
+    tasks (apps/followups/nightly.py; advisory lock; FOLLOWUPS_NIGHTLY_ENABLED, default off). Local DB only."""
+    try:
+        from apps.followups.nightly import run
+        logger.info('[APScheduler] followups nightly: %s', run())
+    except Exception as exc:
+        logger.error('[APScheduler] followups nightly failed: %s', exc)
+
+
 def _run_refill_reminders():
     """Daily WhatsApp refill reminders (template `refill_reminder`). Sends only when
     REFILL_REMINDER_SEND_ENABLED is on; otherwise counts what it would send."""
@@ -4130,6 +4140,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_item_suppliers_sync, 'cron', hour=4, minute=30, id='item_suppliers_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # C09 follow-ups nightly — 01:30, before the 02:00 segmentation reads the missed refills.
+    _scheduler.add_job(
+        _run_followups_nightly, 'cron', hour=1, minute=30, id='followups_nightly',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     # WhatsApp refill reminders — 10:10 Cairo (customers awake, branches open).
     _scheduler.add_job(

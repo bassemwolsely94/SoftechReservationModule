@@ -6,6 +6,8 @@
  * shows the result and sends the user's choices. Review happens inline — no modals.
  *
  * Tabs: summary · sales (checks 1–3) · adjustments (check 5 + per-user ranking) · settings.
+ * C13: «📋 مهمة + جرد» turns a finding (or the ticked ones) into a task for the branch and a count of
+ * just its items; closing that count closes the finding. The server picks the owner and enforces it all.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -238,6 +240,38 @@ function EvidenceLines({ ev }) {
   )
 }
 
+// C13 — the finding's task + targeted count (server decides owner, scope and the one-open-task rule)
+const TASKABLE = new Set(['open', 'escalated'])
+const OUTCOME = { match: 'الجرد مطابق', variance: 'الجرد به فروق', cancelled: 'أُلغيت' }
+
+function TaskLine({ finding, canMake, pending, onMake }) {
+  const t = finding.task
+  if (t && t.status === 'open') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-xs" data-tour="stock-audit-main-task">
+        <span className="px-2 py-0.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-bold">📋 مهمة مفتوحة</span>
+        <Link to={`/tasks/${t.task_id}`} className="text-primary font-bold hover:underline">{t.task_number}</Link>
+        <span className="text-gray-600">{t.assigned_to || 'بدون مسؤول'}</span>
+        {t.count_session_id && (
+          <Link to={`/stock-count?session=${t.count_session_id}`} className="text-primary hover:underline">جرد #{t.count_session_id}</Link>
+        )}
+      </div>
+    )
+  }
+  if (!canMake || !TASKABLE.has(finding.status)) {
+    return t ? <div className="text-xs text-gray-500">آخر مهمة {t.task_number}: {OUTCOME[t.outcome] || t.outcome}</div> : null
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs" data-tour="stock-audit-main-task">
+      <button disabled={pending} onClick={onMake}
+        className="px-2.5 py-1 rounded-md text-xs font-bold border border-primary/40 bg-white text-primary disabled:opacity-50">
+        📋 مهمة + جرد مستهدف
+      </button>
+      {t && <span className="text-gray-500">آخر مهمة {t.task_number}: {OUTCOME[t.outcome] || t.outcome}</span>}
+    </div>
+  )
+}
+
 function ReviewBar({ statuses, onMove, pending, compact }) {
   const [note, setNote] = useState('')
   if (!statuses?.length) return null
@@ -314,6 +348,18 @@ function FindingsGrid({ f, rules, access }) {
       setPicked(new Set()); refresh()
     },
     onError: e => setMsg(errText(e)) })
+  const makeTask = useMutation({
+    mutationFn: id => stockAuditApi.makeTask(id),
+    onSuccess: () => { setMsg(''); refresh() }, onError: e => setMsg(errText(e)) })
+  const bulkTask = useMutation({
+    mutationFn: ids => stockAuditApi.bulkTask(ids),
+    onSuccess: r => {
+      const { created, existing, skipped } = r.data
+      setMsg(`📋 ${created.length} مهمة جديدة${existing.length ? ` · ${existing.length} لها مهمة بالفعل` : ''}`
+        + (skipped.length ? ` · تُرك ${skipped.length}: ${skipped[0].reason}` : ''))
+      setPicked(new Set()); refresh()
+    },
+    onError: e => setMsg(errText(e)) })
 
   const toggle = r => setPicked(p => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n })
   const kb = useGridKeyboard({
@@ -352,6 +398,13 @@ function FindingsGrid({ f, rules, access }) {
           <span className="text-xs font-bold text-gray-700">{pickedRows.length} محددة</span>
           <div className="grow"><ReviewBar compact statuses={bulkMoves} pending={bulk.isPending}
             onMove={(s, note, done) => bulk.mutate({ ids: pickedRows.map(r => r.id), status: s, note }, { onSuccess: done })} /></div>
+          {pickedRows.some(r => TASKABLE.has(r.status) && r.task?.status !== 'open') && (
+            <button data-tour="stock-audit-main-bulk-task" disabled={bulkTask.isPending}
+              onClick={() => bulkTask.mutate(pickedRows.map(r => r.id))}
+              className="px-2.5 py-1 rounded-md text-xs font-bold border border-primary/40 bg-white text-primary disabled:opacity-50">
+              📋 مهمة + جرد للمحددة
+            </button>
+          )}
         </div>
       )}
       {msg && <div className="mb-2 text-xs text-red-600">{msg}</div>}
@@ -398,7 +451,8 @@ function FindingsGrid({ f, rules, access }) {
                         <div className="text-[11px] text-gray-400">{r.sales.pic}</div></>
                     : <span className="text-gray-300">{r.sales ? 'بدون PIC' : '—'}</span>}</td>
                   <td className="px-2 py-2 text-left font-bold whitespace-nowrap">{fmt(r.value_egp)}</td>
-                  <td className="px-2 py-2 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full border text-[11px] ${STATUS[r.status]?.cls}`}>{STATUS[r.status]?.label}</span></td>
+                  <td className="px-2 py-2 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full border text-[11px] ${STATUS[r.status]?.cls}`}>{STATUS[r.status]?.label}</span>
+                    {r.task?.status === 'open' && <span className="ms-1" title={`مهمة ${r.task.task_number} — ${r.task.assigned_to || 'بدون مسؤول'}`}>📋</span>}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{DOC[r.doccode] || r.doccode} {r.docnumber}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{fmtTime(r.occurred_at)}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{r.user_name || r.softech_user || '—'}</td>
@@ -410,6 +464,8 @@ function FindingsGrid({ f, rules, access }) {
                       <div className="text-sm text-gray-800">{r.message_ar}</div>
                       <EvidenceLines ev={r.evidence} />
                       {r.review_note && <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap font-sans">{r.review_note}</pre>}
+                      <div className="mt-2"><TaskLine finding={r} canMake={access.can_review} pending={makeTask.isPending}
+                        onMake={() => makeTask.mutate(r.id)} /></div>
                       {access.can_review && (
                         <div className="mt-2" data-tour="stock-audit-main-review"><ReviewBar statuses={r.next_statuses} pending={one.isPending}
                           onMove={(s, note, done) => one.mutate({ id: r.id, status: s, note }, { onSuccess: done })} /></div>

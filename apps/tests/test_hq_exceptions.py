@@ -66,7 +66,7 @@ def _recon(status='open', invoice_value='0', payment_amount=None):
                                    doc_value_pay=Decimal('0'), party_type='supplier', source_hash='synced')
     pay = None
     if payment_amount is not None:
-        pay = Payment.objects.create(party=party, branchcode='130', cheqsno=f'C{party.pk}', direction='out',
+        pay = Payment.objects.create(party=party, branchcode='130', cheqsno=party.pk, direction='out',
                                      party_type='supplier', voucher_date=dt.date(2026, 9, 18),
                                      amount=Decimal(payment_amount), note='', is_unallocated=True)
     return ReconException.objects.create(party=party, invoice=inv, payment=pay, exception_type='duplicate_payment',
@@ -187,12 +187,18 @@ class DigestTests(TestCase):
         with _calendar():
             return HX.send_weekly(today=today)
 
-    def test_once_per_iso_week_to_the_registry_roles(self):
+    def test_week_starts_on_sunday(self):
+        self.assertEqual(HX.week_start(SUNDAY), SUNDAY)
+        self.assertEqual(HX.week_start(SUNDAY + dt.timedelta(days=1)), SUNDAY)     # Monday (a new ISO week)
+        self.assertEqual(HX.week_start(SUNDAY + dt.timedelta(days=6)), SUNDAY)     # Saturday
+        self.assertEqual(HX.week_start(SUNDAY + dt.timedelta(days=7)), SUNDAY + dt.timedelta(days=7))
+
+    def test_once_per_week_to_the_registry_roles(self):
         from apps.notifications.models import Notification
         _, admin, _ = make_admin('hx_admin')
         make_user('hx_pharm', role='pharmacist')               # not an HQ digest role
         self.assertEqual(self._send(SUNDAY), 1)
-        self.assertEqual(self._send(SUNDAY + dt.timedelta(days=1)), 0)    # same ISO week (Monday)
+        self.assertEqual(self._send(SUNDAY + dt.timedelta(days=1)), 0)    # Monday re-run: same Sunday week
         self.assertEqual(self._send(SUNDAY + dt.timedelta(days=7)), 1)    # next week
         n = Notification.objects.filter(notification_type='hq_exception_digest').first()
         self.assertEqual(n.recipient_id, admin.pk)

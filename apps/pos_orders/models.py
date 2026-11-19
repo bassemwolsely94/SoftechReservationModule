@@ -491,3 +491,71 @@ class ContractEntryConfig(models.Model):
             raise ValidationError({'per_visit_columns': 'أعمدة غير معروفة: يجب أن تكون من أعمدة بيانات التعاقد الـ12'})
         if self.approval_column not in allowed:
             raise ValidationError({'approval_column': 'عمود غير معروف'})
+
+
+class PosLiveCheckGap(models.Model):
+    """D-11 (owner 2026-11-19, «Allow + flag»): a sale that went through while a live branch check
+    could not run. The sale is never blocked and its discount is never recalculated; this row is the
+    review record a supervisor sees in the Exception Center.
+
+      • discount_authority — /ready could not read the seller's SOFTECH discount authority, so a
+        discount above it would not have been caught.
+      • points_rate        — the push could not read the points schedule (custdiscounts), so the
+        sale was posted with 0 points (personnewbal = 0). The missing points are credited ONCE
+        later (`live_checks.credit_missing_points`): claimed by a conditional UPDATE and tagged in
+        SOFTECH picpoints.vf1, so a retry never credits twice.
+
+    One row per (order, kind). PostgreSQL only — nothing reaches SOFTECH except through the credit."""
+    KIND_DISCOUNT = 'discount_authority'
+    KIND_POINTS   = 'points_rate'
+    KIND_CHOICES = [(KIND_DISCOUNT, 'صلاحية الخصم لم تُفحص'),
+                    (KIND_POINTS,   'نقاط الولاء لم تُحسب')]
+
+    STATUS_OPEN      = 'open'        # waiting for a supervisor
+    STATUS_CREDITING = 'crediting'   # claimed by one credit run (the claim is the idempotency guard)
+    STATUS_CREDITED  = 'credited'    # missing points added in SOFTECH
+    STATUS_RECHECKED = 'rechecked'   # a later /ready read the authority and found the discount within it
+    STATUS_REVIEWED  = 'reviewed'    # a supervisor closed it with a note
+    STATUS_CHOICES = [(STATUS_OPEN, 'مفتوح'), (STATUS_CREDITING, 'جارٍ إضافة النقاط'),
+                      (STATUS_CREDITED, 'أُضيفت النقاط'), (STATUS_RECHECKED, 'أُعيد الفحص — سليم'),
+                      (STATUS_REVIEWED, 'تمت المراجعة')]
+
+    # SET_NULL + order_ref snapshot: the review record outlives a deleted draft (audit trail, cf. D-17)
+    order = models.ForeignKey(SoftechSalesOrder, null=True, blank=True, on_delete=models.SET_NULL,
+                              related_name='live_check_gaps')
+    order_ref = models.PositiveIntegerField(db_index=True, verbose_name='رقم الأمر')
+    kind   = models.CharField(max_length=20, choices=KIND_CHOICES)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_OPEN, db_index=True)
+    branch = models.ForeignKey('branches.Branch', null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name='pos_live_check_gaps')
+    cashier = models.ForeignKey('users.StaffProfile', null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name='pos_live_check_gaps')
+    seller_usercode = models.CharField(max_length=5, blank=True)
+    softech_pic     = models.CharField(max_length=18, blank=True)
+    # what the sale carried when the check was skipped (copied, never recomputed)
+    discount_given  = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    doc_value       = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    detail          = models.CharField(max_length=255, blank=True)     # short; no secrets or phones
+    # points credit (kind=points_rate only)
+    points_credited = models.IntegerField(null=True, blank=True)
+    credited_at     = models.DateTimeField(null=True, blank=True)
+    credit_tag      = models.CharField(max_length=30, blank=True)      # picpoints.vf1 tag
+    # closing
+    resolved_by     = models.ForeignKey('users.StaffProfile', null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name='+')
+    resolved_at     = models.DateTimeField(null=True, blank=True)
+    resolution_note = models.CharField(max_length=255, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'بيع بدون فحص مباشر'
+        verbose_name_plural = 'مبيعات بدون فحص مباشر'
+        constraints = [
+            models.UniqueConstraint(fields=['order_ref', 'kind'], name='pos_live_gap_one_per_order_kind'),
+        ]
+
+    def __str__(self):
+        return f'POS-{self.order_ref} {self.kind} [{self.status}]'

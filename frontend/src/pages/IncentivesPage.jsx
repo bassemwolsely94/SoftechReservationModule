@@ -204,6 +204,20 @@ function ProgramsTab({ selectedProgram, onSelect }) {
   const [showCreate, setShowCreate] = useState(false)
   const [cloningId, setCloningId]   = useState(null)
   const [showCloneModal, setShowCloneModal] = useState(null) // program to clone
+  // D-17: programs with transactions/settlements/logs are archived (is_active=false), never deleted
+  const [archiveAsk, setArchiveAsk] = useState(null)   // program id awaiting the inline confirm
+  const [archiveMsg, setArchiveMsg] = useState('')
+
+  const archive = async (p) => {
+    setArchiveMsg('')
+    try {
+      const { data } = await incentivesApi.archiveProgram(p.id)
+      setArchiveMsg(data.detail || 'تمت الأرشفة')
+      load()
+    } catch (e) {
+      setArchiveMsg(e.response?.data?.detail || 'فشلت الأرشفة')
+    } finally { setArchiveAsk(null) }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -221,6 +235,10 @@ function ProgramsTab({ selectedProgram, onSelect }) {
         <h2 className="font-bold text-gray-700">برامج الحوافز</h2>
         <button data-tour="incentives-programs-new" className="btn-primary text-sm" onClick={() => setShowCreate(true)}>+ برنامج جديد</button>
       </div>
+
+      {archiveMsg && (
+        <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">{archiveMsg}</div>
+      )}
 
       {loading ? <Spinner /> : programs.length === 0 ? (
         <EmptyState icon="🏆" title="لا توجد برامج حوافز" sub="أنشئ برنامجاً جديداً للبدء" />
@@ -253,6 +271,23 @@ function ProgramsTab({ selectedProgram, onSelect }) {
                   >
                     نسخ
                   </button>
+                  {p.is_active && (archiveAsk === p.id ? (
+                    <span className="flex items-center gap-1 text-xs" onClick={e => e.stopPropagation()}>
+                      <span className="text-gray-600">أرشفة؟</span>
+                      <button data-tour="incentives-programs-archive-yes" className="text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-2 py-1"
+                        onClick={() => archive(p)}>نعم</button>
+                      <button className="text-gray-500 border border-gray-200 rounded-lg px-2 py-1"
+                        onClick={() => setArchiveAsk(null)}>لا</button>
+                    </span>
+                  ) : (
+                    <button data-tour="incentives-programs-archive"
+                      className="text-xs text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50"
+                      title="إيقاف البرنامج مع الاحتفاظ بكل حركاته وتسوياته وسجلاته"
+                      onClick={e => { e.stopPropagation(); setArchiveAsk(p.id) }}
+                    >
+                      أرشفة
+                    </button>
+                  ))}
                   <Badge color={p.is_active ? 'green' : 'gray'}>{p.is_active ? 'نشط' : 'موقف'}</Badge>
                 </div>
               </div>
@@ -1220,7 +1255,7 @@ function CalculateTab({ selectedProgram }) {
                     onChange={e => setForce(e.target.checked)}
                     className="w-4 h-4 rounded accent-orange-600" />
                   <label htmlFor="force-cb" className="text-sm font-medium cursor-pointer">
-                    إعادة الاحتساب بالقوة (تجاوز القفل)
+                    إعادة الاحتساب لغير المُعتمَدين فقط (التسويات المُعتمدة لا تتغير)
                   </label>
                 </div>
               )}
@@ -1260,11 +1295,18 @@ function CalculateTab({ selectedProgram }) {
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   جارٍ الاحتساب...
                 </span>
-              ) : force ? '⚡ إعادة الاحتساب (بالقوة)' : '⚡ تشغيل الاحتساب'}
+              ) : force ? '⚡ إعادة الاحتساب للمفتوح فقط' : '⚡ تشغيل الاحتساب'}
             </button>
           </div>
         </div>
       </div>
+
+      {result?.kept_finalized_user_ids?.length > 0 && (
+        <div className="text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded-lg p-3">
+          🔒 {result.kept_finalized_user_ids.length} مندوب لهم تسوية مُعتمدة — لم تتغير حركاتهم ولا تسويتهم.
+          لتعديل أحدهم يفتح المدير اعتماد تسويته من تبويب التسويات ثم يُعاد الاحتساب.
+        </div>
+      )}
 
       {result && (
         <div>
@@ -1982,6 +2024,13 @@ function ReceiptModal({ settlementId, onClose }) {
 }
 
 function SettlementsTab({ selectedProgram }) {
+  const { user } = useAuthStore()
+  // D-16: only admins see the unlock action; the server enforces it too (IsAdminRole)
+  const isAdmin = user?.role === 'admin'
+  const [unlockId, setUnlockId]         = useState(null)
+  const [unlockReason, setUnlockReason] = useState('')
+  const [unlockMsg, setUnlockMsg]       = useState('')
+  const [unlocking, setUnlocking]       = useState(false)
   const [settlements, setSettlements] = useState([])
   const [loading, setLoading]         = useState(false)
   const [receiptId, setReceiptId]     = useState(null)
@@ -1999,6 +2048,18 @@ function SettlementsTab({ selectedProgram }) {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (selectedProgram) setProgramFilter(selectedProgram.id) }, [selectedProgram])
+
+  const unlock = async (id) => {
+    setUnlocking(true); setUnlockMsg('')
+    try {
+      const { data } = await incentivesApi.unlockSettlement(id, unlockReason.trim())
+      setUnlockMsg(data.detail || 'تم فتح الاعتماد')
+      setUnlockId(null); setUnlockReason('')
+      load()
+    } catch (e) {
+      setUnlockMsg(e.response?.data?.detail || 'فشل فتح الاعتماد')
+    } finally { setUnlocking(false) }
+  }
 
   const grandTotal     = settlements.reduce((s, x) => s + Number(x.total_incentive || 0), 0)
   const grandFinal     = settlements.reduce((s, x) => s + Number(x.final_payout || x.total_incentive || 0), 0)
@@ -2018,6 +2079,10 @@ function SettlementsTab({ selectedProgram }) {
           <RefreshButton data-tour="incentives-programs-settlements-refresh" loading={loading} onClick={load} size="sm">↻ تحديث</RefreshButton>
         </div>
       </div>
+
+      {unlockMsg && (
+        <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">{unlockMsg}</div>
+      )}
 
       {settlements.length > 0 && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 flex gap-6 text-sm">
@@ -2055,8 +2120,26 @@ function SettlementsTab({ selectedProgram }) {
                     </>
                   )}
                   <button data-tour="incentives-programs-receipt" className="btn-secondary text-xs mt-1" onClick={() => setReceiptId(s.id)}>🖨 إيصال</button>
+                  {isAdmin && unlockId !== s.id && (
+                    <button data-tour="incentives-programs-unlock" className="text-xs text-orange-700 hover:text-orange-800 underline"
+                      onClick={() => { setUnlockId(s.id); setUnlockReason(''); setUnlockMsg('') }}>🔓 فتح الاعتماد</button>
+                  )}
                 </div>
               </div>
+              {isAdmin && unlockId === s.id && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                  <input className="input flex-1 min-w-[12rem] text-sm" autoFocus
+                    placeholder="سبب فتح الاعتماد (إلزامي — يُسجَّل في سجل التدقيق)"
+                    value={unlockReason} onChange={e => setUnlockReason(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && unlockReason.trim().length >= 5) unlock(s.id)
+                      if (e.key === 'Escape') setUnlockId(null)
+                    }} />
+                  <button className="btn-primary text-xs" disabled={unlocking || unlockReason.trim().length < 5}
+                    onClick={() => unlock(s.id)}>{unlocking ? 'جارٍ الفتح...' : 'تأكيد فتح الاعتماد'}</button>
+                  <button className="btn-secondary text-xs" onClick={() => setUnlockId(null)}>إلغاء</button>
+                </div>
+              )}
             </div>
           ))}
         </div>

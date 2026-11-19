@@ -289,19 +289,25 @@ def digest_body(data):
     return body + '\nافتح «التقارير السردية» ← «💰 استثناءات الأسبوع» للروابط.'
 
 
+def week_start(day):
+    """The Sunday that starts `day`'s week. The digest week runs Sunday → Saturday: an ISO week ends ON
+    Sunday, so a Sunday send and a Monday re-run (misfire grace, by hand) would fall in two ISO weeks."""
+    return day - dt.timedelta(days=(day.weekday() + 1) % 7)
+
+
 def send_weekly(today=None):
-    """Sunday: one digest per recipient, once per ISO week. Returns the count sent."""
+    """Sunday: one digest per recipient, once per Sunday-start week. Returns the count sent."""
     from apps.notifications.models import Notification
     today = today or timezone.localdate()
     data = build(today=today)
     if not data['items']:
         return 0
-    year, week, _ = today.isocalendar()
-    title = f"💰 أكبر {len(data['items'])} استثناءات بالجنيه — أسبوع {year}-W{week:02d}"
+    week = week_start(today)
+    title = f"💰 أكبر {len(data['items'])} استثناءات بالجنيه — أسبوع {week.isoformat()}"
     body = digest_body(data)
     sent = 0
     for staff in digest_recipients():
         n = Notification.send_to_user(staff, 'hq_exception_digest', title, body,
-                                      dedup_key=f'hq_exception_digest_{year}w{week:02d}', dedup_once=True)
+                                      dedup_key=f'hq_exception_digest_{week.isoformat()}', dedup_once=True)
         sent += int(n is not None)
     return sent
