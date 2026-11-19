@@ -28,9 +28,9 @@ MODULE = {
                  'desc': T('المريض أكّد أو اشترى. مرحلة نهائية.', 'The patient confirmed or bought. Final.')},
                 {'key': 'missed', 'label': T('فائت — لا استجابة', 'Missed — no response'),
                  'desc': T('لم يستجب بعد عدة محاولات، أو عدّى 3 أيام على موعدها وهي مفتوحة 3 أيام على الأقل (المهمة الجديدة المتأخرة بتاخد فرصتها الأول). '
-                           'ده بيحصل لوحده كل ليلة الساعة 1:30 لمهام الصرف والمزمن بس — مهام قوائم الاتصال والمهام المثبّتة بتفضل مفتوحة. مرحلة نهائية.',
+                           'ده بيحصل لوحده كل ليلة الساعة 1:30 (لما الإدارة تشغّل التشغيل الليلي) لمهام الصرف والمزمن بس — مهام قوائم الاتصال والمهام المثبّتة بتفضل مفتوحة. مرحلة نهائية.',
                            'No response after several attempts, or 3 days past due after being open at least 3 days (a task created already late gets its chance first). '
-                           'This runs by itself every night at 1:30 for refill and chronic tasks only — call-list and pinned tasks stay open. Final.')},
+                           'This runs by itself every night at 1:30 (once management switches the nightly run on) for refill and chronic tasks only — call-list and pinned tasks stay open. Final.')},
                 {'key': 'auto_closed', 'label': T('أُغلق تلقائياً — SOFTECH أكّد البيع', 'Auto-closed — SOFTECH confirmed the sale'),
                  'desc': T('ظهرت فاتورة بيع جديدة على نفس الـPIC لنفس الدواء (أو بديل بنفس التشخيص) بعد الفاتورة اللي طلّعت المهمة، فأُغلقت بدون تدخل. رقم الفاتورة بيتسجّل في المهمة.',
                            'A new sale on the same PIC of the same medicine (or a same-diagnosis substitute) appeared after the sale that created the task, so it closed by itself. The invoice number is saved on the task.')},
@@ -470,8 +470,8 @@ SCREENS = [
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('المهام بتتولد وتتقفل لوحدها كل ليلة؛ وقائمة اتصال جديدة «💊 موعد إعادة الصرف» من سلوك الشراء',
-                         'Tasks are now generated and closed by themselves every night; new call list type "💊 Refill due" from buying behaviour'),
+        'change_note': T('المهام بتتولد وتتقفل لوحدها كل ليلة (بعد تشغيله)؛ وقائمة اتصال جديدة «💊 موعد إعادة الصرف» من سلوك الشراء',
+                         'Tasks are generated and closed by themselves every night (once switched on); new call list type "💊 Refill due" from buying behaviour'),
     },
     {
         'key': 'followups.reminders',

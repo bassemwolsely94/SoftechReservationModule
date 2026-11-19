@@ -13,7 +13,7 @@ Daily, in this order (local DB only — reads synced PurchaseHistory, never SOFT
 One AuditLog row per run with the counts. Guard: a non-blocking Postgres advisory lock, so a second
 scheduler process or a hand run at the same moment skips instead of doubling the work.
 
-Settings (getattr defaults): FOLLOWUPS_NIGHTLY_ENABLED (True), FOLLOWUPS_STALE_AFTER_DAYS (3 — the rule
+Settings (getattr defaults): FOLLOWUPS_NIGHTLY_ENABLED (False — switched on after the backlog retirement), FOLLOWUPS_STALE_AFTER_DAYS (3 — the rule
 the help already documents), FOLLOWUPS_AUTOCLOSE_LOOKBACK_DAYS (45), FOLLOWUPS_GENERATE_GRACE_DAYS (14).
 """
 import logging
@@ -30,7 +30,7 @@ def _cfg(name, default):
 
 
 def enabled() -> bool:
-    return bool(_cfg('NIGHTLY_ENABLED', True))
+    return bool(_cfg('NIGHTLY_ENABLED', False))
 
 
 def run(*, dry_run=False, force=False) -> dict:

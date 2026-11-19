@@ -2808,7 +2808,7 @@ def _run_sales_history_catchup(days=7):
 
 def _run_followups_nightly():
     """C09: daily follow-up pipeline — ERP auto-close, stale → missed, generate the newly due refill
-    tasks (apps/followups/nightly.py; advisory lock; FOLLOWUPS_NIGHTLY_ENABLED). Local DB only."""
+    tasks (apps/followups/nightly.py; advisory lock; FOLLOWUPS_NIGHTLY_ENABLED, default off). Local DB only."""
     try:
         from apps.followups.nightly import run
         logger.info('[APScheduler] followups nightly: %s', run())

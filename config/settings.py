@@ -890,7 +890,8 @@ REFILL_REMINDER_TEMPLATE     = config('REFILL_REMINDER_TEMPLATE', default='refil
 REFILL_REMINDER_LANGUAGE     = config('REFILL_REMINDER_LANGUAGE', default='ar')
 REFILL_REMINDER_DAILY_CAP    = config('REFILL_REMINDER_DAILY_CAP', default=300, cast=int)
 # C09 follow-ups nightly (apps/followups/nightly.py): auto-close, stale → missed, generation. Local DB only.
-FOLLOWUPS_NIGHTLY_ENABLED   = config('FOLLOWUPS_NIGHTLY_ENABLED', default=True, cast=bool)
+# Off by default: retire the old backlog first (retire_followup_backlog --apply), then switch on.
+FOLLOWUPS_NIGHTLY_ENABLED   = config('FOLLOWUPS_NIGHTLY_ENABLED', default=False, cast=bool)  # on after the backlog retirement
 FOLLOWUPS_STALE_AFTER_DAYS  = config('FOLLOWUPS_STALE_AFTER_DAYS', default=3, cast=int)
 # C08 refill-due call list (apps/followups/refill_due.py) — the "regular buyer" rule; owner questions in the PR.
 FOLLOWUPS_REFILL_DUE_MIN_PURCHASES    = config('FOLLOWUPS_REFILL_DUE_MIN_PURCHASES', default=3, cast=int)

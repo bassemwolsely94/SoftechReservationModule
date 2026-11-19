@@ -208,6 +208,7 @@ class RefillDueListTests(_Sales, TestCase):
         self.assertFalse(CallList.objects.exists())
 
 
+@override_settings(FOLLOWUPS_NIGHTLY_ENABLED=True)
 class NightlyAndBacklogTests(_Sales, TestCase):
 
     def setUp(self):
@@ -254,6 +255,7 @@ class NightlyAndBacklogTests(_Sales, TestCase):
         self.sale(self.cust, self.item, timezone.localdate() - dt.timedelta(days=26))
         with override_settings(FOLLOWUPS_NIGHTLY_ENABLED=False):
             self.assertNotIn('created', nightly.run())
+            self.assertEqual(nightly.run(dry_run=True, force=True)['created'], 1)   # force ignores the switch
         self.assertFalse(FollowUpTask.objects.exists())
         dry = nightly.run(dry_run=True)
         self.assertEqual(dry['created'], 1)
