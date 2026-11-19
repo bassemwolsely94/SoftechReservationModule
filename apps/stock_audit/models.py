@@ -266,3 +266,40 @@ class StockAuditAccess(models.Model):
 
     def __str__(self):
         return f'{self.staff_id} {self.level} {"revoked" if self.revoked_at else "active"}'
+
+
+class StockAuditFindingTask(models.Model):
+    """C13: a finding handed to its branch as an assigned task plus a targeted count of just its
+    items. At most one OPEN link per finding (partial unique constraint). Closing the count session
+    closes the link: the finding is marked reviewed when every item matched, or stays open with the
+    variance written on it. Created and closed through apps/stock_audit/finding_tasks.py only."""
+    ST_OPEN, ST_CLOSED = 'open', 'closed'
+    STATUS_CHOICES = [(ST_OPEN, 'مفتوحة'), (ST_CLOSED, 'مغلقة')]
+    OUT_MATCH, OUT_VARIANCE, OUT_CANCELLED = 'match', 'variance', 'cancelled'
+    OUTCOME_CHOICES = [(OUT_MATCH, 'الجرد مطابق'), (OUT_VARIANCE, 'الجرد به فروق'),
+                       (OUT_CANCELLED, 'أُلغيت المهمة أو الجرد')]
+
+    finding = models.ForeignKey(StockAuditFinding, on_delete=models.CASCADE, related_name='tasks')
+    task = models.ForeignKey('tasks.OperationalTask', on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='+')
+    count_session = models.ForeignKey('stockcount.StockCountSession', on_delete=models.SET_NULL,
+                                      null=True, blank=True, related_name='audit_finding_tasks')
+    item_codes = models.JSONField(default=list, verbose_name='أصناف الجرد')
+    assigned_to = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=ST_OPEN, db_index=True)
+    outcome = models.CharField(max_length=10, choices=OUTCOME_CHOICES, blank=True)
+    result = models.JSONField(default=dict)   # {itemcode: {expected, counted, difference, variance_type}}
+    created_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [models.UniqueConstraint(fields=['finding'], condition=models.Q(status='open'),
+                                               name='uniq_open_task_per_finding')]
+        verbose_name = 'مهمة ملاحظة تدقيق'
+        verbose_name_plural = 'مهام ملاحظات التدقيق'
+
+    def __str__(self):
+        return f'finding {self.finding_id} → task {self.task_id} / count {self.count_session_id} [{self.status}]'

@@ -251,14 +251,26 @@ def validate_claim_readiness(claim: InsuranceClaim) -> dict:
         logger.warning('[readiness] net-vs-SOFTECH check failed', exc_info=True)
 
     # 7) Cross-claim duplicate docnumbers (double-billing) ─────────────────────
-    docnos = [rx.softech_docnumber for rx in active_rx if rx.softech_docnumber]
-    if docnos:
-        dupes = (InsuranceClaimPrescription.objects
-                 .filter(softech_docnumber__in=docnos)
-                 .exclude(claim=claim)
-                 .exclude(claim__status=InsuranceClaim.STATUS_CANCELLED)
-                 .values_list('softech_docnumber', 'claim__claim_number'))
-        dupes = list(dupes)
+    # A receipt is (branch, doccode, docnumber) — S-8 / D-10, owner-approved 2026-11-19: the
+    # same number at another branch or of another type is a different receipt, not a double
+    # bill. A blank branch/doccode (legacy row) on either side matches any value.
+    ours = {}
+    for rx in active_rx:
+        if rx.softech_docnumber:
+            ours.setdefault(str(rx.softech_docnumber).strip(), []).append(
+                ((rx.softech_branchcode or '').strip(), (rx.softech_doccode or '').strip()))
+    if ours:
+        def _same(a, b):
+            return not a or not b or a == b
+        rows = (InsuranceClaimPrescription.objects
+                .filter(softech_docnumber__in=list(ours))
+                .exclude(claim=claim)
+                .exclude(claim__status=InsuranceClaim.STATUS_CANCELLED)
+                .values_list('softech_docnumber', 'softech_branchcode', 'softech_doccode',
+                             'claim__claim_number'))
+        dupes = [(d, cno) for d, br, dc, cno in rows
+                 if any(_same((br or '').strip(), b) and _same((dc or '').strip(), c)
+                        for b, c in ours.get(str(d).strip(), ()))]
         if dupes:
             checks.append(_check(
                 'cross_claim_duplicates', 'فواتير مكرّرة في مطالبات أخرى', 'error', len(dupes),
