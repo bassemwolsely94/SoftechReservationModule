@@ -522,13 +522,10 @@ SCREENS = [
              'text': T('يشيل سطر السداد ده.', 'Removes this tender line.'),
              'open_hint': T('لما يكون فيه أكتر من طريقة سداد.', 'When there is more than one tender.')},
             {'target': 'pos-platform-drafts', 'label': T('🛵 طلبات المنصات', '🛵 Platform orders'),
-             'text': T('طلبات طلبات وغيرها اللي اتقبلت في شاشة المنصات ومستنية تتبعت للكاشير. كل طلب بأصنافه زي ما جت من المنصة، '
-                       'ويتسجل بيع آجل بالكامل على حساب المنصة في SOFTECH (عميل دائم) — مفيش نقدي ولا بطاقة ولا PIC. '
-                       '«🧾 معاينة» تجريبي ما بيكتبش حاجة، و«⚠ إرسال للكاشير» بيكتب فعليًا.',
-                       'Talabat and other platform orders accepted on the marketplace screen and waiting to go to the cashier. '
-                       'Each keeps the platform’s own items and posts as a 100% credit sale on the platform’s SOFTECH account '
-                       '(permanent customer) — no cash, no card, no PIC. "🧾 Preview" is a dry run that writes nothing; '
-                       '"⚠ Send to cashier" writes for real.'),
+             'text': T('طلبات المنصات المقبولة بانتظار الكاشير. تتسجل بيع آجل بالكامل على حساب المنصة — بلا نقدي ولا PIC. '
+                       '«معاينة» لا تكتب شيئًا، «إرسال» يكتب فعليًا.',
+                       'Accepted platform orders waiting for the cashier. Posted 100% credit on the platform account, no cash or PIC. '
+                       '"Preview" writes nothing; "Send" writes for real.'),
              'when': T('يظهر بس لما يكون فيه طلبات منصات مقبولة في فرعك.', 'Only shown when your branch has accepted platform orders.'),
              'warn': T('لو SOFTECH رفض صنف «غير مسموح صرفه لهذا التعاقد»، الصنف مقفول على حساب المنصة — كلّم المسؤول عن حسابات العملاء.',
                        'If SOFTECH refuses an item as "not allowed for this contract", the item is closed on the platform account — call whoever manages customer accounts.'),
