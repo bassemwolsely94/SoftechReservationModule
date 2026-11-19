@@ -26,8 +26,8 @@ BUDGETS: dict[str, Budget] = {
     'notifications/': Budget('poll', 4, 'measured 2 on 2026-11-19'),
     'notifications/category-counts': Budget('poll', 4, 'measured 2 on 2026-11-19'),
     'sync/status': Budget('poll', 5, 'measured 3 on 2026-11-19'),
-    'sync/freshness': Budget('poll', 49, 'measured 47 on 2026-11-19; Stage 3 target ≤ 8'),
-    'dashboard/summary': Budget('poll', 36, 'measured 34 on 2026-11-19; Stage 3 target ≤ 10'),
+    'sync/freshness': Budget('poll', 8, 'measured 47 on 2026-11-19; 5 core queries after Stage 3 (+ auth)'),
+    'dashboard/summary': Budget('poll', 12, 'measured 34 on 2026-11-19; 8 core queries after Stage 3 (+ auth)'),
     # ── lists and search ─────────────────────────────────────────────────────────
     'reservations': Budget('list', 11, 'measured 9 on 2026-11-19'),
     'customers': Budget('list', 9, 'measured 7 on 2026-11-19 (pharmacist, branch-scoped, phone masking)'),
@@ -40,9 +40,9 @@ BUDGETS: dict[str, Budget] = {
     'purchasing/metrics': Budget('list', 7, 'measured 5 on 2026-11-19'),
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
     # ── reports on screen ────────────────────────────────────────────────────────
-    'batches/stock-expiry/summary': Budget('report', 35, 'measured 33 on 2026-11-19; mostly Python time (Stage 3)'),
-    'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19: N+1, Stage 3 fixes it; '
-                                               'test is @expectedFailure until then'),
+    'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
+    'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '
+                                               '(one KpiResolver + one grouped query per metric and period)'),
     # ── tracking ─────────────────────────────────────────────────────────────────
     'audit/screen-view': Budget('track', 5, 'measured 3 on 2026-11-19'),
 }

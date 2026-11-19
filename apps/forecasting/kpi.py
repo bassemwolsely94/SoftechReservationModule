@@ -20,7 +20,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
-from django.db.models import Sum, F, DecimalField, ExpressionWrapper
+from django.db.models import Count, Q, Sum, F, DecimalField, ExpressionWrapper
 
 _PROFIT_EXPR = ExpressionWrapper(
     F('line_total') - F('quantity') * F('cost_at_sale'),
@@ -219,6 +219,69 @@ class KpiResolver:
         }
         fn = table.get(metric)
         return fn() if fn else Decimal('0')
+
+    # ── public: one metric for many branches at once (perf Stage 3) ─────────────
+    def resolve_by_branch(self, metric, branch_ids, start, end):
+        """{branch_id: Decimal} equal to resolve(metric, branch_ids=[b], start=start, end=end) for
+        every b in branch_ids, in one grouped query. None when the metric has no grouped form here;
+        the caller then resolves branch by branch. Branch scope only: no salesperson, no category."""
+        from apps.forecasting.models import ChannelBucketMap as C, KpiActualRollup as K
+        bl = list(branch_ids)
+        zero = {b: Decimal('0') for b in bl}
+        amounts = {
+            K.M_CASH_DELIVERY: self.channels_by_bucket.get(C.BUCKET_CASH, []),
+            K.M_CASH:          self.cash_sub.get('', []),
+            K.M_DELIVERY:      self.cash_sub.get('delivery', []),
+            K.M_REGULAR:       self.cash_sub.get('regular', []),
+            K.M_CREDIT:        self.channels_by_bucket.get(C.BUCKET_CREDIT, []),
+            K.M_INSURANCE:     self.channels_by_bucket.get(C.BUCKET_INSURANCE, []),
+            K.M_NET_REVENUE:   self.nonexclude_channels,
+        }
+        if metric in amounts:                                   # _net_amount
+            if not amounts[metric]:
+                return zero
+            qs = self._ph_qs(bl, start, end).filter(sales_channel__in=amounts[metric])
+            return self._sale_minus_return(qs, 'branch_id', 'doc_code', 'total_amount', zero)
+        if metric == K.M_GROSS_PROFIT:                          # _net_profit
+            if not self.profit_channels:
+                return zero
+            qs = self._line_qs(bl, start, end).filter(purchase__sales_channel__in=self.profit_channels)
+            if self.profit_excluded_items:
+                qs = qs.exclude(item_id__in=self.profit_excluded_items)
+            return self._sale_minus_return(qs, 'purchase__branch_id', 'purchase__doc_code', _PROFIT_EXPR, zero)
+        if metric == K.M_BEAUTY:                                # _net_beauty
+            if not self.beauty_types or not self.nonexclude_channels:
+                return zero
+            qs = self._line_qs(bl, start, end).filter(purchase__sales_channel__in=self.nonexclude_channels,
+                                                      item__medicine_type__in=self.beauty_types)
+            return self._sale_minus_return(qs, 'purchase__branch_id', 'purchase__doc_code', 'line_total', zero)
+        if metric in (K.M_CUSTOMERS, K.M_ORDERS, K.M_PIC_COUNT):
+            # _distinct_customers / _order_count / _extended_metric's pic_count
+            channels = self.customer_channels if metric == K.M_CUSTOMERS else self.nonexclude_channels
+            if not channels:
+                return zero
+            qs = self._ph_qs(bl, start, end).filter(doc_code='115', sales_channel__in=channels)
+            if metric != K.M_ORDERS:             # softech_phcode is NOT NULL: COUNT DISTINCT = DISTINCT count
+                qs, n = qs.exclude(softech_phcode=''), Count('softech_phcode', distinct=True)
+            else:
+                n = Count('id')
+            out = dict(zero)
+            for row in qs.values('branch_id').annotate(n=n).order_by():
+                out[row['branch_id']] = Decimal(row['n'])
+            return out
+        return None
+
+    @staticmethod
+    def _sale_minus_return(qs, branch_field, doc_field, value, zero):
+        """{branch: Decimal(sales) − Decimal(returns)} — the per-branch form of _net_amount's sums."""
+        out = dict(zero)
+        rows = (qs.values(branch_field)
+                .annotate(sale=Sum(value, filter=Q(**{doc_field: '115'})),
+                          ret=Sum(value, filter=Q(**{doc_field: '30'})))
+                .order_by())
+        for row in rows:
+            out[row[branch_field]] = Decimal(str(row['sale'] or 0)) - Decimal(str(row['ret'] or 0))
+        return out
 
     # ── derivable Phase-2 metrics (mirror-only) ─────────────────────────────────
     def _derived_metric(self, metric, branch_ids, start, end, softech_user, category_id) -> Decimal:

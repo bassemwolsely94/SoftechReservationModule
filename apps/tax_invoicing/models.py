@@ -798,6 +798,8 @@ class EtaMirrorDocument(models.Model):
     class Meta:
         verbose_name = 'مستند لدى المصلحة (نسخة)'
         ordering = ['-issued_at', '-id']
+        # perf Stage 3: the freshness bar reads the newest fetched_at per system.
+        indexes = [models.Index(fields=['system', 'fetched_at'], name='eta_mirror_doc_fetched')]
         constraints = [models.UniqueConstraint(fields=['system', 'uuid'], name='eta_mirror_document_once')]
 
 
@@ -826,6 +828,8 @@ class EtaMirrorReceipt(models.Model):
     class Meta:
         verbose_name = 'إيصال لدى المصلحة (نسخة)'
         ordering = ['-issued_at', '-id']
+        # perf Stage 3: the freshness bar reads the newest fetched_at per system.
+        indexes = [models.Index(fields=['system', 'fetched_at'], name='eta_mirror_rcpt_fetched')]
         constraints = [models.UniqueConstraint(fields=['system', 'uuid'], name='eta_mirror_receipt_once')]
 
 

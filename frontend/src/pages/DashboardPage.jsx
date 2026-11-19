@@ -20,7 +20,7 @@ import WhatsNewCard from '../help/WhatsNewCard'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { dashboardApi, syncApi } from '../api/client'
+import { dashboardApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
 import { usePermission } from '../hooks/usePermission'
@@ -676,11 +676,8 @@ export default function DashboardPage() {
     refetchInterval: 90_000,
   })
 
-  const { data: syncStatus } = useQuery({
-    queryKey: ['syncStatus'],
-    queryFn:  () => syncApi.status().then(r => r.data),
-    refetchInterval: 30_000,
-  })
+  // The sync widget reads the summary's own `sync` block; Layout already polls sync/status every
+  // 60 s, so a second 30 s poll here was duplicate load (perf Stage 3, audit PERF-10).
 
   const isAdminOrCC = ['admin', 'call_center', 'purchasing'].includes(user?.role)
 
@@ -960,7 +957,7 @@ export default function DashboardPage() {
             {/* Sync */}
             <Card>
               <SectionTitle icon="⟳">المزامنة مع SOFTECH</SectionTitle>
-              <SyncWidget syncStatus={data?.sync || syncStatus} />
+              <SyncWidget syncStatus={data?.sync} />
               {data?.sync?.last_at && (
                 <div className="text-xs text-gray-400 mt-2 text-center">
                   آخر تحديث للبيانات:{' '}

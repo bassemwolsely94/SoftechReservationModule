@@ -283,11 +283,19 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
 
     The top-level keys cover live stock (plus 102/103/105 with include_quarantine). `buckets` gives
     one entry per store role (P-26) so the screens can show shelf risk apart from book residue.
-    Closed stores are never counted anywhere."""
+    Closed stores are never counted anywhere.
+
+    Two queries whatever the size of the mirror (perf Stage 3; was 37 queries and ~4 s of Python
+    building full catalog rows nine times): the mirror grouped by item × store role × expiry band,
+    and the catalog cost of those items. Every card is summed from those groups, so items, quantities
+    and values are the same as summing each card on its own. Value at risk = per-item qty × catalog
+    unit cost (0 when the item has no cost)."""
     import datetime as _d
-    from django.db.models import Sum, Count
+    from collections import defaultdict
+    from decimal import Decimal
+    from django.db.models import Case, CharField, Sum, Value, When
+    from apps.catalog.models import Item
     from .models import StockExpiryBalance
-    from .expiry_audit import _item_attr_map
 
     today = _d.date.today()
     scope = StockExpiryBalance.objects.exclude(store_role=CLOSED)
@@ -295,47 +303,50 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
         scope = scope.filter(branch_code__in=list(branch_codes))
     if store_codes:
         scope = scope.filter(store_code__in=list(store_codes))
-    base = scope.filter(store_role__in=_roles(include_quarantine))
 
-    def _value(q):
-        attrs = _item_attr_map(list(q.values_list('item_code', flat=True).distinct()))
+    def day(n):
+        return today + _d.timedelta(days=n)
+
+    band = Case(When(expiry_date__lt=today, then=Value('expired')),
+                When(expiry_date__lt=day(30), then=Value('lt_30')),
+                When(expiry_date__lt=day(90), then=Value('lt_90')),
+                When(expiry_date__lt=day(180), then=Value('lt_180')),
+                default=Value('later'), output_field=CharField())
+    groups = list(scope.annotate(band=band).values_list('item_code', 'store_role', 'band')
+                  .annotate(qq=Sum('qty')).order_by())
+
+    base_roles = set(_roles(include_quarantine))
+    cards = [LIVE + ':all', LIVE + ':expired', 'lt_30', 'lt_90', 'lt_180', 'expired']         + [r + ':all' for r in QUARANTINE_ROLES]
+    per_item = {c: defaultdict(Decimal) for c in cards}      # card → {item_code: qty}
+    for item_code, role, b, qq in groups:
+        qq = qq or Decimal(0)
+        hit = [role + ':all'] if role in QUARANTINE_ROLES or role == LIVE else []
+        if role == LIVE and b == 'expired':
+            hit.append(LIVE + ':expired')
+        if role in base_roles and b != 'later':
+            hit.append(b)
+        for c in hit:
+            per_item[c][item_code] += qq
+
+    # Catalog cost of the items in scope — a sub-select rather than a list of thousands of codes.
+    cost = {}
+    if groups:
+        in_scope = scope.values('item_code')
+        for code, c in Item.objects.filter(softech_id__in=in_scope).values_list('softech_id', 'cost_price'):
+            cost[code] = float(c) if c is not None else None
+
+    def card(c):
+        items = per_item[c]
         val = 0.0
-        for row in q.values('item_code').annotate(qq=Sum('qty')):
-            val += float(row['qq'] or 0) * (attrs.get(row['item_code'], {}).get('unit_cost') or 0)
-        return round(val, 2)
-
-    def _bucket(q):
-        agg = q.aggregate(qty=Sum('qty'), items=Count('item_code', distinct=True))
-        return {'items': agg['items'] or 0, 'qty': float(agg['qty'] or 0), 'value': _value(q)}
-
-    def band(d_from, d_to):
-        q = base.filter(expiry_date__gte=today + _d.timedelta(days=d_from),
-                        expiry_date__lt=today + _d.timedelta(days=d_to))
-        agg = q.aggregate(qty=Sum('qty'), items=Count('item_code', distinct=True))
-        codes = list(q.values_list('item_code', flat=True).distinct())
-        attrs = _item_attr_map(codes)
-        # value at risk needs per-item qty × cost
-        val = 0.0
-        for row in q.values('item_code').annotate(qq=Sum('qty')):
-            uc = attrs.get(row['item_code'], {}).get('unit_cost') or 0
-            val += float(row['qq'] or 0) * uc
-        return {'items': agg['items'] or 0, 'qty': float(agg['qty'] or 0),
+        for code, qq in items.items():
+            val += float(qq) * (cost.get(code) or 0)
+        return {'items': len(items), 'qty': float(sum(items.values(), Decimal(0))),
                 'value': round(val, 2)}
 
-    expired_q = base.filter(expiry_date__lt=today)
-    exp_codes = list(expired_q.values_list('item_code', flat=True).distinct())
-    exp_attrs = _item_attr_map(exp_codes)
-    exp_val = 0.0
-    for row in expired_q.values('item_code').annotate(qq=Sum('qty')):
-        uc = exp_attrs.get(row['item_code'], {}).get('unit_cost') or 0
-        exp_val += float(row['qq'] or 0) * uc
-
-    b30, b90, b180 = band(0, 30), band(30, 90), band(90, 180)
-    live = scope.filter(store_role=LIVE)
-    live_expired = live.filter(expiry_date__lt=today)
-    buckets = {LIVE: dict(_bucket(live), expired=_bucket(live_expired))}
+    b30, b90, b180 = card('lt_30'), card('lt_90'), card('lt_180')
+    buckets = {LIVE: dict(card(LIVE + ':all'), expired=card(LIVE + ':expired'))}
     for role in QUARANTINE_ROLES:
-        buckets[role] = _bucket(scope.filter(store_role=role))
+        buckets[role] = card(role + ':all')
     for role, b in buckets.items():
         b['label'] = ROLE_LABELS[role]
     return {
@@ -343,9 +354,7 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
         'lt_30':  b30,
         'lt_90':  b90,
         'lt_180': b180,
-        'expired': {'items': expired_q.values('item_code').distinct().count(),
-                    'qty': float(expired_q.aggregate(q=Sum('qty'))['q'] or 0),
-                    'value': round(exp_val, 2)},
+        'expired': card('expired'),
         'total_at_risk_value': round(b30['value'] + b90['value'] + b180['value'], 2),
     }
 
