@@ -400,3 +400,9 @@ class ReservationActivity(models.Model):
 # ── Populate class-level lookup maps (after class body is complete) ────────────
 Reservation._STATUS_LABELS       = dict(Reservation.STATUS_CHOICES)
 ReservationActivity._ACTIVITY_TYPES_MAP = dict(ReservationActivity.ACTIVITY_TYPES)
+
+# ActivityLog (the per-reservation call log, /api/reservations/<id>/activity/) lives in
+# activity_models.py. Import it here so the app registers it at load time, not only when urls.py
+# happens to import its views; otherwise `makemigrations` can see the model as gone and propose
+# dropping a live table (UAT report housekeeping, 2026-11-19).
+from .activity_models import ActivityLog  # noqa: E402,F401  (registered with the app, see above)
