@@ -932,7 +932,9 @@ class EtaReconUncodedItem(models.Model):
 class EtaCodeUsage(models.Model):
     """One code-usage request ETA holds for us in one system (the portal's code-usage history), whatever its status
     (Approved / Rejected / Submitted). A read-only mirror: only eta_codes.fetch writes it. `itemcode` is our SOFTECH
-    code once the EGS/GS1 code is matched to an item."""
+    code once the EGS/GS1 code is matched to an item. It is as long as `item_code`: ETA holds EGS codes whose tail is
+    not one SOFTECH code (EG-<tax id>-124510124197, two codes joined; ASSET100), and on Postgres bulk_update casts to
+    the column's length, which cut those tails silently while the field was 10 long."""
     system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
     code_type = models.CharField(max_length=10)
     item_code = models.CharField(max_length=100)
@@ -942,7 +944,7 @@ class EtaCodeUsage(models.Model):
     status = models.CharField(max_length=30, blank=True, default='')
     gpc = models.CharField(max_length=10, blank=True, default='')
     request_id = models.CharField(max_length=30, blank=True, default='')
-    itemcode = models.CharField(max_length=10, blank=True, default='', db_index=True)
+    itemcode = models.CharField(max_length=100, blank=True, default='', db_index=True)
     fetched_at = models.DateTimeField(auto_now=True)
 
     class Meta:
