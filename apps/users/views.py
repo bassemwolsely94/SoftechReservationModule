@@ -834,19 +834,24 @@ def my_permissions_view(request):
     Non-admins receive only their role's RoleModuleAccess grants;
     missing entries default to False.
     """
-    profile = getattr(request.user, 'staff_profile', None)
+    role, perms = effective_permissions(request.user)
+    return Response({'role': role, 'permissions': perms})
+
+
+def effective_permissions(user):
+    """-> (role, {module: {action: bool}}) exactly as /api/users/my-permissions/ answers it.
+    Shared with the UAT expectations export so the browser suite judges against the same truth."""
+    profile = getattr(user, 'staff_profile', None)
     role = getattr(profile, 'role', 'viewer')
 
     # Admins are unrestricted
-    if role == 'admin' or request.user.is_superuser:
+    if role == 'admin' or user.is_superuser:
         all_modules = [v for v, _ in MODULE_CHOICES]
         all_actions = [v for v, _ in ACTION_CHOICES]
-        perms = {m: {a: True for a in all_actions} for m in all_modules}
-        return Response({'role': 'admin', 'permissions': perms})
+        return 'admin', {m: {a: True for a in all_actions} for m in all_modules}
 
     rows = RoleModuleAccess.objects.filter(role=role).values('module', 'action', 'is_allowed')
     perms = {}
     for row in rows:
         perms.setdefault(row['module'], {})[row['action']] = row['is_allowed']
-
-    return Response({'role': role, 'permissions': perms})
+    return role, perms
