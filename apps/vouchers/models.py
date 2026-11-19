@@ -134,7 +134,7 @@ class Voucher(models.Model):
     @property
     def is_expired(self):
         if self.valid_until:
-            return timezone.now().date() > self.valid_until
+            return timezone.localdate() > self.valid_until      # ends at Cairo midnight (BE-15, owner 2026-11-19)
         return False
 
     @property
@@ -201,7 +201,7 @@ class Voucher(models.Model):
         if self.usage_limit_per_day:
             today_uses = VoucherRedemption.objects.filter(
                 voucher=self,
-                redeemed_at__date=tz.now().date(),
+                redeemed_at__date=tz.localdate(),   # __date is the Cairo day too (BE-15, owner 2026-11-19)
             ).count()
             if today_uses >= self.usage_limit_per_day:
                 return False, 'تجاوز الحد اليومي لهذه القسيمة'
