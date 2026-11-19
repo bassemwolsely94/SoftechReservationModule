@@ -2255,6 +2255,9 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
                 <span className="rounded px-2 py-1 bg-amber-100 text-amber-800">متغيّرة {c.changed}</span>
                 <span className="rounded px-2 py-1 bg-gray-100 text-gray-600">بدون تغيير {c.unchanged}</span>
                 <span className="rounded px-2 py-1 bg-blue-100 text-blue-700" title="إضافات يدوية من مطالبات أخرى — لن تُمس">محمية (يدوية) {c.protected_manual}</span>
+                {c.ambiguous_legacy > 0 && (
+                  <span className="rounded px-2 py-1 bg-gray-100 text-gray-700" title="روشتات قديمة بدون نوع مستند ورقمها موجود أكتر من مرة فى نفس الفرع — مش هتتمس، راجعها يدوياً">غير محسومة {c.ambiguous_legacy}</span>
+                )}
               </div>
               {c.new + c.removed + c.changed === 0 && (
                 <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded p-4 text-center">

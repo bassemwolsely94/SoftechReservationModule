@@ -778,7 +778,7 @@ SCREENS = [
              'when': T('لمراجعة الأصناف أو إرسالها.', 'To review or send the items.'),
              'open_hint': T('تبويب «أصناف المطالبة».', 'The "Claim items" tab.')},
             {'target': 'insurance-claim-resync-preview', 'label': T('جلب ومقارنة', 'Fetch and compare'),
-             'text': T('يقرأ المطالبة من سوفتك ويقارنها بنسختنا: روشتات جديدة، محذوفة، ومتغيّرة. بيقرأ بس.', 'Reads the claim from SOFTECH and compares it with our copy: new, removed and changed prescriptions. Read only.'),
+             'text': T('يقرأ المطالبة من سوفتك ويقارنها بنسختنا: روشتات جديدة، محذوفة، ومتغيّرة. بيقرأ بس. المقارنة بالفرع ونوع المستند والرقم؛ روشتة قديمة بدون نوع مستند ورقمها له أكتر من فاتورة في نفس الفرع بتظهر «غير محسومة» ومش بتتمس.', 'Reads the claim from SOFTECH and compares it with our copy: new, removed and changed prescriptions. Read only. It matches on branch, document type and number; an old prescription with no document type whose number has several invoices at the same branch shows as "Unresolved" and is left untouched.'),
              'when': T('بعد ما الفروع تعدّل في سوفتك. رقم المطالبة بيتحفظ لو مكانش محفوظ.', 'After branches edit in SOFTECH. The claim number is saved if it was missing.')},
             {'target': 'insurance-claim-resync-apply', 'label': T('تطبيق المزامنة', 'Apply resync'),
              'text': T('يضيف الروشتات الجديدة، ويستثني المحذوفة، ويعيد تجميد المتغيّرة اللي علّمت عليها بس. تعديلاتك التانية ما بتتلمسش.', 'Adds new prescriptions, excludes removed ones, and re-freezes only the changed ones you ticked. Your other edits are untouched.'),

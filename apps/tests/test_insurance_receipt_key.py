@@ -12,6 +12,8 @@ receipt 500 at branch 150 are two different receipts. Covered here:
 - the doccode is stored on add, and a resync revert deletes only its own receipt.
 """
 from datetime import date
+from decimal import Decimal as _D
+from unittest import mock as _mock
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -23,6 +25,10 @@ from apps.insurance.importer import (
 )
 from apps.insurance.validation import validate_claim_readiness
 from apps.tests.test_insurance import _add_rx, _mk_claim
+from apps.tests.test_insurance_import_batching import BRANCH as IMP_BRANCH
+from apps.tests.test_insurance_import_batching import MOTNO as IMP_MOTNO
+from apps.tests.test_insurance_import_batching import PC as IMP_PC
+from apps.tests.test_insurance_import_batching import _FakeSoftech, _line_cols, _receipt
 
 
 def _rx_data(docnumber, branch, doccode):
@@ -144,3 +150,119 @@ class SingleReceiptFetchKeyTests(TestCase):
         with mock.patch.object(importer, '_get_connection', return_value=_conn(LINES, HEADERS)):
             out = importer.fetch_single_rx_from_softech(DOC, claim, branchcode=BRANCH)
         self.assertEqual(out['softech_doccode'], '30')
+
+
+# ── Bulk import + resync on the receipt key (follow-up, same owner decision) ───
+
+
+
+class BulkImportReceiptKeyTests(TestCase):
+    """Both claim-import paths keep same-number receipts of different branches / doctypes
+    and still collapse a receipt SOFTECH lists twice."""
+
+    def setUp(self):
+        client = m.InsuranceClient.objects.create(name='عميل')
+        self.sub = m.InsuranceSubClient.objects.create(client=client, name='فئة', softech_personcode=IMP_PC)
+
+    def _run(self, receipts, stktrans, path):
+        from apps.insurance import importer
+        claim = m.InsuranceClaim.objects.create(claim_number=f'MT-RK-I-{path}', subclient=self.sub,
+                                                period_from=date(2026, 10, 1), period_to=date(2026, 10, 31))
+        db = _FakeSoftech(receipts, stktrans)
+        with _mock.patch.object(importer, '_get_connection', side_effect=db.connection), \
+             _mock.patch.object(importer, 'enrich_prescriptions_from_cache'):
+            if path == 'motalbano':
+                importer.import_claim_by_motalbano(claim, IMP_MOTNO)
+            else:
+                importer.import_claim_from_softech(claim, [IMP_PC], date(2026, 10, 1), date(2026, 10, 31))
+        return claim
+
+    def _check_both_paths(self, receipts, stktrans, expected):
+        for path in ('motalbano', 'dates'):
+            with self.subTest(path=path):
+                claim = self._run(receipts, stktrans, path)
+                got = sorted(claim.prescriptions.values_list('softech_branchcode', 'softech_doccode'))
+                self.assertEqual(got, expected)
+
+    def test_same_number_at_two_branches_imports_both(self):
+        self._check_both_paths(
+            [_receipt(500, branch=IMP_BRANCH), _receipt(500, branch='150')],
+            {(IMP_BRANCH, '115', '500'): [_line_cols('A', 10)], ('150', '115', '500'): [_line_cols('B', 20)]},
+            [(IMP_BRANCH, '115'), ('150', '115')])
+
+    def test_sale_and_return_with_one_number_imports_both(self):
+        self._check_both_paths(
+            [_receipt(501), _receipt(501, doccode='30')],
+            {(IMP_BRANCH, '115', '501'): [_line_cols('A', 10)], (IMP_BRANCH, '30', '501'): [_line_cols('A', 10)]},
+            [(IMP_BRANCH, '115'), (IMP_BRANCH, '30')])
+
+    def test_a_receipt_listed_twice_is_imported_once(self):
+        self._check_both_paths(
+            [_receipt(502), _receipt(502)],
+            {(IMP_BRANCH, '115', '502'): [_line_cols('A', 10)]},
+            [(IMP_BRANCH, '115')])
+
+
+def _soft(*keys):
+    return {k: {'branch': k[1], 'docdate': date(2026, 8, 10), 'doccode': k[2],
+                'gross': _D('0'), 'net': _D('0')} for k in keys}
+
+
+class ResyncReceiptKeyTests(TestCase):
+    """preview_resync / apply_resync diff on (docnumber, branch, doccode)."""
+
+    def setUp(self):
+        self.claim = _mk_claim(number='MT-RK-R')
+
+    def _preview(self, soft):
+        with _mock.patch.object(resync, '_softech_headers', return_value=(soft, '4999')):
+            return resync.preview_resync(self.claim)
+
+    def test_same_number_at_two_branches_are_two_receipts(self):
+        _rx(self.claim, '800', '140', '115')
+        _rx(self.claim, '800', '150', '115')
+        pv = self._preview(_soft(('800', '140', '115'), ('800', '150', '115')))
+        self.assertEqual((pv['counts']['new'], pv['counts']['removed'], pv['counts']['unchanged']), (0, 0, 2))
+
+    def test_receipt_gone_from_one_branch_is_the_one_removed(self):
+        _rx(self.claim, '801', '140', '115')
+        other = _rx(self.claim, '801', '150', '115')
+        pv = self._preview(_soft(('801', '140', '115')))
+        self.assertEqual([it['rx_id'] for it in pv['removed']], [other.pk])
+        self.assertEqual(pv['new'], [])
+
+    def test_new_receipt_at_another_branch_is_new(self):
+        _rx(self.claim, '802', '140', '115')
+        pv = self._preview(_soft(('802', '140', '115'), ('802', '150', '115')))
+        self.assertEqual([(it['docnumber'], it['branch'], it['doccode']) for it in pv['new']],
+                         [('802', '150', '115')])
+        self.assertEqual(pv['removed'], [])
+
+    def test_legacy_row_without_doccode_takes_its_only_receipt(self):
+        _rx(self.claim, '803', '140', '')
+        pv = self._preview(_soft(('803', '140', '115')))
+        self.assertEqual((pv['counts']['new'], pv['counts']['removed'], pv['counts']['unchanged']), (0, 0, 1))
+
+    def test_ambiguous_legacy_row_is_left_out_not_excluded(self):
+        _rx(self.claim, '804', '140', '')
+        pv = self._preview(_soft(('804', '140', '115'), ('804', '140', '30')))
+        self.assertEqual(pv['counts']['ambiguous_legacy'], 1)
+        self.assertEqual((pv['counts']['new'], pv['counts']['removed']), (0, 0))
+
+    def test_apply_imports_the_new_receipt_with_its_own_branch(self):
+        from apps.insurance import importer
+        _rx(self.claim, '805', '140', '115')
+        soft = _soft(('805', '140', '115'), ('805', '150', '115'))
+        calls = []
+
+        def fake_import(claim, d, branch, docdate, doccode, *a):
+            calls.append((d, branch, doccode))
+            return _rx(claim, d, branch, doccode)
+
+        with _mock.patch.object(resync, '_softech_headers', return_value=(soft, '4999')), \
+             _mock.patch.object(resync, '_import_one', side_effect=fake_import), \
+             _mock.patch.object(importer, '_get_connection'), \
+             _mock.patch.object(importer, 'read_discount_rates', return_value=(_D('0'), _D('0'), _D('0'))):
+            res = resync.apply_resync(self.claim, confirm=True)
+        self.assertEqual(res['added'], 1)
+        self.assertEqual(calls, [('805', '150', '115')])

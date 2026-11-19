@@ -633,7 +633,9 @@ def import_claim_by_motalbano_batch(
         claim_local = claim_imported = claim_tarsia = Decimal('0')
         claim_gross = claim_discount = claim_net   = Decimal('0')
         rx_count    = 0
-        seen_docnumbers: set[str] = set()
+        # A receipt is (docnumber, branch, doccode) — the same number at another branch or
+        # of another type is a different receipt (S-8 / D-10, owner-approved 2026-11-19).
+        seen_receipts: set[tuple] = set()
         # Track the actual receipt-date range (motalba.docdate = dispense date)
         # so the claim period mirrors SOFTECH instead of the manually-entered
         # motalbasdate/motalbafdate boundaries.
@@ -650,9 +652,10 @@ def import_claim_by_motalbano_batch(
                 receipt_min = docdate if receipt_min is None else min(receipt_min, docdate)
                 receipt_max = docdate if receipt_max is None else max(receipt_max, docdate)
 
-            if not docnumber or docnumber in seen_docnumbers:
+            rkey = _receipt_key(prx_row[3], branchcode_raw, prx_row[5])
+            if not docnumber or rkey in seen_receipts:
                 continue
-            seen_docnumbers.add(docnumber)
+            seen_receipts.add(rkey)
 
             # Apply sign: docvalue_grandtotal (gross) and docvaluerequired (net)
             # are stored as POSITIVE in SOFTECH for both sales and returns.
@@ -743,7 +746,7 @@ def import_claim_from_softech(
 
     # Collect all motalba lines for all personcodes
     all_lines: list[tuple] = []
-    seen_docnumbers: set[str] = set()
+    seen_receipts: set[tuple] = set()   # (docnumber, branch, doccode) — S-8 / D-10
 
     for personcode in personcodes:
         try:
@@ -754,8 +757,9 @@ def import_claim_from_softech(
             rows = cursor.fetchall()
             for row in rows:
                 docnumber = str(_to_int(row[3])) if row[3] else ''
-                if docnumber and docnumber not in seen_docnumbers:
-                    seen_docnumbers.add(docnumber)
+                rkey = _receipt_key(row[3], row[2], row[5])
+                if docnumber and rkey not in seen_receipts:
+                    seen_receipts.add(rkey)
                     all_lines.append(row)
         except Exception as e:
             logger.warning('Failed motalba query for personcode=%s: %s', personcode, e)
