@@ -22,13 +22,13 @@ class ItemPriceChangeRequestSerializer(serializers.ModelSerializer):
             'old_values', 'new_values', 'executed_values', 'reason',
             'status', 'status_display', 'source', 'rolled_back_from',
             'reviewed_by', 'reviewed_by_name', 'reviewed_at', 'review_notes',
-            'erp_executed_at', 'erp_usercode', 'erp_username', 'erp_error',
+            'erp_executed_at', 'erp_usercode', 'erp_username', 'erp_error', 'softech_conflict',
         ]
         read_only_fields = [
             'requested_by', 'requested_at', 'status', 'source', 'rolled_back_from',
             'old_values', 'executed_values',
             'reviewed_by', 'reviewed_at',
-            'erp_executed_at', 'erp_usercode', 'erp_username', 'erp_error',
+            'erp_executed_at', 'erp_usercode', 'erp_username', 'erp_error', 'softech_conflict',
         ]
 
     def get_requested_by_name(self, obj):
