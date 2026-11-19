@@ -1136,7 +1136,8 @@ function DistributionTab() {
 
       {plan && (
         <div className="flex flex-wrap gap-2" data-tour="purchasing-supply-dist-waves">
-          {['1', '2', '3', '4'].map(w => {
+          {/* wave 5 = the dead-stock lane (C05) — only when the plan was built with it switched on */}
+          {['1', '2', '3', '4', ...(plan.inputs?.dead_stock_lane ? ['5'] : [])].map(w => {
             const t = plan.totals?.waves?.[w] || {}
             return tab(w, `${w} · ${plan.wave_labels?.[w] || ''}`, `${t.moves || 0} حركة · ${egp(t.value)} ج`)
           })}
