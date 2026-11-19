@@ -10,9 +10,58 @@ const SEGMENTS = [
   ['dormant', 'نائم 💤'], ['new', 'جديد 🌱'], ['churned', 'مفقود ❌'],
 ]
 const CREATORS = ['admin', 'supervisor', 'call_center']
+const REFILL_SCRIPT = 'السلام عليكم، معاك صيدلية الرزيقي. حبينا نطمّن: علاجك لسه زي ما هو؟ تحب نجهّزهولك في الفرع ولا نوصّله لحد البيت؟'
+const money = v => Number(v || 0).toLocaleString('ar-EG', { maximumFractionDigits: 0 })
+
+// C08: who is due for a refill (from their own buying interval), highest expected value first
+function RefillDuePreview({ preview }) {
+  if (!preview?.refill_due) return null
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-gray-600 dark:text-gray-300">
+        مستحق إعادة صرف في نطاقك: <b>{preview.due_in_scope}</b> عميل ·
+        يمكن الاتصال بهم: <b>{preview.matching}</b>
+        {preview.skipped > 0 && <> · مستبعد: {preview.skipped} (بدون موافقة / رفض / مهمة مفتوحة / اتصلنا به هذا الشهر)</>}
+      </div>
+      {preview.consent_mode === 'opt_in' && preview.skipped > 0 && preview.matching === 0 && (
+        <div className="text-xs text-amber-700 dark:text-amber-300">
+          القائمة تشمل فقط من سجّل موافقته على مكالمات الصرف — سجّل الموافقة من ملف العميل.
+        </div>
+      )}
+      {preview.sample?.length > 0 && (
+        <div className="overflow-auto max-h-64 border border-gray-100 dark:border-gray-700 rounded-lg">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 sticky top-0">
+              <tr>
+                <th className="p-1.5 text-start">العميل</th>
+                <th className="p-1.5 text-start">الأصناف (كل كم يوم · آخر شراء)</th>
+                <th className="p-1.5 text-start">التأخير</th>
+                <th className="p-1.5 text-start">القيمة المتوقعة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {preview.sample.map(r => (
+                <tr key={r.customer_id} className="border-t border-gray-100 dark:border-gray-700 align-top">
+                  <td className="p-1.5"><div>{r.name}</div><div className="text-gray-400" dir="ltr">{r.phone}</div></td>
+                  <td className="p-1.5">
+                    {r.items.map((it, i) => <div key={i}>{it.name} · ~{it.interval} يوم · {it.last}</div>)}
+                    {r.more_items > 0 && <div className="text-gray-400">+ {r.more_items}</div>}
+                  </td>
+                  <td className="p-1.5">{r.max_overdue > 0 ? `${r.max_overdue} يوم` : r.max_overdue === 0 ? 'اليوم' : `بعد ${-r.max_overdue} يوم`}</td>
+                  <td className="p-1.5">{money(r.expected_value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function NewListForm({ branches, onDone }) {
   const qc = useQueryClient()
+  const [kind, setKind] = useState('segment')      // 'segment' | 'refill_due'
   const [name, setName] = useState('')
   const [script, setScript] = useState('')
   const [segments, setSegments] = useState(['at_risk'])
@@ -20,9 +69,15 @@ function NewListForm({ branches, onDone }) {
   const [minDays, setMinDays] = useState('30')
   const [maxDays, setMaxDays] = useState('')
   const [agentIds, setAgentIds] = useState([])
-  const criteria = {
-    segments, ...(branchIds.length && { branch_ids: branchIds }),
-    ...(minDays !== '' && { inactive_days_min: minDays }), ...(maxDays !== '' && { inactive_days_max: maxDays }),
+  const criteria = kind === 'refill_due'
+    ? { refill_due: true, ...(branchIds.length && { branch_ids: branchIds }) }
+    : {
+      segments, ...(branchIds.length && { branch_ids: branchIds }),
+      ...(minDays !== '' && { inactive_days_min: minDays }), ...(maxDays !== '' && { inactive_days_max: maxDays }),
+    }
+  const pickKind = (k) => {
+    setKind(k)
+    if (k === 'refill_due' && !script.trim()) setScript(REFILL_SCRIPT)
   }
 
   const { data: agents = [] } = useQuery({
@@ -51,6 +106,12 @@ function NewListForm({ branches, onDone }) {
 
   return (
     <div className="card space-y-3 text-sm">
+      <div className="flex gap-1 text-xs">
+        {[['segment', 'حسب الشريحة ومدة الانقطاع'], ['refill_due', '💊 موعد إعادة الصرف (من سلوك الشراء)']].map(([v, l]) => (
+          <button key={v} type="button" onClick={() => pickKind(v)}
+            className={`px-3 py-1 rounded-lg ${kind === v ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{l}</button>
+        ))}
+      </div>
       <div className="grid md:grid-cols-2 gap-3">
         <label className="block">
           <span className="text-xs text-gray-500">اسم القائمة</span>
@@ -63,7 +124,7 @@ function NewListForm({ branches, onDone }) {
         </div>
       </div>
 
-      <div>
+      {kind === 'segment' && <div>
         <div className="text-xs text-gray-500 mb-1">الشريحة</div>
         <div className="flex flex-wrap gap-1.5">
           {SEGMENTS.map(([v, l]) => (
@@ -72,9 +133,9 @@ function NewListForm({ branches, onDone }) {
                 ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-600'}`}>{l}</button>
           ))}
         </div>
-      </div>
+      </div>}
 
-      <div className="flex flex-wrap gap-3 items-end">
+      {kind === 'segment' && <div className="flex flex-wrap gap-3 items-end">
         <label className="text-xs text-gray-500">لم يشترِ منذ (يوم) على الأقل
           <input type="number" min="0" value={minDays} onChange={e => setMinDays(e.target.value)} className="input w-24 block" />
         </label>
@@ -87,7 +148,8 @@ function NewListForm({ branches, onDone }) {
             {preview.capped && ` — سيُنشأ أول ${preview.cap} فقط (الأعلى قيمة)`}
           </span>
         )}
-      </div>
+      </div>}
+      {kind === 'refill_due' && <RefillDuePreview preview={preview} />}
 
       <label className="block">
         <span className="text-xs text-gray-500">نص المكالمة (يظهر للموظف مع كل عميل)</span>

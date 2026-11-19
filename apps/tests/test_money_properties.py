@@ -17,7 +17,6 @@ exceeded. SimpleTestCase only (no database); every run uses the same examples (d
 flakes, and max_examples stays modest for CI time.
 """
 import math
-import unittest
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 from types import SimpleNamespace
@@ -281,7 +280,6 @@ class OffersCapProperties(SimpleTestCase):
         for amt in per.values():
             self.assertEqual(amt, amt.quantize(C1))
 
-    @unittest.expectedFailure
     @PROPS
     @given(rows=line_rows, value=pct(), cap=money('0.01', '500'))
     @example(rows=[(1, D('0.03'), D('0')), (1, D('0.03'), D('0')), (1, D('0.00'), D('0'))],
@@ -303,7 +301,6 @@ class OffersCapProperties(SimpleTestCase):
             return
         self.assertEqual(sum(per.values(), D('0')), min(value, subtotal))       # exact, to the piaster
 
-    @unittest.expectedFailure
     @PROPS
     @given(rows=line_rows, value=money('0.00', '3000'))
     @example(rows=[(1, D('0.01'), D('0'))] * 4, value=D('0.02'))
@@ -314,7 +311,6 @@ class OffersCapProperties(SimpleTestCase):
         for l in lines:
             self.assertGreaterEqual(per[l.index], 0, NEGATIVE_LAST_LINE)
 
-    @unittest.expectedFailure
     def test_plan_never_raises_a_line_above_its_gross(self):
         """End to end: a 0.02 fixed offer on four 0.01 lines (e.g. low-priced or free gift lines) — the last
         line's share is −0.01, so its net (0.02) is above its own gross (0.01)."""
@@ -359,3 +355,28 @@ class OffersCapProperties(SimpleTestCase):
             o = objs[applied['offer_id'] - 1]
             if o.max_discount_amount is not None and o.offer_type == 'percent':
                 self.assertLessEqual(applied['discount'], o.max_discount_amount)
+
+
+class OffersBoundsRepairTests(SimpleTestCase):
+    """The repair after the rounding split (owner asked for the fix 2026-11-19): only out-of-bounds lines
+    change, the offer's total never does."""
+
+    def test_the_two_repro_cases(self):
+        from decimal import Decimal as D
+        from apps.offers.engine import _keep_in_bounds
+        # fixed 0.02 on four 0.01 lines: the split gave [0.01, 0.01, 0.01, -0.01]
+        out = _keep_in_bounds({0: D('0.01'), 1: D('0.01'), 2: D('0.01'), 3: D('-0.01')},
+                              {0: D('0.01'), 1: D('0.01'), 2: D('0.01'), 3: D('0.01')})
+        self.assertEqual(out, {0: D('0.00'), 1: D('0.01'), 2: D('0.01'), 3: D('0')})
+        self.assertEqual(sum(out.values()), D('0.02'))
+        # 100% capped at 0.03 on lines 0.03 / 0.03 / 0.00: the split gave [0.02, 0.02, -0.01]
+        out = _keep_in_bounds({0: D('0.02'), 1: D('0.02'), 2: D('-0.01')},
+                              {0: D('0.03'), 1: D('0.03'), 2: D('0.00')})
+        self.assertEqual(out, {0: D('0.01'), 1: D('0.02'), 2: D('0')})
+        self.assertEqual(sum(out.values()), D('0.03'))
+
+    def test_an_in_bounds_split_is_untouched(self):
+        from decimal import Decimal as D
+        from apps.offers.engine import _keep_in_bounds
+        per = {0: D('3.33'), 1: D('3.33'), 2: D('3.34')}
+        self.assertEqual(_keep_in_bounds(per, {0: D('10'), 1: D('10'), 2: D('10')}), per)

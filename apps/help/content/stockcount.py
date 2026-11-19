@@ -419,7 +419,12 @@ SCREENS = [
             T('في «العد» حمّل الورقة، عُدّ، وارفع النتائج — أو عُدّ من الموبايل.', 'In "Count" download the sheet, count and upload — or count on the phone.'),
             T('في «الفروق» راجع، أعد عدّ الأصناف ذات الفروق الكبيرة، صدّر للتسوية، ثم أغلق.', 'In "Variance" review, recount big differences, export for adjustment, then close.'),
         ],
-        'tips': [T('موظف الفرع بيشوف ويفتح جلسات جرد فرعه بس — مينفعش يفتح جرد لفرع تاني.', 'A branch user sees and opens count sessions for their own branch only — not for another branch.'),
+        'tips': [T('جلسة اسمها «جرد ملاحظات تدقيق» اتعملت من تدقيق حركات المخزون («📋 مهمة + جرد مستهدف»): إغلاقها بيقفل '
+                   'الملاحظة لو كل أصنافها مطابقة، ولو فيه فرق الملاحظة بتفضل مفتوحة والفرق مكتوب عليها، والمهمة بتكتمل.',
+                   'A session named «جرد ملاحظات تدقيق» was made from the stock transactions audit ("📋 Task + targeted count"): '
+                   'closing it closes the finding when all its items matched; with a difference the finding stays open with the '
+                   'difference written on it, and the task is completed.'),
+                 T('موظف الفرع بيشوف ويفتح جلسات جرد فرعه بس — مينفعش يفتح جرد لفرع تاني.','A branch user sees and opens count sessions for their own branch only — not for another branch.'),
                  
             T('الجلسة تتقفل بعد تسجيل العد — سواء برفع ملف العد أو بالعد المباشر من الموبايل. قبل كده زر «🔒 إغلاق الجلسة» مش بيظهر والسيرفر بيرفض.',
               'A session can be closed once counts are recorded — by uploading the count file or by counting live on mobile. Before that the "🔒 Close session" button is hidden and the server refuses.'),

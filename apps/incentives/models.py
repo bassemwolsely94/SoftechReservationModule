@@ -291,7 +291,7 @@ class IncentiveTransaction(models.Model):
     ]
 
     program = models.ForeignKey(
-        IncentiveProgram, on_delete=models.CASCADE,
+        IncentiveProgram, on_delete=models.PROTECT,   # D-17: archive, never cascade
         related_name='transactions', verbose_name='البرنامج',
     )
     rule = models.ForeignKey(
@@ -379,7 +379,7 @@ class IncentiveTransaction(models.Model):
 
 class IncentiveSettlement(models.Model):
     program      = models.ForeignKey(
-        IncentiveProgram, on_delete=models.CASCADE,
+        IncentiveProgram, on_delete=models.PROTECT,   # D-17: archive, never cascade
         related_name='settlements', verbose_name='البرنامج',
     )
     user = models.ForeignKey(
@@ -437,7 +437,7 @@ class AdjustmentEntry(models.Model):
     Created/edited only by admins; locked once settlement is finalized.
     """
     program      = models.ForeignKey(
-        IncentiveProgram, on_delete=models.CASCADE,
+        IncentiveProgram, on_delete=models.PROTECT,   # D-17: archive, never cascade
         related_name='adjustments', verbose_name='البرنامج',
     )
     user = models.ForeignKey(
@@ -485,7 +485,7 @@ class IncentiveCalculationLog(models.Model):
     STATUS_CHOICES = [('done', 'مكتمل'), ('failed', 'فشل')]
 
     program      = models.ForeignKey(
-        IncentiveProgram, on_delete=models.CASCADE,
+        IncentiveProgram, on_delete=models.PROTECT,   # D-17: archive, never cascade
         related_name='calculation_logs', verbose_name='البرنامج',
     )
     triggered_by = models.ForeignKey(
@@ -525,6 +525,50 @@ class IncentiveCalculationLog(models.Model):
         return (f'[{self.get_mode_display()}] {self.program.name} '
                 f'{self.period_start}→{self.period_end} '
                 f'({self.get_status_display()})')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Incentive Audit Event  (D-16 / D-17 — admin unlocks, program archives)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class IncentiveAuditEvent(models.Model):
+    """
+    Who / what / when / why / before-after for the incentive actions that change a locked or
+    audited record: an admin unlocking a finalized settlement (D-16) and archiving a program
+    instead of deleting it (D-17). Append-only; protected from its program and settlement.
+    """
+    ACTION_CHOICES = [
+        ('settlement_unlocked', 'فتح اعتماد تسوية'),
+        ('program_archived',    'أرشفة برنامج'),
+    ]
+
+    action     = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True,
+                                  verbose_name='الإجراء')
+    program    = models.ForeignKey(
+        IncentiveProgram, on_delete=models.PROTECT,
+        related_name='audit_events', verbose_name='البرنامج',
+    )
+    settlement = models.ForeignKey(
+        IncentiveSettlement, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='audit_events', verbose_name='التسوية',
+    )
+    actor      = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='بواسطة',
+    )
+    actor_name = models.CharField(max_length=150, blank=True, verbose_name='اسم المنفذ')
+    reason     = models.TextField(blank=True, verbose_name='السبب')
+    before     = models.JSONField(default=dict, verbose_name='قبل')
+    after      = models.JSONField(default=dict, verbose_name='بعد')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name        = 'سجل تدقيق الحوافز'
+        verbose_name_plural = 'سجلات تدقيق الحوافز'
+        ordering            = ['-created_at']
+
+    def __str__(self):
+        return f'{self.get_action_display()} — {self.program_id} ({self.actor_name or "system"})'
 
 
 # ════════════════════════════════════════════════════════════════════════════
