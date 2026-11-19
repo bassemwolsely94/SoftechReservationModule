@@ -651,12 +651,16 @@ export default function MarketShortagePage() {
     ['trends', '📈 الاتجاهات'],
   ]
   const exportView = tab === 'changes' ? 'candidates' : tab   // export/whatsapp map
+  // when the sales + stock figures behind these lists were computed (cached per engine run, ≤ 10 min)
+  const asOfIso = cand?.signals_as_of || deltas?.signals_as_of || confirmed?.signals_as_of
+  const asOf = asOfIso ? new Date(asOfIso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null
 
   return (
     <div dir="rtl" className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-brand-600 flex items-center gap-2">📉 نواقص السوق</h1>
         <p className="text-sm text-gray-500 mt-1">أصناف مرتفعة الطلب يصعب توريدها أو تأتي بكمية محدودة (كوتة). يكتشفها المحرك ثم تُراجَع وتُؤكَّد يدويًا.</p>
+        {asOf && <p className="text-xs text-gray-400 mt-0.5">الأرقام كما في {asOf}</p>}
       </div>
 
       <RunControls />

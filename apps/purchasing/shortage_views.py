@@ -105,7 +105,7 @@ def shortage_candidates(request):
     if limit and limit.isdigit():
         rows = rows[:int(limit)]
     return Response({'total': len(cands), 'tier_counts': counts,
-                     'total_lost_monthly': total_lost,
+                     'total_lost_monthly': total_lost, 'signals_as_of': S.signals_as_of(),
                      'candidates': [_cand_json(c) for c in rows]})
 
 
@@ -115,6 +115,7 @@ def shortage_deltas(request):
     d = S.compute_deltas()
     return Response({
         'has_baseline': d['has_baseline'], 'counts': d['counts'],
+        'signals_as_of': S.signals_as_of(),
         'new':        [_cand_json(c) for c in d['new']],
         'recovering': [_cand_json(c) for c in d['recovering']],
         're_entered': [_cand_json(c) for c in d['re_entered']],
@@ -161,7 +162,8 @@ def shortage_confirmed(request):
     from django.conf import settings
     total_lost = round(sum(r.get('lost_monthly', 0) for r in rows), 2)
     return Response({'count': len(rows), 'items': rows, 'total_lost_monthly': total_lost,
-                     'softech_write_enabled': writer_allowed('SHORTAGE_SOFTECH_WRITE_ENABLED')})
+                     'softech_write_enabled': writer_allowed('SHORTAGE_SOFTECH_WRITE_ENABLED'),
+                     'signals_as_of': S.signals_as_of(_run)})
 
 
 @api_view(['GET'])
