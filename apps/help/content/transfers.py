@@ -79,9 +79,13 @@ TR_MORE_DHEADER = T(
     '• Once the transfer is issued in SOFTECH a "🚛 In transit ← document number" button opens the shipment on the "In transit" screen.')
 TR_MORE_DDETAILS = T(
     'الفرع الطالب والمصدر، الحالة، مين أنشأه ومين راجعه، ومرجع ERP لو اتكتب.\n'
-    '• تحته قسم «مطابقة مستند ERP» بيقولك المستند في SOFTECH مطابق ولا جزئي ولا مش موجود.',
+    '• تحته قسم «مطابقة مستند ERP» بيقولك المستند في SOFTECH مطابق ولا جزئي ولا مش موجود.\n'
+    '• المطابقة بتدوّر على صرف التبادل (125) في الفرع المصدر. لو الرقم لقيته تحت فرع تاني بس، النتيجة «جزئي» — راجعه بنفسك؛ '
+    'ولو في أكتر من فرع تاني، النتيجة «غير موجود».',
     'Requesting and supplying branch, status, who created and who reviewed it, and the ERP reference if entered.\n'
-    '• Below it the "ERP document match" section tells you whether the SOFTECH document is matched, partial or missing.')
+    '• Below it the "ERP document match" section tells you whether the SOFTECH document is matched, partial or missing.\n'
+    '• The match looks for the transfer issue (125) at the supplying branch. If the number is found only under another branch, '
+    'the result is "Partial" — check it yourself; if it is at more than one other branch, the result is "Not found".')
 TR_MORE_DITEMS = T(
     'الأصناف بالكمية المطلوبة، والمعتمدة بعد الموافقة، والمستلمة بعد تأكيد الاستلام.\n'
     '• قارن المعتمد بالمستلم — أي فرق محتاج متابعة بين الفرعين.',
@@ -954,8 +958,9 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('صور المرفقات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل).', 'Attachment photos are shrunk automatically (longest side 1600 px).'),
+        'updated': '2026-11-19',
+        'change_note': T('مطابقة SOFTECH بقت بالفرع ونوع المستند: مستند بنفس الرقم في فرع تاني بقى «جزئي» مش «تم التأكيد».',
+                         'The SOFTECH match now uses branch and document type: a document with the same number at another branch is "Partial", not "Confirmed".'),
     },
     {
         'key': 'transfers.transits',
