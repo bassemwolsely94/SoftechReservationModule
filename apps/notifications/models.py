@@ -74,9 +74,9 @@ class Notification(models.Model):
         ('branch_pending',            '🏷️ فرع جديد بانتظار التصنيف'),
         ('sync_failure',              '🔴 فشل مزامنة متكرر'),
         ('attendance_alert',          '🕒 تنبيه الحضور والبصمة'),
+        ('hq_exception_digest',       '💰 استثناءات الأسبوع بالجنيه'),
         ('receipt_check_digest',      '📦 استلام بدون طلب'),
         ('return_window_digest',      '📆 نوافذ مرتجع الموردين'),
-        ('hq_exception_digest',       '💰 استثناءات الأسبوع بالجنيه'),
         # ── Personal ──────────────────────────────────────────────────────────
         ('personal_reminder',         '⏰ تذكير شخصي'),
         ('gamification_level_up',     '🏆 ترقية مستوى'),
@@ -189,11 +189,11 @@ class Notification(models.Model):
         'attendance_alert':     CATEGORY_GLOBAL,
         # ── Periodic digests → 📊 reports feed (quiet) ────────────────────────
         'weekly_summary':       CATEGORY_REPORTS,
+        'hq_exception_digest':  CATEGORY_REPORTS,
         'monthly_report':       CATEGORY_REPORTS,
         'coupon_digest':        CATEGORY_REPORTS,
         'return_window_digest': CATEGORY_REPORTS,
         'receipt_check_digest': CATEGORY_REPORTS,
-        'hq_exception_digest':  CATEGORY_REPORTS,
         'customer_status_drift': CATEGORY_MONITORING,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────
         'mention':              CATEGORY_MENTIONS,
