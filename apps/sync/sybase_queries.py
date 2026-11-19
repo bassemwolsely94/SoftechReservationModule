@@ -393,17 +393,12 @@ QUERY_USERS = """
 QUERY_EXISTING_RESERVATIONS = None
 
 # ── STKTRANS REFERENCE VALIDATION ─────────────────────────────────────────────
-# Two-pass strategy for maximum robustness:
-#
-#   Pass 1 (QUERY_VALIDATE_STKTRANS):
-#     Match by docnumber + branchcode, ANY doccode.
-#     No doccode whitelist — "تبادل بين الفرع" and other inter-branch doc types
-#     vary by SOFTECH installation and should not block a valid match.
-#     The found doccode is returned and shown to the admin.
-#
-#   Pass 2 (QUERY_VALIDATE_STKTRANS_ANY):
-#     Match by docnumber only, ANY branch, ANY doccode.
-#     Fallback for documents entered centrally (HQ) or under a different branch.
+# Lookup order (apps/transfers/erp_matcher.py):
+#   1. QUERY_VALIDATE_STKTRANS            docnumber + supplying branch + doccode 125
+#   2. QUERY_STKTRANS_DIRECT_HEADER       same key, header derived from stktrans lines
+#   3. QUERY_VALIDATE_STKTRANS_OTHER_BRANCH  docnumber + doccode 125 at another branch,
+#      inside a docdate window — used only when exactly one row comes back, and never
+#      reported as a full match.
 #
 # NOTE: stktransm.branchcode = the branch that ENTERED the document.
 # This may differ from supplying_branch.softech_branch_id when documents
@@ -413,6 +408,11 @@ QUERY_EXISTING_RESERVATIONS = None
 # This is the ONLY valid doccode for inter-branch transfer verification.
 
 # doccode 125 = صرف تبادل بين الفروع (supplying branch sends to requesting branch)
+
+# SOFTECH docnumbers run per (branchcode, doccode) — the same number repeats across
+# branches and document types (audit S-8 / D-10). Every lookup below is keyed on
+# (docnumber, branchcode, doccode); the only cross-branch query is bounded by doccode
+# AND a docdate window, and its caller refuses to pick when more than one row comes back.
 
 # Pass 1: stktransm — docnumber + branchcode + doccode=125
 QUERY_VALIDATE_STKTRANS = """
@@ -424,61 +424,48 @@ QUERY_VALIDATE_STKTRANS = """
       AND sm.doccode = '125'
 """
 
-# Pass 2: stktransm — docnumber + doccode=125, any branch
-QUERY_VALIDATE_STKTRANS_ANY = """
+# Last pass: the same 125 number entered under ANOTHER branch (e.g. keyed in centrally).
+# Bounded by doccode + docdate window. Bind: (docnumber, date_from, date_to).
+# The caller uses the row only when exactly one comes back, and never reports it as a
+# full match (branch_matched=False).
+QUERY_VALIDATE_STKTRANS_OTHER_BRANCH = """
     SELECT sm.docnumber, sm.doccode, sm.branchcode, sm.docdate, sm.docvalue,
            sm.usercode, sm.storecode
     FROM SOFTECHDB9.dbo.stktransm sm
     WHERE sm.docnumber = ?
       AND sm.doccode = '125'
+      AND sm.docdate >= ?
+      AND sm.docdate <= ?
 """
 
-# Pass 3: stktransm — docnumber only, zero filters (diagnostic / last resort)
-QUERY_VALIDATE_STKTRANS_RAW = """
-    SELECT sm.docnumber, sm.doccode, sm.branchcode, sm.docdate, sm.docvalue,
-           sm.usercode, sm.storecode
-    FROM SOFTECHDB9.dbo.stktransm sm
-    WHERE sm.docnumber = ?
-"""
-
-# Pass 4: stktrans direct — if stktransm has nothing at all for this docnumber,
-# fall back to the line-items table itself.  Returns one representative row so
-# ERPMatcher can confirm existence and proceed to item matching.
-# Columns: docnumber, branchcode, doccode (NULL), docdate (NULL), storecode, usercode (NULL)
+# stktrans direct — header derived from the line table when stktransm has no row yet
+# (replication lag). Keyed on the full document identity. The caller wraps it in
+# SET ROWCOUNT 1 (ASE 12.5 does not reliably take TOP with parameters).
+# Bind: (docnumber, branchcode, doccode).
+# Columns: docnumber, doccode, branchcode, docdate (NULL), docvalue (NULL), usercode (NULL), storecode
 QUERY_STKTRANS_DIRECT_HEADER = """
-    SELECT TOP 1
-           st.docnumber, NULL AS doccode, st.branchcode,
+    SELECT st.docnumber, st.doccode, st.branchcode,
            NULL AS docdate, NULL AS docvalue,
            NULL AS usercode, st.storecode
     FROM SOFTECHDB9.dbo.stktrans st
     WHERE st.docnumber = ?
+      AND st.branchcode = ?
+      AND st.doccode = ?
 """
 
-# ── STKTRANS LINE ITEMS — ERP transfer match verification ─────────────────────
-# Returns all item lines for a specific document number + branch.
-# Used by ERPMatcher to cross-reference what was actually transferred in SOFTECH
-# against the items requested in a TransferRequest.
-# Verified stktrans columns: docnumber, branchcode, itemcode, transqty, transprice_total, storecode
-# NOTE: stktrans has NO itemname column — confirmed by InvalidColumn error. Item name from items table or local catalog.
-#
-# Pass 1: lines for specific branch (matches primary header pass)
-# stktrans columns: itemcode, transqty, transprice_total, storecode, trans_time
+# ── STKTRANS LINE ITEMS — ERP transfer / reservation match verification ──────
+# All item lines of ONE document: (docnumber, branchcode, doccode).
+# Used by the transfer and reservation ERP matchers to cross-reference what was
+# actually moved/sold in SOFTECH against the request.
 # NOTE: stktrans has NO itemname column — item name is resolved from the local catalog.
+# Bind: (docnumber, branchcode, doccode)
 # Column order: [0]=itemcode, [1]=transqty, [2]=transprice_total, [3]=storecode, [4]=trans_time
 QUERY_STKTRANS_LINES = """
     SELECT st.itemcode, st.transqty, st.transprice_total, st.storecode, st.trans_time
     FROM SOFTECHDB9.dbo.stktrans st
     WHERE st.docnumber = ?
       AND st.branchcode = ?
-    ORDER BY st.itemcode
-"""
-
-# Pass 2: all lines for this docnumber across any branch
-# Column order: [0]=itemcode, [1]=transqty, [2]=transprice_total, [3]=storecode, [4]=trans_time
-QUERY_STKTRANS_LINES_ANY = """
-    SELECT st.itemcode, st.transqty, st.transprice_total, st.storecode, st.trans_time
-    FROM SOFTECHDB9.dbo.stktrans st
-    WHERE st.docnumber = ?
+      AND st.doccode = ?
     ORDER BY st.itemcode
 """
 
@@ -832,13 +819,15 @@ QUERY_PICCRMORDERS_STATUS_HISTORY = """
     ORDER BY trans_time
 """
 
-# Line items for a delivered order via invoice docnumber + branchcode.
-# Used after orderstatus=90 when docnumber is populated.
+# Line items for a delivered order via its invoice (docnumber, branchcode, doccode).
+# Used after orderstatus=90 when docnumber is populated. Bind: (docnumber, branchcode, doccode)
+# — doccode is required: docnumbers repeat across document types (audit S-8).
 QUERY_PICCRMORDERS_LINES = """
     SELECT st.itemcode, st.transqty, st.transprice, st.transprice_total, st.storecode
     FROM SOFTECHDB9.dbo.stktrans st
     WHERE st.docnumber = ?
       AND st.branchcode = ?
+      AND st.doccode = ?
     ORDER BY st.itemcode
 """
 
@@ -866,9 +855,10 @@ QUERY_ERP_GROUPPERMS = """
 # ── TRANSFERS IN TRANSIT ──────────────────────────────────────────────────────
 #
 # doccode '125' = صرف تبادل بين الفروع
-#   stktransm row on the SUPPLYING branch side.
-#   When the same docnumber also appears in stktrans under the RECEIVING branch,
-#   the transfer has been received.
+#   stktransm row on the SUPPLYING branch side; the receiver is stktransm.cust_branch_code.
+#   The receipt is a separate doccode '25' document at the receiving branch with its OWN
+#   docnumber (linked back via docnumber2) — never infer it from same-numbered rows.
+#   apps/transits/management/commands/sync_in_transit.py owns this logic.
 #
 # Usage: bind (since_date_str,) e.g. '2026-05-01'
 
@@ -881,33 +871,4 @@ QUERY_TRANSIT_HEADERS = """
     ORDER BY sm.docdate DESC
 """
 
-# All distinct branchcodes present in stktrans for a specific docnumber.
-# If branches > 1, the extra branch(es) are the receiving side(s).
-# Bind: (docnumber_int,)
-QUERY_TRANSIT_BRANCHES_PER_DOC = """
-    SELECT DISTINCT st.branchcode
-    FROM SOFTECHDB9.dbo.stktrans st
-    WHERE st.docnumber = ?
-"""
-
-# Line items for the supplying-branch side of an inter-branch transfer.
-# Bind: (docnumber_int, supplying_branchcode)
-# Column layout:
-#  [0] itemcode, [1] transqty, [2] transprice_total, [3] storecode, [4] trans_time
-QUERY_TRANSIT_ITEMS_FOR_BRANCH = """
-    SELECT st.itemcode, st.transqty, st.transprice_total, st.storecode, st.trans_time
-    FROM SOFTECHDB9.dbo.stktrans st
-    WHERE st.docnumber = ?
-      AND st.branchcode = ?
-    ORDER BY st.itemcode
-"""
-
-# Receipt date from stktransm on the receiving branch side.
-# Bind: (docnumber_int, receiving_branchcode)
-QUERY_TRANSIT_RECEIPT_DATE = """
-    SELECT TOP 1 sm.docdate
-    FROM SOFTECHDB9.dbo.stktransm sm
-    WHERE sm.docnumber = ?
-      AND sm.branchcode = ?
-"""
 

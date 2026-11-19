@@ -49,7 +49,6 @@ from .sybase_queries import (
     QUERY_PRESCRIPTION_HEADER_BY_DOCNO,
     QUERY_PRESCRIPTION_HEADER_BY_DOCNO_BRANCH,
     QUERY_CHECK_DOC_IN_MOTALBA_BRANCH,
-    QUERY_CHECK_DOC_IN_MOTALBA,
     QUERY_CUSTDISCOUNTS_BY_PERSONCODE,
 )
 
@@ -1033,8 +1032,10 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     # SOFTECHDB9.dbo.motalba (273k rows, docnumber may be unindexed → very slow).
     try:
         from .models import MotalbaCache
+        # Keyed on the receipt's branch: the same docnumber at another branch is another
+        # client's receipt (S-8) and must not decide the parent-code guard.
         mc = (MotalbaCache.objects
-              .filter(docnumber=str(docnumber))
+              .filter(docnumber=str(docnumber), branchcode=branchcode)
               .order_by('-docdate')
               .values('motalbano', 'personcode', 'ppersoncode', 'branchcode')
               .first())
@@ -1047,7 +1048,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     # Fall back to a live (timeout-bounded) lookup only if the cache misses
     if not tx_personcode:
         try:
-            cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA, [docnumber])
+            cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA_BRANCH, [docnumber, branchcode])
             motalba_row = cursor.fetchone()
             if motalba_row:
                 motalbano       = _safe(motalba_row[0])
@@ -1070,11 +1071,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
             # No shared code per cache — but cache may be STALE (codes were just
             # corrected in SOFTECH).  Re-verify LIVE before blocking.
             try:
-                live_branch = branchcode or target_branch
-                if live_branch:
-                    cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA_BRANCH, [docnumber, live_branch])
-                else:
-                    cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA, [docnumber])
+                cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA_BRANCH, [docnumber, branchcode])
                 live_row = cursor.fetchone()
                 if live_row:
                     tx_personcode  = _safe(live_row[1]) or tx_personcode
@@ -1390,8 +1387,10 @@ def enrich_prescriptions_from_cache(claim) -> int:
     Populate companiesitems metadata (roshetta_no, patient_no, dept_name, etc.)
     on the claim's prescriptions from the local CompaniesItemsCache.
 
-    Matches on (docnumber, branchcode).  Falls back to docnumber-only match if
-    the branch differs (some prescriptions span branch corrections).
+    Matches on (docnumber, branchcode).  Falls back to a docnumber-only match
+    (some prescriptions span branch corrections) ONLY when the cache holds that
+    number at a single branch — a docnumber repeats across branches (S-8), and
+    another branch's prescription belongs to another patient.
     Returns count of enriched prescriptions.
 
     This uses the fast local cache — no live Sybase round-trips.  Run the cache
@@ -1408,18 +1407,26 @@ def enrich_prescriptions_from_cache(claim) -> int:
         return 0
 
     # Build lookup: (docnumber, branchcode) -> cache row, and docnumber -> row
+    # A docnumber repeats across branches (S-8): match on (docnumber, branch). The bare
+    # docnumber fallback is used only when the number is cached at ONE branch.
     cache_rows = CompaniesItemsCache.objects.filter(docnumber__in=docnos)
     by_doc_branch: dict = {}
     by_doc: dict = {}
+    branches_of: dict = {}
     for c in cache_rows:
-        by_doc_branch[(c.docnumber, c.branchcode)] = c
-        by_doc.setdefault(c.docnumber, c)
+        d, b = str(c.docnumber).strip(), str(c.branchcode or '').strip()
+        by_doc_branch[(d, b)] = c
+        by_doc.setdefault(d, c)
+        branches_of.setdefault(d, set()).add(b)
 
     enriched = 0
     to_update = []
     for rx in rxs:
-        c = (by_doc_branch.get((rx.softech_docnumber, rx.softech_branchcode))
-             or by_doc.get(rx.softech_docnumber))
+        rx_doc = str(rx.softech_docnumber).strip()
+        rx_branch = str(rx.softech_branchcode or '').strip()
+        c = by_doc_branch.get((rx_doc, rx_branch))
+        if c is None and len(branches_of.get(rx_doc, ())) == 1:
+            c = by_doc.get(rx_doc)
         if not c:
             continue
         rx.roshetta_no     = c.roshettano or ''
