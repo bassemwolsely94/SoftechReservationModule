@@ -466,14 +466,24 @@ class _Run:
         self.with_login(self.read_account)
         since = datetime.datetime.fromisoformat(str(self.plan['since'])).date()
         want = str(self.plan.get('order_ref') or '')
-        orders = self.with_login(lambda: self.d.order_history(since, keep_ref=want or None))[:MAX_ORDERS]
-        self.rec('read_order_history', True, 'since %s: %s' % (since, [o['order_ref'] for o in orders][:20]))
+        read = self.with_login(lambda: self.d.order_history(since, keep_ref=want or None))
+        orders = read[:MAX_ORDERS]
+        # R20 / R21: "complete" only with the driver's positive proof that no further page exists,
+        # and never when the report is cut at MAX_ORDERS. The server checks both again.
+        truncated = len(read) > MAX_ORDERS
+        proof = getattr(self.d, 'history_proof', None)
+        complete = isinstance(proof, dict) and proof.get('complete') is True and not truncated
+        self.rec('read_order_history', True, 'since %s: %s%s%s' % (
+            since, [o['order_ref'] for o in orders][:20], '' if complete else ' (not proven complete)',
+            ' (truncated at %d)' % MAX_ORDERS if truncated else ''))
+        proof = {'complete': complete, 'truncated': truncated}
         if not orders:
-            return self.payload('history_none')
+            # "none" lets the server retry the basket: only with the proof, else a person decides
+            return self.payload('history_none' if complete else 'history_unclear', **proof)
         # every order in the window: the server decides which one (if any) is this basket's - the
         # newest one is often another basket's order on the same account
         extra = {'orders': [{'order_ref': o['order_ref'], 'date': o.get('date', ''), 'lines': o['lines']}
-                            for o in orders]}
+                            for o in orders], **proof}
         match = next((o for o in orders if want and o['order_ref'] == want), None)
         if match is not None:
             extra.update(order_ref=match['order_ref'], history_lines=match['lines'])

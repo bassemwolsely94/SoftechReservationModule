@@ -61,6 +61,14 @@ HISTORY_COLUMNS = {'Order Number': 'order_ref', 'Date Placed': 'date'}
 PAGER = r'^(Next|Next Page|>|»|›|Show More|Load More|Page \d+ of \d+)$'
 # the element holding how many lines an order has, when the details page shows it (CONFIRM)
 DETAILS_COUNT_LABEL = 'Number of items'
+# R21 (fail closed): PAGER and DETAILS_COUNT_LABEL above are guesses until checked on the real site.
+# While this is False the robot never reports "history_none" (no order, the basket may be retried):
+# an empty read is "history_unclear" and a person decides. Set it True only after the on-site check:
+# logged in by hand on an account with more Order History rows than one page holds, confirm that
+# (1) PAGER matches the list's next-page control, (2) the list is newest first, (3) PAGER also
+# matches a long order's details pager, and (4) DETAILS_COUNT_LABEL names the item count shown on
+# an order's details page - with a screenshot of each in the calibration notes.
+HISTORY_PAGING_CONFIRMED = False
 DETAILS_COLUMNS = {'ID': 'sku', 'Qty': 'qty'}
 DATE_FORMATS = ('%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d', '%b %d, %Y', '%d %b %Y')
 
