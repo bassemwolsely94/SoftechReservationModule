@@ -1438,7 +1438,8 @@ export default function ReconciliationPage() {
   // ?party=<personcode> (from the GL sub-ledgers): open that supplier's حصر straight away
   const [params] = useSearchParams()
   const [party] = useState(() => params.get('party') || null)
-  const [tab, setTab] = useState(party ? 'parties' : 'candidates')
+  // ?tab=exceptions deep link (the weekly HQ exception digest)
+  const [tab, setTab] = useState(party ? 'parties' : (params.get('tab') === 'exceptions' ? 'exceptions' : 'candidates'))
   useHelpTab(tab)
   const [partyType, setPartyType] = useState('supplier')
   const [filters, setFilters] = useState({ personcodes: [], inv_date_from: '', inv_date_to: '', pay_date_from: '', pay_date_to: '', amount_min: '', amount_max: '' })

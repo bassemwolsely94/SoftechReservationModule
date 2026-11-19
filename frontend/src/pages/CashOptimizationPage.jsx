@@ -8,6 +8,7 @@
  * Tab 2: 🧊 مخزون راكد (P-27 part A, read-only — cash/DeadStockTab.jsx). Tab 3 (فائض) is still to come.
  */
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { purchasingApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
@@ -122,7 +123,9 @@ function SpikeTab() {
 }
 
 export default function CashOptimizationPage() {
-  const [tab, setTab] = useState('spike')
+  // ?tab=dead deep link (the weekly HQ exception digest)
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState(() => (params.get('tab') === 'dead' ? 'dead' : 'spike'))
   useHelpTab(tab)
   return (
     <div dir="rtl" className="p-4 max-w-[1400px] mx-auto">

@@ -786,3 +786,10 @@ salesperson POST /api/qa/inspections/987654321/submit/
 viewer GET /api/qa/inspections/
 viewer GET /api/qa/inspections/987654321/
 viewer GET /api/qa/templates/
+
+# reason: C32 — the weekly HQ exception digest (/api/insights/exceptions/) ranks money from every
+#   branch (returns, dead stock, stock audit, A/P exceptions, receipt check): company-level data, so on
+#   top of the analytics grant only an all-branch user may read it (core.branch_scope.sees_everything).
+#   Branch-bound pharmacist / viewer keep their own-branch screens.
+pharmacist GET /api/insights/exceptions/
+viewer GET /api/insights/exceptions/

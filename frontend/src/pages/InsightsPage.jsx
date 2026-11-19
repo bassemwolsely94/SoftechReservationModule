@@ -10,6 +10,7 @@ import useAuthStore from '../store/authStore'
 import { usePermission } from '../hooks/usePermission'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import HqExceptionsTab from '../components/HqExceptionsTab'
 
 const PERIODS = { day: 'يومي', week: 'أسبوعي', mtd: 'حتى تاريخه', month: 'شهري' }
 
@@ -120,7 +121,8 @@ export default function InsightsPage() {
   const analyticsView = usePermission('analytics', 'view')
   const canRun = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && analyticsView
   const canEditRules = ['admin', 'supervisor'].includes(user?.role)   // matches InsightRuleViewSet._guard
-  const [view, setView] = useState('reports')                         // 'reports' | 'rules'
+  // 'reports' | 'rules' | 'exceptions' (C32 weekly HQ exception list; ?tab=exceptions from the digest)
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get('tab') === 'exceptions' ? 'exceptions' : 'reports'))
   useHelpTab(view)
   const [domain, setDomain] = useState('sales')                       // 'sales' | 'purchasing'
   const [period, setPeriod] = useState('day')
@@ -187,12 +189,18 @@ export default function InsightsPage() {
                 className={`px-3 py-1.5 text-sm rounded-md ${domain === 'purchasing' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>📦 المشتريات والتموين</button>
             </div>
           )}
-          {canEditRules && (
+          {(canEditRules || analyticsView) && (
             <div className="flex rounded-lg bg-gray-100 p-0.5" data-tour="analytics-insights-view">
               <button onClick={() => setView('reports')}
                 className={`px-3 py-1.5 text-sm rounded-md ${view === 'reports' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>📋 التقارير</button>
-              <button onClick={() => setView('rules')}
-                className={`px-3 py-1.5 text-sm rounded-md ${view === 'rules' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>⚙️ القواعد والحدود</button>
+              {analyticsView && (
+                <button onClick={() => setView('exceptions')} data-tour="analytics-insights-exceptions"
+                  className={`px-3 py-1.5 text-sm rounded-md ${view === 'exceptions' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>💰 استثناءات الأسبوع</button>
+              )}
+              {canEditRules && (
+                <button onClick={() => setView('rules')}
+                  className={`px-3 py-1.5 text-sm rounded-md ${view === 'rules' ? 'bg-white shadow font-bold text-gray-900' : 'text-gray-500'}`}>⚙️ القواعد والحدود</button>
+              )}
             </div>
           )}
 
@@ -304,7 +312,7 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {view === 'rules' ? <RulesEditor /> : (
+      {view === 'rules' ? <RulesEditor /> : view === 'exceptions' ? <HqExceptionsTab /> : (
       <div className="grid md:grid-cols-[260px_1fr] gap-4">
         <div className="space-y-2" data-tour="analytics-insights-list">
           {isLoading ? <div className="text-gray-400 text-sm py-8 text-center">جارٍ التحميل…</div>

@@ -4,7 +4,7 @@
  * supplier return-window calendar (P-29), rebalancing, disposal / return ledger
  */
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { batchesApi, branchesApi, transfersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
@@ -1346,8 +1346,12 @@ function DisposalTab() {
 }
 
 
+// ?tab= deep links (the weekly HQ exception digest opens «📆 تقويم المرتجع» this way)
+const BATCH_TABS = ['alerts', 'list', 'audit', 'suppliers', 'reorder', 'rebalance', 'disposal', 'return_window']
+
 export default function BatchesPage() {
-  const [tab, setTab] = useState('alerts')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState(() => (BATCH_TABS.includes(params.get('tab')) ? params.get('tab') : 'alerts'))
   useHelpTab(tab)
 
   // KPI cards now read the live stkbalexpiry mirror (all nodes).

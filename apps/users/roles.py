@@ -20,11 +20,13 @@ class Role:
                                        # False = matrix always enforced (new roles)
     qa_inspections: bool = False       # works branch QA inspections (/api/qa/, /m/qa) on top of the
                                        # hr grant every role holds for self-service (UAT W2, 2026-11-19)
+    hq_digest: bool = False            # gets the weekly HQ exception digest when the SystemSetting
+                                       # hq_exception_digest_recipients names nobody (C32)
 
 
 ROLES: tuple[Role, ...] = (
     Role('admin', 'مدير النظام', 'Admin', 'Admin — Full Access',
-         all_branches=True, mfa_required=True, legacy_rbac_mode=True, qa_inspections=True),
+         all_branches=True, mfa_required=True, legacy_rbac_mode=True, qa_inspections=True, hq_digest=True),
     Role('call_center', 'كول سنتر', 'Call center', 'Call Center — All Branches',
          all_branches=True, mfa_required=False, legacy_rbac_mode=True),
     Role('pharmacist', 'صيدلاني', 'Pharmacist', 'Pharmacist — Own Branch',
@@ -53,6 +55,7 @@ ALL_BRANCH_ROLES: tuple[str, ...] = tuple(r.key for r in ROLES if r.all_branches
 MFA_REQUIRED_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.mfa_required)
 LEGACY_RBAC_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.legacy_rbac_mode)
 QA_INSPECTION_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.qa_inspections)
+HQ_DIGEST_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.hq_digest)
 
 
 def role_label(key: str, lang: str = 'ar') -> str:
