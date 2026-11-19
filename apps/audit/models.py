@@ -202,6 +202,13 @@ class AuditLog(models.Model):
         ('branch_order_changed',         'فرع — تغيير الترتيب'),
         # SOFTECH code maps — owner edits a channel / item-category meaning (apps/config/code_maps.py)
         ('code_map_changed',             'ترميزات SOFTECH — تعديل'),
+        # System settings screen (apps/config/views.py) — owner 2026-11-19
+        ('settings_changed',             'إعدادات النظام — تعديل قيمة'),
+        ('settings_created',             'إعدادات النظام — إضافة إعداد'),
+        ('settings_deleted',             'إعدادات النظام — حذف إعداد'),
+        ('theme_changed',                'مظهر النظام — تعديل الألوان أو الخط'),
+        ('pharmacy_profile_changed',     'بيانات الصيدلية — تعديل'),
+        ('dropdown_option_changed',      'قوائم الاختيار — إضافة / تعديل / حذف / ترتيب'),
         # SOFTECH screen RPA (apps/rpa)
         ('rpa_job_uploaded',            'روبوت الإدخال — رفع مهمة'),
         ('rpa_job_approved',            'روبوت الإدخال — اعتماد مهمة'),

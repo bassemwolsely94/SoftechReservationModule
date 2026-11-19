@@ -12,6 +12,20 @@ from .serializers import (
 )
 from core.permissions import RouteModulePermission  # round 2, D6
 
+_AUDIT_VALUE_MAX = 500
+
+
+def _short(value):
+    text = '' if value is None else str(value)
+    return text if len(text) <= _AUDIT_VALUE_MAX else text[:_AUDIT_VALUE_MAX] + '…'
+
+
+def _audit(request, action, obj=None, changes=None, note=''):
+    """Every write on the settings screen is recorded: who, what, before → after (owner 2026-11-19)."""
+    from apps.audit.models import AuditLog
+    AuditLog.log(action, user=getattr(request.user, 'staff_profile', None), obj=obj,
+                 changes=changes or None, note=note, request=request)
+
 
 class SystemSettingViewSet(viewsets.ModelViewSet):
     """
@@ -30,6 +44,23 @@ class SystemSettingViewSet(viewsets.ModelViewSet):
         if self.action in ('update', 'partial_update'):
             return SystemSettingUpdateSerializer
         return SystemSettingSerializer
+
+    def perform_update(self, serializer):
+        before = serializer.instance.value
+        setting = serializer.save()
+        if setting.value != before:
+            _audit(self.request, 'settings_changed', setting,
+                   {'value': [_short(before), _short(setting.value)]}, note=setting.key)
+
+    def perform_create(self, serializer):
+        setting = serializer.save()
+        _audit(self.request, 'settings_created', setting,
+               {'value': [None, _short(setting.value)]}, note=setting.key)
+
+    def perform_destroy(self, instance):
+        _audit(self.request, 'settings_deleted', instance,
+               {'value': [_short(instance.value), None]}, note=instance.key)
+        instance.delete()
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -56,9 +87,11 @@ class SystemSettingViewSet(viewsets.ModelViewSet):
         for key, value in request.data.items():
             try:
                 s = SystemSetting.objects.get(key=key)
-                s.value = str(value)
+                before, s.value = s.value, str(value)
                 s.save(update_fields=['value', 'updated_at'])
                 updated.append(key)
+                if s.value != before:
+                    _audit(request, 'settings_changed', s, {'value': [_short(before), _short(s.value)]}, note=key)
             except SystemSetting.DoesNotExist:
                 pass
         return Response({'updated': updated})
@@ -103,6 +136,27 @@ class DropdownOptionViewSet(viewsets.ModelViewSet):
             )
         return super().destroy(request, *args, **kwargs)
 
+    def _dropdown_audit(self, option, changes, verb):
+        _audit(self.request, 'dropdown_option_changed', option, changes,
+               note=f'{verb}: {option.dropdown_key} / {_short(getattr(option, "label", "") or option.pk)}')
+
+    def perform_create(self, serializer):
+        option = serializer.save()
+        self._dropdown_audit(option, None, 'إضافة')
+
+    def perform_update(self, serializer):
+        fields = list(serializer.validated_data)
+        before = {f: getattr(serializer.instance, f, None) for f in fields}
+        option = serializer.save()
+        changes = {f: [_short(before[f]), _short(getattr(option, f, None))]
+                   for f in fields if before[f] != getattr(option, f, None)}
+        if changes:
+            self._dropdown_audit(option, changes, 'تعديل')
+
+    def perform_destroy(self, instance):
+        self._dropdown_audit(instance, None, 'حذف')
+        instance.delete()
+
     @action(detail=False, methods=['get'])
     def keys(self, request):
         """Return list of distinct dropdown_key values."""
@@ -117,8 +171,13 @@ class DropdownOptionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def reorder(self, request):
         """POST [{id:1, order:0}, {id:2, order:1}, …] → bulk reorder"""
+        moved = []
         for item in request.data:
-            DropdownOption.objects.filter(pk=item['id']).update(order=item['order'])
+            before = DropdownOption.objects.filter(pk=item['id']).values_list('order', flat=True).first()
+            if DropdownOption.objects.filter(pk=item['id']).update(order=item['order']) and before != item['order']:
+                moved.append([item['id'], before, item['order']])
+        if moved:
+            _audit(request, 'dropdown_option_changed', changes={'order': moved}, note='ترتيب')
         return Response({'detail': 'تم إعادة الترتيب'})
 
     @action(detail=False, methods=['get'])
@@ -187,7 +246,8 @@ def theme(request):
             merged['arabicFont'] = font
 
         import json
-        SystemSetting.objects.update_or_create(
+        before = _load_theme()
+        setting, _ = SystemSetting.objects.update_or_create(
             key=THEME_KEY,
             defaults={
                 'value':      json.dumps(merged),
@@ -198,6 +258,9 @@ def theme(request):
                 'description': 'ألوان الهوية البصرية وخط الواجهة — عام لكل المستخدمين',
             },
         )
+        changes = {k: [before.get(k), merged[k]] for k in merged if before.get(k) != merged[k]}
+        if changes:
+            _audit(request, 'theme_changed', setting, changes, note=THEME_KEY)
         return Response(merged)
 
     return Response(_load_theme())
@@ -223,10 +286,16 @@ def pharmacy_profile(request):
             'name_ar', 'name_en', 'tagline_ar', 'website',
             'whatsapp_number', 'call_center_numbers', 'extra_footer_ar',
         }
+        changes = {}
         for field, value in request.data.items():
             if field in allowed:
+                before = getattr(profile, field)
                 setattr(profile, field, value)
+                if before != value:
+                    changes[field] = [_short(before), _short(value)]
         profile.save()
+        if changes:
+            _audit(request, 'pharmacy_profile_changed', profile, changes)
 
     profile  = PharmacyProfile.get()
     # Only live, not-paused branches appear on customer receipts/WhatsApp
