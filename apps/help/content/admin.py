@@ -582,9 +582,11 @@ SCREENS = [
              'text': T('إعدادات القسم المختار تظهر هنا؛ التعديل للمدير فقط.',
                                               'The selected section\'s settings appear here; editing is admin only.'),
              'more': T('كل إعداد في سطر بقيمته الحالية. اضغط «تعديل» جنبه، غيّر القيمة، وبعدين «حفظ» — كل إعداد بيتحفظ لوحده وتظهر «تم الحفظ ✓».\n'
-                       'التغيير بيأثر على شغل الموديول على طول، فغيّر بس اللي فاهم تأثيره.',
+                       'التغيير بيأثر على شغل الموديول على طول، فغيّر بس اللي فاهم تأثيره.\n'
+                       'كل تعديل (القيمة قبل وبعد، ومين عدّل وإمتى) بيتسجّل في سجل التدقيق.',
                        'Each setting is a row with its current value. Click "Edit" next to it, change the value, then "Save" — each setting saves on its own and "Saved ✓" shows.\n'
-                       'The change affects how the module works right away, so only change what you understand.')},
+                       'The change affects how the module works right away, so only change what you understand.\n'
+                       'Every change (the value before and after, who and when) is written to the audit log.')},
             {'target': 'admin-settings-general', 'label': T('الإعدادات العامة', 'General Settings'),
              'text': T('في «عام»: لغة الواجهة وبيانات الصيدلية الظاهرة في الإيصالات وواتساب.',
                                               'In "General": interface language and pharmacy details shown on receipts and WhatsApp.'),
@@ -697,8 +699,8 @@ SCREENS = [
              'text': T('يرجّع ألوان الهوية الأصلية في المعاينة. مش بيتحفظ غير بـ «حفظ».', 'Restores the original brand colours in the preview. Nothing is stored until "Save".'),
              'open_hint': T('في تبويب «🎨 المظهر».', 'On the "🎨 Appearance" tab.')},
         ],
-        'updated': '2026-11-13',
-        'change_note': T('تصنيف الفرع (يعمل/مغلق/كول سنتر/جديد) وترتيب الفروع', 'Branch classification (working/closed/call center/new) and branch order'),
+        'updated': '2026-11-19',
+        'change_note': T('كل تعديل في الإعدادات والمظهر وبيانات الصيدلية والقوائم المنسدلة يُسجَّل في سجل التدقيق', 'Every change to settings, appearance, pharmacy details and dropdowns is written to the audit log'),
     },
     {
         'key': 'admin.sync',
