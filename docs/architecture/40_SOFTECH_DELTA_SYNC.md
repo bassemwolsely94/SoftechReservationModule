@@ -1,6 +1,7 @@
 # 40 — SOFTECH Delta Sync (PERF-6): read only the rows that changed
 
-**Status:** 📝 DESIGN ONLY (2026-11-19). Nothing in the sync changes until the owner approves.
+**Status:** ✅ DESIGN APPROVED by the owner (2026-11-19). Not built: each table's build is a
+separate step that the owner confirms first. Evidence gates G1–G4 (§10) are still open.
 No production code, no migration and no SOFTECH write is part of this document.
 **Builds on:** doc 30 *SOFTECH Load Reduction*, Phase 2 (steps 2.0–2.3). This document is the
 detailed plan for that phase.
