@@ -59,6 +59,7 @@ def _seed_policies():
     import importlib
     from django.apps import apps as django_apps
     importlib.import_module('apps.procurement.migrations.0011_supplierreturnpolicy').seed(django_apps, None)
+    importlib.import_module('apps.procurement.migrations.0015_seed_more_return_policies').seed(django_apps, None)
 
 
 class Base(TestCase):
@@ -80,13 +81,28 @@ class Base(TestCase):
 
 class PolicySeedTests(Base):
 
-    def test_565_and_260_seeded_only(self):
+    def test_seeded_suppliers(self):
+        # 565 / 260 (owner 2026-10-30, self-entry) + the named «no policy» suppliers with the same
+        # window (owner 2026-11-19, not self-entry); purchasing edits the rest
         from apps.procurement.models import SupplierReturnPolicy
         rows = {p.supplier_code: p for p in SupplierReturnPolicy.objects.all()}
-        self.assertEqual(set(rows), {'565', '260'})
+        self.assertEqual(set(rows), {'565', '260', '30', '118', '3226', '156', '4327', '786'})
         p = rows['565']
         self.assertTrue(p.accepts_expiry_returns and p.self_entry)
         self.assertEqual((p.open_offset, p.close_offset), (-2, 1))
+        r = rows['30']
+        self.assertTrue(r.accepts_expiry_returns)
+        self.assertFalse(r.self_entry)
+        self.assertEqual((r.open_offset, r.close_offset), (-2, 1))
+
+    def test_the_seed_never_overwrites_a_policy_purchasing_entered(self):
+        import importlib
+        from django.apps import apps as django_apps
+        from apps.procurement.models import SupplierReturnPolicy
+        SupplierReturnPolicy.objects.filter(supplier_code='118').update(open_offset=-3, close_offset=0)
+        importlib.import_module('apps.procurement.migrations.0015_seed_more_return_policies').seed(django_apps, None)
+        p = SupplierReturnPolicy.objects.get(supplier_code='118')
+        self.assertEqual((p.open_offset, p.close_offset), (-3, 0))
 
 
 class AttributionTests(Base):
