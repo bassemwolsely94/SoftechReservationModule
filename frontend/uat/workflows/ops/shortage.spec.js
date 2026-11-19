@@ -58,7 +58,7 @@ test.describe('shortage list: open → add item → submit', () => {
         await clickFor(page, page.locator('[data-tour="shortage-list-add-text"]'), /\/api\/shortage\/lists\/\d+\/add-item\/$/)
       })
       await step(owner, route, 'submit the list', async () => {
-        // «إرسال» asks window.confirm(); asUser() accepts it.
+        // «إرسال» asks in the inline confirm bar; asUser() answers it (uat/lib/inlineConfirmAnswerer.js).
         await clickFor(page, page.locator('[data-tour="shortage-list-submit"]'), /\/api\/shortage\/lists\/\d+\/submit\/$/)
         const l = await (await page.request.get(`/api/shortage/lists/${id}/`)).json()
         expect(l.status).toBe('submitted')
