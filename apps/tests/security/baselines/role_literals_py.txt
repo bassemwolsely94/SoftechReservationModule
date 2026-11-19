@@ -111,6 +111,7 @@ apps/help/content/vouchers.py::<module>::admin,purchasing,supervisor x2
 apps/hr/views.py::_is_manager::admin,purchasing,supervisor x1
 apps/incentives/permissions.py::<module>::admin,purchasing,quality_manager x1
 apps/incentives/views.py::<module>::admin,purchasing,supervisor x1
+apps/insights/views.py::<module>::admin,purchasing,quality_manager,supervisor x1
 apps/insights/views.py::InsightRuleViewSet._guard::admin,supervisor x1
 apps/insights/views.py::InsightRunViewSet.backfill::admin,supervisor x1
 apps/invoices/views.py::SupplierInvoiceViewSet::admin,purchasing,supervisor x1

@@ -43,13 +43,33 @@ from .serializers import (
 )
 from core.threads import start_thread
 from core.multi_filter import filter_in, multi_values
-from core.permissions import matrix_permission
+from rest_framework.permissions import BasePermission
 
-# Engine runs and supplier classification follow the matrix (UAT W3, owner 2026-11-19): `purchasing`
-# create to run / reclassify, edit to override a category. Was Django is_staff (IsAdminUser), which
-# ignored the app role. SOFTECH supply-group members hold the purchasing grants too (Z-2).
-PROCUREMENT_RUN = matrix_permission('purchasing', post=('create',))
-PROCUREMENT_EDIT = matrix_permission('purchasing')
+
+class _PurchasingGrant(BasePermission):
+    """Engine runs and supplier classification follow the matrix (UAT W3, owner 2026-11-19):
+    `purchasing` create to run / reclassify, edit to override a category. Was Django is_staff
+    (IsAdminUser), which ignored the app role. SOFTECH supply-group members hold the purchasing
+    grants too (Z-2). matrix_allows fails open on an unseeded module, so until `purchasing` rows
+    exist the old rule (is_staff) decides."""
+    action = 'create'
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        from core.middleware import module_access
+        from core.permissions import matrix_allows
+        user = request.user
+        if 'purchasing' not in module_access.seeded_modules():
+            return bool(user and user.is_staff)
+        return matrix_allows(getattr(user, 'staff_profile', None), 'purchasing', self.action)
+
+
+class ProcurementRun(_PurchasingGrant):
+    action = 'create'
+
+
+class ProcurementEdit(_PurchasingGrant):
+    action = 'edit'
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -612,7 +632,7 @@ class EngineRunListView(generics.ListAPIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, PROCUREMENT_RUN])
+@permission_classes([IsAuthenticated, ProcurementRun])
 def trigger_engine(request):
     """
     Trigger a new procurement engine run in a background thread.
@@ -1162,7 +1182,7 @@ def supplier_segmentation_summary(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated, PROCUREMENT_EDIT])
+@permission_classes([IsAuthenticated, ProcurementEdit])
 def update_supplier_segmentation(request, pk):
     """
     Manually override a supplier's category.
@@ -1640,7 +1660,7 @@ def softech_person_codes(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, PROCUREMENT_RUN])
+@permission_classes([IsAuthenticated, ProcurementRun])
 def reclassify_suppliers(request):
     """
     Re-run supplier classification (Stage 2.5 only) against the current rules —

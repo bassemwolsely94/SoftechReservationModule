@@ -137,3 +137,36 @@ class CouponViewTests(_Base):
     def test_the_matrix_decides(self):
         _deny('quality_manager', 'vouchers', 'export')
         self.assertFalse(self._can('quality_manager'))
+
+
+@override_settings(RBAC_ENFORCEMENT='log')
+class UnseededFallbackTests(TestCase):
+    """matrix_allows fails open on an unseeded module; each of the four keeps its old rule there."""
+
+    def setUp(self):
+        RoleModuleAccess.objects.all().delete()
+        module_access.clear_cache()
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def test_procurement_keeps_is_staff(self):
+        user, _, client = make_user('w3un_staff', role='salesperson')
+        type(user).objects.filter(pk=user.pk).update(is_staff=True)
+        user.refresh_from_db()
+        client.force_authenticate(user=user)
+        with mock.patch('apps.procurement.views.start_thread'):
+            self.assertNotEqual(client.post('/api/procurement/trigger/', {}, format='json').status_code, 403)
+        _, _, plain = make_user('w3un_plain', role='viewer')
+        self.assertEqual(plain.post('/api/procurement/trigger/', {}, format='json').status_code, 403)
+
+    def test_insights_keeps_the_analyst_list(self):
+        _, _, viewer = make_user('w3un_viewer', role='viewer')
+        _, _, sup = make_user('w3un_sup', role='supervisor')
+        with mock.patch('apps.insights.views.InsightEngine.run', side_effect=RuntimeError('not here')):
+            self.assertEqual(viewer.post(InsightsGenerateTests.URL, {}, format='json').status_code, 403)
+            self.assertNotEqual(sup.post(InsightsGenerateTests.URL, {}, format='json').status_code, 403)
+
+    def test_coupons_keep_the_old_list(self):
+        self.assertFalse(can_view(make_user('w3un_ph', role='pharmacist')[1]))
+        self.assertTrue(can_view(make_user('w3un_qm', role='quality_manager')[1]))
