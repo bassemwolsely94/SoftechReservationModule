@@ -115,6 +115,8 @@ class AuditLog(models.Model):
         ('stock_audit_rule_changed',     'تدقيق المخزون — تعديل حدود فحص'),
         ('stock_audit_override_changed', 'تدقيق المخزون — تعديل حدود فرع'),
         ('stock_audit_finding_reviewed', 'تدقيق المخزون — مراجعة ملاحظة'),
+        ('stock_audit_finding_task_created', 'تدقيق المخزون — مهمة وجرد مستهدف لملاحظة'),
+        ('stock_audit_finding_task_closed', 'تدقيق المخزون — إغلاق مهمة ملاحظة بنتيجة الجرد'),
         ('stock_audit_access_granted',   'تدقيق المخزون — منح صلاحية مدير فرع'),
         ('stock_audit_access_revoked',   'تدقيق المخزون — سحب صلاحية مدير فرع'),
         ('daily_count_generated',        'جرد يومي — توزيع القوائم'),

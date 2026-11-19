@@ -20,6 +20,8 @@ class Role:
                                        # False = matrix always enforced (new roles)
     qa_inspections: bool = False       # works branch QA inspections (/api/qa/, /m/qa) on top of the
                                        # hr grant every role holds for self-service (UAT W2, 2026-11-19)
+    branch_lead: bool = False          # default owner of a branch's stock-audit finding tasks when no
+                                       # named branch manager exists (C13, apps/stock_audit/assignment.py)
 
 
 ROLES: tuple[Role, ...] = (
@@ -28,7 +30,8 @@ ROLES: tuple[Role, ...] = (
     Role('call_center', 'كول سنتر', 'Call center', 'Call Center — All Branches',
          all_branches=True, mfa_required=False, legacy_rbac_mode=True),
     Role('pharmacist', 'صيدلاني', 'Pharmacist', 'Pharmacist — Own Branch',
-         all_branches=False, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True),
+         all_branches=False, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True,
+         branch_lead=True),
     Role('salesperson', 'مندوب مبيعات', 'Salesperson', 'Sales Person — Own Branch',
          all_branches=False, mfa_required=False, legacy_rbac_mode=True),
     Role('purchasing', 'مشتريات', 'Purchasing', 'Purchasing — HQ Only',
@@ -53,6 +56,7 @@ ALL_BRANCH_ROLES: tuple[str, ...] = tuple(r.key for r in ROLES if r.all_branches
 MFA_REQUIRED_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.mfa_required)
 LEGACY_RBAC_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.legacy_rbac_mode)
 QA_INSPECTION_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.qa_inspections)
+BRANCH_LEAD_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.branch_lead)
 
 
 def role_label(key: str, lang: str = 'ar') -> str:

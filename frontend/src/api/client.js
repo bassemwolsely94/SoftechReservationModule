@@ -3264,6 +3264,8 @@ export const stockAuditApi = {
   finding:      (id)            => api.get(`/stock-audit/findings/${id}/`),
   review:       (id, data)      => api.post(`/stock-audit/findings/${id}/review/`, data),
   bulkReview:   (data)          => api.post('/stock-audit/findings/bulk-review/', data),
+  makeTask:     (id)            => api.post(`/stock-audit/findings/${id}/task/`),      // C13 task + targeted count
+  bulkTask:     (ids)           => api.post('/stock-audit/findings/bulk-task/', { ids }),
   exportFindings: (params = {}) => api.get('/stock-audit/findings/export/', { params, responseType: 'blob' }),
   byUser:       (params = {})   => api.get('/stock-audit/by-user/', { params }),
   rules:        ()              => api.get('/stock-audit/rules/'),

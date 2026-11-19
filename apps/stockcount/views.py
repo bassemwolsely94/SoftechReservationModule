@@ -573,7 +573,14 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
         if session.status not in ('uploaded', 'variance_ready'):
             return Response({'detail': 'لا يمكن إغلاق الجلسة قبل تسجيل نتائج العد'},
                             status=status.HTTP_400_BAD_REQUEST)
-        session.status     = 'closed'
-        session.updated_at = timezone.now()
-        session.save(update_fields=['status', 'updated_at'])
-        return Response({'detail': 'تم إغلاق جلسة الجرد', 'status': 'closed'})
+        from django.db import transaction
+        from apps.stock_audit.finding_tasks import on_count_closed
+        with transaction.atomic():
+            session.status     = 'closed'
+            session.updated_at = timezone.now()
+            session.save(update_fields=['status', 'updated_at'])
+            # C13: a targeted count closes the stock-audit findings it was made for
+            findings_closed = on_count_closed(session, by=getattr(request.user, 'staff_profile', None),
+                                              request=request)
+        return Response({'detail': 'تم إغلاق جلسة الجرد', 'status': 'closed',
+                         'audit_findings_closed': findings_closed})
