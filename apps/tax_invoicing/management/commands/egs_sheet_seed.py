@@ -38,7 +38,7 @@ class Command(BaseCommand):
         try:
             with transaction.atomic():      # no version without its audit event
                 version = egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_SEED,
-                                          note=note or f'seed from {src.name}', **counts)
+                                          note=note or f'seed from {src.name}', whole_workbook=True, **counts)
                 audit('egs_sheet_seed', entity='egs_sheet', entity_id=version.number, reason=version.note,
                       after={'number': version.number, 'file': src.name, 'sha256': version.sha256,
                              'size': version.size, 'coded_rows': version.coded_rows,
