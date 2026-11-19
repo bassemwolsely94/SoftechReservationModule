@@ -13,6 +13,7 @@ import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import { notify } from '../components/ui'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 // Cairo calendar dates — the UTC date hid 00:00–02:00 orders from «اليوم» (UAT W5a)
@@ -679,7 +680,7 @@ function NewOrderModal({ branches, onClose, onDone }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 // a refused step says why (e.g. the pickup geofence: «خرج للتوصيل» needs the driver's GPS at the branch)
-const showError = (e) => alert(e?.response?.data?.detail || 'تعذّر تنفيذ الإجراء')
+const showError = (e) => notify.error(e?.response?.data?.detail || 'تعذّر تنفيذ الإجراء')
 
 function OrderActions({ order, onAssign, onFail, onCancel, onCash, refetch }) {
   const mut = fn => useMutation({ mutationFn: fn, onSuccess: refetch }) // eslint-disable-line

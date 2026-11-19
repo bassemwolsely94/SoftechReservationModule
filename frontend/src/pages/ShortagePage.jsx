@@ -27,6 +27,7 @@ import { createWorker } from 'tesseract.js'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import ShortageTransfersSection from '../components/ShortageTransfersSection'
+import { confirmBar } from '../components/ui'
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -1090,7 +1091,7 @@ function ShortageDetail({ listId, onBack }) {
 
   // ── Status / export ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!window.confirm('إرسال القائمة للمراجعة؟')) return
+    if (!await confirmBar('إرسال القائمة للمراجعة؟')) return
     await shortageApi.submit(listId)
     load(); showToast('تم إرسال القائمة ✓')
   }
@@ -1134,7 +1135,7 @@ function ShortageDetail({ listId, onBack }) {
   }
 
   const handleDelete = async (iid) => {
-    if (!window.confirm('حذف هذا الصنف؟')) return
+    if (!await confirmBar('حذف هذا الصنف؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     await shortageApi.deleteItem(listId, iid)
     load()
   }

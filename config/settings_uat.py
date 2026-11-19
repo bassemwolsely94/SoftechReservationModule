@@ -77,6 +77,7 @@ POS_CANCEL_WRITE_ENABLED = False
 INVOICE_WRITER_ENABLED = False
 REPLACEMENT_POSTING_ENABLED = False
 POS_LIVE_PRICING = False
+POS_SERVER_CHECKOUT = False          # D-18: the UAT copy keeps today's POS checkout
 
 # ── 3. its own database ──────────────────────────────────────────────────────
 DATABASES['default']['NAME'] = _DB

@@ -14,6 +14,7 @@ import { expect } from '@playwright/test'
 import { stateFile } from '../../lib/users.js'
 import { can } from '../../lib/expected.js'
 import { finding, FINDINGS_FILE } from '../../lib/findings.js'
+import { installInlineConfirmAnswerer } from '../../lib/inlineConfirmAnswerer.js'
 
 export const WS = 'W5a'
 /** The Vite origin this session's run uses (playwright.uat.config.js: UAT_WEB_PORT). */
@@ -57,6 +58,10 @@ export const firstNot = (keys, module, action) => keys.find(k => !can(k, module,
 /** A page signed in as `key`, in its own context. Call `close()` when done. */
 export async function asUser(browser, key, contextOptions = {}) {
   const context = await browser.newContext({ storageState: stateFile(key), locale: 'ar-EG', ...contextOptions })
+  // D-25: the app's checks are inline now (bottom bar / press-twice buttons); answer them like the
+  // old native dialogs were — confirm, and type the UAT answer into an input. Any native dialog
+  // still left in the app is accepted as before.
+  await context.addInitScript(installInlineConfirmAnswerer, `UAT-${WS} done`)
   const page = await context.newPage()
   page.on('dialog', d => d.accept(d.type() === 'prompt' ? `UAT-${WS} done` : undefined).catch(() => {}))
   // The app refreshes the session in this context (refresh tokens rotate): write the new cookies

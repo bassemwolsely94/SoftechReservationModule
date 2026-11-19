@@ -1301,7 +1301,7 @@ SCREENS = [
                  'For each category: order, name, code, supplier count, rule count, and status.\n• From the row you can edit or delete the category (delete asks for confirmation).\n• The "main distributor/manufacturer" category feeds the expiry reports, so classify carefully.'),
          },
             {'target': 'purchasing-categories-delete-category', 'label': T('حذف', 'Delete'),
-             'text': T('يحذف الفئة بعد تأكيد.', 'Deletes the category after a confirmation.'),
+             'text': T('يحذف الفئة. اضغط مرتين: أول ضغطة الزر يحمرّ «حذف الفئة؟» لمدة 4 ثواني، والتانية تنفّذ.', 'Deletes the category. Press twice: the first press turns it red ("Delete category?") for 4 s; the second does it.'),
              'warn': T('نهائي، وبيترفض لو فيه قواعد لسه بتشاور عليها. لو مش متأكد عطّلها بدل الحذف، وبعدها «إعادة التصنيف».',
                        'Final, and refused while rules still point to it. If unsure, deactivate it instead, then "Reclassify".')},
             {'target': 'purchasing-categories-new-rule', 'label': T('+ قاعدة جديدة', '+ New rule'),
@@ -1322,7 +1322,7 @@ SCREENS = [
              'text': T('يحفظ القاعدة. ماينفعش قاعدتين بنفس النوع والتصنيف.', 'Saves the rule. Two rules with the same type and classification are not allowed.'),
              'open_hint': T('اضغط «+ قاعدة جديدة» أو «تعديل» على قاعدة.', 'Press "+ New rule" or "Edit" on a rule.')},
             {'target': 'purchasing-categories-delete-rule', 'label': T('حذف', 'Delete'),
-             'text': T('يحذف القاعدة بعد تأكيد.', 'Deletes the rule after a confirmation.'),
+             'text': T('يحذف القاعدة. اضغط مرتين: أول ضغطة الزر يحمرّ «حذف القاعدة؟» لمدة 4 ثواني، والتانية تنفّذ.', 'Deletes the rule. Press twice: the first press turns it red ("Delete rule?") for 4 s; the second does it.'),
              'warn': T('نهائي. الموردين اللي كانت بتصنفهم بيتنقلوا مع أول إعادة تصنيف.', 'Final. The suppliers it classified move on the next reclassify.')},
         ],
         'hints': [

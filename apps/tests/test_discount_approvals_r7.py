@@ -195,15 +195,22 @@ class ApproveRejectTests(_Base):
     @override_settings(**WRITES_ON)
     def test_approve_writes_one_hq_update_with_derived_prices(self):
         req = self._req()
-        conn, cur = _conn(fetchone=(100.0, 33.3333, 114.0))
+        # D-09: live row first (packqty, itemsalestaxp, the 7 price columns), then the read-back
+        conn, cur = _conn(fetchone=[(3, 14.0, 90.0, 102.6, 30.0, 0, 0, 0, 0), (100.0, 33.3333, 114.0)])
+        cur.rowcount = 1
         with mock.patch('config.sybase.get_sybase_connection', return_value=conn):
             r = self.admin.post(f'{BASE}{req.pk}/approve/', {'notes': 'ok'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
-        sql, params = cur.execute.call_args_list[0][0]
+        stmts = [c[0][0].split()[0] for c in cur.execute.call_args_list]
+        self.assertEqual(stmts, ['BEGIN', 'SELECT', 'UPDATE', 'SELECT', 'COMMIT'])
+        sql, params = cur.execute.call_args_list[2][0]
         self.assertEqual(sql, 'UPDATE SOFTECHDB9.dbo.items SET itemsaleprice = ?, unitsaleprice = ?, '
                               'itemsaleprice_tax = ?, usercode = ?, itemlastupdate = GETDATE() '
-                              'WHERE itemcode = ?')
-        self.assertEqual(params, [100.0, 33.3333, 114.0, 'U77', 'R7P01'])
+                              'WHERE itemcode = ? AND ABS(ISNULL(itemsaleprice, 0) - ?) <= 0.0005 '
+                              'AND ABS(ISNULL(packqty, 0) - ?) <= 0.00005 '
+                              'AND ABS(ISNULL(itemsalestaxp, 0) - ?) <= 0.00005')
+        self.assertEqual(params, [100.0, 33.3333, 114.0, 'U77', 'R7P01', 90.0, 3.0, 14.0])
+        conn.close.assert_called_once()
         req.refresh_from_db()
         self.assertEqual(req.status, Req.STATUS_EXECUTED)
         self.assertEqual(req.reviewed_by, self.admin_user)
@@ -216,13 +223,18 @@ class ApproveRejectTests(_Base):
     @override_settings(**WRITES_ON)
     def test_readback_mismatch_marks_the_request_failed(self):
         req = self._req()
-        conn, _ = _conn(fetchone=(90.0, 30.0, 102.6))
+        conn, cur = _conn(fetchone=[(3, 14.0, 90.0, 102.6, 30.0, 0, 0, 0, 0), (90.0, 30.0, 102.6)])
+        cur.rowcount = 1
         with mock.patch('config.sybase.get_sybase_connection', return_value=conn):
             r = self.admin.post(f'{BASE}{req.pk}/approve/', {}, format='json')
         self.assertEqual(r.status_code, 207)
         req.refresh_from_db()
         self.assertEqual(req.status, Req.STATUS_FAILED)
-        self.assertIn('readback mismatch', req.erp_error)
+        self.assertIn('لا تطابق', req.erp_error)
+        # the UPDATE ran inside the transaction, which is rolled back, never committed
+        stmts = [c[0][0].split()[0] for c in cur.execute.call_args_list]
+        self.assertEqual(stmts[-1], 'ROLLBACK')
+        self.assertNotIn('COMMIT', stmts)
         self.item.refresh_from_db()
         self.assertEqual(self.item.pack_price, Decimal('90.000'))
 

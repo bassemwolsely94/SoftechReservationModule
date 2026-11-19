@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from 'react'
 import { commerceApi } from '../api/client'
+import { confirmBar } from '../components/ui'
 
 const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const inp = 'border border-gray-300 rounded px-2 py-1.5 text-sm'
@@ -43,7 +44,7 @@ export default function CommerceAllocationGrid({ doc, onTotals }) {
     await load()
   }
   const patchPrice = async (lineId, price) => { await commerceApi.editLine(id, lineId, { unit_price: price }); await load() }
-  const delItem = async (lineId) => { if (window.confirm('حذف الصنف؟')) { await commerceApi.deleteLine(id, lineId); await load() } }
+  const delItem = async (lineId) => { if (await confirmBar('حذف الصنف؟', { tone: 'danger', confirmLabel: 'حذف' })) { await commerceApi.deleteLine(id, lineId); await load() } }
 
   if (!doc.recipient) return (
     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">

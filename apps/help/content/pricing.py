@@ -21,11 +21,13 @@ PR_MORE_STATUS = T(
     'اختار الحالة اللي عايز تشوفها:\n'
     '• «في الانتظار»: لسه محدش راجعه.\n'
     '• «منفذ»: اتطبّق في SOFTECH.\n'
-    '• «مرفوض» بملاحظة المدير، و«فشل»: اتعتمد بس التنفيذ في SOFTECH ما كملش — اقرأ الخطأ.',
+    '• «مرفوض» بملاحظة المدير، و«فشل»: اتعتمد بس التنفيذ في SOFTECH ما كملش — اقرأ الخطأ.\n'
+    '• «تغيّر في SOFTECH»: لما جه وقت التنفيذ، القيمة في SOFTECH ماكانتش هي اللي الطلب اتعمل عليها (حد غيّرها هناك) — ماتكتبش حاجة، وبيظهر الرقمين جنب بعض.',
     'Choose which status to show:\n'
     '• "Pending": nobody has reviewed it yet.\n'
     '• "Executed": applied in SOFTECH.\n'
-    '• "Rejected" with the manager\'s note, and "Failed": approved but execution in SOFTECH did not complete — read the error.')
+    '• "Rejected" with the manager\'s note, and "Failed": approved but execution in SOFTECH did not complete — read the error.\n'
+    '• "Changed in SOFTECH": at execution time SOFTECH no longer held the value the request was made against (someone changed it there) — nothing was written, and both numbers are shown side by side.')
 PR_MORE_TABLE = T(
     'كل صف طلب: الصنف وكوده، القيم القديمة والجديدة لكل حقل اتطلب تعديله، مين طلبه، التاريخ والحالة.\n'
     '• لو مش مدير هتلاقي طلباتك هنا — المدير بيراجعها ويعتمدها.\n'
@@ -102,10 +104,11 @@ MODULE = {
         'model': 'discount_approvals.ItemPriceChangeRequest', 'field': 'status',
         'states': [
             {'key': 'pending', 'label': T('في الانتظار', 'Pending'), 'desc': T('ينتظر مراجعة المدير.', 'Waiting for a manager.'), 'next': ['approved', 'rejected']},
-            {'key': 'approved', 'label': T('معتمد', 'Approved'), 'desc': T('اعتُمد ويُنفَّذ في SOFTECH.', 'Approved and being executed in SOFTECH.'), 'next': ['executed', 'failed']},
+            {'key': 'approved', 'label': T('معتمد', 'Approved'), 'desc': T('اعتُمد ويُنفَّذ في SOFTECH.', 'Approved and being executed in SOFTECH.'), 'next': ['executed', 'failed', 'softech_changed']},
             {'key': 'executed', 'label': T('منفذ في Softech', 'Executed in SOFTECH'), 'desc': T('طُبّق في SOFTECH وانتشر للفروع. يمكن إنشاء «طلب تراجع» للقيم السابقة.', 'Applied in SOFTECH and replicated to branches. A "rollback request" to the previous values can be created.')},
             {'key': 'rejected', 'label': T('مرفوض', 'Rejected'), 'desc': T('رُفض مع ملاحظة.', 'Rejected with a note.')},
-            {'key': 'failed', 'label': T('فشل في التنفيذ', 'Execution failed'), 'desc': T('لم يُطبَّق في SOFTECH — راجع الخطأ.', 'Not applied in SOFTECH — check the error.')},
+            {'key': 'failed', 'label': T('فشل في التنفيذ', 'Execution failed'), 'desc': T('لم يُطبَّق في SOFTECH — راجع الخطأ. إعادة الاعتماد آمنة: التنفيذ يقرأ SOFTECH أولاً ولا يكتب مرتين.', 'Not applied in SOFTECH — check the error. Approving again is safe: execution reads SOFTECH first and never writes twice.')},
+            {'key': 'softech_changed', 'label': T('تغيّر في SOFTECH — للمراجعة', 'Changed in SOFTECH — review'), 'desc': T('عند التنفيذ لم تكن القيمة في SOFTECH هي القيمة التي قُدّم عليها الطلب (عُدّلت هناك بعده). لم يُكتب شيء؛ تظهر القيمة المعتمدة والقيمة الحالية في SOFTECH. أغلقه، وقدّم طلباً جديداً إن كان التعديل ما زال مطلوباً.', 'At execution SOFTECH no longer held the value the request was made against (it was changed there since). Nothing was written; the approved value and the current SOFTECH value are shown. Close it, and file a new request if the change is still wanted.'), 'next': ['rejected']},
         ],
     }],
     'journeys': [
@@ -195,7 +198,7 @@ MODULE = {
                  'text': T('التبويبات: الطلبات، والمعلّقة، وتبويبات المدير.', 'The tabs: requests, pending follow-up, and the admin tabs.'),
                  'more': PR_MORE_TABS},
                 {'target': 'pricing-approvals-status', 'route': '/pricing-approvals',
-                 'text': T('فلتر الحالة: في الانتظار، منفذ، مرفوض، فشل.', 'Status filter: pending, executed, rejected, failed.'),
+                 'text': T('فلتر الحالة: في الانتظار، منفذ، مرفوض، فشل، تغيّر في SOFTECH.', 'Status filter: pending, executed, rejected, failed, changed in SOFTECH.'),
                  'more': PR_MORE_STATUS},
                 {'target': 'pricing-approvals-table', 'route': '/pricing-approvals',
                  'text': T('جدول الطلبات: القيم القديمة والجديدة ومين طلب.', 'The requests table: old and new values and who asked.'),
@@ -283,7 +286,18 @@ SCREENS = [
             {'target': 'pricing-approvals-row', 'label': T('صف الطلب', 'Request row'),
              'text': T('القيم القديمة والجديدة، من طلب، ومن نفّذ باسم مستخدم SOFTECH، والحالة. صفِّ بالحالة من الأزرار أعلى الجدول.',
                        'Old and new values, who asked, who executed under which SOFTECH user, and the status. Filter by status with the buttons above.'),
-             'when': T('طلب «فشل» يعرض سبب الخطأ تحته.', 'A "Failed" request shows the error under it.')},
+             'when': T('طلب «فشل» يعرض سبب الخطأ تحته، وطلب «تغيّر في SOFTECH» يعرض القيمتين.', 'A "Failed" request shows the error under it; a "Changed in SOFTECH" request shows both values.')},
+            {'target': 'pricing-approvals-softech-changed', 'label': T('تغيّر في SOFTECH', 'Changed in SOFTECH'),
+             'text': T('القيمة التي اعتُمد عليها الطلب مقابل القيمة الموجودة في SOFTECH الآن، لكل حقل اختلف.',
+                       'The value the request was approved against next to the value SOFTECH holds now, for each field that differs.'),
+             'when': T('يظهر لما حد عدّل الصنف في SOFTECH بعد تقديم الطلب. لم يُكتب شيء في SOFTECH.',
+                       'Shows when someone changed the item in SOFTECH after the request was filed. Nothing was written to SOFTECH.'),
+             'warn': T('لا تعيد اعتماده: «إغلاق» ثم طلب جديد على القيمة الحالية لو التعديل ما زال مطلوباً.',
+                       'Do not approve it again: "Close", then a new request on the current value if the change is still wanted.'),
+             'more': T(
+                 'قبل الكتابة النظام بيقرا الصنف من SOFTECH نفسه (مش من النسخة عندنا):\n• عدد الوحدات في العبوة والضريبة بيتاخدوا من SOFTECH ويتحسب منهم سعر الوحدة والسعر شامل الضريبة.\n• لو الحقل اللي هيتغير قيمته في SOFTECH مختلفة عن اللي الطلب اتعمل عليه، مابيكتبش ويعلّم الطلب «تغيّر في SOFTECH».\n• لو التعديل كان اتطبق قبل كده (إعادة محاولة)، مابيكتبش تاني ويعتبره «منفذ».',
+                 'Before writing, the system reads the item from SOFTECH itself (not from our copy):\n• The units per pack and the VAT are taken from SOFTECH and the unit price and price with VAT are computed from them.\n• If the field to change holds a different value in SOFTECH than the request was made against, it writes nothing and marks the request "Changed in SOFTECH".\n• If the change was already applied (a retry), it does not write again and marks it "Executed".'),
+             'open_hint': T('على طلب حالته «تغيّر في SOFTECH».', 'On a request whose status is "Changed in SOFTECH".')},
             {'target': 'pricing-approvals-history', 'label': T('🕘 السجل', '🕘 History'),
              'text': T('سجل تغييرات السعر والخصم لهذا الصنف عبر الزمن.', 'The price and discount change history of this item over time.'),
              'when': T('قبل الاعتماد: تأكد أن الصنف لم يتغير مؤخراً لنفس السبب.', 'Before approving: check the item was not changed recently for the same reason.'),
@@ -299,12 +313,12 @@ SCREENS = [
             {'target': 'pricing-approvals-reject', 'label': T('رفض', 'Reject'),
              'text': T('يفتح نافذة الرفض مع ملاحظة تصل لمن طلب.', 'Opens the reject window with a note sent to the requester.'),
              'warn': T('الرفض نهائي لهذا الطلب؛ لإعادة المحاولة يلزم طلب جديد.', 'Rejecting is final for this request; trying again needs a new request.'),
-             'open_hint': T('للمدير فقط، على طلب «في الانتظار».', 'Admins only, on a "Pending" request.')},
+             'open_hint': T('للمدير فقط، على طلب «في الانتظار»، أو «إغلاق» على طلب «تغيّر في SOFTECH».', 'Admins only, on a "Pending" request, or "Close" on a "Changed in SOFTECH" request.')},
             {'target': 'pricing-approvals-review-confirm', 'label': T('اعتماد وتنفيذ في Softech', 'Approve and run in Softech'),
              'text': T('عند الاعتماد: يُحدَّث سجل الصنف في الرئيسي بـ SOFTECH باسمك، وتسحبه الفروع تلقائياً. في الرفض: «رفض الطلب».',
                        'On approve: the item record at HQ in SOFTECH is updated under your name and branches pull it automatically. On reject: "Reject request".'),
-             'when': T('بعدها الحالة «منفذ في Softech» أو «فشل» مع السبب. شارة النسخ تبين وصوله للفروع.',
-                       'Then the status is "Executed in Softech" or "Failed" with the reason. The replication badge shows if branches got it.'),
+             'when': T('بعدها «منفذ في Softech»، أو «فشل» مع السبب، أو «تغيّر في SOFTECH» لو القيمة اتغيرت هناك بعد الطلب (ماتكتبش حاجة).',
+                       'Then "Executed in Softech", "Failed" with the reason, or "Changed in SOFTECH" if the value changed there after the request (nothing written).'),
              'warn': T('يغيّر سعر البيع في كل الفروع فوراً. لو الكتابة معطلة من الإعدادات يُرفض ويبقى الطلب معلقاً.',
                        'Changes the selling price in every branch at once. If writes are switched off it is refused and stays pending.'),
              'open_hint': T('داخل نافذة المراجعة بعد «اعتماد» أو «رفض».', 'Inside the review window after "Approve" or "Reject".')},
@@ -418,8 +432,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر المصدر والحالة في «تدقيق النسخ المتماثل» بقت تقبل أكثر من اختيار.', 'The source and status filters in "Replication audit" now take several choices.'),
+        'updated': '2026-11-19',
+        'change_note': T('حالة جديدة «تغيّر في SOFTECH — للمراجعة»: التنفيذ يقرأ الصنف من SOFTECH ولا يكتب لو تغيّر بعد الطلب.', 'New status "Changed in SOFTECH — review": execution reads the item from SOFTECH and writes nothing if it changed after the request.'),
     },
     {
         'key': 'pricing.alignment',
@@ -464,6 +478,7 @@ SCREENS = [
             {'target': 'pricing-alignment-apply-suggested-softech', 'label': T('✨ تطبيق المقترح لكل صنف', '✨ Apply each suggestion'),
              'text': T('يكتب لكل صنف محدد المنشأ أو تصنيف التعاقد المقترح لفئته ونسبته.',
                        'Writes to each selected item the origin or contract class suggested for its family and rate.'),
+             'when': T('بيعرض الملخص في شريط تحت الشاشة؛ الكتابة بتحصل بعد «تطبيق فى SOFTECH» بس، و«إلغاء» أو Esc يوقفها.', 'Shows a summary in a bar at the bottom; it writes only after "Apply in SOFTECH", and "Cancel" or Esc stops it.'),
              'warn': T('يكتب على أصناف الرئيسي في SOFTECH باسمك وتنتشر للفروع خلال نحو 30 دقيقة. للمدير فقط.',
                        'Writes to the HQ items in SOFTECH under your name and spreads to branches in about 30 minutes. Admins only.'),
              'open_hint': T('حدّد صنفاً واحداً على الأقل.', 'Select at least one item.')},
@@ -475,6 +490,7 @@ SCREENS = [
             {'target': 'pricing-alignment-apply-softech', 'label': T('✔ تطبيق على SOFTECH', '✔ Apply to SOFTECH'),
              'text': T('يكتب التعيين المُوحَّد على كل الأصناف المحددة، مع قراءة تأكيد لكل صنف ونتيجة نجح/فشل.',
                        'Writes the uniform assignment to every selected item, with a read-back per item and a success/fail count.'),
+             'when': T('بيعرض الملخص في شريط تحت الشاشة؛ الكتابة بتحصل بعد «تطبيق فى SOFTECH» بس، و«إلغاء» أو Esc يوقفها.', 'Shows a summary in a bar at the bottom; it writes only after "Apply in SOFTECH", and "Cancel" or Esc stops it.'),
              'warn': T('يغيّر تسميات الأصناف في SOFTECH الرئيسي وكل الفروع. حتى 1000 صنف في المرة، للمدير فقط.',
                        'Changes item labels in SOFTECH HQ and every branch. Up to 1000 items at a time, admins only.'),
              'open_hint': T('حدّد أصنافاً واختر المنشأ أو التصنيف الجديد.', 'Select items and pick the new origin or class.')},
@@ -491,6 +507,7 @@ SCREENS = [
             {'target': 'pricing-alignment-tier-create-softech', 'label': T('✔ إنشاء فى SOFTECH', '✔ Create in SOFTECH'),
              'text': T('يضيف صفاً جديداً في جدول التصنيفات بـ SOFTECH، منسوخاً من صف قالب مع تغيير الكود والاسم فقط.',
                        'Adds a new row to the SOFTECH class table, copied from a template row with only code and name changed.'),
+             'when': T('بيعرض الملخص في شريط تحت الشاشة؛ الكتابة بتحصل بعد «إنشاء فى SOFTECH» بس، و«إلغاء» أو Esc يوقفها.', 'Shows a summary in a bar at the bottom; it writes only after "Create in SOFTECH", and "Cancel" or Esc stops it.'),
              'warn': T('صف دائم في SOFTECH ولا يُحذف من هنا — راجع الاسم والكود في المعاينة. للمدير فقط.',
                        'A permanent SOFTECH row that cannot be removed from here — check name and code in the preview. Admins only.'),
              'open_hint': T('بعد «👁 معاينة» داخل نافذة التصنيف الجديد.', 'After "👁 Preview" inside the new-class window.')},
@@ -519,7 +536,7 @@ SCREENS = [
                  '• «✨ تطبيق المقترح لكل صنف» بيدّي كل صنف المنشأ/تصنيف الخصم المناسب لفئته ونسبته.\n• أو «تعيين موحّد»: اختار منشأ و/أو تصنيف خصم جديد ثم «✔ تطبيق على SOFTECH» لكل الأصناف المحددة.\n• الاتنين بيكتبوا فعلاً في SOFTECH على الرئيسي باسم مستخدم SOFTECH بتاعك وبعد تأكيد، والتغيير بينتشر للفروع (الرسالة بتقول حوالي 30 دقيقة). للمدير بس.',
                  '• "✨ Apply each item\'s suggestion" gives each item the origin/discount class that fits its category and rate.\n• Or a uniform assignment: pick a new origin and/or discount class, then "✔ Apply to SOFTECH" for all selected items.\n• Both really write to SOFTECH on HQ under your SOFTECH user after a confirmation, and the change spreads to branches (the message says about 30 minutes). Admins only.')},
         ],
-        'updated': '2026-11-06',
+        'updated': '2026-11-19',
         'change_note': T('«مشرف مركز الاتصال» و«مدير الجودة» بقوا يشوفوا الشاشة دي في القائمة؛ دور «مشاهد» ماعادش يقدر يفتحها.', 'Call-center supervisors and quality managers now see this screen in the menu; the viewer role can no longer open it.'),
     },
 ]

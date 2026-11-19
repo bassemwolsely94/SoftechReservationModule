@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import checkout
 from . import missed_sales_views as msv
 
 urlpatterns = [
@@ -34,6 +35,9 @@ urlpatterns = [
     path('contract-assist/history/',        views.contract_assist_history,        name='pos-contract-assist-history'),
     path('contract-assist/field-values/',   views.contract_assist_field_values,   name='pos-contract-assist-field-values'),
     path('contract-assist/approval-check/', views.contract_assist_approval_check, name='pos-contract-assist-approval-check'),
+    # D-18 server-side checkout (doc 39) — 404 'disabled' while POS_SERVER_CHECKOUT is off
+    path('checkout/',         checkout.checkout,                   name='pos-order-checkout'),
+    path('checkout/preview/', checkout.checkout_preview,           name='pos-order-checkout-preview'),
     path('<int:pk>/',         views.OrderDetailView.as_view(),     name='pos-order-detail'),
     path('<int:pk>/ready/',   views.ready_order,                   name='pos-order-ready'),
     path('<int:pk>/prescription/', views.upload_prescription,      name='pos-order-prescription'),

@@ -16,6 +16,7 @@ import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import { chronicApi, enrichmentApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
+import { confirmBar } from '../components/ui'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -332,8 +333,8 @@ function ItemClassifier() {
                     {item.is_classified && (
                       <button
                         data-tour="chronic-classifier-unclassify"
-                        onClick={() => {
-                          if (window.confirm('إزالة تصنيف هذا الصنف؟'))
+                        onClick={async () => {
+                          if (await confirmBar('إزالة تصنيف هذا الصنف؟', { tone: 'danger', confirmLabel: 'تأكيد' }))
                             unclassifyMut.mutate({ itemId: item.id })
                         }}
                         className="text-xs text-red-400 hover:text-red-600"
@@ -1158,8 +1159,8 @@ function TaskGenerator() {
           </button>
           <button
             data-tour="chronic-classifier-generate"
-            onClick={() => {
-              if (window.confirm('سيتم إنشاء مهام المتابعة فعلياً في قاعدة البيانات. هل أنت متأكد؟'))
+            onClick={async () => {
+              if (await confirmBar('سيتم إنشاء مهام المتابعة فعلياً في قاعدة البيانات. هل أنت متأكد؟'))
                 generateMut.mutate(payload)
             }}
             disabled={generateMut.isPending}

@@ -454,7 +454,9 @@ SCREENS = [
         'tips': [T('الكتابة فى سوفتك (صنف نواقص / التحذير / أوامر التوريد) تُقرأ قيمها قبل أول تعديل لنا وتُعاد كما كانت عند الإلغاء أو الاسترجاع — فلا يُمسح علم وُضع يدوياً فى سوفتك. صنف غير موجود فى سوفتك لا يُعتبر مُزامَناً.',
                    'SOFTECH writes (shortage flag / warning / supply orders) read the values before our first change and put them back on undo or retrieve — a flag set by hand in SOFTECH is never wiped. An item missing in SOFTECH is not counted as synced.'),
                  T('التأكيد والإلغاء والاستبعاد والاسترجاع بيتطلبوا إن دورك مسموح له يكتب في SOFTECH من المكان ده. لو لأ هتظهر «الكتابة في SOFTECH غير متاحة لدورك من هذا المكان» والصنف مش هيتغير.',
-                   'Confirm, unflag, dismiss and restore need your role to be allowed to write to SOFTECH from this place. If not, a refusal shows and the item does not change.')],
+                   'Confirm, unflag, dismiss and restore need your role to be allowed to write to SOFTECH from this place. If not, a refusal shows and the item does not change.'),
+                 T('«الأرقام كما في HH:MM» تحت العنوان = وقت حساب أرقام المبيعات والمخزون. بتتحدث تلقائياً كل 10 دقائق على الأكثر ومع كل تشغيل للمحرك؛ علامات التأكيد والاستبعاد بتظهر فوراً.',
+                   '«الأرقام كما في HH:MM» (figures as of) under the title = when the sales and stock figures were worked out. They refresh by themselves at most every 10 minutes and on every engine run; confirm and dismiss marks show at once.')],
         'audience': T('المشتريات والصيادلة والمشرفون والجودة.', 'Purchasing, pharmacists, supervisors and quality.'),
         'tabs': [
             {'key': 'changes', 'title': T('التغييرات', 'Changes'), 'body': T('ما تغيّر منذ آخر تشغيل: نواقص جديدة للمراجعة، وأصناف مؤكدة عاد مخزونها ومبيعاتها للطبيعي (أزل النقص إن توفّرت).', 'What changed since the last run: new shortages to review, and confirmed items whose stock and sales are back to normal (remove the shortage if available).')},
@@ -581,7 +583,7 @@ SCREENS = [
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Dismissed" tab.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('الشاشة بتفتح أسرع: حسابات المحرك بتتعمل مرة واحدة لكل تشغيل، ولو التغييرات ما اتحملتش يظهر زر «إعادة المحاولة»', 'Opens faster: the engine figures are worked out once per run, and if the changes fail to load a «إعادة المحاولة» (retry) button shows'),
+        'change_note': T('الشاشة بتفتح في أقل من ثانيتين، وتحت العنوان «الأرقام كما في HH:MM» = وقت حساب أرقام المبيعات والمخزون (بتتحدث كل 10 دقائق على الأكثر ومع كل تشغيل للمحرك)', 'Opens in under two seconds; under the title «الأرقام كما في HH:MM» (figures as of) = when the sales and stock figures were worked out (refreshed at most every 10 minutes and on every engine run)'),
     },
     {
         'key': 'shortage.phantom',

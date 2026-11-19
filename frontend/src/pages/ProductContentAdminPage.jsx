@@ -15,6 +15,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { productsApi } from '../api/client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import useHelpTab from '../help/useHelpTab'
+import { confirmBar } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -209,8 +210,8 @@ function MediaTab({ product, productId }) {
                 </button>
                 <button
                   data-tour="catalog-content-admin-delete-media"
-                  onClick={() => {
-                    if (window.confirm('حذف هذه الصورة نهائياً؟')) {
+                  onClick={async () => {
+                    if (await confirmBar('حذف هذه الصورة نهائياً؟', { tone: 'danger', confirmLabel: 'حذف' })) {
                       deleteMutation.mutate(m.id)
                     }
                   }}

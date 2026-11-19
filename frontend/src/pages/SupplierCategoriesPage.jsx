@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { procurementIntelApi } from '../api/client'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 const TONES = {
   blue:   'bg-blue-100 text-blue-800',      green:  'bg-green-100 text-green-800',
@@ -143,8 +144,9 @@ export default function SupplierCategoriesPage() {
                     : <span className="text-gray-400 text-xs">معطّل</span>}</td>
                   <td className="px-3 py-2 text-left whitespace-nowrap">
                     <button data-tour="purchasing-categories-edit-category" onClick={() => setCatModal(c)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
-                    <button data-tour="purchasing-categories-delete-category" onClick={() => { if (confirm(`حذف الفئة "${c.name_ar}"؟`)) delCat.mutate(c.id) }}
-                      className="text-red-500 hover:underline text-xs">حذف</button>
+                    <ConfirmButton data-tour="purchasing-categories-delete-category" onConfirm={() => delCat.mutate(c.id)} confirmLabel="حذف الفئة؟"
+                      armedClassName="text-xs font-bold px-1.5 py-0.5 rounded bg-red-600 text-white"
+                      className="text-red-500 hover:underline text-xs">حذف</ConfirmButton>
                   </td>
                 </tr>
               ))}
@@ -185,8 +187,9 @@ export default function SupplierCategoriesPage() {
                     : <span className="text-gray-400 text-xs">معطّل</span>}</td>
                   <td className="px-3 py-2 text-left whitespace-nowrap">
                     <button data-tour="purchasing-categories-edit-rule" onClick={() => setRuleModal(r)} className="text-brand-600 hover:underline text-xs ml-3">تعديل</button>
-                    <button data-tour="purchasing-categories-delete-rule" onClick={() => { if (confirm('حذف القاعدة؟')) delRule.mutate(r.id) }}
-                      className="text-red-500 hover:underline text-xs">حذف</button>
+                    <ConfirmButton data-tour="purchasing-categories-delete-rule" onConfirm={() => delRule.mutate(r.id)} confirmLabel="حذف القاعدة؟"
+                      armedClassName="text-xs font-bold px-1.5 py-0.5 rounded bg-red-600 text-white"
+                      className="text-red-500 hover:underline text-xs">حذف</ConfirmButton>
                   </td>
                 </tr>
               ))}

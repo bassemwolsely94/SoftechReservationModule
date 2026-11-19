@@ -106,6 +106,7 @@ def _signals_key(run):
 
 def _compute_sales_and_stock(run):
     from django.db import connection
+    from django.utils import timezone
     from django.db.models import Sum
     from apps.purchasing.models import ItemDemandMetrics
 
@@ -118,19 +119,23 @@ def _compute_sales_and_stock(run):
             SELECT item_id,
                    SUM(CASE WHEN doc_date >= CURRENT_DATE - 30  THEN net_qty ELSE 0 END),
                    SUM(CASE WHEN doc_date >= CURRENT_DATE - 365 THEN net_qty ELSE 0 END),
-                   COUNT(DISTINCT date_trunc('month', doc_date))
+                   BIT_OR(1::bigint << ((EXTRACT(YEAR FROM doc_date)::int * 12
+                                         + EXTRACT(MONTH FROM doc_date)::int) % 60))
                          FILTER (WHERE doc_date >= CURRENT_DATE - 365 AND net_qty > 0)
             FROM purchasing_salestransactionline
             WHERE item_id IS NOT NULL AND doccode = '115'
             GROUP BY item_id
         """)
-        sales = {r[0]: (float(r[1] or 0), float(r[2] or 0), int(r[3] or 0))
+        # Sale months = bits set in a month bitmask (one bit per calendar month, mod 60). The 365-day
+        # window spans at most 13 consecutive months, so no two share a bit: the count equals
+        # COUNT(DISTINCT date_trunc('month', doc_date)) without its per-item sort (2.8 s → 0.8 s).
+        sales = {r[0]: (float(r[1] or 0), float(r[2] or 0), int(r[3] or 0).bit_count())
                  for r in cur.fetchall()}
-    return stock, sales
+    return stock, sales, timezone.now()
 
 
 def _sales_and_stock(run):
-    """(stock, sales) for the run — cached; one computation while parallel callers wait."""
+    """(stock, sales, computed_at) for the run — cached; one computation while parallel callers wait."""
     import time
     from django.core.cache import cache
 
@@ -162,15 +167,29 @@ def item_signals(run=None):
     item that has demand, PLUS any confirmed/dismissed item (so its state is known
     even when its signal is currently quiet). Includes catalog flags.
     """
+    from django.db.models import Q
     from apps.catalog.models import Item
 
     run = _latest_run(run)
     if run is None:
         return {}, None
 
-    stock, sales = _sales_and_stock(run)
+    stock, sales, _computed_at = _sales_and_stock(run)
 
-    items = {i.id: i for i in Item.objects.filter(is_stockable=True).only(
+    # Candidacy needs only the sales + stock numbers, so decide it first and load just the items that
+    # matter to the review (a live signal OR a saved state) — not all ~52k stockable items, whose model
+    # objects alone took ~8 s (performance Stage 3.1). Flags are still read live from the item.
+    def _candidate(item_id):
+        q30, q365, months = sales.get(item_id, (0.0, 0.0, 0))
+        hist = q365 / 12.0
+        st = stock.get(item_id, 0.0)
+        coverage = st / hist if hist > 0 else (0.0 if st == 0 else 999.0)
+        return (q365 >= MIN_ANNUAL_QTY and months >= MIN_SALE_MONTHS
+                and hist > 0 and coverage < COVERAGE_MAX)
+
+    candidate_ids = [iid for iid in sales if _candidate(iid)]
+    items = {i.id: i for i in Item.objects.filter(is_stockable=True).filter(
+        Q(id__in=candidate_ids) | Q(in_shortage=True) | Q(shortage_dismissed=True)).only(
         'id', 'softech_id', 'name', 'unit_price', 'pack_price', 'medicine_type',
         'medicine_type_name_ar', 'medicine_type_name',
         'in_shortage', 'shortage_source', 'shortage_dismissed')}
@@ -205,6 +224,15 @@ def item_signals(run=None):
             'healthy': _healthy(coverage, suppression),
         }
     return out, run
+
+
+def signals_as_of(run=None):
+    """ISO time the cached sales + stock figures for the run were computed (caching rule, perf spec §6):
+    the screen shows «الأرقام كما في HH:MM». None when nothing is cached."""
+    from django.core.cache import cache
+    run = _latest_run(run)
+    hit = cache.get(_signals_key(run)) if run is not None else None
+    return hit[2].isoformat() if hit else None
 
 
 def stockout_map(max_snaps=30):

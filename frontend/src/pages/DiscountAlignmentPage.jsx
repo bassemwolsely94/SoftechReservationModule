@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { pricingApprovalsApi } from '../api/client'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import { useToast } from '../components/ui'
+import { useConfirm } from '../components/InlineConfirm'
 
 const FLAG_META = {
   origin_vs_discount: { label: 'الخصم ≠ نسبة المنشأ',       cls: 'bg-red-100 text-red-700' },
@@ -25,6 +27,8 @@ function Pct({ v }) {
 // Create a NEW classification tier in a SOFTECH lookup table (Phase 3).
 // Preview-first: shows the exact proposed row (copied from a template) before writing.
 function CreateTierModal({ onClose, onCreated }) {
+  const toast = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [kind, setKind]   = useState('store')       // 'store' | 'origin'
   const [label, setLabel] = useState('')
   const [code, setCode]   = useState('')
@@ -32,34 +36,36 @@ function CreateTierModal({ onClose, onCreated }) {
   const [busy, setBusy]   = useState(false)
 
   const doPreview = async () => {
-    if (!label.trim()) { alert('أدخل اسم التصنيف (يُفضّل أن يتضمن النسبة، مثال: Med: Imported 20%)'); return }
+    if (!label.trim()) { toast.warning('أدخل اسم التصنيف (يُفضّل أن يتضمن النسبة، مثال: Med: Imported 20%)'); return }
     setBusy(true); setPreview(null)
     try {
       const r = await pricingApprovalsApi.tierPreview({ kind, label, code: code || undefined })
       setPreview(r.data)
-    } catch (e) { alert(e?.response?.data?.detail || 'تعذّرت المعاينة (تأكد من اتصال SOFTECH)') }
+    } catch (e) { toast.error(e?.response?.data?.detail || 'تعذّرت المعاينة (تأكد من اتصال SOFTECH)') }
     finally { setBusy(false) }
   }
 
   const doCreate = async () => {
-    if (!preview) { alert('اعرض المعاينة أولاً'); return }
-    if (preview.code_exists) { alert('الكود مستخدم بالفعل — غيّر الكود'); return }
-    if (!window.confirm(
+    if (!preview) { toast.warning('اعرض المعاينة أولاً'); return }
+    if (preview.code_exists) { toast.warning('الكود مستخدم بالفعل — غيّر الكود'); return }
+    if (!await confirmInline(
       `إنشاء تصنيف جديد فى SOFTECH (${preview.table}):\n` +
       `• الكود: ${preview.new_code}\n• الاسم: ${label}\n\n` +
-      `سيُنسخ صف موجود كقالب مع تغيير الكود والاسم فقط. متابعة؟`
+      `سيُنسخ صف موجود كقالب مع تغيير الكود والاسم فقط. متابعة؟`,
+      { confirmLabel: 'إنشاء فى SOFTECH' }
     )) return
     setBusy(true)
     try {
       const r = await pricingApprovalsApi.tierCreate({ kind, label, code: code || undefined })
-      alert(`✓ تم الإنشاء — الكود ${r.data.code}. يمكنك الآن توجيه الأصناف إليه.`)
+      toast.success(`تم الإنشاء — الكود ${r.data.code}. يمكنك الآن توجيه الأصناف إليه.`)
       onCreated?.(); onClose()
-    } catch (e) { alert(e?.response?.data?.detail || 'فشل الإنشاء') }
+    } catch (e) { toast.error(e?.response?.data?.detail || 'فشل الإنشاء') }
     finally { setBusy(false) }
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" dir="rtl" onClick={onClose}>
+      {confirmUi}
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-black text-gray-900">➕ تصنيف جديد فى SOFTECH</h3>
@@ -127,6 +133,8 @@ function CreateTierModal({ onClose, onCreated }) {
 
 export default function DiscountAlignmentPage() {
   const qc = useQueryClient()
+  const toast = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [search, setSearch]     = useState('')
   const [flag, setFlag]         = useState('')
   const [onlyMis, setOnlyMis]   = useState(true)
@@ -177,34 +185,36 @@ export default function DiscountAlignmentPage() {
   const applyMut = useMutation({
     mutationFn: (payload) => pricingApprovalsApi.alignmentApply(payload).then(r => r.data),
     onSuccess: (res) => {
-      alert(`تم التطبيق: ${res.applied} نجح · ${res.failed} فشل.\n${res.note || ''}`)
+      toast[res.failed ? 'warning' : 'success'](`تم التطبيق: ${res.applied} نجح · ${res.failed} فشل.`, res.note || undefined)
       clearSel()
       qc.invalidateQueries({ queryKey: ['discount-alignment'] })
     },
-    onError: (err) => alert(err?.response?.data?.detail || 'فشل التطبيق'),
+    onError: (err) => toast.error(err?.response?.data?.detail || 'فشل التطبيق'),
   })
 
   // Uniform: one target tier for all selected
-  const doApply = () => {
-    if (!newOrigin && !newStore) { alert('اختر المنشأ الجديد و/أو تصنيف الخصم الجديد'); return }
+  const doApply = async () => {
+    if (!newOrigin && !newStore) { toast.warning('اختر المنشأ الجديد و/أو تصنيف الخصم الجديد'); return }
     const oLbl = origins.find(o => o.code === newOrigin)?.name || '—'
     const sLbl = stores.find(s => s.code === newStore)?.name || '—'
-    if (!window.confirm(
+    if (!await confirmInline(
       `تطبيق مُوحَّد على ${sel.size} صنف في SOFTECH:\n` +
       (newOrigin ? `• المنشأ ← ${oLbl}\n` : '') +
       (newStore  ? `• تصنيف الخصم ← ${sLbl}\n` : '') +
-      `\nستُكتب على HQ وتنتشر للفروع خلال ~30 دقيقة. متابعة؟`
+      `\nستُكتب على HQ وتنتشر للفروع خلال ~30 دقيقة. متابعة؟`,
+      { confirmLabel: 'تطبيق فى SOFTECH' }
     )) return
     applyMut.mutate({ item_ids: [...sel], origin_code: newOrigin || undefined, store_classif: newStore || undefined })
   }
 
   // Per-row: apply each selected item's OWN family-aware suggestion
-  const doApplySuggestions = () => {
-    if (selWithSugg.length === 0) { alert('لا توجد اقتراحات للأصناف المحددة'); return }
-    if (!window.confirm(
+  const doApplySuggestions = async () => {
+    if (selWithSugg.length === 0) { toast.warning('لا توجد اقتراحات للأصناف المحددة'); return }
+    if (!await confirmInline(
       `تطبيق الاقتراح المناسب لكل صنف (${selWithSugg.length} صنف) في SOFTECH:\n` +
       `يُعيَّن لكل صنف المنشأ/تصنيف الخصم المطابق لفئته ونسبته.\n` +
-      `ستُكتب على HQ وتنتشر للفروع خلال ~30 دقيقة. متابعة؟`
+      `ستُكتب على HQ وتنتشر للفروع خلال ~30 دقيقة. متابعة؟`,
+      { confirmLabel: 'تطبيق فى SOFTECH' }
     )) return
     applyMut.mutate({
       changes: selWithSugg.map(r => ({
@@ -219,6 +229,7 @@ export default function DiscountAlignmentPage() {
 
   return (
     <div dir="rtl" className="p-4 space-y-3">
+      {confirmUi}
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>

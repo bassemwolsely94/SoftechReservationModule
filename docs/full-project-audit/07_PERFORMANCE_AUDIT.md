@@ -387,3 +387,68 @@ All measured, at 50 rows per page.
   - `perf_explain.py`
   - `perf_uid.py`
   - `perf_load.py`
+
+---
+
+## 6. Stage 1 baseline (performance boost, 2026-11-19)
+
+Design: `docs/superpowers/specs/2026-11-19-performance-boost-design.md`. Plan:
+`docs/superpowers/plans/2026-11-19-perf-stage1-measure-and-guard.md`.
+
+### 6.1 Slow-request log, last 14 days, ranked by total time (office, read only)
+
+325 slow calls (≥ 1 s). The office runtime was down part of the window, so counts are low; read it as
+a ranking. Window 2026-11-05 → 2026-11-19 includes calls from before PERF-5 (filter-options) merged.
+
+| Route | n | p50 ms | p95 ms | max ms | total s |
+|---|---:|---:|---:|---:|---:|
+| `GET api/purchasing/filter-options/` | 41 | 1880 | 21374 | 308858 | 519 |
+| `GET api/sync/freshness/` | 53 | 1270 | 3120 | 218296 | 317 |
+| `GET api/purchasing/isr/filter-options/` | 4 | 6091 | 260939 | 260939 | 273 |
+| `GET api/purchasing/export/` | 1 | 164213 | 164213 | 164213 | 164 |
+| `POST api/purchasing/isr/fulfilment/` | 6 | 6376 | 69256 | 69256 | 160 |
+| `POST api/purchasing/rates/propose/` | 3 | 52585 | 61140 | 61140 | 160 |
+| `POST api/purchasing/rates/pushes/<int:pk>/execute/` | 3 | 52214 | 55892 | 55892 | 144 |
+| `GET api/usage-print/sheet/` | 2 | 132428 | 132428 | 132428 | 139 |
+| `GET api/purchasing/shortage/confirmed/` | 4 | 29512 | 32613 | 32613 | 105 |
+| `GET api/batches/stock-expiry/summary/` | 16 | 4976 | 8174 | 10830 | 82 |
+| `GET api/purchasing/shortage/deltas/` | 3 | 29132 | 31930 | 31930 | 80 |
+| `POST api/purchasing/isr/fulfilment/export/` | 3 | 23794 | 48601 | 48601 | 79 |
+| `GET api/purchasing/shortage/med-types/` | 3 | 19501 | 22390 | 22390 | 61 |
+| `GET api/purchasing/shortage/candidates/` | 3 | 18875 | 22402 | 22402 | 60 |
+| `GET api/notifications/` | 18 | 2219 | 6890 | 8944 | 52 |
+
+Not yet in any Stage 3 session: `isr/filter-options`, `isr/fulfilment` (+ export), `rates/propose` and
+`rates/pushes/…/execute` (SOFTECH-adjacent: stop and ask before changing), `usage-print/sheet` and
+`purchasing/export` (both Stage 4 exports).
+
+### 6.2 Query budgets (CI, `apps/tests/perf/`)
+
+Measured with the budget harness (`PERF_BUDGET_REPORT=1 manage.py test apps.tests.perf`). Few rows →
+many rows; ceiling = measured + 2 (`apps/tests/perf/budgets.py`).
+
+| Route | Kind | Queries | Note |
+|---|---|---:|---|
+| `notifications/` | poll | 2 | |
+| `notifications/category-counts` | poll | 2 | |
+| `sync/status` | poll | 3 | |
+| `sync/freshness` | poll | 47 | Stage 3 target ≤ 8 |
+| `dashboard/summary` | poll | 34 | Stage 3 target ≤ 10 |
+| `reservations` | list | 9 | flat (PERF-4 fix holds) |
+| `customers` (pharmacist) | list | 7 | flat (PERF-4 fix holds) |
+| `customers?search` | list | 7 | |
+| `items?search` | list | 6 | |
+| `search/universal` | list | 18 | |
+| `supply/cases` | list | 5 | flat (PERF-4 fix holds) |
+| `pos-orders` | list | 7 | |
+| `insurance/claims` | list | 8 | |
+| `purchasing/metrics` | list | 5 | |
+| `purchasing/filter-options` | list | 12 | |
+| `batches/stock-expiry/summary` | report | 33 | cost is mostly Python |
+| `incentives/targets` | report | **12 → 52** | **N+1** (≈4 per target), expected failure until Stage 3 |
+| `audit/screen-view` | track | 3 | 2.7 s in production is not SQL count — check locks / inserts |
+
+### 6.3 `pg_stat_statements`
+
+Pending the owner's after-closing restart (`docs/deploy/2026-11-office-pg-query-stats.md`, from the
+Stage 1 ranking/stats PR). Then: `manage.py perf_top_queries --limit 20`.

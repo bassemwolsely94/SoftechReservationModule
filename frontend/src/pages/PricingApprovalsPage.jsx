@@ -54,6 +54,7 @@ const STATUS_STYLES = {
   rejected: 'bg-red-100 text-red-700 border border-red-200',
   executed: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
   failed:   'bg-rose-100 text-rose-800 border border-rose-200',
+  softech_changed: 'bg-orange-100 text-orange-800 border border-orange-200',
 }
 
 const STATUS_LABELS = {
@@ -62,6 +63,7 @@ const STATUS_LABELS = {
   rejected: 'مرفوض',
   executed: 'منفذ في Softech',
   failed:   'فشل',
+  softech_changed: 'تغيّر في SOFTECH — للمراجعة',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,6 +104,25 @@ function ChangeSummary({ oldValues, newValues, executedValues }) {
           </span>
         )
       })}
+    </div>
+  )
+}
+
+// D-09: SOFTECH no longer held what the request was approved against — nothing was written.
+// The backend decides this (compare-and-set inside the write); the screen only shows both values.
+function SoftechConflict({ conflict }) {
+  const fields = conflict?.fields || {}
+  const allFields = [...EDITABLE_FIELDS, ...DERIVED_FIELDS]
+  if (!Object.keys(fields).length) return null
+  return (
+    <div data-tour="pricing-approvals-softech-changed"
+      className="mt-1 rounded border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-800">
+      <div className="font-medium">تغيّر في SOFTECH بعد تقديم الطلب — لم يُكتب شيء</div>
+      {Object.entries(fields).map(([key, v]) => (
+        <div key={key}>
+          {allFields.find(f => f.key === key)?.label || key}: المعتمد {fmt(v.approved)} / SOFTECH الآن {fmt(v.softech)}
+        </div>
+      ))}
     </div>
   )
 }
@@ -542,6 +563,7 @@ export default function PricingApprovalsPage() {
             { key: 'executed', label: 'منفذ' },
             { key: 'rejected', label: 'مرفوض' },
             { key: 'failed',   label: 'فشل' },
+            { key: 'softech_changed', label: 'تغيّر في SOFTECH' },
           ].map(tab => (
             <button
               key={tab.key}
@@ -607,7 +629,9 @@ export default function PricingApprovalsPage() {
                         {req.review_notes && (
                           <div className="text-xs text-blue-500 mt-0.5 line-clamp-1">ملاحظة: {req.review_notes}</div>
                         )}
-                        {req.erp_error && (
+                        {req.status === 'softech_changed' ? (
+                          <SoftechConflict conflict={req.softech_conflict} />
+                        ) : req.erp_error && (
                           <div className="text-xs text-red-500 mt-0.5 line-clamp-1">خطأ: {req.erp_error}</div>
                         )}
                       </td>
@@ -662,6 +686,15 @@ export default function PricingApprovalsPage() {
                                 </button>
                               )}
                             </div>
+                          )}
+                          {req.status === 'softech_changed' && (
+                            <button data-tour="pricing-approvals-reject"
+                              onClick={() => setReviewTarget({ request: req, action: 'reject' })}
+                              title="إغلاق الطلب — قدّم طلباً جديداً إن كان التعديل ما زال مطلوباً"
+                              className="px-3 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs hover:bg-gray-200 border border-gray-200"
+                            >
+                              إغلاق
+                            </button>
                           )}
                           {req.status === 'executed' && (
                             <button data-tour="pricing-approvals-rollback"

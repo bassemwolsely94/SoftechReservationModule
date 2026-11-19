@@ -8,6 +8,7 @@ import DailyCountTab from './stockcount/DailyCountTab'
 import useAuthStore from '../store/authStore'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { confirmBar } from '../components/ui'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -426,7 +427,7 @@ function SnapshotTab({ session, onRefresh }) {
   }
 
   async function handleSnapshot() {
-    if (!window.confirm('سيتم تجميد الكميات المتوقعة الآن. هل أنت متأكد؟')) return;
+    if (!await confirmBar('سيتم تجميد الكميات المتوقعة الآن. هل أنت متأكد؟')) return;
     setSnapping(true); setMsg('');
     try {
       const res = await stockCountApi.generateSnapshot(session.id);
@@ -691,7 +692,7 @@ function VarianceTab({ session, onRefresh }) {
   }
 
   async function handleClose() {
-    if (!window.confirm('هل تريد إغلاق الجلسة نهائياً؟ لن يمكن التعديل بعد ذلك.')) return;
+    if (!await confirmBar('هل تريد إغلاق الجلسة نهائياً؟ لن يمكن التعديل بعد ذلك.', { tone: 'danger', confirmLabel: 'تأكيد' })) return;
     setClosing(true);
     try {
       await stockCountApi.close(session.id);

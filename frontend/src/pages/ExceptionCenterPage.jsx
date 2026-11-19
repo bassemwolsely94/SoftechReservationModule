@@ -17,6 +17,7 @@ import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import { confirmBar, notify } from '../components/ui'
 
 const money = (v) => `${Number(v || 0).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`
 const fmtAge = (min) => {
@@ -73,7 +74,7 @@ function BucketOrdersTable({ orders, onDetail, cancel }) {
               <td className="px-3 py-1.5 whitespace-nowrap">
                 <button onClick={() => onDetail(o.id)} data-tour="pos-exceptions-details"
                         className="text-xs px-2 py-1 rounded border hover:bg-gray-100 ml-1">تفاصيل</button>
-                <button onClick={() => { if (confirm(`إلغاء الأمر POS-${o.id}؟`)) cancel.mutate(o.id) }} data-tour="pos-exceptions-cancel"
+                <button onClick={async () => { if (await confirmBar(`إلغاء الأمر POS-${o.id}؟`, { tone: 'danger', confirmLabel: 'تأكيد' })) cancel.mutate(o.id) }} data-tour="pos-exceptions-cancel"
                         disabled={cancel.isPending}
                         className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 disabled:opacity-50">
                   إلغاء
@@ -148,7 +149,7 @@ export default function ExceptionCenterPage() {
   })
   const cancel = useMutation({
     mutationFn: (id) => api.post(`/pos-orders/${id}/cancel/`),
-    onError: (e) => alert(e?.response?.data?.detail || 'تعذّر الإلغاء'),
+    onError: (e) => notify.error(e?.response?.data?.detail || 'تعذّر الإلغاء'),
     onSettled: () => qc.invalidateQueries({ queryKey: ['pos-exceptions'] }),
   })
 

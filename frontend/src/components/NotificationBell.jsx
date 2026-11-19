@@ -14,6 +14,7 @@ import {
 import { notificationsApi } from '../api/client'
 import NotificationPanel from './NotificationPanel'
 import NotificationPreferencesModal from './NotificationPreferencesModal'
+import { confirmBar } from './ui'
 
 // ── Toast overlay ─────────────────────────────────────────────────────────────
 // Routine notifications get a quiet white toast; the actionable alarm tiers get a
@@ -178,7 +179,7 @@ export default function NotificationBell() {
 
   // When a notification is cleared from the panel, update local state
   const handleClearAll = async () => {
-    if (!window.confirm('هل تريد حذف جميع الإشعارات؟')) return
+    if (!await confirmBar('هل تريد حذف جميع الإشعارات؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     try {
       const { notificationsApi } = await import('../api/client')
       await notificationsApi.clearAll()

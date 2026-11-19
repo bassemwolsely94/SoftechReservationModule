@@ -375,6 +375,36 @@ def _scheduled_fast_sync():
     return run_fast_sync()
 
 
+# A plain 60-min interval job first fires 60 min AFTER the scheduler starts, so a scheduler
+# restarted more often than that (deploys after merges, sleep/wake) never runs the slow lane:
+# on 2026-11-19 it was restarted 13 times between 02:30 and 12:07 and items/customers stayed
+# 10 h old. The first run is therefore anchored on the last slow run, not on the restart.
+SLOW_LANE_START_DELAY_MIN = 2
+
+
+def _last_slow_run_start():
+    """Start time of the latest scheduled-or-manual slow/full run, or None."""
+    return (SyncRun.objects.filter(lane__in=['slow', 'full'])
+            .order_by('-started_at').values_list('started_at', flat=True).first())
+
+
+def _slow_lane_first_run(slow_min, now=None):
+    """First fire time for the slow lane: one interval after the last slow run, but never
+    sooner than a short delay after start-up (lets the web process and the fast lane settle)."""
+    import datetime as _d
+    now = now or timezone.now()
+    earliest = now + _d.timedelta(minutes=SLOW_LANE_START_DELAY_MIN)
+    try:
+        last = _last_slow_run_start()
+    except Exception as exc:   # DB not ready at start-up: keep the old behaviour
+        logger.warning('[scheduler] slow lane: last run unknown (%s) — first run in %s min',
+                       exc, slow_min)
+        return now + _d.timedelta(minutes=slow_min)
+    if last is None:
+        return earliest
+    return max(earliest, last + _d.timedelta(minutes=slow_min))
+
+
 def _scheduled_slow_sync():
     if _manual_run_in_flight('slow'):
         logger.info('[sync] slow lane tick skipped — a manual run is in flight')
@@ -2573,6 +2603,17 @@ def _run_return_window_reconcile():
         logger.error('[APScheduler] return-window reconcile failed: %s', exc)
 
 
+def _run_near_expiry_outcomes():
+    """C04 / P-28: measure what happened to near-expiry lots whose chosen action is due (local mirrors only)."""
+    try:
+        from apps.batches.near_expiry import evaluate_outcomes
+        out = evaluate_outcomes()
+        if out['closed']:
+            logger.info('[APScheduler] near-expiry outcomes: %s', out)
+    except Exception as exc:
+        logger.error('[APScheduler] near-expiry outcomes failed: %s', exc)
+
+
 def _run_cash_view_snapshot():
     """P-40: keep this Saturday's 13-week cash view for forecast-vs-actual (local DB only; one per date)."""
     try:
@@ -2622,6 +2663,16 @@ def _run_return_window_digest():
         logger.info('[APScheduler] return-window digest: %s', monthly_digest())
     except Exception as exc:
         logger.error('[APScheduler] return-window digest failed: %s', exc)
+
+
+def _run_hq_exception_digest():
+    """C32: Sunday — the top 10 open items by EGP across the engines to HQ management (in-app, once per
+    ISO week). Reads stored engine output only (apps/insights/hq_exceptions.py)."""
+    try:
+        from apps.insights.hq_exceptions import send_weekly
+        logger.info('[APScheduler] HQ exception digest sent=%s', send_weekly())
+    except Exception as exc:
+        logger.error('[APScheduler] HQ exception digest failed: %s', exc)
 
 
 def _run_receipt_check_daily():
@@ -3653,6 +3704,7 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=300,
+        next_run_time=_slow_lane_first_run(_slow_min),
     )
     # NETWORK HEALTH — probe HQ + all operational branches (6 nodes) in parallel,
     # fail-fast, every fast interval. Isolated from the sync lanes so a down node
@@ -4017,6 +4069,11 @@ def start_scheduler():
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
+    # Near-expiry worklist (C04 / P-28): daily outcome check after the 05:30 stock-expiry sweep.
+    _scheduler.add_job(
+        _run_near_expiry_outcomes, 'cron', hour=6, minute=20, id='near_expiry_outcomes',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
+    )
     # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
     _scheduler.add_job(
         _run_portal_expire_leases, 'interval', minutes=5, id='rpa_portal_expire_leases',
@@ -4204,6 +4261,10 @@ def start_scheduler():
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
+    _scheduler.add_job(   # C32: weekly HQ exception digest (Sunday, after the overnight engines)
+        _run_hq_exception_digest, 'cron', day_of_week='sun', hour=9, minute=10, id='hq_exception_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
     _scheduler.add_job(   # in-app help: weekly training digest to supervisors (Sunday, start of week)
         _help_training_digest, 'cron', day_of_week='sun', hour=8, minute=40, id='help_training_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,

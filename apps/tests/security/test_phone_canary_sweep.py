@@ -14,6 +14,7 @@ take a customer id or a typed number, is then called (with sweep.FEATURE_FLAGS_O
 A match = NUMBER_TOKEN (digits from the middle of the number — mask() keeps only the last 3) in
 the response body. Reviewed exceptions: baselines/phone_canary_leaks.txt.
 """
+import json
 import logging
 
 from django.db import transaction
@@ -42,6 +43,44 @@ def _body(resp):
         return resp.content.decode('utf-8', 'replace')
     except Exception:          # noqa: BLE001 — streaming responses
         return ''
+
+
+CONTEXT_CHARS = 40       # characters of body shown on each side of a hit (diagnostic only)
+MAX_HITS_SHOWN = 5
+
+
+def _json_paths(node, path='$'):
+    """Yield (json path, string value) for every scalar in a decoded JSON body."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _json_paths(v, f'{path}.{k}')
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _json_paths(v, f'{path}[{i}]')
+    elif node is not None:
+        yield path, str(node)
+
+
+def hit_context(body, token=None):
+    """Where the token sits in a response body, for the failure message only — it never decides
+    what counts as a hit. Returns lines: the JSON path of each value holding the token (when the
+    body is JSON) and ~CONTEXT_CHARS characters around each raw match."""
+    token = token or NUMBER_TOKEN
+    lines = []
+    try:
+        decoded = json.loads(body)
+    except (ValueError, TypeError):
+        decoded = None
+    if decoded is not None:
+        lines += [f'  field {p} = {v[:120]!r}' for p, v in _json_paths(decoded) if token in v][:MAX_HITS_SHOWN]
+    start, shown = 0, 0
+    while shown < MAX_HITS_SHOWN:
+        i = body.find(token, start)
+        if i < 0:
+            break
+        lines.append(f'  …{body[max(0, i - CONTEXT_CHARS):i + len(token) + CONTEXT_CHARS]!r}…')
+        start, shown = i + 1, shown + 1
+    return lines
 
 
 def _get(client, path):
@@ -97,13 +136,16 @@ class PhoneCanarySweepTests(TestCase):
                 clients = {'other_branch': bearer_client(user_b), 'no_phone_flag': bearer_client(user_a)}
                 adm = bearer_client(admin)
                 cls.leaks, cls.admin_sees = set(), set()
+                cls.leak_context = {}          # leak entry → where the token was found (diagnostic)
                 for path in routes:
                     if NUMBER_TOKEN in _get(adm, path)[1]:
                         cls.admin_sees.add(path)
                     for who, c in clients.items():
                         code, body = _get(c, path)
                         if code == 200 and NUMBER_TOKEN in body:
-                            cls.leaks.add(f"{who} GET {path.replace(f'/{cid}/', '/<cid>/')}")
+                            entry = f"{who} GET {path.replace(f'/{cid}/', '/<cid>/')}"
+                            cls.leaks.add(entry)
+                            cls.leak_context[entry] = hit_context(body)
         finally:
             logging.disable(previous)
 
@@ -131,4 +173,18 @@ class PhoneCanarySweepTests(TestCase):
         self.assertGreater(len(self.admin_sees), 10)
 
     def test_no_unmasked_number_for_staff_who_may_not_see_it(self):
-        assert_matches_baseline(self, 'phone_canary_leaks', self.leaks)
+        try:
+            assert_matches_baseline(self, 'phone_canary_leaks', self.leaks)
+        except AssertionError as exc:
+            # same verdict; only the message gains where each hit sits (field path + context)
+            ctx = '\n'.join(f'{entry}:\n' + '\n'.join(lines or ['  (no context)'])
+                            for entry, lines in sorted(self.leak_context.items()))
+            raise AssertionError(f'{exc}\n\nWhere the token {NUMBER_TOKEN!r} was found:\n{ctx}') from None
+
+    def test_hit_context_names_the_field_and_the_surrounding_text(self):
+        body = json.dumps({'results': [{'id': 1, 'generated_at': '2026-11-19T11:28:42.938471+00:00'}]})
+        lines = hit_context(body)
+        self.assertIn("field $.results[0].generated_at = '2026-11-19T11:28:42.938471+00:00'", lines[0])
+        self.assertTrue(any('11:28:42.938471' in l for l in lines[1:]))
+        self.assertEqual(hit_context('plain text 93847 here'), ["  …'plain text 93847 here'…"])
+        self.assertEqual(hit_context('nothing'), [])

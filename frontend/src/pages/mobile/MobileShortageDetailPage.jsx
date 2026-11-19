@@ -12,6 +12,7 @@ import { shortageApi } from '../../api/client'
 import { queuedPost } from '../../api/offlineQueue'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { ba } from '../../utils/flowArrow'
+import { confirmBar } from '../../components/ui'
 
 const STATUS_CLASS = {
   open: 'bg-orange-100 text-orange-700', submitted: 'bg-blue-100 text-blue-700', resolved: 'bg-green-100 text-green-700',
@@ -161,13 +162,13 @@ export default function MobileShortageDetailPage() {
   }
 
   async function removeItem(iid) {
-    if (!window.confirm('حذف هذا الصنف؟')) return        // as on the desktop list
+    if (!await confirmBar('حذف هذا الصنف؟', { tone: 'danger', confirmLabel: 'حذف' })) return        // as on the desktop list
     await shortageApi.deleteItem(id, iid)
     refresh()
   }
 
   async function submitList() {
-    if (!window.confirm('إرسال القائمة للمراجعة؟')) return
+    if (!await confirmBar('إرسال القائمة للمراجعة؟')) return
     await shortageApi.submit(id)
     refresh()
   }

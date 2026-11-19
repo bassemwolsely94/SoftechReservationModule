@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { customersApi } from '../api/client'
 import { fa } from '../utils/flowArrow'
+import { confirmBar } from './ui'
 
 const LABEL_OPTIONS = [
   { value: 'home',     label: '🏠 المنزل' },
@@ -202,7 +203,7 @@ export default function CustomerLocationsPanel({ customerId, readonly = false })
   }
 
   async function handleDelete(locId) {
-    if (!window.confirm('حذف هذا العنوان؟')) return
+    if (!await confirmBar('حذف هذا العنوان؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     await customersApi.deleteLocation(customerId, locId)
     invalidate()
   }

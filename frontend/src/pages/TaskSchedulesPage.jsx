@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { tasksApi, branchesApi, usersApi } from '../api/client'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
+import { confirmBar } from '../components/ui'
 
 const FREQ_LABELS = { none: 'لا تتكرر', daily: 'يومي', weekly: 'أسبوعي', monthly: 'شهري' }
 const TYPE_LABELS = {
@@ -198,7 +199,7 @@ export default function TaskSchedulesPage() {
   }
 
   const deleteSchedule = async (id) => {
-    if (!window.confirm('حذف هذا الجدول؟')) return
+    if (!await confirmBar('حذف هذا الجدول؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     try {
       await tasksApi.deleteSchedule(id)
       load()

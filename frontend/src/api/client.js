@@ -422,7 +422,8 @@ export const syncApi = {
   branchHealth: (probe = false) => api.get('/sync/branch-health/', probe ? { params: { probe: 1 } } : undefined),
   schedulerStatus: () => api.get('/sync/scheduler-status/'),
   softechLoad:  (hours = 24) => api.get('/sync/softech-load/', { params: { hours } }),
-  slowRequests: (days = 14) => api.get('/sync/slow-requests/', { params: { days } }),   // P-56
+  slowRequests: (days = 14, sort = 'p95', limit = 10) =>                               // P-56 + perf stage 1
+    api.get('/sync/slow-requests/', { params: { days, sort, limit } }),
   writerSwitches: () => api.get('/sync/writer-switches/'),                              // P-54
   // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
@@ -637,6 +638,7 @@ export const insightsApi = {
   backfill: (data = {})   => api.post('/insights/reports/backfill/', data),
   rules:    ()            => api.get('/insights/rules/'),
   updateRule: (id, data)  => api.patch(`/insights/rules/${id}/`, data),
+  exceptions: (params = {}) => api.get('/insights/exceptions/', { params }),   // C32 weekly HQ list
 }
 
 // Phone alerts (WhatsApp) admin API — admin + supervisor only (enforced server-side)
@@ -2941,6 +2943,13 @@ export const batchesApi = {
   returnWindowSavePolicy: (body)  => api.post('/batches/return-window/policies/', body),
   returnWindowExport:    (body)   => api.post('/batches/return-window/export/', body, { responseType: 'blob' }),
   returnWindowReconcile: ()       => api.post('/batches/return-window/reconcile/'),
+  // Near-expiry action worklist (C04 / P-28): lots are the server's line keys
+  nearExpiry:              (params) => api.get('/batches/near-expiry/', { params }),
+  nearExpiryChoose:        (body)   => api.post('/batches/near-expiry/choose/', body),
+  nearExpiryRequestReturn: (lots)   => api.post('/batches/near-expiry/request-return/', { lots }),
+  nearExpiryLinkTransfer:  (body)   => api.post('/batches/near-expiry/link-transfer/', body),
+  nearExpiryOutcomes:      (params) => api.get('/batches/near-expiry/outcomes/', { params }),
+  nearExpiryCheckOutcomes: ()       => api.post('/batches/near-expiry/check-outcomes/'),
 }
 
 // ── HR Workflow ───────────────────────────────────────────────────────────────

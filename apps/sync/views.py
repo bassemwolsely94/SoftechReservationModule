@@ -312,10 +312,12 @@ def softech_load(request):
 @permission_classes([IsAuthenticated, RouteModulePermission])
 def slow_requests(request):
     """
-    Top 10 slowest API endpoints over the last ?days= (default 14, max 30) by p95
-    duration, from SlowRequest (P-56: measure before optimising). Only requests
-    slower than SLOW_REQUEST_MS are recorded, so `count` is "slow calls", not all
-    calls. Admin only.
+    Slowest API endpoints over the last ?days= (default 14, max 30), from SlowRequest
+    (P-56: measure before optimising). ?sort=p95 (default) ranks by the 95th-percentile
+    duration; ?sort=total by the total time spent (a little slow but called all day costs
+    more than a rare very slow route). ?limit= rows (default 10, clamped 1..50). Each row:
+    count, p50_ms, p95_ms, max_ms, total_s. Only requests slower than SLOW_REQUEST_MS are
+    recorded, so `count` is "slow calls", not all calls. Admin only.
     """
     from datetime import timedelta
     from django.utils import timezone
@@ -328,21 +330,38 @@ def slow_requests(request):
         days = max(1, min(int(request.query_params.get('days', 14)), 30))
     except (TypeError, ValueError):
         days = 14
+    sort = request.query_params.get('sort', 'p95')
+    if sort not in ('p95', 'total'):
+        sort = 'p95'
+    try:
+        limit = max(1, min(int(request.query_params.get('limit', 10)), 50))
+    except (TypeError, ValueError):
+        limit = 10
     since = timezone.now() - timedelta(days=days)
     by_path = {}
     for path, method, ms in (SlowRequest.objects.filter(at__gte=since)
                              .values_list('path', 'method', 'duration_ms')):
         by_path.setdefault((path, method), []).append(ms)
+
+    def pct(vals, q):
+        return vals[min(len(vals) - 1, int(round(q * (len(vals) - 1))))]
+
     rows = []
     for (path, method), vals in by_path.items():
         vals.sort()
-        p95 = vals[min(len(vals) - 1, int(round(0.95 * (len(vals) - 1))))]
+        total_ms = sum(vals)
         rows.append({'path': path, 'method': method, 'count': len(vals),
-                     'p95_ms': p95, 'max_ms': vals[-1]})
-    rows.sort(key=lambda r: (-r['p95_ms'], -r['count']))
+                     'p50_ms': pct(vals, 0.50), 'p95_ms': pct(vals, 0.95), 'max_ms': vals[-1],
+                     'total_s': round(total_ms / 1000, 1), '_total_ms': total_ms})
+    if sort == 'total':
+        rows.sort(key=lambda r: (-r['_total_ms'], -r['p95_ms']))
+    else:
+        rows.sort(key=lambda r: (-r['p95_ms'], -r['count']))
+    for r in rows:
+        del r['_total_ms']
     from django.conf import settings
     return Response({'days': days, 'threshold_ms': int(getattr(settings, 'SLOW_REQUEST_MS', 1000)),
-                     'endpoints': rows[:10]})
+                     'sort': sort, 'endpoints': rows[:limit]})
 
 
 @api_view(['GET'])

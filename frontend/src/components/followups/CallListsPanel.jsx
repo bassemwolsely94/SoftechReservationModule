@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { followupsApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
 import BranchMultiSelect from '../BranchMultiSelect'
+import { ConfirmButton } from '../InlineConfirm'
 
 const SEGMENTS = [
   ['vip', 'VIP 👑'], ['loyal', 'مخلص 💚'], ['regular', 'عادي'], ['at_risk', 'في خطر ⚠️'],
@@ -236,8 +237,10 @@ export default function CallListsPanel({ branches = [], activeListId, onSelectLi
               {cl.script && <div className="text-xs text-gray-500 line-clamp-2">📝 {cl.script}</div>}
               {canCreate && cl.status === 'active' && (
                 <div className="flex justify-end">
-                  <button onClick={(e) => { e.stopPropagation(); if (confirm(`إغلاق «${cl.name}»؟ تُلغى المكالمات التي لم تتم.`)) close.mutate(cl.id) }}
-                    className="text-xs text-red-600 hover:underline">إغلاق القائمة</button>
+                  <ConfirmButton onConfirm={() => close.mutate(cl.id)} confirmLabel="إغلاق؟ تُلغى المكالمات التي لم تتم"
+                    title={`إغلاق «${cl.name}»`}
+                    armedClassName="text-xs font-bold px-2 py-0.5 rounded bg-red-600 text-white"
+                    className="text-xs text-red-600 hover:underline">إغلاق القائمة</ConfirmButton>
                 </div>
               )}
             </div>

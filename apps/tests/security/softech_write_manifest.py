@@ -75,11 +75,17 @@ WRITE_SITES = {
               'ReplicationGap.repaired_by (repair_gaps view)',
         trigger='POST pricing-approvals <pk>/force-replication/ + replication/repair/ (IsAdminRole); '
                 'jobs pricing_replication_audit / _full_audit (policy auto_repair); cmd audit_replication --repair'),
-    'apps/discount_approvals/services.py::execute_price_change': WriteSite(
+    # D-09 (owner 2026-11-19): the SQL moved into _cas_write; execute_price_change (switch, audit,
+    # status) calls it with commit=True, the rollback probe (cmd price_change_probe) with commit=False.
+    'apps/discount_approvals/services.py::_cas_write': WriteSite(
         tables=('items',), flag='PRICING_SOFTECH_WRITE_ENABLED', dry_run_default=False,
-        idempotency='request status pending/failed only (no row lock)',
-        audit='ItemPriceChangeRequest (reviewed_by, old/new/executed values)',
-        trigger='POST /api/pricing-approvals/<pk>/approve/ (IsAdminRole)'),
+        idempotency='request claimed by one conditional status UPDATE (BE-14); in ONE tran: live row read '
+                    'HOLDLOCK, already-at-target = no write, compare-and-set WHERE on the approved old '
+                    'values + live packqty/itemsalestaxp, row count must be 1, read-back before COMMIT',
+        audit='ItemPriceChangeRequest (reviewed_by, old/new/executed values, softech_conflict) + AuditLog '
+              'softech_price_change_written / _conflict / _refused',
+        trigger='POST /api/pricing-approvals/<pk>/approve/ (IsAdminRole); cmd price_change_probe --run '
+                '(always ROLLBACK TRAN)'),
     # ── finance A/P writer (doc 26 سداد) ──────────────────────────────────────────
     'apps/finance/recon_writer.py::_chequestrans_insert_sql': WriteSite(
         tables=('chequestrans',), flag='AP_RECONCILE_WRITER_ENABLED', dry_run_default=True,
@@ -242,7 +248,10 @@ WRITE_SITES = {
         idempotency="PG status + 'POS<pk>' vf2 adopt; atomic claim, one flush job (P-11)",
         audit='SoftechSalesOrder erp_payload/readback + AuditLog softech_pos_order_pushed (who) — P-16 (views)',
         trigger='POST pos-orders <pk>/push/ + flush/ (CanPushPosOrders); jobs pos_orders_flush + pos_flush_queued; '
-                'cmds flush_pos_orders / pos_probe --commit / pos_writer_live_test; replacement legs'),
+                'cmds flush_pos_orders / pos_probe --commit / pos_writer_live_test; replacement legs; '
+                'D-18 POST pos-orders checkout/ (CanOperate + CanPush, POS_SERVER_CHECKOUT switch, same '
+                'push_order — client_token advisory lock + basket hash in front); cmd pos_checkout_golden '
+                '(rollback probe, SOFTECH_PROBES_ENABLED, never commits)'),
     'apps/pos_orders/writer.py::probe_cancel': WriteSite(
         tables=('stktransm5', 'stktrans5', 'branchesales5', 'companiesitems5', 'branchesalescc5'),
         flag='SOFTECH_PROBES_ENABLED', dry_run_default=None, idempotency=None, audit='logger',

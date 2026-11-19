@@ -327,6 +327,66 @@ class GroupingTests(GLManualBase):
         self.assertEqual([g.balanced for g in self.groups(half)], [True])   # one group, not two
 
 
+OTHER = 'فرع تاني'
+
+
+class AcrossBranchesTests(GLManualBase):
+    """Finance keys a transfer between branches as one entry with a line on each branch."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.other, _ = Branch.objects.update_or_create(
+            softech_branch_id='B82', defaults={'name': OTHER, 'name_ar': OTHER})
+
+    def split(self, debit=100, credit=100, desc='وارد', **kw):
+        return [row('3280', debit=debit, desc=desc, **kw), row('1296', credit=credit, desc=desc, branch=OTHER, **kw)]
+
+    def test_halves_on_two_branches_are_one_entry(self):
+        gs = self.groups(self.split())
+        self.assertEqual(len(gs), 1)
+        g = gs[0]
+        self.assertEqual((g.merged_by, g.balanced, g.status, len(g.rows)), ('across_branches', True, 'manual', 2))
+        self.assertEqual({r.branch_name: g.line_branches[r.row_no] for r in g.rows},
+                         {BRANCH: self.branch, OTHER: self.other})
+
+    def test_groups_balancing_alone_stay_apart(self):
+        gs = self.groups(self.manual_rows(desc='اهلاك') + self.manual_rows(desc='اهلاك', branch=OTHER))
+        self.assertEqual(len(gs), 2)
+        self.assertFalse(any(g.merged_by for g in gs))
+
+    def test_halves_that_do_not_balance_together_stay_unbalanced(self):
+        gs = self.groups(self.split(credit=90))
+        self.assertEqual(sorted(g.status for g in gs), ['unbalanced', 'unbalanced'])
+        self.assertFalse(any(g.merged_by for g in gs))
+
+    def test_one_branch_alone_is_not_merged_across_branches(self):
+        gs = self.groups([row('3280', debit=100, desc='ق'), row('1296', credit=90, desc='ق', date=D2)])
+        self.assertFalse(any(g.merged_by for g in gs))
+
+    def test_a_line_on_an_unknown_branch_makes_the_entry_unknown_branch(self):
+        gs = self.groups([row('3280', debit=100, desc='و'), row('1296', credit=100, desc='و', branch='فرع مش موجود')])
+        self.assertEqual([(g.merged_by, g.status) for g in gs], [('across_branches', 'unknown_branch')])
+
+    def test_a_half_that_lost_a_reported_row_is_not_merged(self):
+        gs = self.groups(self.split() + [row('3280', debit=1.005, desc='وارد')])
+        self.assertFalse(any(g.merged_by for g in gs))
+        self.assertTrue(all(g.status == 'unbalanced' for g in gs))
+
+    def test_key_unchanged_under_shuffled_rows(self):
+        rows = self.split()
+        self.assertEqual(self.groups(rows)[0].key, self.groups(list(reversed(rows)))[0].key)
+
+    def test_imported_lines_keep_their_branch(self):
+        res = self.run_import(self.split())
+        self.assertEqual(res['imported'], 1)
+        entry = LedgerEntry.objects.get(source_type=mi.SOURCE_TYPE)
+        self.assertEqual(entry.branch, self.branch)
+        self.assertEqual({ln.account.code: ln.branch_id for ln in entry.lines.all()},
+                         {'3280': self.branch.pk, '1296': self.other.pk})
+        self.assertEqual(self.run_import(self.split())['already_imported'], 1)
+
+
 class FeedTests(GLManualBase):
     def test_effective_feed_auto_from_rules_and_maps_and_override(self):
         def get(code):

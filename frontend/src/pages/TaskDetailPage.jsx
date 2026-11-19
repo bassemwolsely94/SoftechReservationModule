@@ -8,6 +8,7 @@ import { tasksApi, branchesApi, usersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import { fa } from '../utils/flowArrow'
 import PhoneAlertStatusChip from '../components/PhoneAlertStatusChip'
+import { confirmBar } from '../components/ui'
 
 // ── Constants (shared with TasksPage) ─────────────────────────────────────────
 
@@ -263,7 +264,7 @@ function Attachments({ taskId, attachments, onRefresh }) {
   }
 
   const remove = async (att) => {
-    if (!window.confirm(`حذف "${att.file_name}"؟`)) return
+    if (!await confirmBar(`حذف "${att.file_name}"؟`, { tone: 'danger', confirmLabel: 'حذف' })) return
     try {
       await tasksApi.deleteAttachment(taskId, att.id)
       onRefresh()
@@ -493,7 +494,7 @@ export default function TaskDetailPage() {
   }
 
   const reopenTask = async () => {
-    if (!window.confirm('إعادة فتح هذه المهمة؟')) return
+    if (!await confirmBar('إعادة فتح هذه المهمة؟')) return
     try {
       await tasksApi.reopen(id)
       loadTask()

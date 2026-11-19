@@ -81,6 +81,10 @@ class ItemPriceChangeRequest(models.Model):
     STATUS_REJECTED = 'rejected'
     STATUS_EXECUTED = 'executed'
     STATUS_FAILED   = 'failed'
+    # D-09 (2026-11-19): the live SOFTECH value no longer matches what the request was approved
+    # against (someone changed it in SOFTECH since). Nothing was written; a person reviews both
+    # values (softech_conflict) and files a fresh request if the change is still wanted.
+    STATUS_SOFTECH_CHANGED = 'softech_changed'
 
     STATUS_CHOICES = [
         (STATUS_PENDING,  'في الانتظار'),
@@ -88,6 +92,7 @@ class ItemPriceChangeRequest(models.Model):
         (STATUS_REJECTED, 'مرفوض'),
         (STATUS_EXECUTED, 'منفذ في Softech'),
         (STATUS_FAILED,   'فشل في التنفيذ'),
+        (STATUS_SOFTECH_CHANGED, 'تغيّر في SOFTECH — للمراجعة'),
     ]
 
     item         = models.ForeignKey(
@@ -130,6 +135,10 @@ class ItemPriceChangeRequest(models.Model):
     erp_usercode       = models.CharField(max_length=10, blank=True, verbose_name='كود Softech للمعتمِد')
     erp_username       = models.CharField(max_length=50, blank=True, verbose_name='اسم Softech للمعتمِد')
     erp_error          = models.TextField(blank=True, verbose_name='خطأ التنفيذ')
+    # D-09: when SOFTECH changed under the request — per field {'approved': old, 'softech': live},
+    # plus the live pack size / VAT read at write time. Empty unless status is softech_changed.
+    softech_conflict   = models.JSONField(default=dict, db_default={}, blank=True,
+                                          verbose_name='اختلاف SOFTECH عن القيم المعتمدة')
 
     class Meta:
         ordering = ['-requested_at']

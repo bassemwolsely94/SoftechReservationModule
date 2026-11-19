@@ -53,7 +53,7 @@ export default function PrescriptionOcrModal({ onAdd, onClose }) {
   }
   const stopRec = () => { try { mediaRef.current?.stop() } catch { /* noop */ } setRecording(false) }
 
-  const confirm = (li, cand, rawName) => {
+  const confirmLine = (li, cand, rawName) => {
     onAdd(cand.softech_id)
     setAdded(a => ({ ...a, [li]: cand.softech_id }))
     // teach the flywheel + label the corpus sample so it resolves instantly next time; the
@@ -114,7 +114,7 @@ export default function PrescriptionOcrModal({ onAdd, onClose }) {
                   <div className="flex flex-wrap gap-1.5">
                     {(ln.candidates || []).length === 0 && <span className="text-[11px] text-gray-400">لا مطابقة — أضِفه يدويًا من البحث.</span>}
                     {(ln.candidates || []).map(c => (
-                      <button data-tour="pos-order-ocr-confirm" key={c.item_id} onClick={() => confirm(li, c, rawName)}
+                      <button data-tour="pos-order-ocr-confirm" key={c.item_id} onClick={() => confirmLine(li, c, rawName)}
                               title={`ثقة ${(c.score * 100).toFixed(0)}%${c.learned ? ' · مُتعلَّم' : ''}`}
                               className="text-[11px] rounded px-2 py-1 border bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1">
                         <span className="truncate max-w-[200px]">{c.name}</span>

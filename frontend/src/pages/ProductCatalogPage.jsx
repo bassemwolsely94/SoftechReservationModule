@@ -19,6 +19,7 @@ import { productsApi, itemsApi, pickZonesApi } from '../api/client'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import useHelpTab from '../help/useHelpTab'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { notify } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -716,7 +717,7 @@ export default function ProductCatalogPage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      alert('فشل التصدير. حاول مجدداً.')
+      notify.error('فشل التصدير. حاول مجدداً.')
     } finally {
       setExporting(false)
     }

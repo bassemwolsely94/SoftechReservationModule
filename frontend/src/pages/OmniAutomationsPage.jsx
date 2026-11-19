@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { omniApi } from '../api/client'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 const TRIGGERS = [
   { v: 'message_in', l: 'رسالة واردة' },
@@ -216,8 +217,9 @@ export default function OmniAutomationsPage() {
                   {rule.is_active ? 'مفعّلة' : 'معطّلة'}
                 </button>
                 <button data-tour="omni-automations-edit" onClick={() => setModal(rule)} className="text-xs text-gray-500 hover:text-indigo-600">✏️</button>
-                <button data-tour="omni-automations-delete" onClick={() => { if (confirm('حذف القاعدة؟')) del.mutate(rule.id) }}
-                        className="text-xs text-gray-400 hover:text-red-500">🗑️</button>
+                <ConfirmButton data-tour="omni-automations-delete" onConfirm={() => del.mutate(rule.id)} confirmLabel="حذف؟"
+                        armedClassName="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white"
+                        className="text-xs text-gray-400 hover:text-red-500">🗑️</ConfirmButton>
               </div>
             </div>
           ))}

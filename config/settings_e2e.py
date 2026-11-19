@@ -125,6 +125,11 @@ E2E_STOCK = [('E2E001', '992', 'B01', '7')]
 E2E_CUSTOMER = {'name': 'عميل الاختبار E2E', 'phone': '01099990001'}
 # POS ready uses the offline price (no SOFTECH read); it is the default, pinned here.
 POS_LIVE_PRICING = False
+# D-18 server checkout ON for the SECOND test branch only, so frontend/e2e/pos-checkout.spec.js tests
+# the new path while flows.spec.js (first branch) keeps guarding today's path. POS_WRITER_ENABLED is
+# False above, so every e2e checkout is a dry run — nothing is ever written to SOFTECH.
+POS_SERVER_CHECKOUT = True
+POS_SERVER_CHECKOUT_BRANCHES = ['992']
 
 # ── 6. its own log file (never the dev platform.log) ──────────────────────────
 os.makedirs(BASE_DIR / 'logs', exist_ok=True)  # noqa: F405

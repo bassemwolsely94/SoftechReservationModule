@@ -11,6 +11,7 @@ import { insuranceApi } from '../api/client'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import { confirmBar } from '../components/ui'
 
 const CATS = [
   { value: 'local',    label: 'محلى',   cls: 'bg-green-100 text-green-700' },
@@ -108,7 +109,7 @@ export default function InsuranceItemOverridesPage() {
     load()
   }
   const remove = async (o) => {
-    if (!window.confirm(`حذف تصويب الصنف ${o.item_code}؟`)) return
+    if (!await confirmBar(`حذف تصويب الصنف ${o.item_code}؟`, { tone: 'danger', confirmLabel: 'حذف' })) return
     await insuranceApi.deleteItemOverride(o.id); load()
   }
   const toggleAffected = async (o) => {
