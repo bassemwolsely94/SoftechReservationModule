@@ -12,7 +12,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { stockAuditApi } from '../api/client'
+import { exportJobsApi, stockAuditApi } from '../api/client'
+import useExportJob from '../hooks/useExportJob'
+import ExportJobStatus from '../components/ExportJobStatus'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import DataTable, { SortIcon } from '../components/DataTable'
 import useGridKeyboard from '../hooks/useGridKeyboard'
@@ -372,16 +374,13 @@ function FindingsGrid({ f, rules, access }) {
     ? [...pickedRows.map(r => new Set(r.next_statuses)).reduce((a, b) => new Set([...a].filter(x => b.has(x))))]
     : []
 
-  async function download() {
-    setMsg('')
-    try {
-      const { page: _p, ...q } = params
-      const r = await stockAuditApi.exportFindings(q)
-      const url = URL.createObjectURL(r.data)
-      const a = document.createElement('a'); a.href = url; a.download = `stock-audit-${f.from}-${f.to}.xlsx`; a.click()
-      URL.revokeObjectURL(url)
-    } catch { setMsg('ليس لديك صلاحية التصدير.') }
-  }
+  // Stage 4: the file is built as a background job (start → progress → download), same name as before
+  const exp = useExportJob({
+    storageKey: 'export-job:stock-audit',
+    start: () => { const { page: _p, ...q } = params; return exportJobsApi.start('/stock-audit/findings/export/', q) },
+    fileName: () => `stock-audit-${f.from}-${f.to}.xlsx`,
+  })
+  const download = () => { setMsg(''); exp.run() }
 
   return (
     <div>
@@ -390,9 +389,12 @@ function FindingsGrid({ f, rules, access }) {
         <span className="text-gray-400">· اضغط عنوان أي عمود للترتيب</span>
         {access.can_export && (
           <button data-tour="stock-audit-main-export" onClick={download}
-            className="ms-auto px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-700 font-bold">⬇️ تصدير Excel</button>
+            disabled={exp.busy}
+            className="ms-auto px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-700 font-bold disabled:opacity-50">
+            {exp.busy ? '… جارٍ تجهيز الملف' : '⬇️ تصدير Excel'}</button>
         )}
       </div>
+      <div className="flex justify-end mb-2"><ExportJobStatus exp={exp} /></div>
       {pickedRows.length > 0 && access.can_review && (
         <div className="mb-2 p-2 rounded-lg bg-primary/5 border border-primary/20 flex flex-wrap items-center gap-2" data-tour="stock-audit-main-bulk">
           <span className="text-xs font-bold text-gray-700">{pickedRows.length} محددة</span>

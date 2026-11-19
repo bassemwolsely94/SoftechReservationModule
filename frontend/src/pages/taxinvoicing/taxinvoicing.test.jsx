@@ -75,6 +75,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../../components/DataFreshnessBar', () => ({ default: () => null }))
 vi.mock('../../api/client', () => ({
   taxInvoicingApi: api,
+  exportJobsApi: { start: vi.fn(), status: vi.fn(), file: vi.fn() },   // Stage 4 export jobs
   branchesApi: { list: vi.fn(() => Promise.resolve({ data: [{ softech_branch_id: '170', name_ar: 'فرع الجيش' }] })) },
 }))
 

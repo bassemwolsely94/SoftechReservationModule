@@ -485,8 +485,8 @@ SCREENS = [
                  'الرقم جنب كل تبويب = عدد أصنافه.\n• ابدأ يومك بـ «التغييرات» (الجديد من آخر تشغيل).\n• «المرشحون» فيه فلتر بالشدة (نفاد مؤكد، نقص حاد، مراقبة) وترتيب «الأشد» أو «الأعلى خسارة».',
                  'The number next to each tab = its item count.\n• Start your day with "Changes" (what is new since the last run).\n• "Candidates" has a severity filter (confirmed out, severe, watch) and "Most severe" or "Highest loss" sorting.')},
             {'target': 'shortage-market-toolbar', 'label': T('بحث · 📥 Excel · 📱 واتساب', 'Search · 📥 Excel · 📱 WhatsApp'),
-             'text': T('علّم تصنيفاً أو أكثر وابحث بالكود أو الاسم. «📥 Excel» ينزّل التبويب، و«📱 واتساب» يجهّز نص للمورد.',
-                       'Tick one class or more and search by code or name. "📥 Excel" downloads the tab; "📱 WhatsApp" prepares a text for the supplier.'),
+             'text': T('علّم تصنيفاً أو أكثر وابحث بالكود أو الاسم. «📥 Excel» ينزّل التبويب (الملف بيتجهّز في الخلفية بشريط تقدّم وبينزل لوحده — تقدر تكمّل شغلك)، و«📱 واتساب» يجهّز نص للمورد.',
+                       'Tick one class or more and search by code or name. "📥 Excel" downloads the tab (built in the background with a progress bar; keep working meanwhile); "📱 WhatsApp" prepares a text for the supplier.'),
              'when': T('الواتساب بيفتح المحادثة بس — إنت اللي بتضغط إرسال هناك.', 'WhatsApp only opens the chat — you press send there yourself.'),
              'open_hint': T('موجود في كل التبويبات ما عدا «📈 الاتجاهات».', 'Present on every tab except "📈 Trends".'),
              'more': T(

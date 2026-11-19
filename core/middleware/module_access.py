@@ -262,8 +262,10 @@ def required(path, method):
         return None
     # Performance Stage 4: starting an export job (POST …/export/jobs/) asks what the direct export
     # (GET …/export/) asked — it builds the same file; the view keeps the export's own checks.
-    if method.upper() == 'POST' and path.endswith('/export/jobs/'):
-        return required(path[:-len('jobs/')], 'GET')
+    if method.upper() == 'POST' and path.endswith('/jobs/'):
+        from apps.access.policy import is_export
+        if is_export(path[:-len('jobs/')]):
+            return required(path[:-len('jobs/')], 'GET')
     # Small daily counts (Project 2) have their own gate, like /api/stock-audit/: every salesperson
     # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
     # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)

@@ -17,7 +17,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { purchasingApi, branchesApi, syncApi } from '../api/client'
+import { purchasingApi, branchesApi, syncApi, exportJobsApi } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
@@ -1632,7 +1632,6 @@ export default function PurchasingDashboard() {
   // Pivot demand-sheet horizon (empty = engine's 1-month; e.g. 0.8 = fill to 0.8 mo)
   const [pivotCoverage, setPivotCoverage] = useState('')
   const [pivotRoundAt,  setPivotRoundAt]  = useState('total')   // total | branch
-  const [exporting,    setExporting]    = useState(false)
   const exportRef = useRef(null)
 
   // Close export dropdown on outside click
@@ -1678,50 +1677,33 @@ export default function PurchasingDashboard() {
   }, [viewTab, exportBranch, exportAbc, pivotCoverage, pivotRoundAt, exportJob])
 
   // Experimental ADVANCED pathway — parallel current-vs-advanced comparison sheet.
-  const handleAdvancedExport = useCallback(async () => {
-    setExporting(true)
+  // (Stage 4: both advanced files are background jobs too, same names as before)
+  const advJob = useExportJob({
+    storageKey: 'export-job:purchasing-advanced',
+    start: (params) => exportJobsApi.start('/purchasing/advanced-export/', params),
+    fileName: () => `purchasing-advanced-${new Date().toISOString().slice(0, 10)}.xlsx`,
+  })
+  const handleAdvancedExport = useCallback(() => {
     setExportOpen(false)
-    try {
-      const res  = await purchasingApi.advancedExport({
-        branch:    exportBranch.length ? exportBranch.join(',') : undefined,
-        abc_class: exportAbc.length    ? exportAbc.join(',')    : undefined,
-        budget:    advBudget    || undefined,
-      })
-      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href = url
-      a.download = `purchasing-advanced-${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error('Advanced export failed', err)
-      toast.error('فشل التصدير المتقدم — قد يستغرق وقتاً على كل الفروع؛ جرّب فرعاً واحداً')
-    } finally {
-      setExporting(false)
-    }
-  }, [exportBranch, exportAbc, advBudget, toast])
+    advJob.run({
+      branch:    exportBranch.length ? exportBranch.join(',') : undefined,
+      abc_class: exportAbc.length    ? exportAbc.join(',')    : undefined,
+      budget:    advBudget    || undefined,
+    })
+  }, [exportBranch, exportAbc, advBudget, advJob])
 
   // Advanced SUPPLIER pivot — one row per item, per-branch cols, pack rounding.
-  const handleAdvancedPivotExport = useCallback(async () => {
-    setExporting(true)
+  const advPivotJob = useExportJob({
+    storageKey: 'export-job:purchasing-adv-pivot',
+    start: () => exportJobsApi.start('/purchasing/advanced-pivot-export/', {}),   // network-wide (all branches)
+    fileName: () => `advanced-supplier-order-${new Date().toISOString().slice(0, 10)}.xlsx`,
+  })
+  const handleAdvancedPivotExport = useCallback(() => {
     setExportOpen(false)
-    try {
-      const res = await purchasingApi.advancedPivotExport({})   // network-wide (all branches)
-      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href = url
-      a.download = `advanced-supplier-order-${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error('Advanced pivot export failed', err)
-      toast.error('فشل تصدير طلب الموردين — قد يستغرق دقيقة على كل الأصناف')
-    } finally {
-      setExporting(false)
-    }
-  }, [toast])
+    advPivotJob.run()
+  }, [advPivotJob])
+  const exportJobs = [exportJob, advJob, advPivotJob]
+  const exporting = exportJobs.some(j => j.busy)
 
   // ── Engine params dialog ──────────────────────────────────────────────────
   const [paramsOpen,  setParamsOpen]  = useState(false)
@@ -2278,16 +2260,16 @@ export default function PurchasingDashboard() {
             <div className="relative" ref={exportRef}>
               <button data-tour="purchasing-engine-export"
                 onClick={() => setExportOpen(v => !v)}
-                disabled={exporting || exportJob.busy}
+                disabled={exporting}
                 className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700
                            hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
               >
-                {exporting || exportJob.busy ? '⏳ جارٍ التصدير...' : '⬇ تصدير'}
+                {exporting ? '⏳ جارٍ التصدير...' : '⬇ تصدير'}
               </button>
-              {!exportOpen && (exportJob.running || exportJob.error) && (
+              {!exportOpen && exportJobs.some(j => j.running || j.error) && (
                 <div className="absolute left-0 top-full mt-1 z-40 w-72 rounded-lg border border-gray-200 bg-white p-2 shadow"
                   data-tour="purchasing-engine-export-progress">
-                  <ExportJobStatus exp={exportJob} className="w-full" />
+                  {exportJobs.map((j, i) => <ExportJobStatus key={i} exp={j} className="w-full" />)}
                 </div>
               )}
 

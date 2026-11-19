@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 
+from apps.export_jobs import views as export_job_views
 from core.csp import csp_report
 from core.media import serve_media
 
@@ -87,6 +88,12 @@ urlpatterns = [
     # Uploads: signature-checked (core/storage.py, core/media.py) in every mode,
     # not just DEBUG — protected files need a signed, unexpired URL.
     path('media/<path:path>', serve_media, name='media'),
+    # Stage 4: start a whitelisted export as a background job — its own path + jobs/. LAST, so every
+    # app's own route (pic-analytics, purchasing export/jobs/) wins; anything not whitelisted is a 404.
+    # `rest` = the export's own path under /api/ (ends with '/'). The security sweeps cannot render a
+    # pattern without a concrete path, so they skip it; apps/tests/test_export_jobs_views.py covers it
+    # (no grant -> 403, not whitelisted -> 404, module gate of the export's own prefix).
+    re_path(r'^api/(?P<rest>(?:[\w.-]+/)+)jobs/$', export_job_views.start_view_export, name='export-job-start'),
 ]
 
 # N0/H9: Django admin has no 2FA, so it is mounted only when DJANGO_ADMIN_ENABLED (default: off — SEC-4).

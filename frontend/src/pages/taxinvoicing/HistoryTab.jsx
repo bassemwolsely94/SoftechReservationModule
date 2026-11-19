@@ -4,7 +4,9 @@
  */
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { taxInvoicingApi } from '../../api/client'
+import { exportJobsApi, taxInvoicingApi } from '../../api/client'
+import useExportJob from '../../hooks/useExportJob'
+import ExportJobStatus from '../../components/ExportJobStatus'
 import SortTh from '../../components/SortTh'
 import ReconSection from './ReconSection'
 import useServerSort from '../../hooks/useServerSort'
@@ -110,15 +112,21 @@ export default function HistoryTab({ me }) {
   const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) },
     { allowed: kind === 'documents' ? DOC_SORT : RECEIPT_SORT, defaultOrdering: '-issued_at' })
   const data = list.data
-  const exportFile = () => act.run(() => taxInvoicingApi.historyExport(kind, { ...params, page: undefined }), r => {
-    save(r instanceof Blob ? r : new Blob([r]), `eta-${kind}-${system}.xlsx`)
-    return 'تم التصدير'
+  // Stage 4: the file is built as a background job (start → progress → download)
+  const exp = useExportJob({
+    storageKey: 'export-job:eta-history',
+    start: () => exportJobsApi.start(`/tax-invoicing/history/${kind}/export/`, { ...params, page: undefined }),
   })
+  const exportFile = () => exp.run()
 
   return (
     <Section title="سجل المصلحة" data-tour="tax-invoicing-main-history"
       hint="نسخة للقراءة فقط مما تحتفظ به المصلحة لكل منظومة. لا يُرسل شيء من هنا."
-      actions={<Btn disabled={act.pending || !data?.count} onClick={exportFile} data-tour="tax-invoicing-main-history-export">تصدير Excel</Btn>}>
+      actions={<>
+        <Btn disabled={exp.busy || !data?.count} onClick={exportFile} data-tour="tax-invoicing-main-history-export">
+          {exp.busy ? '… جارٍ تجهيز الملف' : 'تصدير Excel'}</Btn>
+        <ExportJobStatus exp={exp} className="w-56" />
+      </>}>
       <div className="flex flex-wrap items-end gap-2 mb-3">
         <div className="flex rounded-md border border-gray-200 overflow-hidden" role="group" aria-label="المنظومة">
           {SYSTEMS.map(([k, label]) => (

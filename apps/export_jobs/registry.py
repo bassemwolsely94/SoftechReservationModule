@@ -48,12 +48,20 @@ KINDS = {
 
 
 def get_kind(key) -> ExportKind:
+    if key.startswith('v:'):                 # a whitelisted export view replayed as a job (view_kinds.py)
+        from .view_kinds import kind_for
+        return kind_for(key)
     if key not in KINDS:
         raise KeyError(f'unknown export kind {key!r}')
     module, attr = KINDS[key].split(':')
     return getattr(import_module(module), attr)
 
 
+def all_kinds():
+    from .view_kinds import VIEW_EXPORTS
+    return [*KINDS, *VIEW_EXPORTS]
+
+
 def service_kinds():
     """Kinds the jobs service may run (no live SOFTECH read)."""
-    return [k for k in KINDS if not get_kind(k).needs_softech]
+    return [k for k in all_kinds() if not get_kind(k).needs_softech]
