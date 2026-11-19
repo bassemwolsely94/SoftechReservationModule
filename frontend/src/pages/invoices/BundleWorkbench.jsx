@@ -4,6 +4,7 @@ import BranchSelect from '../../components/BranchSelect'
 import VendorTemplateEditor from './VendorTemplateEditor'
 import { ba } from '../../utils/flowArrow'
 import DuplicateNotice from './DuplicateNotice'
+import { notify } from '../../components/ui'
 
 /**
  * Multi-invoice PDF bundle review workbench.
@@ -159,7 +160,7 @@ function BundleDetail({ batchId, onBack, onOpenInvoice }) {
   const reprocess = async () => {
     setReprocessing(true)
     try { await invoicesApi.reprocessBatch(batchId); load() }
-    catch (e) { alert(e.response?.data?.detail || 'تعذّرت إعادة التقسيم') }
+    catch (e) { notify.error(e.response?.data?.detail || 'تعذّرت إعادة التقسيم') }
     finally { setReprocessing(false) }
   }
 

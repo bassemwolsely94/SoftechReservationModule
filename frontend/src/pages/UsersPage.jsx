@@ -10,6 +10,7 @@ import BranchSelect from '../components/BranchSelect'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { notify } from '../components/ui'
 
 // Server-side ordering: DRF `ordering` whitelist on /users/staff/ (the list is paged).
 const USER_SORT_KEYS = ['user__first_name', 'softech_username', 'role', 'branch__name', 'is_active']
@@ -72,7 +73,7 @@ function EditModal({ staffId, roles, branches, onClose, onSaved }) {
       await usersApi.resetPassword(staffId, resetPwd)
       setResetPwd('')
       setError('')
-      alert('تم إعادة تعيين كلمة المرور بنجاح')
+      notify.success('تم إعادة تعيين كلمة المرور بنجاح')
     } catch (e) { setError(e.response?.data?.error || 'فشل إعادة تعيين كلمة المرور') }
   }
 

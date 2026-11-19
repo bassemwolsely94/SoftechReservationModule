@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../api/client'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { notify } from '../components/ui'
 
 const CATEGORY_AR = {
   journal:   'يومية',
@@ -84,10 +85,10 @@ export default function FinanceSchemaPage() {
   const discoverMut = useMutation({
     mutationFn: () => financeApi.triggerDiscover(),
     onSuccess:  () => {
-      alert('بدأ اكتشاف المخطط في الخلفية. انتظر 2-3 دقائق ثم أعد التحميل.')
+      notify.success('بدأ اكتشاف المخطط في الخلفية. انتظر 2-3 دقائق ثم أعد التحميل.')
       setTimeout(() => refetch(), 5000)
     },
-    onError: (err) => alert(`خطأ: ${err.response?.data?.detail || err.message}`),
+    onError: (err) => notify.error(`خطأ: ${err.response?.data?.detail || err.message}`),
   })
 
   const updateMut = useMutation({

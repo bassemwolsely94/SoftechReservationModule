@@ -10,6 +10,7 @@
  *   <button onClick={() => printReservationReceipt(reservation)}>طباعة</button>
  */
 import { escapeDeep } from '../utils/escapeHtml'
+import { notify } from './ui'
 
 // ── Status labels ─────────────────────────────────────────────────────────────
 const STATUS_AR = {
@@ -491,7 +492,7 @@ export function printReservationReceipt(reservation) {
   const html   = buildReservationHTML(escapeDeep(reservation))   // SEC-2: data is escaped, templates unchanged
   const win    = window.open('', '_blank', 'width=400,height=700')
   if (!win) {
-    alert('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال')
+    notify.warning('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال')
     return
   }
   win.document.write(html)
@@ -508,7 +509,7 @@ export function printTransferReceipt(transfer) {
   const html = buildTransferHTML(escapeDeep(transfer))   // SEC-2
   const win  = window.open('', '_blank', 'width=400,height=700')
   if (!win) {
-    alert('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال')
+    notify.warning('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال')
     return
   }
   win.document.write(html)

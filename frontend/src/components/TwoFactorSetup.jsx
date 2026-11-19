@@ -31,7 +31,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
     return () => { alive = false }
   }, [mfaToken])
 
-  async function confirm() {
+  async function confirmCode() {
     if (code.trim().length < 6) { setError('أدخل الرمز المكوّن من 6 أرقام'); return }
     setSubmitting(true); setError('')
     try {
@@ -102,7 +102,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
               maxLength={6}
               value={code}
               onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-              onKeyDown={e => { if (e.key === 'Enter') confirm() }}
+              onKeyDown={e => { if (e.key === 'Enter') confirmCode() }}
               placeholder="000000"
               data-tour="general-security-code"
               className="input-field w-full text-center text-2xl tracking-[0.4em] font-mono"
@@ -115,7 +115,7 @@ export default function TwoFactorSetup({ mfaToken = null, onComplete, onCancel }
             {onCancel && (
               <button onClick={onCancel} disabled={submitting} className="btn-secondary flex-1">إلغاء</button>
             )}
-            <button data-tour="general-security-confirm" onClick={confirm} disabled={submitting} className="btn-primary flex-1 disabled:opacity-50">
+            <button data-tour="general-security-confirm" onClick={confirmCode} disabled={submitting} className="btn-primary flex-1 disabled:opacity-50">
               {submitting ? 'جارٍ التأكيد...' : 'تأكيد وتفعيل'}
             </button>
           </div>

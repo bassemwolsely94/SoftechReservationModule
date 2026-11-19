@@ -27,6 +27,7 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
 import MultiSelectFilter from './MultiSelectFilter'
 import BranchMultiSelect from './BranchMultiSelect'
+import { notify } from './ui'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -225,7 +226,7 @@ function DetailPanel({ transit, onClose, onAction }) {
         : await transitsApi.exportPicking(transit.id)
       saveExportResponse(res, `${mode}_${transit.erp_doc_number}.xlsx`)
     } catch {
-      alert(mode === 'stocking' ? 'خطأ في تصدير ورقة الترصيص' : 'خطأ في تصدير ورقة التجميع')
+      notify.error(mode === 'stocking' ? 'خطأ في تصدير ورقة الترصيص' : 'خطأ في تصدير ورقة التجميع')
     } finally {
       setExporting('')
     }
