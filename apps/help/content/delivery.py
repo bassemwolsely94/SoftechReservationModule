@@ -659,7 +659,7 @@ SCREENS = [
                      'وإرسال رابط التتبع للعميل. إجراءات تغيير الحالة تتم من لوحة التوزيع وتطبيق السائق.',
                      'Follow delivery orders on the phone: status, "late" flag, and order details (call, WhatsApp, location, items, driver, status log), '
                      'and send the tracking link to the customer. Status changes are done from the dispatch board and the driver app.'),
-        'audience': T('مسؤول التوزيع والمديرون والكول سنتر.', 'The dispatcher, managers and the call center.'),
+        'audience': T('المنسق والمديرون والكول سنتر، وكل من له صلاحية التوصيل.', 'The dispatcher, managers and the call center, and anyone with delivery access.'),
         'steps': [T('اضغط طلباً ثم «إرسال رابط التتبع للعميل» لو سأل عن طلبه.', 'Tap an order, then "Send tracking link" if the customer asks about it.')],
         'related': ['delivery.dashboard'],
         'tour': [
@@ -704,7 +704,7 @@ SCREENS = [
                        'Every status change: by whom and when. Status changes themselves are made on the delivery board or the driver app.'),
              'open_hint': T('افتح طلب له سجل حالات.', 'Open an order that has a status log.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية التوصيل في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives delivery access'),
     },
 ]

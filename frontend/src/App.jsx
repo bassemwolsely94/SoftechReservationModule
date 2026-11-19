@@ -229,21 +229,23 @@ const queryClient = new QueryClient({
 // `roles` (when present) gates the tab; MobileLayout filters by the user's role. Reservations /
 // transfers follow the matrix's view grant (Batch 4, Z-11i — delivery / purchasing saw tabs that
 // loaded nothing); roles without reservations land on «لوحتي» (MobileReservationsPage redirects).
+// Demand, shortage, delivery, approvals, vouchers and stock count follow the matrix's view grant too
+// (UAT W2, owner 2026-11-19): the role lists here hid tabs whose data the server serves those roles.
 const MOBILE_TABS = [
   { to: '/m/me',           label: 'لوحتي',      icon: '🙋' },
   { to: '/m/pos',          label: 'نقطة البيع', icon: '🧾', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'] },
   { to: '/m/reservations', label: 'الحجوزات',  icon: '📋', roles: MOBILE_RESERVATION_ROLES },
   { to: '/m/transfers',    label: 'التحويلات', icon: '🔀', roles: MOBILE_TRANSFER_ROLES },
-  { to: '/m/demand',       label: 'الطلب الضائع', icon: '🔍', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
-  { to: '/m/shortage',     label: 'النواقص',   icon: '🚨', roles: ['admin', 'pharmacist', 'call_center', 'salesperson', 'purchasing', 'supervisor', 'quality_manager'] },
-  { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', roles: ['admin', 'call_center', 'supervisor', 'quality_manager', 'pharmacist'] },
-  { to: '/m/approvals',    label: 'الموافقات', icon: '✔️', roles: ['admin', 'supervisor', 'purchasing'], badge: 'approvals' },
+  { to: '/m/demand',       label: 'الطلب الضائع', icon: '🔍', module: 'demand' },
+  { to: '/m/shortage',     label: 'النواقص',   icon: '🚨', module: 'shortage' },
+  { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', module: 'delivery' },
+  { to: '/m/approvals',    label: 'الموافقات', icon: '✔️', module: 'approvals', badge: 'approvals' },
   { to: '/m/items',        label: 'الأصناف',   icon: '🔎' },
   { to: '/m/customers',    label: 'العملاء',   icon: '👥', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
-  { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
+  { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', module: 'vouchers' },
   { to: '/m/tasks',        label: 'المهام',    icon: '✅', module: 'tasks' },
   { to: '/m/daily-count',  label: 'جردي اليوم', icon: '🧮', feature: 'daily_count' },
-  { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', roles: ['admin', 'pharmacist', 'supervisor', 'quality_manager'] },
+  { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', module: 'stockcount' },
   { to: '/m/qa',           label: 'مراجعة الجودة', icon: '🧹', roles: ['admin', 'quality_manager', 'supervisor', 'pharmacist'] },
   { to: '/m/attendance',   label: 'الحضور',    icon: '🕐' },
   { to: '/m/my-incentives', label: 'حوافزي',   icon: '🏅' },

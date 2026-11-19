@@ -495,7 +495,7 @@ SCREENS = [
         'title': T('الموافقات (موبايل)', 'Approvals (mobile)'),
         'summary': T('قرار سريع من الموبايل بتبديل بين «تشغيلية» (موافقات تشغيلية + طلبات تغيير السعر/الخصم) و«HR» (إجازات، إضافي، سلف، مصروفات). الطلب المتأخر عليه علامة.',
                      'Quick decisions on the phone with a toggle between "Operational" (operational approvals + price/discount change requests) and "HR" (leave, overtime, advances, expenses). Late requests are flagged.'),
-        'audience': T('المدير والمشرف والمشتريات.', 'Admins, supervisors and purchasing.'),
+        'audience': T('الأدمن والمشرفون والمشتريات والصيادلة ومدير الجودة.', 'Admins, supervisors, purchasing, pharmacists and the quality manager.'),
         'tabs': [
             {'key': 'operational', 'title': T('تشغيلية', 'Operational'), 'body': T('الموافقات التشغيلية وطلبات تغيير الأسعار.', 'Operational approvals and price change requests.')},
             {'key': 'hr', 'title': T('HR', 'HR'), 'body': T('طلبات الموارد البشرية.', 'HR requests.')},
@@ -573,9 +573,9 @@ SCREENS = [
              'warn': T('مافيش تراجع بعد التأكيد. «إلغاء» يقفل النافذة من غير قرار.', 'No undo after confirming. "Cancel" closes the sheet without a decision.'),
              'open_hint': _SHEET},
         ],
-        'updated': '2026-10-30',
+        'updated': '2026-11-19',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية الموافقات في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives approvals access'),
     },
     {
         'key': 'hr.attendance',
@@ -851,8 +851,8 @@ SCREENS = [
              'warn': T('بعد الإرسال مش ممكن تعدّل. ولازم بند واحد على الأقل متقيّم.', 'No edits after submitting. At least one item must be graded.'),
              'open_hint': _QA_OPEN},
         ],
-        'updated': '2026-11-05',
+        'updated': '2026-11-19',
     
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'change_note': T('المراجعات للأدمن ومدير الجودة والمشرفين والصيادلة فقط، قراءة وتسجيلاً', 'Inspections are for admin, the quality manager, supervisors and pharmacists only, to read or file'),
     },
 ]

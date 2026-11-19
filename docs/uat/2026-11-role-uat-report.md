@@ -112,6 +112,19 @@ URL what the menu says it may not see — tighten the server to the matrix (D5) 
 | `/m/qa` (`qa/inspections`) | 6 | `/analytics/transfers` | 2 (salesperson, salesperson@B) |
 | `/m/approvals` (pricing + pending approvals) | 6 | `/demand/dashboard`, `/demand/recovery` | purchasing |
 
+**Resolution (2026-11-19, owner's per-screen split).** None of the 60 was the server looser than the matrix:
+the copy enforces the matrix and every API that answered is granted there. The menus hid them through
+hand-written role lists narrower than the matrix. Per screen:
+
+| screen | resolution |
+|---|---|
+| `/m/delivery`, `/m/vouchers`, `/m/stock-count`, `/m/demand`, `/m/shortage`, `/m/approvals` | menu follows the matrix: the tabs show by the module's view grant |
+| `/demand/dashboard` | menu follows the matrix: new Analytics link «تحليلات الطلب الضائع» (analytics view; purchasing included). `/demand/recovery` stays under «الطلب الضائع» (its actions are demand work) |
+| `/salesperson-board` | server narrowed to the analysts (`ANALYST_ROLES`: admin, supervisor, purchasing), reads too |
+| `/analytics/transfers` | server narrowed: `transfers/analytics` needs analytics view (middleware + view), not the transfers grant |
+| `/m/qa` | server narrowed: QA inspections only for roles the registry marks `qa_inspections` (admin, pharmacist, supervisor, quality manager), reads and writes — every role's hr self-service grant used to let call center, purchasing, salesperson, delivery and viewer read and (with hr create) file them |
+| `/recommendations`, `/purchasing` (`runs/latest`) | not leaks: product pairings are read-open for the POS by design (Z-1); `runs/latest` is the engine's run status (Market Shortage, shortage view). Moved to doubtful |
+
 Doubtful P1 (34 rows — only a setup or picker call answers, no business data): `/stock-audit` 12
 (`stock-audit/me`), `/callcenter` 11 (PBX/WebRTC config), `/inventory`, `/analytics`, `/analytics/sales` 3 each
 (item filter options), `/demand` 2 (staff list).
@@ -229,7 +242,7 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
 - **Owner decisions:** D4 real roles (then switch `SELF_APPROVAL_ADMIN_EXEMPT` off); voucher OTP visible to
   staff; `DAILY_COUNT_ENABLED` at go-live; quality manager `hr:create`; delivery cash rules (above);
   office `DEBUG` off; the rider-shell menu (W2 P2).
-- **Follow-up fixes:** the 60 W2 P1 screens (server gates to the matrix); 126 unhandled-403 screens should say
+- **Follow-up fixes:** ~~the 60 W2 P1 screens~~ (resolved, `claude/uat-server-gates`, see W2); 126 unhandled-403 screens should say
   "no access"; `/market-shortage` loading (`purchasing/runs/active` 404); backend role lists still looser than
   the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons); the 103
   stricter-than-matrix checks (W3).

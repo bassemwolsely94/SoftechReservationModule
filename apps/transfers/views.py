@@ -969,6 +969,11 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         profile = _profile(request)
         if not profile:
             return Response({'detail': 'مطلوب تسجيل الدخول'}, status=status.HTTP_401_UNAUTHORIZED)
+        # an Analytics hub report: analytics view, as the middleware maps it (UAT W2, 2026-11-19)
+        from core.permissions import deny_unless
+        denied = deny_unless(request, 'analytics', 'view')
+        if denied is not None:
+            return denied
 
         days = max(1, min(int(request.query_params.get('days', 30)), 365))
         since = timezone.now() - timedelta(days=days)

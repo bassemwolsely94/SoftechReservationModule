@@ -437,6 +437,10 @@ def required(path, method):
                            ('delete',) if method == 'DELETE' else _POST_ACTIONS)
     if safe and prefix == 'reservations' and parts[3:4] == ['analytics']:
         return 'analytics', ('view',)
+    # Transfer analytics is the Analytics hub's «التحويلات» tab, network-wide: analytics view, not the
+    # transfers grant salespeople hold for their own requests (UAT W2, owner 2026-11-19)
+    if safe and prefix == 'transfers' and parts[3:4] == ['analytics']:
+        return 'analytics', ('view',)
     # Pick-zone classify runs from the product screens (catalog); preview only computes (Z-7c)
     if prefix == 'transits' and parts[3:5] == ['pick-zones', 'classify-items']:
         return 'catalog', ('view',)

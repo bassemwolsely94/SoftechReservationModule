@@ -658,7 +658,7 @@ SCREENS = [
         'title': T('النواقص (موبايل)', 'Shortages (mobile)'),
         'summary': T('تسجيل النواقص من بين الأرفف: افتح قائمة (أو أنشئ واحدة بعنوان اختياري)، أضف الصنف الناقص بسرعة، أو الصق قائمة، أو بالصوت، أو بصورة، ثم «إرسال القائمة». يعمل بدون إنترنت مؤقتاً.',
                      'Record shortages in the aisle: open a list (or create one with an optional title), add missing items quickly, or paste a list, use voice or a photo, then "Submit list". Works briefly offline.'),
-        'audience': T('العاملون في الفروع.', 'Branch staff.'),
+        'audience': T('موظفو الفروع، وكل من له صلاحية النواقص.', 'Branch staff, and anyone with shortage access.'),
         'tips': [T('بتشوف قوائم فرعك بس.', "You see your own branch's lists only.")],
         'steps': [
             T('«قائمة نواقص جديدة» ← «إنشاء وبدء التسجيل».', '"New shortage list" → "Create and start".'),
@@ -738,7 +738,7 @@ SCREENS = [
                        'After pasting, or after "📷 Photo" fills the lines — review them first. Offline, it imports once the connection is back (📴).'),
              'open_hint': T('اضغط «📋 لصق قائمة» في قائمة مفتوحة.', 'Tap "📋 Paste a list" in an open list.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية النواقص في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives shortage access'),
     },
 ]

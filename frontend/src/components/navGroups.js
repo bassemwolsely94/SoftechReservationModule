@@ -112,6 +112,10 @@ export const NAV_GROUPS = [
       { to: '/targets',     icon: '🎯', label: 'الأهداف البيعية',  roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/kpi-board',   icon: '📊', label: 'لوحة مؤشرات الفروع', roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/salesperson-board', icon: '🧑‍💼', label: 'متابعة المندوبين', roles: ['admin','supervisor','purchasing'] },
+      // The lost-demand dashboard is an analytics page (the server checks analytics view): purchasing
+      // holds analytics but not demand, so it had no menu way in (UAT W2, owner 2026-11-19). The
+      // recovery list stays under «الطلب الضائع»: its follow-up actions are demand work.
+      { to: '/demand/dashboard', icon: '🔍', label: 'تحليلات الطلب الضائع', roles: null, module: 'analytics' },
       { to: '/forecast-scenarios', icon: '🔮', label: 'سيناريوهات التنبؤ', roles: ['admin','supervisor','purchasing'] },
       { to: '/insights',    icon: '📋', label: 'التقارير السردية', roles: ['admin','supervisor','purchasing','quality_manager','viewer'] },
       { to: '/referral-stats', icon: '🩺', label: 'إحالات الأطباء', roles: ['admin','supervisor','pharmacist','quality_manager','viewer'] },

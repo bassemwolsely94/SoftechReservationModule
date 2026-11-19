@@ -18,15 +18,17 @@ class Role:
     mfa_required: bool = True          # new roles default to 2FA (fail closed)
     legacy_rbac_mode: bool = False     # True = follows RBAC_ENFORCEMENT (log/enforce);
                                        # False = matrix always enforced (new roles)
+    qa_inspections: bool = False       # works branch QA inspections (/api/qa/, /m/qa) on top of the
+                                       # hr grant every role holds for self-service (UAT W2, 2026-11-19)
 
 
 ROLES: tuple[Role, ...] = (
     Role('admin', 'مدير النظام', 'Admin', 'Admin — Full Access',
-         all_branches=True, mfa_required=True, legacy_rbac_mode=True),
+         all_branches=True, mfa_required=True, legacy_rbac_mode=True, qa_inspections=True),
     Role('call_center', 'كول سنتر', 'Call center', 'Call Center — All Branches',
          all_branches=True, mfa_required=False, legacy_rbac_mode=True),
     Role('pharmacist', 'صيدلاني', 'Pharmacist', 'Pharmacist — Own Branch',
-         all_branches=False, mfa_required=False, legacy_rbac_mode=True),
+         all_branches=False, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True),
     Role('salesperson', 'مندوب مبيعات', 'Salesperson', 'Sales Person — Own Branch',
          all_branches=False, mfa_required=False, legacy_rbac_mode=True),
     Role('purchasing', 'مشتريات', 'Purchasing', 'Purchasing — HQ Only',
@@ -36,9 +38,9 @@ ROLES: tuple[Role, ...] = (
     Role('viewer', 'مشاهد فقط', 'Viewer', 'Viewer — Read Only',
          all_branches=False, mfa_required=False, legacy_rbac_mode=True),
     Role('supervisor', 'مشرف', 'Supervisor', 'Supervisor — Call Center Supervisor',
-         all_branches=True, mfa_required=True, legacy_rbac_mode=True),
+         all_branches=True, mfa_required=True, legacy_rbac_mode=True, qa_inspections=True),
     Role('quality_manager', 'مدير الجودة', 'Quality manager', 'Quality Manager — QA & Scoring',
-         all_branches=True, mfa_required=False, legacy_rbac_mode=True),
+         all_branches=True, mfa_required=False, legacy_rbac_mode=True, qa_inspections=True),
     # finance data is company-level (ruling R7, security decision B-1)
     Role('accountant', 'محاسب', 'Accountant', 'Accountant — General Ledger',
          all_branches=True, mfa_required=False, legacy_rbac_mode=True),
@@ -50,6 +52,7 @@ ROLE_BY_KEY: dict[str, Role] = {r.key: r for r in ROLES}
 ALL_BRANCH_ROLES: tuple[str, ...] = tuple(r.key for r in ROLES if r.all_branches)
 MFA_REQUIRED_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.mfa_required)
 LEGACY_RBAC_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.legacy_rbac_mode)
+QA_INSPECTION_ROLES: frozenset[str] = frozenset(r.key for r in ROLES if r.qa_inspections)
 
 
 def role_label(key: str, lang: str = 'ar') -> str:
