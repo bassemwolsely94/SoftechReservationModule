@@ -628,8 +628,8 @@ def _report_history(basket, run, outcome, payload, device, now, *, late=False):
     if outcome == 'history_found' and not orders and not (reading and _unreadable_orders(payload)):
         outcome = 'error'                    # "found" with nothing readable proves nothing
     if outcome not in HISTORY_OUTCOMES:
-        if late:                             # e.g. the wrong account: the closed run keeps its outcome
-            run.save(update_fields=['steps'])
+        if late:                             # e.g. the wrong account: proves nothing, not taken in
+            raise RunConflict()
         else:
             _close(run, outcome if outcome in PERSON_OUTCOMES else 'error', now)
         return basket
@@ -656,7 +656,11 @@ def _report_history(basket, run, outcome, payload, device, now, *, late=False):
         step['note'] = f'{len(orders)} order(s) in the window, all on other baskets'
     pull_back = settled != 'history_none' and basket.status in PULL_BACK
     if late and not (pull_back or (settled != 'history_none' and basket.status == 'needs_person')):
-        # nothing to act on (no order, or the order is recorded): kept for the record only
+        # nothing to act on (no order, or the order is recorded): kept for the record, once - any
+        # further such answer (a lost reply, retried) is refused, so the run never grows without end
+        if any(isinstance(s, dict) and s.get('label') == 'order_history' and 'orders' in s
+               for s in run.steps or []):
+            raise RunConflict()
         step['note'] = f'{step["note"]} (read closed by a person before it came)'.strip()
         run.steps = list(run.steps or []) + [step]
         run.save(update_fields=['steps'])
@@ -742,38 +746,60 @@ def _submit_seen_late(basket, run, payload, device, now):
 LIVE_BASKETS = ('pending', 'ready', 'in_progress', 'awaiting_submit')
 
 
+# a newer basket of the same lines that already has a person or an order: flagged, status kept
+FLAG_BASKETS = ('needs_person', 'submitted', 'recorded')
+
+
 def _cancelled_may_have_ordered(basket, ref, device, now):
-    """A cancelled basket turned out to have (maybe) ordered: hold its lines (R19) and pull every
-    newer live basket of the same lines to a person, in this same transaction."""
-    _hold_after_late_sighting(basket, ref, device, now)
+    """A cancelled basket turned out to have (maybe) ordered: pull every newer basket of the same
+    lines to a person, then hold its lines (R19), in this same transaction. Baskets are locked
+    before buy lines, as in resolve's cancel."""
     _pull_other_baskets(basket, device, now)
+    _hold_after_late_sighting(basket, ref, device, now)
 
 
 def _pull_other_baskets(basket, device, now):
     """R19: after this cancelled basket was let go, its buy lines may have been re-picked into a
-    newer job at the same portal. That basket would order the same items again, so it goes to a
-    person (submit_seen_other:<this basket's id>), whatever it is doing; a fill it is in is closed
-    and stops at its next heartbeat. Audited on this basket with every basket pulled."""
+    newer job at the same portal. A newer basket that may still be sent would order the same items
+    again: it goes to a person (submit_seen_other:<this basket's id>), whatever it is doing; a fill
+    it is in is closed and stops at its next heartbeat. A newer basket already with a person, or
+    already ordered (submitted / recorded: a possible double order), keeps its status and gets the
+    same marker added to its reason. Each is audited, and the whole on this basket."""
     ids = list(basket.lines.values_list('buyline_id', flat=True))
-    pks = list(PortalBasket.objects.filter(job__portal_id=basket.job.portal_id, status__in=LIVE_BASKETS,
-                                           lines__buyline_id__in=ids)
-               .exclude(pk=basket.pk).values_list('pk', flat=True).distinct())
+    pks = list(PortalBasket.objects.filter(job__portal_id=basket.job.portal_id, pk__gt=basket.pk,
+                                           status__in=LIVE_BASKETS + FLAG_BASKETS, lines__buyline_id__in=ids)
+               .values_list('pk', flat=True).distinct())
     if not pks:
         return []
-    reason = f'submit_seen_other:{basket.pk}'
-    pulled = []
-    for other in (PortalBasket.objects.select_for_update().filter(pk__in=pks, status__in=LIVE_BASKETS)
-                  .order_by('pk')):
-        PortalRun.objects.filter(basket=other, finished_at__isnull=True).exclude(kind='history').update(
-            outcome='resolved', finished_at=now)
-        other.claimed_by = None
-        other.save(update_fields=['claimed_by'])
-        _needs_person(other, reason, user=device.staff, now=now)
-        pulled.append(other.pk)
-    _audit('rpa_portal_needs_person', basket, user=device.staff,
-           new={'late_sighting_basket': basket.pk, 'baskets': pulled, 'shared_buylines': ids},
-           note=f'basket {basket.pk}: may have ordered after its cancel - newer baskets {pulled} to a person')
-    return pulled
+    marker = f'submit_seen_other:{basket.pk}'
+    pulled, flagged = [], []
+    for other in (PortalBasket.objects.select_for_update()
+                  .filter(pk__in=pks, status__in=LIVE_BASKETS + FLAG_BASKETS).order_by('pk')):
+        if other.status in LIVE_BASKETS:
+            PortalRun.objects.filter(basket=other, finished_at__isnull=True).exclude(kind='history').update(
+                outcome='resolved', finished_at=now)
+            other.claimed_by = None
+            other.save(update_fields=['claimed_by'])
+            _needs_person(other, marker, user=device.staff, now=now)
+            pulled.append(other.pk)
+            continue
+        if marker in (other.needs_person_reason or ''):
+            continue
+        old = {'status': other.status, 'needs_person_reason': other.needs_person_reason}
+        other.needs_person_reason = (f'{other.needs_person_reason}; {marker}' if other.needs_person_reason
+                                     else marker)[:255]
+        other.save(update_fields=['needs_person_reason'])
+        _audit('rpa_portal_needs_person', other, user=device.staff, old=old,
+               new={'status': other.status, 'needs_person_reason': other.needs_person_reason,
+                    'late_sighting_basket': basket.pk},
+               note=f'basket {other.pk}: basket {basket.pk} may have ordered the same items')
+        flagged.append(other.pk)
+    if pulled or flagged:
+        _audit('rpa_portal_needs_person', basket, user=device.staff,
+               new={'late_sighting_basket': basket.pk, 'baskets': pulled, 'flagged': flagged,
+                    'shared_buylines': ids},
+               note=f'basket {basket.pk}: may have ordered after its cancel - newer baskets {pulled + flagged}')
+    return pulled + flagged
 
 
 def _hold_after_late_sighting(basket, ref, device, now):
@@ -1072,12 +1098,16 @@ def resolve(basket, *, staff, action, order_ref='', confirm_none=False, history_
                 raise QueueError('الروبوت يقرأ سجل الطلبات لهذه السلة الآن — انتظر نتيجة القراءة ثم أعد المحاولة')
             if b.submitted_seen_at or b.portal_ref:
                 raise QueueError('ظهر رقم طلب لهذه السلة — اربطها بالطلب أو ألغها، لا تُعاد')
-            if may_have_ordered(b) and not _history_clears(b):
+            # a reason that names an order (or another basket's possible order, submit_seen_other)
+            # gates a retry like a fill that may have reached Submit, even on a basket that never ran
+            # (pulled back by a late read, or by another basket's late Submit) - with a written why
+            order_reason = any(m in (b.needs_person_reason or '') for m in ORDER_REASONS)
+            if (may_have_ordered(b) or order_reason) and not _history_clears(b):
                 if not confirm_none:
                     raise QueueError('ربما أُرسل الطلب — راجع سجل الطلبات أولاً أو أكّد أنه لم يُرسل')
-                if _history_found_stands(b) and not reason:
-                    raise QueueError('سجل الطلبات وجد طلباً قد يكون لهذه السلة، أو لم يستطع التأكد — اربطها به، '
-                                     'أو اكتب سبب تأكيدك أنه لم يُرسل طلب لها')
+                if (order_reason or _history_found_stands(b)) and not reason:
+                    raise QueueError('ربما يوجد طلب لهذه السلة (سجل الطلبات أو سلة أخرى أشارت إليه، أو لم يُتأكد) — '
+                                     'اربطها به، أو اكتب سبب تأكيدك أنه لم يُرسل طلب لها')
                 new['confirmed_no_order'] = True
             b.status = 'ready'
             b.claimed_by = None
