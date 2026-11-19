@@ -27,12 +27,14 @@ MODULE = {
                 {'key': 'done', 'label': T('مكتمل — تم الشراء', 'Done — purchased'),
                  'desc': T('المريض أكّد أو اشترى. مرحلة نهائية.', 'The patient confirmed or bought. Final.')},
                 {'key': 'missed', 'label': T('فائت — لا استجابة', 'Missed — no response'),
-                 'desc': T('لم يستجب بعد عدة محاولات، أو عدّى 3 أيام على موعدها وهي مفتوحة 3 أيام على الأقل (المهمة الجديدة المتأخرة بتاخد فرصتها الأول). مرحلة نهائية.',
-                           'No response after several attempts, or 3 days past due after being open at least 3 days (a task created already late gets its chance first). Final.')},
+                 'desc': T('لم يستجب بعد عدة محاولات، أو عدّى 3 أيام على موعدها وهي مفتوحة 3 أيام على الأقل (المهمة الجديدة المتأخرة بتاخد فرصتها الأول). '
+                           'ده بيحصل لوحده كل ليلة الساعة 1:30 (لما الإدارة تشغّل التشغيل الليلي) لمهام الصرف والمزمن بس — مهام قوائم الاتصال والمهام المثبّتة بتفضل مفتوحة. مرحلة نهائية.',
+                           'No response after several attempts, or 3 days past due after being open at least 3 days (a task created already late gets its chance first). '
+                           'This runs by itself every night at 1:30 (once management switches the nightly run on) for refill and chronic tasks only — call-list and pinned tasks stay open. Final.')},
                 {'key': 'auto_closed', 'label': T('أُغلق تلقائياً — SOFTECH أكّد البيع', 'Auto-closed — SOFTECH confirmed the sale'),
                  'desc': T('ظهرت فاتورة بيع جديدة على نفس الـPIC لنفس الدواء (أو بديل بنفس التشخيص) بعد الفاتورة اللي طلّعت المهمة، فأُغلقت بدون تدخل. رقم الفاتورة بيتسجّل في المهمة.',
                            'A new sale on the same PIC of the same medicine (or a same-diagnosis substitute) appeared after the sale that created the task, so it closed by itself. The invoice number is saved on the task.')},
-                {'key': 'cancelled', 'label': T('ملغي', 'Cancelled'), 'desc': T('لم تعد مطلوبة (مثلاً الطبيب أوقف الدواء).', 'No longer needed (e.g. the doctor stopped the medicine).')},
+                {'key': 'cancelled', 'label': T('ملغي', 'Cancelled'), 'desc': T('لم تعد مطلوبة (مثلاً الطبيب أوقف الدواء)، أو مهمة قديمة متراكمة أقفلها المدير مرة واحدة بسبب مكتوب — مش بتتحسب «فائتة» على العميل.', 'No longer needed (e.g. the doctor stopped the medicine), or an old piled-up task an admin closed in one clean-up with a written reason — it does not count as "missed" for the customer.')},
             ],
         },
         {
@@ -189,12 +191,27 @@ SCREENS = [
                        'اكتب نص المكالمة واختر الموظفين — تُنشأ مهمة لكل عميل (حتى 500) وتوزَّع عليهم بالتساوي، ويصل كل موظف إشعار واحد. '
                        'يُستبعد من ليس له رقم، ومن طلب إيقاف التذكيرات، ومن لديه مهمة مفتوحة. اضغط على قائمة لترى عملاءها أدناه، '
                        'واتصل بزر «📞» بجانب الرقم ثم سجّل النتيجة كالمعتاد. «إغلاق القائمة» يلغي ما لم يتم الاتصال به. '
-                       'الإنشاء للمدير والمشرف وموظفي الكول سنتر.',
+                       'الإنشاء للمدير والمشرف وموظفي الكول سنتر. '
+                       'نوع «💊 موعد إعادة الصرف (من سلوك الشراء)»: النظام يدوّر على العملاء اللي بيشتروا نفس الصنف بانتظام '
+                       '(3 مرات على الأقل في آخر سنة، كاش أو توصيل)، ويحسب «كل كم يوم» من وسيط الفترات بين آخر مشترياتهم، '
+                       'ويطلّع اللي ميعاده جه أو عدّى (ولسه آخر شراء خلال 180 يوم). الترتيب بالقيمة المتوقعة (متوسط اللي بيدفعه في المرة '
+                       'لكل صنف مستحق) والأعلى الأول. بيظهر قبل الإنشاء أول 10 عملاء بالأصناف والتأخير، والرقم مخفي لو مش مسموح لك تشوفه. '
+                       'بيدخل بس العميل اللي سجّل موافقته على مكالمات الصرف، ومحدش بيتكلم أكتر من مرة في الشهر من القائمة دي. '
+                       'المكالمة تذكير خدمة مش بيع: اسأل «علاجك لسه زي ما هو؟» — لو الطبيب غيّره سجّل كده. '
+                       'مفيش أي رسالة بتتبعت للعميل؛ ولو اشترى الصنف بعدها المهمة بتتقفل لوحدها «أُغلق تلقائياً».',
                        'Outbound call campaigns: "+ New call list" → choose segment, branch (one or several; none = every allowed branch) and days since last purchase (the matching count shows instantly), '
                        'write the call script and pick the staff — one task per customer is created (up to 500) and split evenly, with one notification per staff member. '
                        'Customers without a phone, who asked to stop reminders, or with an open task are skipped. Click a list to see its customers below, '
                        'call with the "📞" button next to the number, then record the outcome as usual. "Close list" cancels what was not called. '
-                       'Admins, supervisors and call-center staff can create lists.')},
+                       'Admins, supervisors and call-center staff can create lists. '
+                       'Type "💊 Refill due (from buying behaviour)": the system finds customers who buy the same item regularly '
+                       '(at least 3 times in the last year, cash or delivery), works out "every how many days" from the median gap between '
+                       'their latest purchases, and lists those whose date has come or passed (last purchase still within 180 days). '
+                       'Ranked by expected value (their average spend per visit on each due item), highest first. Before creating, the top 10 '
+                       'show with their items and delay; the number is masked if you may not see it. Only customers who recorded a yes to refill '
+                       'calls are included, and nobody is called from this list more than once a month. The call is a service reminder, not a '
+                       'sale: ask "is your treatment still the same?" — if the doctor changed it, record that. No message is sent to the customer; '
+                       'if they buy the item afterwards the task closes by itself as "Auto-closed".')},
             {'key': 'overview', 'title': T('📋 ملخص (داخل المهمة)', '📋 Summary (inside a task)'),
              'body': T('بيانات العميل والهاتف (إن كان مسموحاً لك برؤيته)، الدواء، آخر صرف وموعد الاستحقاق، رقم مستند SOFTECH، و«تسجيل النتيجة».',
                        'Customer data and phone (if you may see it), the medicine, last dispense and due date, the SOFTECH document number, and "Record outcome".')},
@@ -452,8 +469,9 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('رقم العميل بيتخفي للمشاهد ولأي حد مقفول عنده رقم العميل، مهما كان دوره', 'The customer number is hidden from viewers and from anyone whose customer numbers are hidden, whatever their role'),
+        'updated': '2026-11-19',
+        'change_note': T('المهام بتتولد وتتقفل لوحدها كل ليلة (بعد تشغيله)؛ وقائمة اتصال جديدة «💊 موعد إعادة الصرف» من سلوك الشراء',
+                         'Tasks are generated and closed by themselves every night (once switched on); new call list type "💊 Refill due" from buying behaviour'),
     },
     {
         'key': 'followups.reminders',

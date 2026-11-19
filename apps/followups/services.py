@@ -1385,7 +1385,14 @@ def bulk_task_action(
     return {'processed': processed, 'errors': errors}
 
 
-def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict:
+STALE_NOTE = 'أُغلق تلقائياً — تجاوز موعد الاستحقاق دون استجابة'
+# Automatic stale / backlog rules touch the generated refill & chronic tasks only — never a call-list
+# campaign task (due "today" when the list is made) or a task someone pinned to follow personally.
+STALE_SCOPE = {'task_type__in': ('refill', 'chronic'), 'call_list__isnull': True, 'is_pinned': False}
+BACKLOG_NOTE = 'أُغلقت — مهمة قديمة متراكمة تجاوزت موعدها بأكثر من {days} يوم دون اتصال؛ لا تُحتسب «فائتة»'
+
+
+def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False, actor=None) -> dict:
     """
     Scans ALL pending FollowUpTasks whose due_date is more than `overdue_days`
     days in the past and marks them 'missed' — but only tasks that have EXISTED for
@@ -1397,7 +1404,11 @@ def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict
     scoring engine: once a task is 'missed', segment_customers picks it up
     via missed_refills_map and adds it to the churn score.
 
-    Called by: generate_followup_tasks management command (nightly)
+    Only the generated refill / chronic tasks (STALE_SCOPE) — call-list and pinned tasks stay open.
+    Each run writes one AuditLog row with the closed task ids.
+
+    Called by: the scheduled followups_nightly job (apps/followups/nightly.py) and the
+    generate_followup_tasks management command
     Also callable standalone: manage.py generate_followup_tasks --escalate-only
 
     Returns: {'escalated': N, 'already_missed': M}
@@ -1413,7 +1424,7 @@ def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict
         status__in=('pending', 'called'),
         due_date__lt=cutoff,
         created_at__lt=timezone.now() - timedelta(days=overdue_days),
-    )
+    ).filter(**STALE_SCOPE)
 
     already_missed = FollowUpTask.objects.filter(status='missed').count()
     escalated = 0
@@ -1421,10 +1432,17 @@ def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict
     if not dry_run:
         # Bulk update is faster than iterating, but we lose per-task notes
         # Use update() for performance since these are automated transitions
-        escalated = overdue_qs.update(
+        ids = list(overdue_qs.values_list('pk', flat=True))
+        escalated = FollowUpTask.objects.filter(pk__in=ids, status__in=('pending', 'called')).update(
             status='missed',
-            result_note='أُغلق تلقائياً — تجاوز موعد الاستحقاق دون استجابة',
+            result_note=STALE_NOTE,
         )
+        if escalated:
+            from apps.audit.models import AuditLog
+            AuditLog.log('followup_auto_closed', user=actor,
+                         new_data={'rule': f'due_date < today-{overdue_days} and open >= {overdue_days} days',
+                                   'status': 'missed', 'count': escalated, 'task_ids': ids},
+                         note=f'متابعة: {escalated} مهمة → فائتة (تجاوزت موعدها بـ{overdue_days} يوم دون استجابة)')
     else:
         escalated = overdue_qs.count()
 
@@ -1433,6 +1451,44 @@ def escalate_overdue_tasks(overdue_days: int = 3, dry_run: bool = False) -> dict
         escalated, dry_run, overdue_days,
     )
     return {'escalated': escalated, 'already_missed': already_missed}
+
+
+def retire_backlog(older_than_days: int = 60, created_before=None, dry_run: bool = True, actor=None) -> dict:
+    """
+    One-off clean-up of an old open backlog (C09): open generated refill / chronic tasks (STALE_SCOPE)
+    whose due date passed more than `older_than_days` ago (optionally only those created before
+    `created_before`). They first get the normal ERP auto-close (a sale since → auto_closed), then the
+    rest are CANCELLED with a reason — never deleted, and not 'missed' (nobody was asked to call them,
+    so they must not count against the customer's churn score). One AuditLog row with the ids.
+    dry_run (the default) changes nothing and returns the same counts.
+    """
+    from collections import Counter
+    from apps.audit.models import AuditLog
+
+    cutoff = date.today() - timedelta(days=int(older_than_days))
+    qs = FollowUpTask.objects.filter(status__in=('pending', 'called'), due_date__lt=cutoff, **STALE_SCOPE)
+    if created_before:
+        qs = qs.filter(created_at__date__lt=created_before)
+    oldest = qs.order_by('created_at').values_list('created_at', flat=True).first()
+    lookback_min = int((timezone.now() - oldest).total_seconds() // 60) + 60 * 24 if oldest else 0
+    # would_auto_close counts every open task with a later sale (the normal ERP auto-close), not only the backlog
+    bought = auto_close_followup_tasks_from_erp(since_minutes=lookback_min, dry_run=True) if oldest else 0
+    by_month = Counter(f'{d:%Y-%m}' for d in qs.values_list('created_at', flat=True))
+    out = {'cutoff': str(cutoff), 'open_matching': qs.count(), 'would_auto_close': bought,
+           'by_created_month': dict(sorted(by_month.items())), 'dry_run': dry_run, 'auto_closed': 0, 'cancelled': 0}
+    if dry_run or not oldest:
+        return out
+    out['auto_closed'] = auto_close_followup_tasks_from_erp(since_minutes=lookback_min)
+    ids = list(qs.values_list('pk', flat=True))          # re-read: the auto-closed ones left the set
+    note = BACKLOG_NOTE.format(days=older_than_days)
+    out['cancelled'] = FollowUpTask.objects.filter(pk__in=ids, status__in=('pending', 'called')).update(
+        status='cancelled', result_note=note)
+    AuditLog.log('followup_backlog_retired', user=actor,
+                 new_data={'cutoff': str(cutoff), 'created_before': str(created_before or ''),
+                           'auto_closed': out['auto_closed'], 'cancelled': out['cancelled'], 'task_ids': ids},
+                 note=f'متابعة: أُغلقت {out["cancelled"]} مهمة متراكمة (استحقاق قبل {cutoff})')
+    logger.info('retire_backlog: %s', {k: v for k, v in out.items() if k != 'by_created_month'})
+    return out
 
 
 def backfill_sales_channels() -> int:
