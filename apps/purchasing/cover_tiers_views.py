@@ -208,7 +208,7 @@ def _excel(lines, report):
     from io import BytesIO
     from django.http import HttpResponse
     buf = BytesIO()
-    build_workbook(lines, report).save(buf)
+    neutralise_formulas(build_workbook(lines, report)).save(buf)   # the save site itself is neutralised (W-4)
     resp = HttpResponse(buf.getvalue(),
                         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     resp['Content-Disposition'] = f'attachment; filename="cover_tiers_{timezone.localdate().isoformat()}.xlsx"'
