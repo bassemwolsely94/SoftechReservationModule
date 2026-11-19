@@ -581,8 +581,8 @@ SCREENS = [
              'text': T('يعرض المستبعدة بسبب واحد بس، والرقم = عددها.', 'Shows dismissed items with one reason only; the number = their count.'),
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Dismissed" tab.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('التصنيف يقبل أكثر من اختيار', 'The class filter takes several choices'),
+        'updated': '2026-11-19',
+        'change_note': T('الشاشة بتفتح أسرع: حسابات المحرك بتتعمل مرة واحدة لكل تشغيل، ولو التغييرات ما اتحملتش يظهر زر «إعادة المحاولة»', 'Opens faster: the engine figures are worked out once per run, and if the changes fail to load a «إعادة المحاولة» (retry) button shows'),
     },
     {
         'key': 'shortage.phantom',
