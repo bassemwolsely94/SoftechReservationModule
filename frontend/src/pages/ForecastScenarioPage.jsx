@@ -10,6 +10,7 @@ import useAuthStore from '../store/authStore'
 import DataFreshnessBar from '../components/DataFreshnessBar'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import { ConfirmButton, useConfirm } from '../components/InlineConfirm'
 
 const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
 const MODELS = { a: 'Model A — نمو الهدف', b: 'Model B — مزيج مرجّح', avg: 'المتوسط (A+B)/2' }
@@ -198,6 +199,7 @@ const RCOLS = [
 
 function ReferencesPanel({ canEdit }) {
   const qc = useQueryClient()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [open, setOpen] = useState(false)
   const [infl, setInfl] = useState('')
   const [rg, setRg] = useState('')
@@ -231,6 +233,7 @@ function ReferencesPanel({ canEdit }) {
   const { sorted: sortedRefs, headerProps: refHp } = useSortableRows(refRows)
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+      {confirmUi}
       <button data-tour="analytics-scenarios-references" onClick={() => setOpen(o => !o)} className="text-sm font-bold text-gray-800 flex items-center gap-2">
         <span>{open ? '▾' : '▸'}</span> 📐 القيم المرجعية (موسمية · نمو مرجعي · تضخم)
         {refs.as_of && <span className="text-[11px] text-gray-400 font-normal">— محدّثة {refs.as_of} · تضخم {pct(refs.inflation_annual)}/سنة</span>}
@@ -274,7 +277,7 @@ function ReferencesPanel({ canEdit }) {
             {canEdit ? (
               <select className="input-field !w-auto !py-1 text-[11px]" value={refs.engine_seasonality_mode || 'none'}
                       disabled={setMode.isPending}
-                      onChange={e => { if (confirm('تغيير طريقة تطبيق الموسمية على كل التوقعات الجديدة؟')) setMode.mutate(e.target.value) }}>
+                      onChange={async e => { const v = e.target.value; if (await confirmInline('تغيير طريقة تطبيق الموسمية على كل التوقعات الجديدة؟', { confirmLabel: 'تغيير' })) setMode.mutate(v) }}>
                 {Object.entries(SEASON_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             ) : <span>{SEASON_MODES[refs.engine_seasonality_mode || 'none']}</span>}
@@ -363,8 +366,9 @@ function ProfitExclusionPanel({ canEdit }) {
                   </td>
                   {canEdit && (
                     <td className="text-center">
-                      <button data-tour="analytics-scenarios-exclusion-delete" onClick={() => { if (confirm('حذف الاستثناء؟')) del.mutate(x.id) }}
-                        className="text-gray-300 hover:text-red-500">✕</button>
+                      <ConfirmButton data-tour="analytics-scenarios-exclusion-delete" onConfirm={() => del.mutate(x.id)} confirmLabel="حذف؟"
+                        armedClassName="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white"
+                        className="text-gray-300 hover:text-red-500">✕</ConfirmButton>
                     </td>
                   )}
                 </tr>
@@ -517,7 +521,7 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
               <span className="text-gray-400"> — {horizonText(sc.year, sc.month)}</span>
             </div>
           </div>
-          {canEdit && <button data-tour="analytics-scenarios-delete" onClick={() => { if (confirm('حذف السيناريو؟')) del.mutate() }} className="text-gray-300 hover:text-red-500 text-sm">حذف</button>}
+          {canEdit && <ConfirmButton data-tour="analytics-scenarios-delete" onConfirm={() => del.mutate()} confirmLabel="تأكيد حذف السيناريو؟" armedClassName="text-sm font-bold px-2 py-0.5 rounded bg-red-600 text-white" className="text-gray-300 hover:text-red-500 text-sm">حذف</ConfirmButton>}
         </div>
 
         {sc.signals_changed_at && (
@@ -549,10 +553,11 @@ function ScenarioDetail({ id, canEdit, onDeleted }) {
               {recalcBusy ? 'جارٍ الحساب…' : '⚙️ حفظ واحسب التنبؤ'}
             </button>
             {sc.status !== 'draft' && (
-              <button data-tour="analytics-scenarios-approve" onClick={() => { if (confirm('اعتماد الأهداف للفروع؟')) commit.mutate() }} disabled={commit.isPending}
+              <ConfirmButton data-tour="analytics-scenarios-approve" onConfirm={() => commit.mutate()} disabled={commit.isPending}
+                confirmLabel="اعتماد الأهداف للفروع؟ اضغط ثانية"
                 className="text-sm px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
                 {commit.isPending ? 'جارٍ الاعتماد…' : '✅ اعتماد الأهداف'}
-              </button>
+              </ConfirmButton>
             )}
             {sc.status === 'committed' && <span className="text-xs text-emerald-600 self-center">تم اعتماد الأهداف — تظهر في لوحة المؤشرات</span>}
           </div>

@@ -13,6 +13,7 @@ import { ar } from 'date-fns/locale'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
 import { wildcardMatch } from '../utils/wildcard'
+import { useToast } from '../components/ui'
 
 const toLatinDigits = s =>
   s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -64,6 +65,7 @@ const STATUS_OPTIONS = [
 const CC_WRITE = ['create', 'edit', 'approve']
 
 function CaseDetailPanel({ caseId, onClose, onStateChange }) {
+  const toast = useToast()
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const canEdit = usePermissionAny('callcenter', CC_WRITE)
@@ -148,7 +150,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
       setRecording(true)
       setRecorderReady(true)
     } catch {
-      alert('لا يمكن الوصول للميكروفون')
+      toast.error('لا يمكن الوصول للميكروفون')
     }
   }
 
@@ -180,7 +182,7 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
       qc.invalidateQueries({ queryKey: ['case-detail', caseId] })
       onStateChange?.()
     } catch (e) {
-      alert(e.response?.data?.detail || 'حدث خطأ')
+      toast.error(e.response?.data?.detail || 'حدث خطأ')
     } finally {
       setPosting(false)
     }
@@ -193,12 +195,12 @@ function CaseDetailPanel({ caseId, onClose, onStateChange }) {
       qc.invalidateQueries({ queryKey: ['cases-list'] })
       onStateChange?.()
     } catch (e) {
-      alert(e.response?.data?.detail || 'حدث خطأ')
+      toast.error(e.response?.data?.detail || 'حدث خطأ')
     }
   }
 
   async function resolve() {
-    if (!resolveText.trim()) { alert('وصف الحل مطلوب'); return }
+    if (!resolveText.trim()) { toast.warning('وصف الحل مطلوب'); return }
     await doAction(callCenterApi.cases.resolve, { resolution: resolveText })
     setShowResolve(false)
     setResolveText('')
