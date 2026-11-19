@@ -483,6 +483,7 @@ export const helpApi = {
   saveTerm:   (id, data)         => api.put(`/help/glossary/${id}/`, data),
   deleteTerm: (id)               => api.delete(`/help/glossary/${id}/`),
   scanGlossary: (screen_key, data) => api.post('/help/glossary/scan/', { screen_key, data }),
+  scanTrainingGlossary: (kind, key, data) => api.post('/help/glossary/scan/', { kind, key, data }),
   firstDay:   (mobile = false)   => api.get('/help/first-day/', { params: mobile ? { mobile: 1 } : {} }),
   hideFirstDay: (hidden = true)  => api.post('/help/first-day/', { hidden }),
   tourEvent:  (payload)          => api.post('/help/tour-event/', payload),

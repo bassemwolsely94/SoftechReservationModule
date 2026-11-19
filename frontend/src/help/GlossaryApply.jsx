@@ -1,5 +1,6 @@
 /**
- * GlossaryApply — «📖 طبّق القاموس» in the screen help editor. Asks the server where the
+ * GlossaryApply — «📖 طبّق القاموس» in the screen help editor and, for workflow tours and quizzes,
+ * the training editor. Asks the server where the
  * draft uses words the glossary says to avoid (POST /api/help/glossary/scan/ — same
  * matching as the «💡» hints), then lists each one in its sentence: «استبدل» changes
  * that word in the draft, «تخطّى» leaves it. Inline, no popup; nothing is saved until
@@ -12,14 +13,19 @@ import { acceptAll as allEdits, acceptOne, skipOne } from './glossaryEdits'
 const FIELD = {
   title: 'العنوان', summary: 'دور الشاشة', audience: 'من يستخدمها', steps: 'خطوة', tips: 'ملاحظة',
   tabs: 'تبويب', faq: 'سؤال متكرر', notes: 'ملاحظات المدرب', tour: 'جولة «اعرض لي» — خطوة',
+  questions: 'سؤال',
 }
-const where = (path) => {
-  const [f, i, sub] = path
+const PART = { q: ' (السؤال)', a: ' (الإجابة)', title: ' (العنوان)', more: ' (الشرح الإضافي)', explain: ' (التوضيح)' }
+// where a match is, in the trainer's words: «خطوة 3 (الشرح الإضافي)», «سؤال 2 (اختيار 3)»
+const where = (path, flow) => {
+  const [f, i, sub, j] = path
   const n = typeof i === 'number' ? ` ${i + 1}` : ''
-  const part = sub === 'q' ? ' (السؤال)' : sub === 'a' ? ' (الإجابة)' : sub === 'title' ? ' (العنوان)' : ''
-  return `${FIELD[f] || f}${n}${part}`
+  const part = sub === 'options' && typeof j === 'number' ? ` (اختيار ${j + 1})` : PART[sub] || ''
+  const name = flow && f === 'summary' ? 'الملخص' : FIELD[f] || f
+  return `${name}${n}${part}`
 }
-export default function GlossaryApply({ screenKey, draft, setDraft }) {
+/** `screenKey` for a screen's help, or `target` = {kind: 'flow' | 'quiz', key} in the training editor. */
+export default function GlossaryApply({ screenKey, target, draft, setDraft }) {
   const [items, setItems] = useState(null)      // null = closed
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -27,7 +33,9 @@ export default function GlossaryApply({ screenKey, draft, setDraft }) {
   const scan = async () => {
     setBusy(true); setErr(null)
     try {
-      const { data } = await helpApi.scanGlossary(screenKey, draft)
+      const { data } = target
+        ? await helpApi.scanTrainingGlossary(target.kind, target.key, draft)
+        : await helpApi.scanGlossary(screenKey, draft)
       setItems(data.items.map((it) => ({ ...it, state: 'open' })))
     } catch (e) {
       setErr(e?.response?.data?.detail || 'تعذّر الفحص')
@@ -63,7 +71,7 @@ export default function GlossaryApply({ screenKey, draft, setDraft }) {
       <div className="divide-y divide-line max-h-80 overflow-y-auto">
         {items.map((it, i) => (
           <div key={i} className={`py-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm ${it.state !== 'open' ? 'opacity-60' : ''}`}>
-            <span className="text-[11px] text-faint w-32 shrink-0">{where(it.path)}</span>
+            <span className="text-[11px] text-faint w-32 shrink-0">{where(it.path, target?.kind === 'flow')}</span>
             <span className="flex-1 min-w-[220px] text-content leading-6">
               {it.before}<mark className="bg-amber-200 rounded px-0.5">{it.match}</mark>{it.after}
               <span className="text-muted"> ← </span><b className="text-emerald-700">{it.replacement}</b>

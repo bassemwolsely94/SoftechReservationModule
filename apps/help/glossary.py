@@ -136,19 +136,40 @@ def glossary_term(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def scan(request):
-    """«طبّق القاموس» in the screen editor: POST {screen_key, data: draft} → {'items': [...]}
-    — every avoided word in the draft's Arabic text with its place (path, start, end),
-    sentence and replacement (notecheck.scan). Read-only: the editor applies the ones
-    the trainer accepts to its draft, and nothing changes until they press «حفظ»."""
+    """«طبّق القاموس»: every avoided word in a draft's Arabic text with its place (path,
+    start, end), sentence and replacement (notecheck.scan). Read-only: the editor applies
+    the ones the trainer accepts to its draft, and nothing changes until they press «حفظ».
+
+      screen help:   POST {screen_key, data: draft}
+      workflow tour: POST {kind: 'flow', key: '<module>.<flow>', data: {title, summary, steps}}
+      quiz:          POST {kind: 'quiz', key: '<module>', data: {questions}}
+    Terms limited to some modules apply by the module the draft belongs to."""
     if not _can_edit(_profile(request)):
         return Response({'detail': 'ليس لديك صلاحية'}, status=403)
     body = request.data if isinstance(request.data, dict) else {}
-    _, screens = registry.load()
-    s = screens.get(str(body.get('screen_key') or ''))
-    if s is None:
-        return Response({'detail': 'not found'}, status=404)
     data = body.get('data')
     if not isinstance(data, dict):
         return Response({'detail': 'data must be an object'}, status=400)
+    modules, screens = registry.load()
+    kind, key = body.get('kind'), str(body.get('key') or '')
+    if kind == 'flow':
+        from . import training
+        if training.base_flow(key) is None:
+            return Response({'detail': 'not found'}, status=404)
+        steps = data.get('steps') if isinstance(data.get('steps'), list) else []
+        draft = {'title': data.get('title'), 'summary': data.get('summary'),
+                 'steps': [{f: st.get(f) for f in ('text', 'more')} if isinstance(st, dict) else {}
+                           for st in steps]}
+        return Response({'items': notecheck.scan(draft, terms(), key.split('.')[0])})
+    if kind == 'quiz':
+        if key not in modules:
+            return Response({'detail': 'not found'}, status=404)
+        qs = data.get('questions') if isinstance(data.get('questions'), list) else []
+        draft = {'questions': [{f: q.get(f) for f in ('q', 'options', 'explain')} if isinstance(q, dict) else {}
+                               for q in qs]}
+        return Response({'items': notecheck.scan(draft, terms(), key)})
+    s = screens.get(str(body.get('screen_key') or ''))
+    if s is None:
+        return Response({'detail': 'not found'}, status=404)
     draft = {f: data.get(f) for f in registry.EDITABLE_FIELDS if f in data}
     return Response({'items': notecheck.scan(draft, terms(), s['module'])})

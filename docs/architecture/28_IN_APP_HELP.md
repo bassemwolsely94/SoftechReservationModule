@@ -54,6 +54,10 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   (`notecheck.occurrences`). The trainer replaces or skips each one (or «استبدل الباقي»); a replacement
   only happens if the text at that place is still the scanned word (else «افحص تاني»), later places in
   the same text shift. Only the draft changes — the normal «حفظ» records it in `HelpRevision`.
+  Also in the training editor for workflow tours and module quizzes (2026-11-15): the same panel
+  with `target={kind, key}` → `POST /api/help/glossary/scan/ {kind: 'flow'|'quiz', key, data}`;
+  flow drafts are scanned on title / summary / step `text` + `more`, quizzes on question / options /
+  explanation; module-limited terms follow the tour's or quiz's module. Read-only, as for screens.
 - **Elaborate tours (2026-10-25).** Every tour step — screen `tour` and module `flows` — has a one-line
   headline (`text`) and a longer explanation (`more`: what the button does, when to use it, what
   happens next, what to watch for), checked by `TourExplanationTests` (≥ 60 Arabic chars + English).
