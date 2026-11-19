@@ -588,6 +588,9 @@ LOYALTY_ADJUST_ROLES = frozenset(
 # identical adjustment (customer, points, reason) is refused as a probable double post.
 LOYALTY_MAX_MANUAL_ADJUST         = config('LOYALTY_MAX_MANUAL_ADJUST', default=1000, cast=int)
 LOYALTY_DUPLICATE_WINDOW_SECONDS  = config('LOYALTY_DUPLICATE_WINDOW_SECONDS', default=120, cast=int)
+# Referral-points deduction (owner decision D-14, 2026-11-19): the largest deduction one
+# adjustment may make; more than this is admin only. A written reason is always required.
+LOYALTY_REFERRAL_DEDUCT_MAX       = config('LOYALTY_REFERRAL_DEDUCT_MAX', default=500, cast=int)
 # Default per-statement timeout (seconds) for INTERACTIVE queries — bounds an
 # HTTP request against a slow/blocked Sybase read. jConnect enforces this as a
 # socket read-timeout (fires as JZ0T3 on fetch), so keep it snappy.
