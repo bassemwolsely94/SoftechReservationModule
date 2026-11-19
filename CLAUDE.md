@@ -75,3 +75,7 @@ they can't. (Round-2 plan, docs/security/2026-11-05-full-project-test-plan.md.)
 6. **Suppressions:** no new `# nosec` / `# noqa` or baseline line without a written reason.
 7. **New values:** its per-branch exports/reports are registered in `apps/tests/new_value_registry.py`.
 8. **Roles:** a new role = one line in `apps/users/roles.py`; no literal role lists (role_literals guard).
+9. **Speed:** every new list/report endpoint gets a row in `apps/tests/perf/budgets.py` and a budget
+   test (`assert_budget`: query count flat as rows grow + under its ceiling); exports go through the
+   shared export job once performance Stage 4 lands (design
+   `docs/superpowers/specs/2026-11-19-performance-boost-design.md`).
