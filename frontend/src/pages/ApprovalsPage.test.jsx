@@ -72,6 +72,15 @@ describe('ApprovalsPage bulk + keyboard', () => {
     expect(await screen.findByTestId('approvals-bulk-result')).toHaveProperty('textContent', expect.stringContaining('تمت الموافقة على 2'))
   })
 
+  it('approving every request empties the inbox, and the result still shows', async () => {
+    approvalsApi.pending.mockResolvedValueOnce({ data: ROWS }).mockResolvedValue({ data: [] })
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('تحديد الكل'))
+    fireEvent.click(screen.getByRole('button', { name: /موافقة على المحدد \(3\)/ }))
+    expect(await screen.findByText('لا توجد طلبات بانتظار القرار')).toBeTruthy()
+    expect(screen.getByTestId('approvals-bulk-result').textContent).toContain('تمت الموافقة على 3')
+  })
+
   it('bulk reject stays disabled until a reason is written, then sends it', async () => {
     renderPage()
     fireEvent.click(await screen.findByLabelText('تحديد سلفة منى'))

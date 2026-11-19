@@ -147,9 +147,11 @@ export default function ApprovalsPage() {
   const runBulk = async (decision) => {
     if (!canBulkDecide(decision, tickedIds.length, bulkNote) || bulkBusy) return
     setBulkBusy(true); setBulkResult(null)
+    // titles kept now: decided rows leave the list when it refreshes
+    const titles = Object.fromEntries(tickedIds.map(id => [id, requests.find(r => r.id === id)?.title]))
     try {
       const res = await decideMany(tickedIds, { decision, notes: bulkNote.trim() }, approvalsApi.decide)
-      setBulkResult({ decision, ...res })
+      setBulkResult({ decision, titles, ...res })
       setTicked(new Set(res.failed.map(f => f.id)))                // keep only what still needs attention
       if (!res.failed.length) setBulkNote('')
     } finally {
@@ -157,7 +159,6 @@ export default function ApprovalsPage() {
       qc.invalidateQueries({ queryKey: ['approvals'] })
     }
   }
-  const titleOf = id => requests.find(r => r.id === id)?.title || `#${id}`
 
   return (
     <div className="p-6 max-w-5xl mx-auto" dir="rtl">
@@ -182,6 +183,21 @@ export default function ApprovalsPage() {
           </button>
         ))}
       </div>
+
+      {/* outside the table: approving the last requests empties the list, and the result must stay */}
+      {pending && bulkResult && (
+        <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 text-sm" role="status" data-testid="approvals-bulk-result">
+          <span className={bulkResult.failed.length ? 'text-amber-700' : 'text-green-700'}>
+            {bulkResult.decision === 'approved' ? 'تمت الموافقة على' : 'تم رفض'} {bulkResult.done.length}
+            {bulkResult.failed.length ? ` · تعذّر ${bulkResult.failed.length} (ما زالت محددة):` : ''}
+          </span>
+          {bulkResult.failed.length > 0 && (
+            <ul className="mt-1 list-disc pr-5 text-red-700">
+              {bulkResult.failed.map(f => <li key={f.id}>{bulkResult.titles[f.id] || `#${f.id}`} — {f.detail}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="text-center py-16 text-gray-400">جاري التحميل...</div>
@@ -213,19 +229,6 @@ export default function ApprovalsPage() {
                     className="px-3 py-1.5 rounded-lg text-sm font-medium border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40">
               {`❌ رفض المحدد${tickedIds.length ? ` (${tickedIds.length})` : ''}`}
             </button>
-            {bulkResult && (
-              <div className="basis-full text-sm" role="status" data-testid="approvals-bulk-result">
-                <span className={bulkResult.failed.length ? 'text-amber-700' : 'text-green-700'}>
-                  {bulkResult.decision === 'approved' ? 'تمت الموافقة على' : 'تم رفض'} {bulkResult.done.length}
-                  {bulkResult.failed.length ? ` · تعذّر ${bulkResult.failed.length} (ما زالت محددة):` : ''}
-                </span>
-                {bulkResult.failed.length > 0 && (
-                  <ul className="mt-1 list-disc pr-5 text-red-700">
-                    {bulkResult.failed.map(f => <li key={f.id}>{titleOf(f.id)} — {f.detail}</li>)}
-                  </ul>
-                )}
-              </div>
-            )}
           </div>
         )}
         <div {...kb.containerProps}
