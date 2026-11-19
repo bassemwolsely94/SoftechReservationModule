@@ -721,6 +721,8 @@ export const transfersApi = {
   list:    (params) => api.get('/transfers/', { params }),
   get:     (id)     => api.get(`/transfers/${id}/`),
   create:  (data)   => api.post('/transfers/', data),
+  // save + submit in one server transaction: a refused submit saves nothing (full audit FE-11)
+  createAndSubmit: (data) => api.post('/transfers/', data, { params: { submit: 1 } }),
   update:  (id, data) => api.patch(`/transfers/${id}/`, data),
   delete:  (id)     => api.delete(`/transfers/${id}/`),
 

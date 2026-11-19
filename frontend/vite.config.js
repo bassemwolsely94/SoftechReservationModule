@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -7,6 +8,10 @@ const API = process.env.VITE_API_TARGET || 'http://localhost:8000'
 
 export default defineConfig({
   plugins: [react()],
+  // Each checkout keeps its own pre-bundled deps. Worktrees link frontend/node_modules to the main
+  // checkout, so the default node_modules/.vite was one cache shared by every dev server: one
+  // server re-bundling React broke the others ("Invalid hook call", useState of null).
+  cacheDir: fileURLToPath(new URL('./.vite-cache', import.meta.url)),
   server: {
     port: process.env.PORT ? Number(process.env.PORT) : 5173,
     // OneDrive breaks native file-watching, so HMR silently stops picking up

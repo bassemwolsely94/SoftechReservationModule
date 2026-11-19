@@ -5,7 +5,7 @@
  *
  * Uses shared ItemSearchWidget for barcode-scanner-compatible item search.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { transfersApi, branchesApi, itemsApi } from '../api/client'
@@ -29,7 +29,10 @@ export default function NewTransferPage() {
   const [phoneAlert,        setPhoneAlert]        = useState(false)
   const [items,             setItems]             = useState([])
   const [itemStocks,        setItemStocks]        = useState({})
-  const [submitAndSend,     setSubmitAndSend]     = useState(false)
+  // most requests are meant to be sent: «حفظ وتقديم» is the default; untick to keep a draft (FE-11)
+  const [submitAndSend,     setSubmitAndSend]     = useState(true)
+  const [focusItemId,       setFocusItemId]       = useState(null)   // qty box to focus after an add
+  const searchBoxRef = useRef(null)
   const [submitting,        setSubmitting]        = useState(false)
   const [error,             setError]             = useState('')
 
@@ -50,6 +53,7 @@ export default function NewTransferPage() {
   }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function addItem(item) {
+    setFocusItemId(item.id)            // scanned again → jump to its quantity
     if (items.find(i => i.item.id === item.id)) return
     setItems(prev => [...prev, { item, qty: '', notes: '' }])
     itemsApi.stock(item.id)
@@ -79,9 +83,9 @@ export default function NewTransferPage() {
         phone_alert: phoneAlert,
         items: items.map(i => ({ item: i.item.id, quantity: i.qty, notes: i.notes || '' })),
       }
-      const res = await transfersApi.create(payload)
+      // one call either way: a refused send leaves no draft behind, so pressing again can't duplicate
+      const res = submitAndSend ? await transfersApi.createAndSubmit(payload) : await transfersApi.create(payload)
       const newId = res.data.id
-      if (submitAndSend) await transfersApi.submit(newId)
       qc.invalidateQueries({ queryKey: ['transfers'] })
 
       if (submitAndSend) {
@@ -153,12 +157,14 @@ export default function NewTransferPage() {
           <h2 className="text-sm font-bold text-gray-700 mb-4">الأصناف المطلوبة</h2>
 
           {/* Shared ItemSearchWidget — barcode scanner compatible */}
-          <ItemSearchWidget
-            selected={null}
-            mode="list"
-            onSelect={addItem}
-            placeholder="ابحث باسم الصنف أو الكود أو الباركود (ماسح ضوئي متوافق)..."
-          />
+          <div ref={searchBoxRef}>
+            <ItemSearchWidget
+              selected={null}
+              mode="list"
+              onSelect={addItem}
+              placeholder="ابحث باسم الصنف أو الكود أو الباركود (ماسح ضوئي متوافق)..."
+            />
+          </div>
 
           {items.length === 0 ? (
             <div className="border-2 border-dashed border-gray-200 rounded-xl py-8 text-center mt-4">
@@ -205,6 +211,14 @@ export default function NewTransferPage() {
                         </div>
                       </div>
                       <input type="number" min="0.001" step="0.001" placeholder="الكمية"
+                        data-testid="transfer-qty"
+                        ref={el => {
+                          if (el && focusItemId === row.item.id) { el.focus(); el.select(); setFocusItemId(null) }
+                        }}
+                        onKeyDown={e => {
+                          // Enter → back to the item search for the next scan
+                          if (e.key === 'Enter') { e.preventDefault(); searchBoxRef.current?.querySelector('input')?.focus() }
+                        }}
                         value={row.qty} onChange={e => updateItem(idx, 'qty', e.target.value)}
                         className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-brand-400" />
                       <input placeholder="ملاحظة"

@@ -94,7 +94,7 @@ function OrderPanel({ id, canCreate, onClose }) {
         {o.pos_order && (
           <div className="rounded-lg bg-blue-50 text-blue-800 text-sm px-3 py-2">
             مسودة نقطة البيع رقم {o.pos_order.id} ({o.pos_order.status_label || o.pos_order.status}) على حساب المنصة —{' '}
-            <Link to="/pos" className="underline font-medium">افتح نقطة البيع</Link> وكمّلها من المسودات.
+            <Link to="/pos" className="underline font-medium">افتح نقطة البيع</Link> وأرسلها للكاشير من زر 🛵 «طلبات المنصات».
           </div>
         )}
 
