@@ -121,6 +121,12 @@ def eta_recon_export():
     return _get('/api/tax-invoicing/history/recon/export/?system=production')
 
 
+def cover_tiers_export():
+    """C25 / P-34 tiered-cover workbook (/cash-optimization → 🎯 التغطية حسب الفئة → تصدير): retail branches
+    of the latest engine run only — HQ is not a cover target, pending / closed / call center never show."""
+    return _get('/api/purchasing/cover-tiers/lines/?format=xlsx')
+
+
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
@@ -136,4 +142,5 @@ EXPORTS = [
     ('stock_count_board', stock_count_board, ABSENT_ALL),
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
+    ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
 ]

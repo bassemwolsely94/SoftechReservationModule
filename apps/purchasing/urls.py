@@ -7,6 +7,7 @@ from . import dead_stock_views   # P-27
 from . import rate_writer_views
 from . import isr_views
 from . import branch_request_views
+from . import cover_tiers_views   # C25 / P-34
 
 urlpatterns = [
     # ── Demand engine ─────────────────────────────────────────────────────────
@@ -135,4 +136,7 @@ urlpatterns = [
     path('spike/med-types/',  spike_views.spike_med_types,  name='spike-med-types'),
     path('spike/confirm/',    spike_views.spike_confirm,    name='spike-confirm'),
     path('spike/unconfirm/',  spike_views.spike_unconfirm,  name='spike-unconfirm'),
+    # ── Tiered cover under a cash budget (🎯 التغطية حسب الفئة, C25 / P-34 — read-only) ──
+    path('cover-tiers/summary/', cover_tiers_views.cover_tiers_summary, name='cover-tiers-summary'),
+    path('cover-tiers/lines/', cover_tiers_views.cover_tiers_lines, name='cover-tiers-lines'),
 ]

@@ -858,6 +858,10 @@ export const purchasingApi = {
   spikeMedTypes:      ()            => api.get('/purchasing/spike/med-types/'),
   spikeConfirm:       (itemId)      => api.post('/purchasing/spike/confirm/', { item_id: itemId }),
   spikeUnconfirm:     (itemId)      => api.post('/purchasing/spike/unconfirm/', { item_id: itemId }),
+  // C25 / P-34 tiered cover («🎯 التغطية حسب الفئة», read-only)
+  coverTiersSummary:  (params)      => api.get('/purchasing/cover-tiers/summary/', { params }),
+  coverTiersLines:    (params)      => api.get('/purchasing/cover-tiers/lines/', { params }),
+  coverTiersExport:   (params)      => api.get('/purchasing/cover-tiers/lines/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   // P-27 dead stock («🧊 مخزون راكد», read-only)
   deadStockSummary:   ()            => api.get('/purchasing/dead-stock/summary/'),
   deadStockLines:     (params)      => api.get('/purchasing/dead-stock/lines/', { params }),
