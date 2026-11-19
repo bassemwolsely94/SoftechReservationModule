@@ -130,7 +130,7 @@ Doubtful P1 (34 rows — only a setup or picker call answers, no business data):
 (item filter options), `/demand` 2 (staff list).
 
 **P2 (47 rows):**
-- `/market-shortage` never finishes loading for 10 users (>22 s; `purchasing/runs/active` answers 404).
+- `/market-shortage` never finishes loading for 10 users (>22 s; `purchasing/runs/active` answers 404). **Fixed** (`claude/market-shortage-speed`): the page's three calls ran the engine's year-of-sales GROUP BY ~5 times; now once per run (cached, single-flight). The 404 is the normal "no run active" answer.
 - `/rider` is in the menu but refused (rider APIs 403) for admin, supervisor, restricted, the real admin and delivery@B.
 - delivery and delivery@B: 16 menu entries each refuse (`/dashboard`, `/m/me`, `/tasks` …). They live in the
   rider shell — likely the menu model, not access (owner to confirm).

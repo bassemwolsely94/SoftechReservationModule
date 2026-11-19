@@ -4,6 +4,7 @@ config/log_handlers.py
 Logging handlers hardened for our Windows + OneDrive + multi-process setup
 (dev server and management commands running at the same time).
 """
+import os
 import time
 import logging.handlers
 
@@ -16,6 +17,13 @@ class SafeTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
     On a failed rollover it keeps appending to the current file and postpones the
     next rotation attempt, instead of raising and retrying on every record.
     """
+
+    def _open(self):
+        # logs/ is not in git: a fresh checkout or CI runner has no folder until something makes
+        # it, and the first record a test logs then raised FileNotFoundError out of the request
+        # (seen when test sharding moved access-gate tests first, 2026-11-19).
+        os.makedirs(os.path.dirname(self.baseFilename), exist_ok=True)
+        return super()._open()
 
     def doRollover(self):
         try:
