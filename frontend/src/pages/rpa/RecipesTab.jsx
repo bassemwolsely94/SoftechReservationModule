@@ -2,8 +2,9 @@
  * RecipesTab — الوصفات (admin only): the recorded SOFTECH screen recipes. A draft recipe is
  * uploaded from a .dld recording with its field map; an admin completes the DRAFT inline (cancel
  * keys, popup rules, checklist, reference cells — a .dld carries none of them) and a SECOND admin
- * approves it (four-eyes, enforced by the server: neither the importer nor the last editor shown in
- * «آخر من عدّلها» may approve; it also refuses a recipe that cannot end a dry run safely). Approved content is frozen; this screen never edits it. The screen switch only
+ * approves it (four-eyes, enforced by the server: neither the importer nor anyone who ever edited it
+ * may approve — «آخر من عدّلها» shows the latest editor; it also refuses a recipe that cannot end a
+ * dry run safely). Approved content is frozen; this screen never edits it. The screen switch only
  * enables or stops the robot for the screen; live entry cannot be turned on in Stage 1.
  */
 import { Fragment, useMemo, useState } from 'react'

@@ -218,8 +218,8 @@ def edit_recipe(recipe, profile, changes: dict) -> RpaRecipe:
     """An admin sets a DRAFT recipe's cancel keys, popup rules, checklist and reference cells.
 
     Approved and retired recipes stay frozen (the model guard backs this up). The edit is stamped
-    on the recipe (edited_by / edited_at): its last editor cannot then approve it (approve_recipe),
-    so four eyes still see the final content."""
+    on the recipe (edited_by / edited_at, the last editor) and logged; no admin who ever edited it
+    can then approve it (approve_recipe), so four eyes still see the final content."""
     if not profile.is_admin:
         raise PermissionDenied('تعديل الوصفة للمدير فقط.')
     if not isinstance(changes, dict) or not changes:
@@ -264,10 +264,17 @@ def set_screen_enabled(screen, profile, enabled: bool) -> RpaScreen:
     return screen
 
 
+def _ever_edited_by(recipe, profile) -> bool:
+    """Any past edit of this recipe by this admin, from the audit trail (edit_recipe logs each one)."""
+    return AuditLog.objects.filter(action='rpa_recipe_edited', model_name='RpaRecipe',
+                                   object_id=str(recipe.pk), user=profile).exists()
+
+
 def approve_recipe(recipe, profile) -> RpaRecipe:
-    """Four-eyes on a recipe: an admin other than its importer and its last editor (both read from
-    the recipe row itself, under its lock); the content must allow a safe dry run; the previous
-    approved one retires."""
+    """Four-eyes on a recipe: an admin who neither imported it nor ever edited it. Checked under the
+    recipe row lock against the row (created_by, last editor edited_by) and the audit trail (every
+    earlier editor; if retention ever prunes it, edited_by still holds the last one). The content
+    must allow a safe dry run; the previous approved one retires."""
     if not profile.is_admin:
         raise PermissionDenied('اعتماد الوصفة للمدير فقط.')
     with transaction.atomic():
@@ -275,7 +282,7 @@ def approve_recipe(recipe, profile) -> RpaRecipe:
         recipe = RpaRecipe.objects.select_for_update().get(pk=recipe.pk)
         if profile.id == recipe.created_by_id:
             raise PermissionDenied('لا يمكنك اعتماد وصفة قمت باستيرادها أنت.')
-        if profile.id == recipe.edited_by_id:
+        if profile.id == recipe.edited_by_id or _ever_edited_by(recipe, profile):
             raise PermissionDenied('لا يمكنك اعتماد وصفة عدّلتها أنت.')
         if recipe.status != 'draft':
             raise ValidationError({'detail': 'يمكن اعتماد الوصفة وهي مسودة فقط.'})
