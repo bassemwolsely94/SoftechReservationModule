@@ -1,7 +1,8 @@
 # 40 — SOFTECH Delta Sync (PERF-6): read only the rows that changed
 
 **Status:** ✅ DESIGN APPROVED by the owner (2026-11-19). Not built: each table's build is a
-separate step that the owner confirms first. Evidence gates G1–G4 (§10) are still open.
+separate step that the owner confirms first. Evidence gates (§10): G1 passed (morning run),
+G3 price passed; G2, G3 cost and G4 still open. §10.1 lists a fix needed before stock SHADOW.
 No production code, no migration and no SOFTECH write is part of this document.
 **Builds on:** doc 30 *SOFTECH Load Reduction*, Phase 2 (steps 2.0–2.3). This document is the
 detailed plan for that phase.
@@ -90,10 +91,11 @@ on the owner's PC) and a small read-only probe for this design on 2026-11-19 06:
    is exactly as current as today's full read, because both read HQ. Neither is "more stale".
 2. **The 11-11 probe showed "moved but not bumped" rows** (7 of 19 bumped). The samples are
    movements made minutes *after* the branch's last batch (moved 00:17:27, batch 00:16:09).
-   That fits warning 1, not a missing bump, but it is not proven. The fair test is section [3]
-   of the improved probe (read the same rows twice, 15 min apart: did every quantity change
-   come with a newer `modif_lastupdate`?). It has not been run in working hours yet. It is
-   gate **G1** below, and SHADOW mode (§6) proves the same thing on live traffic.
+   That fits warning 1, not a missing bump. The fair test is section [3] of the improved probe
+   (read the same rows twice, 15 min apart: did every quantity change come with a newer
+   `modif_lastupdate`?). The morning run on 2026-11-19 passed: **6 of 6** quantity changes had a
+   newer stamp (gate **G1**, §10). The sample is small, so SHADOW mode (§6) still has to prove
+   it on a full week of live traffic.
 
 ## 3. Common design (all tables)
 
@@ -320,18 +322,34 @@ Changes (small, part of the build):
 | S7 | if G1 shows `modif_lastupdate` is the branch's clock, not the HQ arrival time | the stock design changes to the movement-key detector |
 | S8 | the new "full refresh older than 26 h" stale rule on the bar | changes what staff see |
 | S9 | any shadow miss > 0 | stop, investigate, do not proceed to ON |
+| S10 | changing the precision of `ItemStock` quantity columns (§10.1) | schema change on a stock table |
 
-## 10. Open evidence gates (read-only, owner's PC, working hours)
-- **G1** — `python manage.py probe_softech_change_columns --watch 15`, once in the morning and
-  once in the afternoon. Section [3]: every quantity change must carry a newer
-  `modif_lastupdate`. Section [2b]: confirm the batch rhythm.
-- **G2** — the same run, section [6b]: customers whose flags changed must have a newer
-  `trans_time` and/or `table_dumped`.
-- **G3** — after a real price update in SOFTECH: section [5]. Also check one received purchase
-  (doc 10): did `itemcostprice` change, and was `itemlastupdate` bumped?
-- **G4** — a bounded count of `itembarcode.modif_lastupdate` and `deltrans_time` coverage.
+## 10. Evidence gates (read-only, owner's PC, working hours)
 
+| Gate | Test | Result | Status |
+|---|---|---|---|
+| **G1** | `probe_softech_change_columns --watch 15`, section [3]: every stock quantity change must carry a newer `modif_lastupdate` | **Morning run, 2026-11-19 12:16–12:33:** 4,319 rows watched, **6 of 6** quantity changes had a newer stamp, 0 without. Section [2b]: in working hours stamps arrive every minute or so (12:14:50, 12:15:49, 12:15:51; max gap 7.8 min). 501 rows changed in the last hour → a 5-min delta would read ≈ 41 rows instead of 32,563. | ✅ passed (small sample). Afternoon run at 17:00 still to add. |
+| **G2** | same run, section [6b]: customers whose flags changed must have a newer `trans_time` / `table_dumped` | 0 customers with a changed flag since our last customer sync, so nothing could be tested. `trans_time` and `table_dumped` each moved on 41 rows in 24 h. | ⏳ open — re-run later in the day. |
+| **G3** | section [5]: price changes must bump `itemlastupdate`; also cost changes from a received purchase | **21 of 21** items whose price changed in SOFTECH since our last item sync had a newer `itemlastupdate`. Cost-only changes not yet measured (a read-only watcher runs until the next hourly item sync). | ✅ price passed · ⏳ cost open |
+| **G4** | bounded count of `itembarcode.modif_lastupdate` and `deltrans_time` coverage | not run | ⏳ open |
+
+Raw reports: `scratch/softech_change_columns_probe_G1_morning.txt` on the owner's PC.
 Avoid joins between `stktrans` and `stkbal` in these probes (Appendix A note).
+
+### 10.1 Found while checking: the stock "changed" count is wrong (must be fixed before SHADOW)
+Every stock run logs about **2,785 changed rows**, even at night when nothing moves. Cause:
+2,785 `stkbal` rows with `nowqty > 0` hold `nowqty` with **more than 3 decimals** (strip
+fractions such as 1/3 of a pack; 0 such rows for `monthlyqty` / `onorderqty`).
+`ItemStock.quantity_on_hand` has 3 decimals, so the stored value is rounded and the next run's
+comparison in `sync_stock` (P-56) sees a difference again. Effects:
+- about 2,800 needless row updates in PostgreSQL every 5 minutes (today, whatever the switch);
+- the SHADOW check in §6.1 uses that same "really changed" set, so these rows would look like
+  real changes that the delta "missed".
+
+Fix before stock SHADOW (small, separate PR): round the incoming value to the stored precision
+(3 decimals, half-up) before comparing. Whether 3 decimals is precise enough for strip
+quantities (memory note: SOFTECH uses 5 decimals for strips) is a separate question.
+**Stop-and-ask S10:** changing the column precision is a schema change on a stock table.
 
 ## 11. Out of scope (listed so nothing is lost)
 - Other heavy readers: `eta_recon._softech_rows` (5.4 M rows a week), `customers.status_drift`,
