@@ -260,7 +260,7 @@ function ToastItem({ toast, onDismiss }) {
       setTimeout(() => onDismiss(toast.id), 250)
     }, toast.duration ?? (toast.type === 'error' ? 6000 : 3500))
     return () => clearTimeout(t)
-  }, [toast.id, toast.duration, onDismiss])
+  }, [toast.id, toast.duration, toast.type, onDismiss])
 
   return (
     <div

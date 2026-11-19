@@ -23,6 +23,8 @@ const CONVERTED = [
   'pages/PurchasingDashboard.jsx',
   'pages/DemandPage.jsx',
   'pages/DemandDetailPage.jsx',
+  // batch 2
+  'pages/InsuranceClaimDetailPage.jsx',
   'components/InlineConfirm.jsx',
 ]
 

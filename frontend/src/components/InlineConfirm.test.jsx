@@ -112,6 +112,21 @@ describe('useConfirm (non-modal bar)', () => {
     expect(screen.getByText('تأكيد').disabled).toBe(false)
   })
 
+  it('clicks and keys in the bar do not reach a host modal (backdrop onClick={onClose}, Esc)', async () => {
+    const onClose = vi.fn(), onKey = vi.fn(), onResult = vi.fn()
+    render(<div onClick={onClose} onKeyDown={onKey}><Harness onResult={onResult} /></div>)
+    fireEvent.click(screen.getByText('go'))
+    onClose.mockClear()
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
+    await act(async () => {})
+    expect(onKey).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('go'))
+    onClose.mockClear()
+    await act(async () => { fireEvent.click(screen.getByText('تأكيد')) })
+    expect(onResult).toHaveBeenLastCalledWith(true)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('a second request settles the first one as cancelled', async () => {
     const results = []
     render(<Harness onResult={(v) => results.push(v)} />)
