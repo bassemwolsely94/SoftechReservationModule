@@ -79,14 +79,16 @@ class ViewKindTests(TestCase):
         self.assertIn('شغّل المحرك', job.error)
 
     def test_not_whitelisted_is_404(self):
-        for path in ('/api/purchasing/metrics/jobs/', '/api/customers/jobs/', '/api/nothing/here/jobs/'):
+        # (an app's own router may answer first, e.g. /api/customers/jobs/ is its detail route — 405 there)
+        for path in ('/api/purchasing/metrics/jobs/', '/api/purchasing/summary/jobs/', '/api/nothing/here/jobs/'):
             self.assertEqual(self.c.post(path).status_code, 404, path)
         self.assertFalse(ExportJob.objects.exists())
 
     def test_app_routes_win_over_the_generic_one(self):
         from django.urls import resolve
         self.assertEqual(resolve('/api/purchasing/export/jobs/').url_name, 'purchasing-export-job')
-        self.assertEqual(resolve('/api/pic-analytics/export/jobs/').func.__name__, 'export_jobs')
+        self.assertNotEqual(resolve('/api/pic-analytics/export/jobs/').url_name, 'export-job-start')
+        self.assertEqual(resolve('/api/pic-analytics/export/jobs/').func.cls.__name__, 'export_jobs')
         self.assertEqual(resolve('/api/stock-audit/findings/export/jobs/').url_name, 'export-job-start')
 
     def test_without_permission_403(self):
