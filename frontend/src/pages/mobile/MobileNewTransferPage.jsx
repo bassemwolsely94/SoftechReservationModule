@@ -55,10 +55,8 @@ export default function MobileNewTransferPage() {
         phone_alert: phoneAlert,
         items: lines.map(l => ({ item: l.item.id, quantity: Number(l.quantity) || 1 })),
       }
-      const { data } = await transfersApi.create(payload)
-      if (thenSubmit) {
-        try { await transfersApi.submit(data.id) } catch { /* land on detail to retry */ }
-      }
+      // one server call: a refused submit saves nothing, so a retry can't leave a second request (FE-11)
+      const { data } = thenSubmit ? await transfersApi.createAndSubmit(payload) : await transfersApi.create(payload)
       qc.invalidateQueries({ queryKey: ['m-transfers'] })
       navigate(`/m/transfers/${data.id}`, { replace: true })
     } catch (e) {
