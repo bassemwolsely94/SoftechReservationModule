@@ -25,6 +25,8 @@ const CONVERTED = [
   'pages/DemandDetailPage.jsx',
   // batch 2
   'pages/InsuranceClaimDetailPage.jsx',
+  // batch 3
+  'pages/FollowUpsPage.jsx',
   'components/InlineConfirm.jsx',
 ]
 
