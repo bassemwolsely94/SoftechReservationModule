@@ -53,11 +53,9 @@ class ReportBudgets(TestCase):
 
     def test_incentives_targets(self):
         self._targets(2)
-        # N+1 found in Stage 1 (12 → 52 queries for 10 targets). Pin exactly that failure so a 403, a
-        # missing row or any other breakage still fails; Stage 3 removes this wrapper with its fix.
-        with self.assertRaisesRegex(AssertionError, 'queries grow with rows'):
-            assert_budget(self, 'incentives/targets', self.client_, '/api/incentives/targets/',
-                          grow=self._targets, min_rows=10, rows_of=_count_list)
+        # Stage 1 found an N+1 here (12 → 52 queries for 10 targets); Stage 3 batches the attainments.
+        assert_budget(self, 'incentives/targets', self.client_, '/api/incentives/targets/',
+                      grow=self._targets, min_rows=10, rows_of=_count_list)
 
 
 class TrackBudgets(TestCase):
