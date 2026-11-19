@@ -12,6 +12,7 @@ import DuplicateNotice from './invoices/DuplicateNotice'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
+import { ConfirmButton, useConfirm } from '../components/InlineConfirm'
 
 // ── Download helper ────────────────────────────────────────────────────────────
 function triggerDownload(data, filename, mime) {
@@ -51,7 +52,8 @@ function scoreColor(s) {
 // mapping (code moving between items, or an item's code changing), it comes back
 // as needs_approval — the user must approve the warning before we override, and
 // is then notified of the discrepancy they signed off.
-async function learnWithApproval(invoiceId, lineId, onNotify) {
+// `askConfirm` is useConfirm()'s confirm: the supplier-code change is approved in the inline bar
+async function learnWithApproval(invoiceId, lineId, onNotify, askConfirm) {
   try {
     const r = await invoicesApi.learnMapping(invoiceId, lineId)
     const link = r?.data?.softech_link
@@ -61,8 +63,9 @@ async function learnWithApproval(invoiceId, lineId, onNotify) {
         ? `• سيتغيّر كود المورد لهذا الصنف من "${d.from}" إلى "${d.to}"`
         : `• كود المورد "${d.code}" مرتبط حالياً بصنف آخر (${(d.from_itemcodes || []).join(', ')}) وسيُنقل إلى هذا الصنف`
     ).join('\n')
-    const ok = window.confirm(
-      `⚠ تم رصد تعارض في ربط كود المورد:\n\n${parts}\n\nهل تعتمد هذا التعديل؟`)
+    const ok = askConfirm ? await askConfirm(
+      `⚠ تم رصد تعارض في ربط كود المورد:\n\n${parts}\n\nهل تعتمد هذا التعديل؟`,
+      { confirmLabel: 'اعتماد التعديل', cancelLabel: 'عدم الاعتماد' }) : false
     if (!ok) { onNotify?.('لم يُعتمد تعديل كود المورد', 'error'); return }
     const r2 = await invoicesApi.learnMapping(invoiceId, lineId, { approve_link_change: true })
     if (r2?.data?.softech_link?.committed) {
@@ -72,6 +75,7 @@ async function learnWithApproval(invoiceId, lineId, onNotify) {
 }
 
 export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable, onNotify, kb, openReq }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [editing,     setEditing]     = useState(false)
   const [draft,       setDraft]       = useState({ ...line })
   const [showMatches, setShowMatches] = useState(false)
@@ -96,7 +100,7 @@ export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable,
   // Free-text / item-code search pick (ItemSearchWidget → updateLine).
   const pickItem = async (item) => {
     await invoicesApi.updateLine(invoiceId, line.id, { item: item.item_id, is_confirmed: true })
-    learnWithApproval(invoiceId, line.id, onNotify)
+    learnWithApproval(invoiceId, line.id, onNotify, confirmInline)
     setShowMatches(false)
     onUpdated()
   }
@@ -115,7 +119,7 @@ export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable,
       })
       // Learn the mapping for future invoices (prompts for approval on a change)
       if (draft.item) {
-        learnWithApproval(invoiceId, line.id, onNotify)
+        learnWithApproval(invoiceId, line.id, onNotify, confirmInline)
       }
       setEditing(false)
       setShowMatches(false)
@@ -128,7 +132,7 @@ export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable,
   const selectMatch = async (m) => {
     await invoicesApi.updateLine(invoiceId, line.id, { item: m.item_id, is_confirmed: true })
     // Learn mapping (prompts for approval if this changes an existing code link)
-    learnWithApproval(invoiceId, line.id, onNotify)
+    learnWithApproval(invoiceId, line.id, onNotify, confirmInline)
     setShowMatches(false)
     onUpdated()
   }
@@ -146,6 +150,7 @@ export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable,
         needsReview ? 'border-orange-300 bg-orange-50/40' :
         line.item ? 'border-blue-200 bg-blue-50/10' :
         'border-amber-200 bg-amber-50/10'}`}>
+      {confirmUi}
 
       <div className="flex items-start gap-3 p-3">
         {/* Confirm dot */}
@@ -264,8 +269,10 @@ export function InvoiceLineRow({ line, invoiceId, onUpdated, onDelete, editable,
                   className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">
                   {loadingM ? '...' : '🔍'}
                 </button>
-                <button data-tour="invoices-main-line-delete" onClick={() => onDelete(line.id)}
-                  className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">🗑</button>
+                <ConfirmButton data-tour="invoices-main-line-delete" onConfirm={() => onDelete(line.id)}
+                  confirmLabel="حذف؟" title="حذف هذا السطر"
+                  armedClassName="text-xs px-1.5 py-1 rounded bg-red-600 text-white font-bold"
+                  className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">🗑</ConfirmButton>
               </>
             )}
           </div>
@@ -401,6 +408,8 @@ function VendorLink({ inv, editable, onLinked, onNotify }) {
 }
 
 function InvoiceDetail({ invoiceId, onBack, onOpen }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
+  const [validationReport, setValidationReport] = useState(null)   // «تحقق» findings, shown inline
   const [inv,          setInv]          = useState(null)
   const [loading,      setLoading]      = useState(true)
   const [headerEdit,   setHeaderEdit]   = useState(false)
@@ -514,14 +523,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     onConfirm: async (l) => {
       if (!l.item || l.is_confirmed) return
       await invoicesApi.updateLine(invoiceId, l.id, { item: l.item, is_confirmed: true })
-      learnWithApproval(invoiceId, l.id, showToast)
+      learnWithApproval(invoiceId, l.id, showToast, confirmInline)
       quietReload()
     },
     onOpen: l => setOpenReq(r => ({ id: l.id, n: (r?.n || 0) + 1 })),
   })
 
-  const handleDelete = async (lid) => {
-    if (!confirm('حذف هذا السطر؟')) return
+  const handleDelete = async (lid) => {   // the 🗑 is a two-step ConfirmButton
     await invoicesApi.deleteLine(invoiceId, lid)
     load()
   }
@@ -666,13 +674,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
     try {
       const { data } = await invoicesApi.validateErp(invoiceId)
       const ne = data.errors?.length || 0, nw = data.warnings?.length || 0, nn = data.notices?.length || 0
-      if (ne === 0 && nw === 0 && nn === 0) showToast('✓ لا توجد مخالفات — جاهزة للترحيل')
+      if (ne === 0 && nw === 0 && nn === 0) { setValidationReport(null); showToast('✓ لا توجد مخالفات — جاهزة للترحيل') }
       else {
         const parts = []
         if (ne) parts.push('أخطاء (تمنع الترحيل):\n' + data.errors.map(e => '• ' + e.message).join('\n'))
         if (nw) parts.push('تحذيرات:\n' + data.warnings.map(w => '• ' + w.message).join('\n'))
         if (nn) parts.push('تنبيهات (لا تمنع الترحيل):\n' + data.notices.map(w => '• ' + w.message).join('\n'))
-        window.alert(parts.join('\n\n'))
+        setValidationReport(parts.join('\n\n'))
         showToast(`${ne} خطأ / ${nw} تحذير`, ne ? 'error' : 'success')
       }
     } catch (e) {
@@ -700,7 +708,7 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
 
   const [returning, setReturning] = useState(false)
   const handleCreateReturn = async () => {
-    if (!window.confirm('إنشاء مسودة مرتجع مورد لهذه الفاتورة؟ (يمكنك تعديل الكميات قبل الترحيل)')) return
+    if (!(await confirmInline('إنشاء مسودة مرتجع مورد لهذه الفاتورة؟ (يمكنك تعديل الكميات قبل الترحيل)', { confirmLabel: 'إنشاء المسودة' }))) return
     setReturning(true)
     try {
       const { data } = await invoicesApi.createReturn(invoiceId)
@@ -729,6 +737,13 @@ function InvoiceDetail({ invoiceId, onBack, onOpen }) {
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium
           ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
           {toast.msg}
+        </div>
+      )}
+      {confirmUi}
+      {validationReport && (
+        <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-3" data-tour="invoices-main-validation-report">
+          <div className="flex-1 whitespace-pre-line leading-relaxed">{validationReport}</div>
+          <button type="button" onClick={() => setValidationReport(null)} className="shrink-0 text-amber-700 hover:text-amber-900" title="إغلاق">✕</button>
         </div>
       )}
 
