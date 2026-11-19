@@ -35,9 +35,10 @@ _OVERPAY_TOL = Decimal('0.01')
 
 def _upsert_exc(party, etype, severity, *, invoice=None, payment=None,
                 detail='', anomaly_score=Decimal('0')) -> bool:
-    """Create an OPEN exception unless an identical open one already exists."""
-    if ReconException.objects.filter(exception_type=etype, party=party, status='open',
-                                     invoice=invoice, payment=payment).exists():
+    """Create an OPEN exception unless an identical one is open / under investigation, or a person
+    has decided it (C15: a person's decision sticks — recon_review.is_suppressed)."""
+    from .recon_review import is_suppressed
+    if is_suppressed(etype, party, invoice=invoice, payment=payment):
         return False
     ReconException.objects.create(
         party=party, invoice=invoice, payment=payment, exception_type=etype,

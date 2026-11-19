@@ -28,6 +28,10 @@ def _can_create(request):
 def _clean_criteria(data) -> dict:
     c = data.get('criteria') or {}
     out = {}
+    if c.get('refill_due') in (True, 'true', '1', 1):
+        # C08: due for a refill from their own buying interval — segment / inactive days do not apply
+        out['refill_due'] = True
+        c = {k: v for k, v in c.items() if k in ('branch_ids', 'branch_id')}
     segs = c.get('segments') or []
     if isinstance(segs, list) and segs:
         out['segments'] = [str(s)[:15] for s in segs if s][:10]

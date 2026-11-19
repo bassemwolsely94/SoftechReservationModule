@@ -94,12 +94,16 @@ class PayrollRuleTests(_Base):
         self.assertEqual((sett.total_incentive, sett.total_adjustments, sett.final_payout),
                          (Decimal('5.00'), Decimal('2.50'), Decimal('7.50')))
         self.assertEqual((sett.transaction_count, sett.is_finalized, sett.notes), (2, True, 'Sep'))
-        # finalizing again skips it; recalculating needs force
+        # finalizing again skips it; recalculating is refused, and a forced run (open settlements
+        # only) leaves the finalized one as it is (D-16, owner 2026-11-19)
         self.assertEqual(self.admin.post(self._url('finalize/'), PERIOD, format='json').json()['skipped_count'], 1)
         self.assertEqual(self._calculate().status_code, 409)
-        self.assertEqual(self._calculate(force=True).status_code, 200)
+        r = self._calculate(force=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['kept_finalized_user_ids'], [self.rep.pk])
         sett.refresh_from_db()
-        self.assertFalse(sett.is_finalized)
+        self.assertTrue(sett.is_finalized)
+        self.assertEqual(IncentiveTransaction.objects.count(), 2)
 
     def test_finalize_without_transactions_is_400(self):
         self.assertEqual(self.admin.post(self._url('finalize/'), PERIOD, format='json').status_code, 400)

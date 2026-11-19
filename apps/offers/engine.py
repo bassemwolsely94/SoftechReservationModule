@@ -219,6 +219,42 @@ def _cap_to_posdiscp(per_line, qlines):
     return capped
 
 
+def _keep_in_bounds(per, ceilings):
+    """The rounding split ("the last line absorbs the rounding") can leave one line BELOW 0 — a hidden
+    surcharge — or above what it may carry, when the earlier shares round up and the last line is tiny
+    (Wave 4 property tests, PR 207; owner asked for the fix 2026-11-19). Repair only those lines: clamp
+    each to [0, its ceiling] and move the difference, a piaster at a time, to / from the other lines —
+    the largest share first, then the lowest line index — so the offer's total is unchanged and every
+    basket that was already in bounds keeps exactly the same split."""
+    out = dict(per)
+    step = Decimal('0.01')
+    owed = Decimal('0')                       # > 0: piasters still to place; < 0: still to take back
+    for idx in out:
+        top = ceilings.get(idx, out[idx])
+        if out[idx] < 0:
+            owed += out[idx]
+            out[idx] = Decimal('0')
+        elif out[idx] > top:
+            owed += out[idx] - top
+            out[idx] = top
+    while owed != 0:
+        if owed < 0:                          # take back from the line with the largest share
+            pool = [i for i in out if out[i] >= step]
+            if not pool:
+                break
+            i = min(pool, key=lambda k: (-out[k], k))
+            out[i] -= step
+            owed += step
+        else:                                 # place on the line with the most room left
+            pool = [i for i in out if ceilings.get(i, out[i]) - out[i] >= step]
+            if not pool:
+                break
+            i = min(pool, key=lambda k: (-(ceilings.get(k, out[k]) - out[k]), k))
+            out[i] += step
+            owed -= step
+    return out
+
+
 def _percent(offer, qlines):
     pct = _d(offer.value)
     per = {l.index: _r2(l.gross * pct / Decimal('100')) for l in qlines}
@@ -235,7 +271,7 @@ def _percent(offer, qlines):
                 scaled[idx] = s
                 running += s
             scaled[items[-1][0]] = _r2(cap - running)   # last absorbs rounding
-            per = scaled
+            per = _keep_in_bounds(scaled, per)          # never below 0, never above its uncapped share
     return per
 
 
@@ -250,7 +286,7 @@ def _fixed(offer, qlines):
         per[l.index] = s
         running += s
     per[qlines[-1].index] = _r2(amount - running)   # last absorbs rounding
-    return per
+    return _keep_in_bounds(per, {l.index: l.gross for l in qlines})   # never below 0 or above the line
 
 
 def _bxgy_same_item(offer, qlines, item_card):
@@ -541,7 +577,8 @@ def evaluate_offers(basket, *, customer=None, branch_id=None, channel=None, at=N
         for idx, amt in c['per_line'].items():
             combined[idx] = combined.get(idx, Decimal('0')) + amt
     for idx in list(combined):
-        combined[idx] = min(combined[idx], gross_by_index.get(idx, Decimal('0')))
+        # a line's discount stays within [0, its gross] — never a surcharge (PR 207 property tests)
+        combined[idx] = max(Decimal('0'), min(combined[idx], gross_by_index.get(idx, Decimal('0'))))
 
     total_discount = _r2(sum(combined.values(), Decimal('0')))
 

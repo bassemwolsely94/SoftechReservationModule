@@ -14,11 +14,18 @@ class LoyaltyTierSerializer(serializers.ModelSerializer):
 
 class PointTransactionSerializer(serializers.ModelSerializer):
     transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
+    # Who made a manual change (D-14 audit). The staff name only — never a phone.
+    created_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PointTransaction
         fields = ['id', 'points', 'transaction_type', 'transaction_type_display',
-                  'source_type', 'reason', 'notes', 'balance_after', 'created_at']
+                  'source_type', 'reason', 'notes', 'balance_before', 'balance_after',
+                  'created_by_name', 'created_at']
+
+    def get_created_by_name(self, obj):
+        staff = obj.created_by
+        return (staff.full_name or '') if staff else ''
 
 
 class LoyaltyAccountSerializer(serializers.ModelSerializer):
