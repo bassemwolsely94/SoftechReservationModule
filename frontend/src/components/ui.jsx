@@ -258,9 +258,9 @@ function ToastItem({ toast, onDismiss }) {
     const t = setTimeout(() => {
       setLeaving(true)
       setTimeout(() => onDismiss(toast.id), 250)
-    }, toast.duration ?? 3500)
+    }, toast.duration ?? (toast.type === 'error' ? 6000 : 3500))
     return () => clearTimeout(t)
-  }, [toast.id, toast.duration, onDismiss])
+  }, [toast.id, toast.duration, toast.type, onDismiss])
 
   return (
     <div
@@ -276,7 +276,7 @@ function ToastItem({ toast, onDismiss }) {
       <div className="flex-1 min-w-0">
         <div className="font-bold text-sm">{toast.title}</div>
         {toast.message && (
-          <div className="text-xs opacity-80 mt-0.5 leading-relaxed">{toast.message}</div>
+          <div className="text-xs opacity-80 mt-0.5 leading-relaxed whitespace-pre-line">{toast.message}</div>
         )}
       </div>
       <button

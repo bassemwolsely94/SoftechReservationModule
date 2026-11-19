@@ -39,8 +39,10 @@ def _d(v):
 
 
 def _softech_headers(claim, motalba_no=None):
-    """SOFTECH's current motalba prescriptions (header level only) keyed by docnumber:
-    {docnumber: {'branch', 'docdate', 'doccode', 'gross', 'net'}}.  Reuses the import
+    """SOFTECH's current motalba prescriptions (header level only) keyed by the receipt
+    (docnumber, branch, doccode) — S-8 / D-10: the same number at another branch or of
+    another type is a different receipt:
+    {(docnumber, branch, doccode): {'branch', 'docdate', 'doccode', 'gross', 'net'}}.  Reuses the import
     queries.  `motalba_no` overrides the claim's stored number (used when the claim
     has none yet).  Raises InsuranceImportError on connection/lookup failure."""
     from .importer import (
@@ -80,13 +82,14 @@ def _softech_headers(claim, motalba_no=None):
     out = {}
     for r in cur.fetchall():
         docnumber = str(_to_int(r[3])) if r[3] else ''
-        if not docnumber or docnumber in out:
-            continue
         doccode = str(r[5] or '').strip()
-        dgt, dvr = _signed_dgt(r[7], r[11], doccode)
         branch_raw = r[2] if r[2] is not None else ''
         branch = branch_raw.strip() if isinstance(branch_raw, str) else str(branch_raw)
-        out[docnumber] = {
+        key = (docnumber, branch, doccode)
+        if not docnumber or key in out:
+            continue
+        dgt, dvr = _signed_dgt(r[7], r[11], doccode)
+        out[key] = {
             'branch': branch, 'docdate': _to_date(r[4]),
             'doccode': doccode, 'gross': _d(dgt), 'net': _d(dvr),
         }
@@ -106,16 +109,43 @@ def _our_reprice_net_delta(claim, docnumber, branch):
     return total
 
 
+def _our_receipt_key(rx, soft, taken):
+    """(key, ambiguous_candidates) for one of our prescriptions; key = (docnumber, branch,
+    doccode). A legacy row with no doccode takes the SOFTECH receipt of the same number +
+    branch when exactly one is left unclaimed. When several are left it is AMBIGUOUS: the
+    caller leaves the row and those receipts out of the diff, so nothing is excluded or
+    imported on a guess."""
+    d = str(rx.softech_docnumber).strip()
+    br = (rx.softech_branchcode or '').strip()
+    dc = (rx.softech_doccode or '').strip()
+    if not dc:
+        cands = [k for k in soft if k[0] == d and k[1] == br and k not in taken]
+        if len(cands) == 1:
+            return cands[0], []
+        if len(cands) > 1:
+            return (d, br, dc), cands
+    return (d, br, dc), []
+
+
 def preview_resync(claim: InsuranceClaim, motalba_no=None) -> dict:
-    """Read-only diff of SOFTECH's current motalba vs our claim."""
+    """Read-only diff of SOFTECH's current motalba vs our claim, matched on the receipt
+    (docnumber, branch, doccode)."""
     soft, pc = _softech_headers(claim, motalba_no)
 
-    # our IMPORTED prescriptions (manual additions from other motalbas are protected)
+    # our IMPORTED prescriptions (manual additions from other motalbas are protected).
+    # Rows with a doccode first, so a legacy blank-doccode row never takes their receipt.
     ours = {}
-    for rx in claim.prescriptions.all():
-        if rx.is_manual:
+    ambiguous_rx, held = [], set()
+    rows = [rx for rx in claim.prescriptions.all() if not rx.is_manual]
+    rows.sort(key=lambda rx: not (rx.softech_doccode or '').strip())
+    for rx in rows:
+        key, cands = _our_receipt_key(rx, soft, set(ours) | held)
+        if cands:
+            ambiguous_rx.append(rx)
+            held.update(cands)
             continue
-        ours[str(rx.softech_docnumber)] = rx
+        ours[key] = rx
+    soft = {k: v for k, v in soft.items() if k not in held}
 
     soft_docs, our_docs = set(soft), set(ours)
 
@@ -124,20 +154,21 @@ def preview_resync(claim: InsuranceClaim, motalba_no=None) -> dict:
     both = soft_docs & our_docs
 
     new_items = [{
-        'docnumber': d, 'branch': soft[d]['branch'],
-        'date': soft[d]['docdate'].isoformat() if soft[d]['docdate'] else None,
-        'gross': float(soft[d]['gross']), 'net': float(soft[d]['net']),
-    } for d in new_docs]
+        'docnumber': k[0], 'branch': soft[k]['branch'], 'doccode': k[2],
+        'date': soft[k]['docdate'].isoformat() if soft[k]['docdate'] else None,
+        'gross': float(soft[k]['gross']), 'net': float(soft[k]['net']),
+    } for k in new_docs]
 
     removed_items = []
-    for d in removed_docs:
-        rx = ours[d]
+    for k in removed_docs:
+        rx = ours[k]
+        d = k[0]
         reprices = SoftechRepriceRun.objects.filter(
             docnumber=d, branchcode=rx.softech_branchcode,
             status=SoftechRepriceRun.STATUS_APPLIED
         ).exclude(new_prices__has_key='_bonusqty_backfill')
         removed_items.append({
-            'rx_id': rx.id, 'docnumber': d, 'branch': rx.softech_branchcode,
+            'rx_id': rx.id, 'docnumber': d, 'branch': rx.softech_branchcode, 'doccode': k[2],
             'patient': rx.patient_name, 'net': float(_d(rx.net_after)),
             'already_excluded': hasattr(rx, 'exclusion'),
             'has_reprice': reprices.exists(),
@@ -145,16 +176,17 @@ def preview_resync(claim: InsuranceClaim, motalba_no=None) -> dict:
         })
 
     changed_items = []
-    for d in sorted(both):
-        rx = ours[d]
+    for k in sorted(both):
+        rx = ours[k]
+        d = k[0]
         # expected current SOFTECH net = imported net + our own reprice deltas
         our_delta = _our_reprice_net_delta(claim, d, rx.softech_branchcode)
         base_net = _d(rx.softech_net if rx.softech_net is not None else rx.net_after)
         expected_net = base_net + our_delta
-        soft_net = soft[d]['net']
+        soft_net = soft[k]['net']
         if abs(soft_net - expected_net) > _TOL:
             changed_items.append({
-                'rx_id': rx.id, 'docnumber': d, 'branch': rx.softech_branchcode,
+                'rx_id': rx.id, 'docnumber': d, 'branch': rx.softech_branchcode, 'doccode': k[2],
                 'patient': rx.patient_name,
                 'our_net': float(base_net), 'our_reprice_delta': float(our_delta),
                 'softech_net': float(soft_net),
@@ -170,6 +202,9 @@ def preview_resync(claim: InsuranceClaim, motalba_no=None) -> dict:
             'unchanged': len(both) - len(changed_items),
             'protected_manual': claim.prescriptions.filter(is_manual=True).count()
                                 + claim.manual_rx.count(),
+            # legacy rows (no doccode) whose number+branch has several SOFTECH receipts —
+            # left out of the diff, never excluded or re-imported on a guess
+            'ambiguous_legacy': len(ambiguous_rx),
         },
         'new': new_items,
         'removed': removed_items,
@@ -249,7 +284,8 @@ def _import_one(claim, docnumber, branch, docdate, doccode, gross, net, pc,
         claim=claim, seq=seq, docnumber=docnumber, docdate=docdate,
         branchcode=branch, personcode=pc, patient_name=patient_name,
         classified_lines=classified_lines, totals=totals,
-        local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc)
+        local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc,
+        doccode=doccode)
 
 
 def apply_resync(claim: InsuranceClaim, approved_change_ids=None,
@@ -288,7 +324,7 @@ def apply_resync(claim: InsuranceClaim, approved_change_ids=None,
     tarsia_disc   = ta if ta > 0 else _d(claim.applied_tarsia_disc_pct)
     tarsia_codes  = DEFAULT_TARSIA_CLASSIF_CODES
 
-    # need docdate/doccode/gross/net per new+changed docnumber → re-read headers
+    # need docdate/doccode/gross/net per new+changed receipt → re-read headers
     soft, _ = _softech_headers(claim)
 
     from .models import ResyncRun
@@ -300,7 +336,7 @@ def apply_resync(claim: InsuranceClaim, approved_change_ids=None,
     with transaction.atomic():
         # ── NEW ────────────────────────────────────────────────────────────────
         for it in pv['new']:
-            d = it['docnumber']; h = soft.get(d)
+            d = it['docnumber']; h = soft.get((d, it['branch'], it['doccode']))
             if not h:
                 continue
             rx = _import_one(claim, d, h['branch'], h['docdate'], h['doccode'],
@@ -338,7 +374,7 @@ def apply_resync(claim: InsuranceClaim, approved_change_ids=None,
         for it in pv['changed']:
             if it['rx_id'] not in approved:
                 continue
-            d = it['docnumber']; h = soft.get(d)
+            d = it['docnumber']; h = soft.get((d, it['branch'], it['doccode']))
             if not h:
                 continue
             old = claim.prescriptions.filter(pk=it['rx_id']).first()
@@ -392,8 +428,15 @@ def revert_resync(run, user=None) -> dict:
         #    re-imported one for that docnumber first)
         for snap in p.get('changed', []):
             docno = snap['rx'].get('softech_docnumber')
-            InsuranceClaimPrescription.objects.filter(
-                claim=claim, softech_docnumber=docno).delete()
+            # A claim may hold the same number from another branch / doctype (S-8 / D-10),
+            # so delete only THIS receipt. Imported rows only: a manual addition is never
+            # re-synced, and older snapshots carry no doccode.
+            target = InsuranceClaimPrescription.objects.filter(
+                claim=claim, softech_docnumber=docno, is_manual=False,
+                softech_branchcode=snap['rx'].get('softech_branchcode') or '')
+            if snap['rx'].get('softech_doccode'):
+                target = target.filter(softech_doccode=snap['rx']['softech_doccode'])
+            target.delete()
             _restore_prescription(claim, snap)
         recalculate_claim_final_totals(claim)
         run.status = ResyncRun.STATUS_REVERTED

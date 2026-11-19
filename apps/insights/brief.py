@@ -127,13 +127,25 @@ def _followups_section(branch, day):
     return [f'*{H_FOLLOWUP}*'] + lines
 
 
+def _today_section(branch, day):
+    """C02: what to do today, with the money at stake (apps/insights/today.py). A failure there never
+    stops the rest of the brief."""
+    from apps.insights import today
+    try:
+        return today.lines(today.actions(branch, day))
+    except Exception:
+        logger.exception('morning brief: «اليوم» failed for branch %s', branch.pk)
+        return []
+
+
 def compose(branch, day):
     """The brief for ``branch`` on ``day`` (reports on the day before)."""
     yesterday = day - timedelta(days=1)
     name = branch.name_ar or branch.name
     y_lines, sales = _yesterday_section(branch, yesterday)
     m_lines, mtd = _mtd_section(branch, yesterday)
-    sections = [y_lines, m_lines, _drops_section(branch, yesterday), _followups_section(branch, day)]
+    sections = [_today_section(branch, day), y_lines, m_lines, _drops_section(branch, yesterday),
+                _followups_section(branch, day)]
     text = '\n\n'.join('\n'.join(s) for s in [[f'☀️ صباح الخير — {name}']] + [s for s in sections if s])
     return BriefContent(
         headline_vars=[' '.join(name.split()), f'{_n(sales)} ج.م', _pct(mtd['pct'])],

@@ -7,6 +7,8 @@ apps/stock_audit/views.py — mounted at /api/stock-audit/ (doc 32 Phase 3)
   GET  findings/<id>/               one finding
   POST findings/<id>/review/        {status, note}             review (management approve, or own-branch manager)
   POST findings/bulk-review/        {ids, status, note}
+  POST findings/<id>/task/          C13: assigned task + targeted count of the finding's items (idempotent)
+  POST findings/bulk-task/          {ids}  the same for ticked findings (one count per branch)
   GET  findings/export/             Excel of the current filters
   GET  by-user/                     adjustments per SOFTECH user (check 5 ranking, always shown)
   GET  rules/                       thresholds: defaults, chain values, branch overrides
@@ -105,7 +107,8 @@ def _rule_meta(code):
     return {'code': code, 'number': s.get('number'), 'name_ar': s.get('name_ar', code), 'name_en': s.get('name_en', code)}
 
 
-def _finding_json(f, bnames, unames, sales=None):
+def _finding_json(f, bnames, unames, sales=None, links=None):
+    from .finding_tasks import link_json
     return {
         'id': f.id, 'rule': _rule_meta(f.rule_code), 'severity': f.severity, 'status': f.status,
         'branchcode': f.branchcode, 'branch_name': bnames.get(f.branchcode, {'ar': f.branchcode, 'en': f.branchcode}),
@@ -119,6 +122,7 @@ def _finding_json(f, bnames, unames, sales=None):
         'reviewed_at': f.reviewed_at, 'first_seen': f.first_seen, 'last_seen': f.last_seen,
         'next_statuses': sorted(StockAuditFinding.TRANSITIONS.get(f.status, ())),
         'sales': (sales or {}).get(f.id),   # channel / account / PIC on sale & return findings
+        'task': link_json((links or {}).get(f.id)),   # C13: newest task + targeted count
     }
 
 
@@ -222,7 +226,9 @@ def findings(request):
     page = pager.paginate_queryset(qs, request)
     bnames, unames = _branch_names(), _user_names({f.softech_user for f in page})
     sales = sales_context(page)
-    resp = pager.get_paginated_response([_finding_json(f, bnames, unames, sales) for f in page])
+    from .finding_tasks import latest_links
+    links = latest_links(f.id for f in page)
+    resp = pager.get_paginated_response([_finding_json(f, bnames, unames, sales, links) for f in page])
     resp.data['totals'] = qs.aggregate(value=Sum('value_egp'), n=Count('id'))
     resp.data['from'], resp.data['to'] = d_from, d_to
     return resp
@@ -244,7 +250,12 @@ def finding_detail(request, pk):
     f = _get_scoped(acc, pk)
     if f is None:
         return Response({'detail': 'غير موجود — Not found'}, status=404)
-    return Response(_finding_json(f, _branch_names(), _user_names({f.softech_user}), sales_context([f])))
+    return Response(_one_json(f))
+
+
+def _one_json(f):
+    from .finding_tasks import latest_links
+    return _finding_json(f, _branch_names(), _user_names({f.softech_user}), sales_context([f]), latest_links([f.id]))
 
 
 def _apply_review(f, new_status, note, acc, request):
@@ -284,7 +295,7 @@ def review(request, pk):
     if err:
         return _bad(err)
     f.refresh_from_db()
-    return Response(_finding_json(f, _branch_names(), _user_names({f.softech_user}), sales_context([f])))
+    return Response(_one_json(f))
 
 
 @api_view(['POST'])
@@ -309,6 +320,60 @@ def bulk_review(request):
             else:
                 done += 1
     return Response({'done': done, 'skipped': skipped})
+
+
+# ── C13: finding → assigned task + targeted count ────────────────────────────
+
+TASK_BULK_MAX = 100
+
+
+def _task_result(out):
+    from .finding_tasks import link_json
+    return {'created': [{'finding': l.finding_id, **link_json(l)} for l in out['created']],
+            'existing': [{'finding': l.finding_id, **link_json(l)} for l in out['existing']],
+            'skipped': out['skipped']}
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def finding_task(request, pk):
+    """Same reviewers as the review moves (stock_audit approve, or a named branch manager for their
+    own branches). A second call returns the open task instead of making another."""
+    from .finding_tasks import create_tasks
+    acc = Access(request)
+    if not acc.can_review:
+        return _deny()
+    f = _get_scoped(acc, pk)
+    if f is None:
+        return Response({'detail': 'غير موجود — Not found'}, status=404)
+    out = create_tasks([f], by=acc.profile, request=request)
+    if out['skipped']:
+        return _bad(out['skipped'][0]['reason'])
+    f.refresh_from_db()
+    return Response({**_task_result(out), 'finding': _one_json(f)},
+                    status=status.HTTP_201_CREATED if out['created'] else status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def bulk_task(request):
+    from .finding_tasks import create_tasks
+    acc = Access(request)
+    if not acc.can_review:
+        return _deny()
+    ids = request.data.get('ids') or []
+    if not isinstance(ids, list) or not ids:
+        return _bad('اختر ملاحظة واحدة على الأقل — pick at least one finding')
+    if len(ids) > TASK_BULK_MAX:
+        return _bad(f'الحد الأقصى {TASK_BULK_MAX} ملاحظة في المرة — at most {TASK_BULK_MAX}')
+    if not all(isinstance(i, int) or (isinstance(i, str) and i.isdigit()) for i in ids):
+        return _bad('أرقام ملاحظات غير صالحة — invalid ids')
+    rows = list(StockAuditFinding.objects.filter(pk__in=ids))
+    allowed = [f for f in rows if acc.allows_branch(f.branchcode)]
+    outside = [{'id': f.pk, 'reason': 'خارج فروعك — outside your branches'} for f in rows if f not in allowed]
+    out = create_tasks(allowed, by=acc.profile, request=request)
+    out['skipped'] = outside + out['skipped']
+    return Response(_task_result(out))
 
 
 @api_view(['GET'])

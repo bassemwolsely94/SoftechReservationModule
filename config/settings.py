@@ -624,6 +624,10 @@ POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 # OFF = a NEW return order is refused and the screen does not offer «مرتجع»; returns already created
 # keep their posting path. Not a SOFTECH writer switch.
 POS_RETURNS_ENABLED = config('POS_RETURNS_ENABLED', default=False, cast=bool)
+# D-11 (owner 2026-11-19): re-credit the loyalty points a sale missed when the branch points-rate read
+# failed (supervisor action on the Exception Center / cmd credit_pos_missing_points). Default OFF. The
+# write itself goes through the registered loyalty writer, so LOYALTY_SOFTECH_WRITE_ENABLED must be ON too.
+POS_POINTS_RECOVERY_ENABLED = config('POS_POINTS_RECOVERY_ENABLED', default=False, cast=bool)
 # D1 (UAT 2026-11-17): hours another branch's customer stays openable by id after a full-phone find.
 CUSTOMER_FOUND_HOURS = config('CUSTOMER_FOUND_HOURS', default=12, cast=int)
 # Maker-checker on ISR / GL / price-change approvals (core/maker_checker.py, UAT W5b 2026-11-17): the
@@ -900,6 +904,16 @@ REFILL_REMINDER_SEND_ENABLED = config('REFILL_REMINDER_SEND_ENABLED', default=Fa
 REFILL_REMINDER_TEMPLATE     = config('REFILL_REMINDER_TEMPLATE', default='refill_reminder')
 REFILL_REMINDER_LANGUAGE     = config('REFILL_REMINDER_LANGUAGE', default='ar')
 REFILL_REMINDER_DAILY_CAP    = config('REFILL_REMINDER_DAILY_CAP', default=300, cast=int)
+# C09 follow-ups nightly (apps/followups/nightly.py): auto-close, stale → missed, generation. Local DB only.
+# Off by default: retire the old backlog first (retire_followup_backlog --apply), then switch on.
+FOLLOWUPS_NIGHTLY_ENABLED   = config('FOLLOWUPS_NIGHTLY_ENABLED', default=False, cast=bool)  # on after the backlog retirement
+FOLLOWUPS_STALE_AFTER_DAYS  = config('FOLLOWUPS_STALE_AFTER_DAYS', default=3, cast=int)
+# C08 refill-due call list (apps/followups/refill_due.py) — the "regular buyer" rule; owner questions in the PR.
+FOLLOWUPS_REFILL_DUE_MIN_PURCHASES    = config('FOLLOWUPS_REFILL_DUE_MIN_PURCHASES', default=3, cast=int)
+FOLLOWUPS_REFILL_DUE_WINDOW_DAYS      = config('FOLLOWUPS_REFILL_DUE_WINDOW_DAYS', default=365, cast=int)
+FOLLOWUPS_REFILL_DUE_OVERDUE_DAYS_MIN = config('FOLLOWUPS_REFILL_DUE_OVERDUE_DAYS_MIN', default=0, cast=int)
+FOLLOWUPS_REFILL_DUE_CHANNELS         = config('FOLLOWUPS_REFILL_DUE_CHANNELS', default='91,90')   # cash, delivery
+FOLLOWUPS_REFILL_DUE_CONSENT          = config('FOLLOWUPS_REFILL_DUE_CONSENT', default='opt_in')  # or not_withdrawn
 # Project 4 (doc 34): staff drug assistant, pharmacist-approved counselling sheets, WhatsApp counselling card.
 DRUG_ASSISTANT_ENABLED      = config('DRUG_ASSISTANT_ENABLED', default=False, cast=bool)
 COUNSELLING_CONTENT_ENABLED = config('COUNSELLING_CONTENT_ENABLED', default=False, cast=bool)

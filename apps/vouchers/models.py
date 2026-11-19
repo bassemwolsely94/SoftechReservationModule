@@ -525,7 +525,8 @@ class VoucherRedemption(models.Model):
     Final audit record — written when the POS confirms the document as used.
     Immutable once created.
     """
-    voucher        = models.ForeignKey(Voucher, on_delete=models.CASCADE,
+    # D-17 (owner 2026-11-19): a voucher with redemptions is cancelled (archived), never deleted
+    voucher        = models.ForeignKey(Voucher, on_delete=models.PROTECT,
                                         related_name='redemptions')
     document       = models.OneToOneField(VoucherRedemptionDocument, null=True,
                                            blank=True, on_delete=models.SET_NULL,

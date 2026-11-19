@@ -822,6 +822,8 @@ SCREENS = [
             T('«إعادة إرسال الطابور» بعد عودة اتصال الفرع؛ أو «إلغاء الأمر» لو لن يُحصَّل.', '"Resend queue" once the branch is back online; or "Cancel order" if it will not be collected.'),
             T('الأوامر «بانتظار الكاشير متأخر» تحتاج اتصالاً بالفرع: هل حصّل الكاشير بدون الأمر؟', '"Awaiting cashier — late" orders need a call to the branch: did the cashier collect without the order?'),
             T('قسم «المبيعات غير المخزنة» (علّم فرعاً واحداً): أكثر الأصناف ضياعاً والإلغاءات حسب الكاشير.', 'The "unsaved sales" section (tick one branch): most-lost items and removals by cashier.'),
+            T('المشرف: قسم «مبيعات بدون فحص مباشر» — راجع الخصم واكتب ملاحظة، وأضف النقاط الناقصة بعد التحصيل.',
+              'Supervisor: the "Sales without a live check" section — review the discount with a note, and add the missing points after collection.'),
         ],
         'tips': [T('الصيدلي بيشوف المبيعات الضايعة لفرعه بس؛ المشرف بيشوف كل الفروع.', "A pharmacist sees their own branch's lost sales only; a supervisor sees every branch."),
                  T('الصفحة تتحدّث تلقائياً كل 30 ثانية، ولا تكتب في SOFTECH من نفسها.', 'The page refreshes every 30 seconds and never writes to SOFTECH on its own.'),
@@ -885,6 +887,19 @@ SCREENS = [
                  'أصناف اتكتبت على الشاشة بسعر وبعدين اتلغت قبل الحفظ — فرص بيع ضاعت. بتختار آخر 30 أو 60 أو 90 يوم، وبيتحدّث بالليل.\n• بيوضح إجمالي القيمة الضايعة وعدد الأسطر الملغية ورسم يومي — مفيد للتدريب ومتابعة الكاشير.',
                  'Items entered on the screen with a price and then removed before saving — lost sales. You choose the last 30, 60 or 90 days; it updates overnight.\n• It shows the total lost value, the number of removed lines and a daily chart — useful for training and following up cashiers.'),
          },
+            {'target': 'pos-exceptions-unchecked', 'label': T('مبيعات بدون فحص مباشر', 'Sales without a live check'),
+             'text': T('بيع اتعمل والفرع ما ردّش على الفحص المباشر: صلاحية الخصم ما اتفحصتش، أو النقاط ما اتحسبتش.',
+                       'A sale went through while the branch did not answer the live check: the discount authority was not checked, or the points were not counted.'),
+             'when': T('للمشرف والمدير بس. راجعها كل وردية.', 'Supervisors and admins only. Review it every shift.'),
+             'more': T(
+                 'البيع نفسه ما بيتوقفش والخصم ما بيتغيّرش — النظام بس بيسجّل إن الفحص ما حصلش عشان حد يراجعه.\n'
+                 '• «صلاحية الخصم لم تُفحص»: راجع الخصم مع البائع واكتب ملاحظة واضغط «تمت المراجعة». لو اتضغط «جاهز» تاني والفحص نجح، السجل بيتقفل لوحده.\n'
+                 '• «نقاط الولاء لم تُحسب»: البيع اتسجّل بدون نقاط. بعد ما الكاشير يحصّل، «إضافة النقاط…» يوريك العدد من غير ما يكتب حاجة، و«تأكيد» يضيفها في SOFTECH مرة واحدة بس — حتى لو ضغطت تاني أو النت قطع.',
+                 'The sale itself is never stopped and the discount is never changed — the system only records that the check did not happen so someone reviews it.\n'
+                 '• "Discount authority not checked": review the discount with the seller, write a note and press "Reviewed". If "Ready" is pressed again and the check works, the record closes by itself.\n'
+                 '• "Loyalty points not counted": the sale was recorded with no points. Once the cashier has collected, "Add points…" shows the number without writing anything, and "Confirm" adds them in SOFTECH once only — even if you press again or the connection drops.'),
+             'warn': T('«تأكيد» يكتب في نقاط SOFTECH، ومش هيشتغل غير لما المسؤول يفعّل إضافة النقاط المؤجلة.',
+                       '"Confirm" writes to SOFTECH points, and works only once the admin has switched on deferred points.')},
         ],
         'hints': [
             {'target': 'pos-exceptions-refresh', 'label': T('تحديث', 'Refresh'),
@@ -895,9 +910,9 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر الفرع يقبل الآن أكثر من فرع معاً، واتجاه الفرص الضائعة يتفلتر بالفروع المعلّمة فعلاً',
-                         'The branch filter now takes several branches at once, and the lost-chance trend really follows the ticked branches'),
+        'updated': '2026-11-19',
+        'change_note': T('قسم جديد «مبيعات بدون فحص مباشر» للمشرف: البيع اللي الفرع ما ردّش فيه على فحص الخصم أو النقاط، وإضافة النقاط الناقصة مرة واحدة. والأوامر اللي اتبعتت من الطابور بقت تحسب استخدام العروض زي الإرسال العادي',
+                         'New supervisor section "Sales without a live check": sales where the branch did not answer the discount or points check, and adding the missing points once. Orders sent from the queue now count offer uses like a normal send'),
     },
     {
         'key': 'pos.offers',

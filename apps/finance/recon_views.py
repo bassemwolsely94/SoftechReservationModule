@@ -66,6 +66,8 @@ FINANCE_APPROVE  = _company_only(matrix_permission('finance', post=('approve',))
 FINANCE_EDIT     = _company_only(matrix_permission('finance', post=('edit',)))
 FINANCE_FINALIZE = _company_only(matrix_permission('finance', post=('finalize',)))     # SOFTECH write-back
 FINANCE_EXPORT   = _company_only(matrix_permission('finance', get=('export',)))
+# C15 exception decisions: the finance grant gates the door; _can_review_exceptions decides who acts
+FINANCE_REVIEW   = _company_only(matrix_permission('finance', post=('view',)))
 
 
 def _scope(request, qs, party_path='party'):
@@ -391,6 +393,44 @@ def _guard_write(request):
     if not _is_admin_or_pharmacist(request.user):
         return Response({'detail': 'صلاحية غير كافية لاعتماد التسويات'}, status=403)
     return None
+
+
+def _can_review_exceptions(user) -> bool:
+    """C15: who records a decision on an exception — admin / pharmacist holding finance `approve`
+    (the gate for approving a match), plus the finance-department accountant (owner decision
+    2026-11-19). Only this endpoint: the accountant still cannot approve, write or reverse a match."""
+    from core.permissions import matrix_allows
+    profile = getattr(user, 'staff_profile', None)
+    if _is_admin_or_pharmacist(user):
+        return profile is None or matrix_allows(profile, 'finance', 'approve')
+    from apps.users.roles import AP_REVIEW_ROLES
+    return getattr(profile, 'role', None) in AP_REVIEW_ROLES
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, FINANCE_REVIEW])
+def decide_exceptions_view(request):
+    """C15: bulk decision on exceptions — {ids, action: investigating|resolved|dismissed|open, note}.
+    Mirror only: nothing goes to SOFTECH, and a decision never releases a held match by itself
+    (recon_review)."""
+    if not _can_review_exceptions(request.user):
+        return Response({'detail': 'صلاحية غير كافية لمراجعة الاستثناءات'}, status=403)
+    from . import recon_review
+    ids = request.data.get('ids') or []
+    if not isinstance(ids, list):
+        return Response({'detail': 'ids must be a list'}, status=400)
+    # only rows this user may see (company-level finance, the same scope as the list)
+    visible = set(_scope(request, ReconException.objects.filter(pk__in=[i for i in ids if str(i).isdigit()]))
+                  .values_list('pk', flat=True))
+    try:
+        res = recon_review.decide([i for i in ids if str(i).isdigit() and int(i) in visible],
+                                  request.data.get('action'), note=request.data.get('note', ''),
+                                  user=_staff(request))
+    except recon_review.ReviewError as e:
+        return Response({'detail': str(e)}, status=400)
+    res['missing'] = sorted(set(res['missing']) | {i for i in ids if not (str(i).isdigit() and int(i) in visible)},
+                            key=str)
+    return Response(res)
 
 
 @api_view(['POST'])

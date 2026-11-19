@@ -2606,6 +2606,15 @@ def _run_dead_stock_snapshot():
         logger.error('[APScheduler] dead-stock list failed: %s', exc)
 
 
+def _run_ap_review_digest():
+    """C15: Sunday 09:00 — open / new / decided A/P exceptions + held matches → finance (in-app)."""
+    try:
+        from apps.finance.recon_review import weekly_digest
+        logger.info('[APScheduler] A/P review digest: %s', weekly_digest())
+    except Exception as exc:
+        logger.error('[APScheduler] A/P review digest failed: %s', exc)
+
+
 def _run_return_window_digest():
     """P-29: 1st of the month — supplier window snapshot + one digest to the returns owners."""
     try:
@@ -2804,6 +2813,16 @@ def _run_sales_history_catchup(days=7):
                 conn.close()
             except Exception:
                 pass
+
+
+def _run_followups_nightly():
+    """C09: daily follow-up pipeline — ERP auto-close, stale → missed, generate the newly due refill
+    tasks (apps/followups/nightly.py; advisory lock; FOLLOWUPS_NIGHTLY_ENABLED, default off). Local DB only."""
+    try:
+        from apps.followups.nightly import run
+        logger.info('[APScheduler] followups nightly: %s', run())
+    except Exception as exc:
+        logger.error('[APScheduler] followups nightly failed: %s', exc)
 
 
 def _run_refill_reminders():
@@ -3991,6 +4010,10 @@ def start_scheduler():
         replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     _scheduler.add_job(
+        _run_ap_review_digest, 'cron', day_of_week='sun', hour=9, minute=0, id='ap_review_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )   # C15: weekly A/P review digest to finance (in-app, deduped per ISO week)
+    _scheduler.add_job(
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
@@ -4107,6 +4130,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_item_suppliers_sync, 'cron', hour=4, minute=30, id='item_suppliers_sync',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # C09 follow-ups nightly — 01:30, before the 02:00 segmentation reads the missed refills.
+    _scheduler.add_job(
+        _run_followups_nightly, 'cron', hour=1, minute=30, id='followups_nightly',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     # WhatsApp refill reminders — 10:10 Cairo (customers awake, branches open).
     _scheduler.add_job(

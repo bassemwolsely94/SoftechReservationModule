@@ -184,6 +184,25 @@ class VoucherViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_409_CONFLICT)
         return super().update(request, *args, **kwargs)
 
+    # ── DELETE (D-17, owner 2026-11-19 "Protect") ─────────────────────────────
+    # VoucherRedemption is the immutable audit record (on_delete=PROTECT): a voucher that was ever
+    # redeemed is cancelled (archived) through /cancel/, never deleted. One with no redemption may
+    # still be deleted by a role with the vouchers 'delete' grant.
+    ARCHIVE_INSTEAD = ('لا يمكن حذف قسيمة لها استخدامات مسجّلة — سجل الاستخدام سجل تدقيق. '
+                       'يمكنك إلغاء القسيمة (أرشفتها) بدلاً من الحذف.')
+
+    def destroy(self, request, *args, **kwargs):
+        from django.db.models.deletion import ProtectedError
+        voucher = self.get_object()
+        refusal = {'detail': self.ARCHIVE_INSTEAD, 'can_archive': voucher.status != 'cancelled',
+                   'archive_url': f'/api/vouchers/vouchers/{voucher.pk}/cancel/'}
+        if voucher.redemptions.exists():
+            return Response(refusal, status=status.HTTP_409_CONFLICT)
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:      # a redemption landed between the check and the delete
+            return Response(refusal, status=status.HTTP_409_CONFLICT)
+
     # ── MODULE 1: Validate eligibility ─────────────────────────────────────────
 
     @action(detail=True, methods=['post'], url_path='validate')

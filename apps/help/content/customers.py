@@ -483,7 +483,7 @@ SCREENS = [
         'hints': [
             {'target': 'customers-detail-note-delete', 'label': T('حذف', 'Delete'),
              'text': T('يحذف الملاحظة من ملف العميل — كاتبها أو المدير/الجودة بس.', "Deletes the note from the customer's file — only its author or a manager / quality."),
-             'warn': T('بيسأل للتأكيد، والحذف نهائي — نص الملاحظة بيتحفظ في سجل المراجعة باسمك.', 'Asks first; deleting is final — the note text is kept in the audit log under your name.'),
+             'warn': T('اضغط مرتين: أول ضغطة الزر يحمرّ ويكتب «تأكيد الحذف؟» لمدة 4 ثواني، والتانية تنفّذ. الحذف نهائي — نص الملاحظة بيتحفظ في سجل المراجعة باسمك.', 'Press twice: the first press turns it red ("Confirm delete?") for 4 s; the second does it. Final; the note text stays in the audit log under your name.'),
              'open_hint': T('تحت كل ملاحظة في «الجدول الزمني».', 'Under each note on the "Timeline".')},
             {'target': 'customers-detail-points-chip', 'label': T('🏆 نقاط SOFTECH · عرض التفاصيل ←', '🏆 SOFTECH points · Details ←'),
              'text': T('رصيد النقاط مقروء من SOFTECH. الضغط يفتح تبويب «🏆 النقاط».', 'The points balance read from SOFTECH. Clicking opens the "🏆 Points" tab.'),
@@ -496,7 +496,7 @@ SCREENS = [
              'when': T('اكتبها واضحة — الصيدلي بيشوفها وهو بيصرف.', 'Write them clearly — the pharmacist sees them when dispensing.'),
              'open_hint': T('بعد «تعديل» في كارت «أمراض مزمنة».', 'After "Edit" on the "Chronic conditions" card.')},
         ],
-        'updated': '2026-11-17',
+        'updated': '2026-11-19',
         'change_note': T('عميل فرع تاني بيتفتح بعد البحث برقم موبايله كامل بس (لمدة ١٢ ساعة)', "Another branch's customer opens only after a search by their full phone number (for 12 hours)"),
     },
     {

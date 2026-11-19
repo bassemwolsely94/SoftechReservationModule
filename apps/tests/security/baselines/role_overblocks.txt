@@ -223,6 +223,10 @@ purchasing POST /api/finance/reconciliation/allocations/987654321/undo/
 purchasing POST /api/finance/reconciliation/allocations/987654321/write-softech/
 purchasing POST /api/finance/reconciliation/allocations/bulk-write-softech/
 purchasing POST /api/finance/reconciliation/allocations/manual/
+
+# reason: C15 (owner 2026-11-19) — A/P exception decisions are admin / pharmacist with finance approve,
+#   plus the accountant (apps.users.roles AP_REVIEW_ROLES); purchasing reads finance but does not decide.
+purchasing POST /api/finance/reconciliation/exceptions/decide/
 purchasing POST /api/finance/reconciliation/candidates/987654321/approve/
 purchasing POST /api/finance/reconciliation/candidates/987654321/reject/
 purchasing POST /api/finance/reconciliation/candidates/bulk-approve/
@@ -407,6 +411,10 @@ salesperson POST /api/hr/shifts/
 # reason: Z-9a — sales targets are edited by admin / supervisor / purchasing; quality_manager
 # holds analytics export, which the middleware counts as a write grant
 quality_manager POST /api/incentives/targets/
+# reason: D-16 (owner 2026-11-19) - settlement unlock is admin-only (IsAdminRole): reopening a
+# finalized payroll settlement needs an admin and a written reason, audited before/after
+purchasing POST /api/incentives/settlements/987654321/unlock/
+quality_manager POST /api/incentives/settlements/987654321/unlock/
 # reason: Z-9b — a near-expiry markdown request is a price-change request (approvals, Z-6);
 # the near_expiry_markdown_enabled switch is off, so every role — admin too — is refused today
 quality_manager POST /api/batches/purchase-expiry/request-markdown/
@@ -786,3 +794,17 @@ salesperson POST /api/qa/inspections/987654321/submit/
 viewer GET /api/qa/inspections/
 viewer GET /api/qa/inspections/987654321/
 viewer GET /api/qa/templates/
+
+# reason: D-11 (owner 2026-11-19) — the review list of sales whose live discount-authority / points check
+#   could not run, its close-with-note and the points re-credit (a picpoints write) are for supervisors
+#   (pos/edit, CanReviewLiveCheckGaps). Cashier roles hold pos view/create only: they make the sales
+#   being reviewed, so they must not close or credit them.
+call_center GET /api/pos-orders/live-check-gaps/
+call_center POST /api/pos-orders/live-check-gaps/987654321/credit-points/
+call_center POST /api/pos-orders/live-check-gaps/987654321/review/
+pharmacist GET /api/pos-orders/live-check-gaps/
+pharmacist POST /api/pos-orders/live-check-gaps/987654321/credit-points/
+pharmacist POST /api/pos-orders/live-check-gaps/987654321/review/
+salesperson GET /api/pos-orders/live-check-gaps/
+salesperson POST /api/pos-orders/live-check-gaps/987654321/credit-points/
+salesperson POST /api/pos-orders/live-check-gaps/987654321/review/

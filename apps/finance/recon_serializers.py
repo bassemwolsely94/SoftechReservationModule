@@ -172,7 +172,8 @@ class ReconExceptionSerializer(serializers.ModelSerializer):
                   'invoice_detail', 'payment_detail',
                   'exception_type', 'exception_type_display', 'severity',
                   'severity_display', 'anomaly_score', 'detail', 'status',
-                  'status_display', 'created_at']
+                  'status_display', 'created_at',
+                  'resolution_notes', 'resolved_at']   # C15: the person's decision and note
 
 
 class ReconciliationRunSerializer(serializers.ModelSerializer):

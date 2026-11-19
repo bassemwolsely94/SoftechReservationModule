@@ -498,9 +498,8 @@ def _emit_exceptions(run, party, matched_payment_ids, cfg) -> int:
 
 def _upsert_exc(run, party, etype, severity, invoice=None, payment=None, detail=''):
     """Avoid duplicate open exceptions for the same (type, invoice/payment)."""
-    qs = ReconException.objects.filter(exception_type=etype, party=party, status='open',
-                                       invoice=invoice, payment=payment)
-    if qs.exists():
+    from .recon_review import is_suppressed
+    if is_suppressed(etype, party, invoice=invoice, payment=payment):     # C15: a person's decision sticks
         return
     ReconException.objects.create(
         run=run, party=party, invoice=invoice, payment=payment,

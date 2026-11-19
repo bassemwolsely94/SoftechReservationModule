@@ -19,7 +19,7 @@ from rest_framework.response import Response
 
 from .models import SoftechSalesOrder, CHANNEL_TO_PTCLASSIF, PAYTYPE_TO_SOFTECH, DOCKIND_TO_DOCCODE
 from .serializers import OrderSerializer
-from .permissions import CanOperatePosOrders, CanPushPosOrders, CanViewPos
+from .permissions import CanOperatePosOrders, CanPushPosOrders, CanViewPos, CanReviewLiveCheckGaps
 from .validators import validate_order
 from .discount_authority import validate_discount_authority
 from . import writer
@@ -329,10 +329,19 @@ def _ready_checks(request, order, tenders, live):
     # SOFTECH write could actually happen (writer enabled). In dry-run/preview mode it is
     # skipped, keeping previews instant and avoiding a needless branch round-trip.
     if writer.writer_enabled():
+        from . import live_checks
+        from .models import PosLiveCheckGap
         try:
             disc_errs = validate_discount_authority(order)
-        except Exception:
-            disc_errs = []   # live-read failure must never block /ready
+        except Exception as exc:
+            # D-11 «Allow + flag» (owner 2026-11-19): a failed live read still never blocks /ready and
+            # changes no discount — it leaves one review record for a supervisor (Exception Center).
+            disc_errs = []
+            live_checks.record_gap(order, PosLiveCheckGap.KIND_DISCOUNT, cashier=_staff(request.user),
+                                   detail=f'تعذّر قراءة صلاحية الخصم من الفرع ({type(exc).__name__})')
+        else:
+            if not disc_errs:
+                live_checks.mark_rechecked(order, PosLiveCheckGap.KIND_DISCOUNT)
         if disc_errs:
             return Response({'detail': 'الخصم يتجاوز الصلاحية المسموح بها.',
                              'errors': {'discount_authority': disc_errs}},
@@ -414,25 +423,18 @@ def _push_checks(request, order, *, want_live, confirm, confirmed_not_landed):
                          'errors': {'stock': [e['detail'] for e in result['stock_errors']]}},
                         status=status.HTTP_400_BAD_REQUEST)
     # Branch was unreachable → the order is safely queued for automatic retry (HTTP 202).
-    # NOTE: offer uses are consumed when the queued order actually POSTS (via the
-    # flush path), not here — see docs/PHASE3_OFFER_EXECUTION_DESIGN.md §9.
+    # NOTE: offer uses are consumed when the queued order actually POSTS (flush_now /
+    # cmd flush_pos_orders → offer_uses.consume_after_post, D-12), not here.
     if result.get('queued'):
         return Response({**result, 'detail': 'الفرع غير متصل — تم حفظ الأمر في الطابور وسيُرسل تلقائياً عند عودة الاتصال.'},
                         status=status.HTTP_202_ACCEPTED)
 
-    # Sale POSTED successfully → commit offer uses (flip OfferApplication.was_applied).
-    # Idempotent + locked. A rare race that over-consumes after the sale already
-    # posted is logged + flagged (we never fail a posted sale).
+    # Sale POSTED → commit offer uses (flip OfferApplication.was_applied). The same helper runs on the
+    # flush paths (D-12). Idempotent + locked; an over-limit race after posting is logged + flagged.
     if not dry:
-        from apps.offers.usage import consume_offer_uses, UsageLimitExceeded
-        try:
-            consumed = consume_offer_uses(order, customer=offer_customer)
-            if consumed:
-                result['offer_uses_consumed'] = len(consumed)
-        except UsageLimitExceeded as e:
-            logger.error('[pos_orders] order=%s POSTED but offer overused (%s) — flagged for review',
-                         order.pk, e.scope)
-            result['offer_overuse'] = True
+        from .offer_uses import consume_after_post, posted
+        if posted(result):
+            result.update(consume_after_post(order, customer=offer_customer))
     return Response(result)
 
 
@@ -1324,6 +1326,7 @@ def flush_now(request):
     qs = (branch_scope.scope(SoftechSalesOrder.objects.filter(status__in=statuses)
                              .exclude(erp_error__startswith=writer.OUTCOME_UNKNOWN), request.user)   # audit S-1
           .select_related('branch').order_by('created_at')[:50])
+    from .offer_uses import consume_after_post, posted
     pushed = queued = failed = 0
     results = []
     for order in qs:
@@ -1332,6 +1335,8 @@ def flush_now(request):
         except Exception as e:
             failed += 1; results.append({'id': order.pk, 'error': public_error(request, e)}); continue
         _audit_pos(request, 'softech_pos_order_pushed', order, res, via='flush_now')
+        if posted(res):                                  # D-12: queued sales consume offer uses too
+            res.update(consume_after_post(order))
         if res.get('queued'):
             queued += 1
         elif res.get('ok') or res.get('already_pushed'):
@@ -1521,3 +1526,89 @@ def contract_assist_approval_check(request):
     matches = ch.approval_reused(pc, request.query_params.get('value', ''),
                                  exclude_order_id=_int_param(request, 'exclude_order'))
     return Response({'reused': bool(matches), 'matches': matches})
+
+
+# ── D-11: sales whose live branch check could not run (owner 2026-11-19, «Allow + flag») ─────────
+
+def _gap_row(g):
+    o = g.order
+    return {
+        'id': g.pk, 'order_id': g.order_ref, 'kind': g.kind, 'kind_display': g.get_kind_display(),
+        'status': g.status, 'status_display': g.get_status_display(),
+        'order_status': o.status if o else None,
+        'branch': g.branch_id,
+        'branch_name': (g.branch.name_ar or g.branch.name) if g.branch_id else '',
+        'cashier': (g.cashier.full_name or '') if g.cashier_id else '',
+        'seller_usercode': g.seller_usercode,
+        'has_pic': bool(g.softech_pic),
+        'discount_given': float(g.discount_given or 0), 'doc_value': float(g.doc_value or 0),
+        'detail': g.detail,
+        'points_credited': g.points_credited,
+        'credited_at': g.credited_at.isoformat() if g.credited_at else None,
+        'resolution_note': g.resolution_note,
+        'resolved_by': (g.resolved_by.full_name or '') if g.resolved_by_id else '',
+        'created_at': g.created_at.isoformat() if g.created_at else None,
+        'can_credit': (g.kind == g.KIND_POINTS and g.status == g.STATUS_OPEN and bool(o)
+                       and o.status == SoftechSalesOrder.STATUS_SETTLED and bool(g.softech_pic)),
+    }
+
+
+@api_view(['GET'])
+@permission_classes([CanReviewLiveCheckGaps])
+def live_check_gaps(request):
+    """Supervisor review list (Exception Center): one row per sale whose discount-authority or
+    points check could not run. ?status=open (default) | all · ?branch=<id>[,<id>…]. Read-only."""
+    from .models import PosLiveCheckGap as Gap
+    qs = branch_scope.scope(Gap.objects.select_related('order', 'branch', 'cashier', 'resolved_by'),
+                            request.user)
+    if request.query_params.get('branch'):
+        qs = filter_in(qs, 'branch_id', multi_ids(request.query_params, 'branch') or [0])
+    st = request.query_params.get('status', 'open')
+    if st == 'open':
+        qs = qs.filter(status__in=[Gap.STATUS_OPEN, Gap.STATUS_CREDITING])
+    elif st != 'all':
+        qs = qs.filter(status=st)
+    from .live_checks import recovery_enabled
+    rows = [_gap_row(g) for g in qs.order_by('-created_at')[:300]]
+    return Response({'count': len(rows), 'results': rows, 'recovery_enabled': recovery_enabled()})
+
+
+@api_view(['POST'])
+@permission_classes([CanReviewLiveCheckGaps])
+def live_check_gap_review(request, pk):
+    """Close an open record with a written note («تمت المراجعة»). PostgreSQL only; audited."""
+    from .models import PosLiveCheckGap as Gap
+    from . import live_checks
+    gap = branch_scope.get_or_404(Gap, request.user, pk=pk)
+    note = str((request.data or {}).get('note') or '').strip()
+    if not note:
+        return Response({'detail': 'اكتب ملاحظة المراجعة.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not live_checks.review_gap(gap, actor_staff=_staff(request.user), note=note):
+        return Response({'detail': 'السجل مغلق أو قيد المعالجة.'}, status=status.HTTP_409_CONFLICT)
+    gap.refresh_from_db()
+    return Response(_gap_row(gap))
+
+
+@api_view(['POST'])
+@permission_classes([CanReviewLiveCheckGaps])
+def live_check_gap_credit(request, pk):
+    """Credit the points a sale missed — once. Dry run (preview) unless confirm=true. The write goes
+    through the registered loyalty writer (picpoints) under POS_POINTS_RECOVERY_ENABLED +
+    LOYALTY_SOFTECH_WRITE_ENABLED; claimed by a conditional UPDATE and tagged in picpoints.vf1, so a
+    double click or a retry never credits twice (live_checks.credit_missing_points)."""
+    from .models import PosLiveCheckGap as Gap
+    from . import live_checks
+    gap = branch_scope.get_or_404(Gap.objects.select_related('order'), request.user, pk=pk)
+    commit = bool((request.data or {}).get('confirm'))
+    if commit:
+        from apps.access import softech_gate
+        from core.exceptions import softech_zone_response
+        refused = softech_gate.require_write('pos_points_recovery')
+        if refused is not None:
+            return softech_zone_response(refused)
+    try:
+        res = live_checks.credit_missing_points(gap, actor=request.user, commit=commit)
+    except live_checks.CreditRefused as e:
+        return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+    gap.refresh_from_db()
+    return Response({**res, 'gap': _gap_row(gap)})
