@@ -223,6 +223,14 @@ export const checkoutOutcome = (res) => (
   res?.busy ? 'busy' : res?.queued ? 'queued'
     : (res?.status === 'pushed' || res?.status === 'settled') ? 'sent' : 'dry_run')
 
+// D-25 / FE-9: the live send and the parked-basket delete keep an explicit second step, but
+// as a second press (F10 F10, or two clicks) instead of window.confirm. The first press only
+// arms; a second press within ARM_MS of it goes ahead. `armed` = { key, at } of the last arm.
+export const POS_ARM_MS = 4000
+export const LIVE_ARM_MSG = '⚠ اضغط F10 (أو «إرسال») مرة ثانية خلال 4 ثوانٍ لإرسال أمر بيع فعلي إلى شاشة الكاشير في SOFTECH.'
+export const twoStepGate = (armed, key, now, ms = POS_ARM_MS) =>
+  !!armed && armed.key === key && now - armed.at <= ms
+
 // allowServerCheckout: only the desktop POS screen opts in to D-18 (doc 39). The mobile POS keeps the
 // old endpoints until a separate decision, whatever the server switch says.
 export default function usePosOrder({ allowServerCheckout = false } = {}) {
@@ -307,6 +315,24 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
   const [offersPlan, setOffersPlan] = useState(null)   // read-only offers preview for the live basket
   const [msg, setMsg] = useState('')
   const [errs, setErrs] = useState([])
+  // two-step arm for the live send / parked delete (a ref, so F10 F10 between renders counts)
+  const armRef = useRef(null)
+  const [armedKey, setArmedKey] = useState(null)        // 'live' | 'parked:<id>' | null — for the button look
+  const armTimerRef = useRef(null)
+  // true = go ahead now; false = this press only armed it (the caller shows why and returns)
+  const passGate = (key) => {
+    if (twoStepGate(armRef.current, key, Date.now())) {
+      armRef.current = null; setArmedKey(null); clearTimeout(armTimerRef.current)
+      return true
+    }
+    armRef.current = { key, at: Date.now() }; setArmedKey(key)
+    clearTimeout(armTimerRef.current)
+    armTimerRef.current = setTimeout(() => {
+      if (armRef.current?.key === key) { armRef.current = null; setArmedKey(null) }
+    }, POS_ARM_MS)
+    return false
+  }
+  useEffect(() => () => clearTimeout(armTimerRef.current), [])
   // Odoo-style extras
   const [suggest, setSuggest] = useState({ map: {}, caps: {}, ceiling: null })   // discounts + per-item caps
   const [loyalty, setLoyalty] = useState(null)                          // customer points account
@@ -1427,7 +1453,8 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
   }
   const deleteParked = (id) => {
     const s = parked.find(p => p.id === id)
-    if (s && !window.confirm(`حذف السلة المعلّقة «${s.label}»؟ مش هترجع.`)) return
+    if (!s) return
+    if (!passGate(`parked:${id}`)) { setMsg(`اضغط ✕ مرة ثانية خلال 4 ثوانٍ لحذف السلة المعلّقة «${s.label}» — مش هترجع.`); return }
     _persistParked(parked.filter(p => p.id !== id))
   }
 
@@ -1597,7 +1624,7 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
     // the tender checks are the server's on this path (it splits نقدى/آجل itself)
     const ce = clientValidate(live).filter(e => e.tab !== 'payment')
     if (ce.length) { setErrs(ce); return }
-    if (live && !window.confirm('سيتم إرسال أمر بيع فعلي إلى شاشة الكاشير في SOFTECH. هل أنت متأكد؟')) return
+    if (live && !passGate('live')) { setMsg(LIVE_ARM_MSG); return }
     setBusy(true)
     try {
       if (selTimerRef.current) clearTimeout(selTimerRef.current)
@@ -1663,7 +1690,7 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
     setMsg(''); setPlan(null); setErrs([])
     const ce = clientValidate(live)
     if (ce.length) { setErrs(ce); return }
-    if (live && !window.confirm('سيتم إرسال أمر بيع فعلي إلى شاشة الكاشير في SOFTECH. هل أنت متأكد؟')) return
+    if (live && !passGate('live')) { setMsg(LIVE_ARM_MSG); return }
     setBusy(true)
     try {
       // stable idempotency token for THIS attempt — if the request is queued offline and
@@ -1795,5 +1822,6 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
     serverCheckout, serverQuote, quotePending,
     workflow,
     submit, reset, busy, plan, setPlan, msg, setMsg, errs,
+    liveArmed: armedKey === 'live', parkedArmedId: armedKey?.startsWith('parked:') ? armedKey.slice(7) : null,
   }
 }

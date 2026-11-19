@@ -14,12 +14,13 @@ import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { askBar, notify } from '../components/ui'
 
 const pct = (x) => `${Math.round((x ?? 0) * 100)}%`
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['phantom-candidates', 'phantom-excluded', 'phantom-summary']
   .forEach(k => qc.invalidateQueries({ queryKey: [k] }))
-const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء.')
+const onErr = (e) => notify.error(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء.')
 
 // derived sort values (value = the reduction value); default = biggest reduction first
 const phantomVal = (r, k) => (k === 'value' ? r.buyback_qty * r.cost : r[k])
@@ -48,7 +49,7 @@ function Toolbar({ med, setMed, q, setQ, medTypes }) {
 function Table({ rows, tab, qc }) {
   const confirm = useMutation({ mutationFn: (id) => purchasingApi.phantomConfirm({ item_id: id }), onSuccess: () => invalidate(qc), onError: onErr })
   const exclude = useMutation({
-    mutationFn: (id) => purchasingApi.phantomExclude({ item_id: id, note: window.prompt('سبب الاستبعاد (اختياري):') || '' }),
+    mutationFn: ({ id, note }) => purchasingApi.phantomExclude({ item_id: id, note }),
     onSuccess: () => invalidate(qc), onError: onErr,
   })
   const reset = useMutation({ mutationFn: (id) => purchasingApi.phantomReset(id), onSuccess: () => invalidate(qc), onError: onErr })
@@ -92,7 +93,10 @@ function Table({ rows, tab, qc }) {
                   <div data-tour="shortage-phantom-row-actions" className="flex gap-1">
                     {r.override !== 'confirmed' &&
                       <button data-tour="shortage-phantom-confirm" onClick={() => confirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-violet-700 border border-violet-200 rounded hover:bg-violet-50">تأكيد</button>}
-                    <button data-tour="shortage-phantom-exclude" onClick={() => exclude.mutate(r.item_id)} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">ليست وهمية</button>
+                    <button data-tour="shortage-phantom-exclude" onClick={async () => {   // the reason is asked in the bottom bar; «إلغاء» stops the exclusion
+                      const note = await askBar('سبب الاستبعاد (اختياري):', { confirmLabel: 'استبعاد' })
+                      if (note !== null) exclude.mutate({ id: r.item_id, note: note || '' })
+                    }} className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-100">ليست وهمية</button>
                   </div>
                 ) : (
                   <button data-tour="shortage-phantom-reset" onClick={() => reset.mutate(r.item_id)} className="px-2 py-1 text-xs text-brand-600 border border-brand-200 rounded hover:bg-brand-50">إرجاع للتلقائي</button>

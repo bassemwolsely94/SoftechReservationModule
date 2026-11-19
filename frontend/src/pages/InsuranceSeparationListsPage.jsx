@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import { confirmBar } from '../components/ui'
 
 const inp = 'w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500'
 
@@ -45,7 +46,7 @@ export default function InsuranceSeparationListsPage() {
     setNewLabel(''); loadLists()
   }
   const delList = async (l) => {
-    if (!window.confirm(`حذف قائمة "${l.label}" وكل أسمائها؟`)) return
+    if (!await confirmBar(`حذف قائمة "${l.label}" وكل أسمائها؟`, { tone: 'danger', confirmLabel: 'حذف' })) return
     await insuranceApi.deleteSeparationList(l.id)
     if (sel?.id === l.id) { setSel(null); setNames([]) }
     loadLists()
@@ -57,7 +58,7 @@ export default function InsuranceSeparationListsPage() {
     flash(`تمت إضافة ${data.added} اسم (${data.skipped} مكرر) · الإجمالى ${data.total}`)
   }
   const delName = async (n) => {
-    if (!window.confirm(`حذف "${n.name}"؟`)) return
+    if (!await confirmBar(`حذف "${n.name}"؟`, { tone: 'danger', confirmLabel: 'حذف' })) return
     await insuranceApi.deleteSeparationName(sel.id, n.id)
     loadNames(sel); loadLists()
   }

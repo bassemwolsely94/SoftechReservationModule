@@ -21,6 +21,7 @@ import useGridKeyboard from '../../hooks/useGridKeyboard'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import ProgressBar from '../../components/ProgressBar'
 import { fa } from '../../utils/flowArrow'
+import { confirmBar } from '../../components/ui'
 
 const FLAG = {
   choose_variant:     ['اختر النوع / الحجم', 'amber'],
@@ -249,7 +250,7 @@ function Review({ id }) {
               title="ينشئ قائمة نواقص الفرع من الأسطر المؤكَّدة ويُعلِّم المطابِق">
               {confirmM.isPending ? '…' : `إنشاء قائمة النواقص (${items.length - pending.length})`}
             </button>
-            <button data-tour="purchasing-supply-wa-cancel" className="text-xs text-rose-700 underline" onClick={() => window.confirm('إلغاء الطلب نهائياً؟ الطلب الملغي لا يرجع للتعديل.') && cancelM.mutate()}>إلغاء الطلب</button>
+            <button data-tour="purchasing-supply-wa-cancel" className="text-xs text-rose-700 underline" onClick={async () => (await confirmBar('إلغاء الطلب نهائياً؟ الطلب الملغي لا يرجع للتعديل.', { tone: 'danger', confirmLabel: 'تأكيد' })) && cancelM.mutate()}>إلغاء الطلب</button>
           </>}
         </div>
       </div>

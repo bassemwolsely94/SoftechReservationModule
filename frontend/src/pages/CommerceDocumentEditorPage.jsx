@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { commerceApi } from '../api/client'
 import CommerceAllocationGrid from './CommerceAllocationGrid'
+import { confirmBar } from '../components/ui'
 
 const fmt = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -37,7 +38,7 @@ export default function CommerceDocumentEditorPage() {
   }
 
   const patchLine = async (lid, patch) => { await commerceApi.editLine(id, lid, patch); await load() }
-  const delLine   = async (lid) => { if (window.confirm('حذف البند؟')) { await commerceApi.deleteLine(id, lid); await load() } }
+  const delLine   = async (lid) => { if (await confirmBar('حذف البند؟', { tone: 'danger', confirmLabel: 'حذف' })) { await commerceApi.deleteLine(id, lid); await load() } }
 
   const exportDoc = async () => {
     setExporting(true)

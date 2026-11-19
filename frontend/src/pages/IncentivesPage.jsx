@@ -23,6 +23,7 @@ import { fa } from '../utils/flowArrow'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { confirmBar, notify } from '../components/ui'
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -518,7 +519,7 @@ function RuleItemsManager({ rule, onItemsChanged }) {
   }
 
   const clearAll = async () => {
-    if (!window.confirm(`حذف كل الأصناف (${items.length}) من هذه القاعدة؟`)) return
+    if (!await confirmBar(`حذف كل الأصناف (${items.length}) من هذه القاعدة؟`, { tone: 'danger', confirmLabel: 'حذف' })) return
     setBusy(true)
     try {
       await incentivesApi.clearRuleItems(rule.id)
@@ -1054,7 +1055,7 @@ function RulesTab({ selectedProgram }) {
   useEffect(() => { load() }, [load])
 
   const deleteRule = async (id) => {
-    if (!window.confirm('هل تريد حذف هذه القاعدة؟')) return
+    if (!await confirmBar('هل تريد حذف هذه القاعدة؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     await incentivesApi.deleteRule(id)
     setRules(rs => rs.filter(r => r.id !== id))
   }
@@ -1488,7 +1489,7 @@ function ReportTab({ selectedProgram }) {
   }
 
   const finalize = async () => {
-    if (!window.confirm('هل تريد اعتماد التسويات نهائياً لهذه الفترة؟ لا يمكن التراجع.')) return
+    if (!await confirmBar('هل تريد اعتماد التسويات نهائياً لهذه الفترة؟ لا يمكن التراجع.', { tone: 'danger', confirmLabel: 'تأكيد' })) return
     setFinalizing(true); setFinalMsg('')
     try {
       const { data } = await incentivesApi.finalize(selectedProgram.id, {
@@ -1740,12 +1741,12 @@ function AdjustmentsTab({ selectedProgram }) {
   useEffect(() => { load() },      [load])
 
   const deleteAdj = async (id) => {
-    if (!window.confirm('حذف هذه التسوية؟')) return
+    if (!await confirmBar('حذف هذه التسوية؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     try {
       await incentivesApi.deleteAdjustment(id)
       setAdjustments(prev => prev.filter(a => a.id !== id))
     } catch (e) {
-      alert(e.response?.data?.detail || 'فشل الحذف — ربما الفترة مُعتمدة نهائياً')
+      notify.error(e.response?.data?.detail || 'فشل الحذف — ربما الفترة مُعتمدة نهائياً')
     }
   }
 
@@ -2707,7 +2708,7 @@ function ExportSettlementsButton({ program, settlements }) {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch (e) {
-      alert('فشل التصدير: ' + (e.message || 'خطأ غير معروف'))
+      notify.error('فشل التصدير: ' + (e.message || 'خطأ غير معروف'))
     } finally { setExporting(false) }
   }
 

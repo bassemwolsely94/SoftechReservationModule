@@ -243,7 +243,7 @@ export default function MobilePOSOrderPage() {
           <button data-tour="pos-mobile-reset" onClick={() => P.reset()} className="py-2.5 rounded border text-red-600 text-xs">أمر جديد</button>
           <button data-tour="pos-mobile-preview" onClick={() => P.submit(false)} disabled={P.busy} className="py-2.5 rounded bg-blue-600 text-white disabled:opacity-50">{P.busy ? '...' : 'معاينة'}</button>
           {P.ref?.writer_enabled
-            ? <button onClick={() => P.submit(true)} disabled={P.busy} data-tour="pos-mobile-send" className="py-2.5 rounded bg-red-600 text-white disabled:opacity-50">⚠ فعلي</button>
+            ? <button onClick={() => P.submit(true)} disabled={P.busy} data-tour="pos-mobile-send" className={`py-2.5 rounded bg-red-600 text-white disabled:opacity-50 ${P.liveArmed ? 'ring-2 ring-red-300 animate-pulse' : ''}`}>{P.liveArmed ? 'مرة ثانية للتأكيد' : '⚠ فعلي'}</button>
             : <button disabled data-tour="pos-mobile-send" className="py-2.5 rounded bg-gray-100 text-gray-400 text-xs">مُعطّل</button>}
         </div>
       </div>
@@ -257,7 +257,7 @@ export default function MobilePOSOrderPage() {
               <div><div className="font-medium">{s.label}</div><div className="text-xs text-gray-500">{s.lines?.length} صنف · {money(s.total)}</div></div>
               <div className="flex gap-2">
                 <button data-tour="pos-mobile-parked-recall" onClick={() => { P.recallOrder(s.id); setSheet(null) }} className="px-3 py-1 rounded bg-blue-600 text-white text-xs">استرجاع</button>
-                <button data-tour="pos-mobile-parked-delete" onClick={() => P.deleteParked(s.id)} className="px-2 text-red-500">✕</button>
+                <button data-tour="pos-mobile-parked-delete" onClick={() => P.deleteParked(s.id)} className={String(P.parkedArmedId) === String(s.id) ? 'px-2 rounded bg-red-600 text-white text-xs font-bold' : 'px-2 text-red-500'}>{String(P.parkedArmedId) === String(s.id) ? 'حذف؟' : '✕'}</button>
               </div>
             </div>
           ))}
@@ -484,7 +484,7 @@ function MobileGuidedMode({ P, onClose, onOpenPic }) {
         <button onClick={goPrev} disabled={safeIdx === 0} className="px-3 py-2 rounded-lg border text-sm disabled:opacity-40">‹ السابق</button>
         {!isLast
           ? <button onClick={goNext} className="px-4 py-2 rounded-lg text-white text-sm" style={{ background: '#022871' }}>التالى ›</button>
-          : <button data-tour="pos-mobile-guided-send" onClick={() => P.submit(true)} disabled={P.busy || !wf.ready} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-40">{P.busy ? '…' : 'إرسال ✓'}</button>}
+          : <button data-tour="pos-mobile-guided-send" onClick={() => P.submit(true)} disabled={P.busy || !wf.ready} className={`px-4 py-2 rounded-lg text-white text-sm disabled:opacity-40 ${P.liveArmed ? 'bg-red-600' : 'bg-emerald-600'}`}>{P.busy ? '…' : P.liveArmed ? 'مرة ثانية للتأكيد' : 'إرسال ✓'}</button>}
       </div>
       <style>{`.minp{margin-top:.15rem;width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.4rem .5rem;text-align:center}
         .pos-num::-webkit-inner-spin-button,.pos-num::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}

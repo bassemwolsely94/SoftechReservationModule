@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
+import { confirmBar } from '../../components/ui'
 
 const money = v => (v == null || v === '' ? '—' : Number(v).toFixed(2))
 const errText = e => {
@@ -30,7 +31,7 @@ export default function PlatformDraftsButton({ branch, writerEnabled }) {
   if (!branch || !rows.length) return null
 
   const run = async (row, live) => {
-    if (live && !window.confirm(`سيتم إرسال طلب ${row.platform} رقم ${row.platform_order} إلى شاشة الكاشير في SOFTECH كبيع آجل على حساب المنصة. متأكد؟`)) return
+    if (live && !await confirmBar(`سيتم إرسال طلب ${row.platform} رقم ${row.platform_order} إلى شاشة الكاشير في SOFTECH كبيع آجل على حساب المنصة. متأكد؟`)) return
     setBusy(row.id)
     setNote(n => ({ ...n, [row.id]: null }))
     try {

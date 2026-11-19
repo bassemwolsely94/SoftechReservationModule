@@ -23,6 +23,7 @@ import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import { escapeDeep } from '../utils/escapeHtml'
+import { confirmBar, notify } from '../components/ui'
 
 // the voucher list is paged: the server sorts all vouchers (whitelist in VoucherViewSet.LIST_ORDERINGS)
 const VOUCHER_SORT = ['code', 'title', 'voucher_category', 'voucher_type', 'times_used', 'valid_from', 'status']
@@ -493,7 +494,7 @@ function VouchersList({ onRedeem }) {
   useEffect(() => { load() }, [load])
 
   const handleCancel = async (v) => {
-    if (!window.confirm(`إلغاء القسيمة "${v.code}"؟`)) return
+    if (!await confirmBar(`إلغاء القسيمة "${v.code}"؟`, { tone: 'danger', confirmLabel: 'تأكيد' })) return
     try {
       await vouchersApi.cancel(v.id)
       showToast('تم إلغاء القسيمة')
@@ -1087,7 +1088,7 @@ function RedemptionFlow({ voucher, onClose }) {
                       // D-04: print from the opener — the popup inherits the enforced CSP (script-src 'self'),
                       // so an inline <script> inside the written page would be blocked.
                       win.onload = () => setTimeout(() => { win.focus(); win.print() }, 300)
-                    } catch { alert('خطأ في جلب بيانات الوثيقة') }
+                    } catch { notify.error('خطأ في جلب بيانات الوثيقة') }
                   }}>
                   🖨️ طباعة
                 </Btn>

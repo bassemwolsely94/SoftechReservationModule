@@ -14,7 +14,7 @@ import { useEffect } from 'react'
  *                   ItemSearchWidget, which owns the highlighted row; F7 is free here)
  *   F4 / Delete   → delete the selected line
  *   F9            → preview the send (dry-run — never writes to SOFTECH)
- *   F10           → live send to the cashier (only when the writer is enabled)
+ *   F10           → live send to the cashier (only when the writer is enabled); the first press arms, a second within 4 s sends (D-25)
  *   ArrowUp/Down  → move the selected line (only when not editing a field)
  * (Ctrl+F1 advanced search is handled by ItemSearchHotkeyProvider; widgets register via useItemSearchRegistration.)
  *

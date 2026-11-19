@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useConfirm } from './InlineConfirm'
 
 const BRAND = 'rgb(var(--c-brand-600))'
 
@@ -316,6 +317,26 @@ export const notify = {
   info:    notifyVia('info'),
 }
 
+// D-25 batch 6: the same idea for checks — one shared non-modal confirm bar (InlineConfirm's useConfirm),
+// hosted here so any handler can `await confirmBar(msg)` / `await askBar(msg)` without wiring a hook
+// into its component. No provider mounted (tests) → nothing is confirmed: false / null.
+let providerConfirm = null
+let providerAsk = null
+export const confirmBar = (message, opts) => (providerConfirm ? providerConfirm(message, opts) : Promise.resolve(false))
+export const askBar = (message, opts) => (providerAsk ? providerAsk(message, opts) : Promise.resolve(null))
+
+function ConfirmHost() {
+  const { confirm, ask, ui } = useConfirm()
+  useEffect(() => {
+    providerConfirm = confirm; providerAsk = ask
+    return () => {
+      if (providerConfirm === confirm) providerConfirm = null
+      if (providerAsk === ask) providerAsk = null
+    }
+  }, [confirm, ask])
+  return ui
+}
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
@@ -344,6 +365,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={toast}>
       {children}
       <ToastPortal toasts={toasts} dismiss={dismiss} />
+      <ConfirmHost />
     </ToastContext.Provider>
   )
 }

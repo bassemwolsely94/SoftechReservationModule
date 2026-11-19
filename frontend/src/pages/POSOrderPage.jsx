@@ -206,7 +206,7 @@ function ParkedModal({ P, onClose }) {
             <div><div className="font-medium">{s.label}</div><div className="text-xs text-gray-500">{s.lines?.length} صنف · {money(s.total)} · {new Date(s.at).toLocaleString('ar-EG')}</div></div>
             <div className="flex gap-2">
               <button data-tour="pos-order-parked-recall" onClick={() => { P.recallOrder(s.id); onClose() }} className="px-3 py-1 rounded bg-blue-600 text-white text-xs">استرجاع</button>
-              <button data-tour="pos-order-parked-delete" onClick={() => P.deleteParked(s.id)} className="px-2 text-red-500">✕</button>
+              <button data-tour="pos-order-parked-delete" onClick={() => P.deleteParked(s.id)} className={String(P.parkedArmedId) === String(s.id) ? 'px-2 rounded bg-red-600 text-white text-xs font-bold' : 'px-2 text-red-500'}>{String(P.parkedArmedId) === String(s.id) ? 'حذف؟' : '✕'}</button>
             </div>
           </div>
         ))}
@@ -458,8 +458,8 @@ function GuidedMode({ P, onAlternatives, onClose, onOpenCust, onOpenPic }) {
                 <button data-tour="pos-order-guided-preview" onClick={() => P.submit(false)} disabled={P.busy}
                         className="px-4 py-2 rounded-lg border text-sm disabled:opacity-40">🧾 معاينة (تجريبى)</button>
                 <button data-tour="pos-order-guided-send" onClick={() => P.submit(true)} disabled={P.busy || !wf.ready}
-                        className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-40">
-                  {P.busy ? '…' : '✓ إرسال للكاشير'}
+                        className={`px-5 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-40 ${P.liveArmed ? 'bg-red-600' : 'bg-emerald-600'}`}>
+                  {P.busy ? '…' : P.liveArmed ? 'اضغط مرة ثانية للإرسال' : '✓ إرسال للكاشير'}
                 </button>
               </div>}
         </div>
@@ -1089,7 +1089,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       </button>
       {P.ref?.writer_enabled
         ? <button onClick={() => P.submit(true)} disabled={P.busy || !P.lines.length} title="إرسال فعلي للكاشير" data-tour="pos-order-send"
-                  className="h-8 px-3 rounded bg-red-600 text-white font-semibold disabled:opacity-40 flex items-center gap-1.5">⚠ إرسال <kbd className="text-[10px] bg-white/20 rounded px-1">F10</kbd></button>
+                  className={`h-8 px-3 rounded bg-red-600 text-white font-semibold disabled:opacity-40 flex items-center gap-1.5 ${P.liveArmed ? 'ring-2 ring-red-300 animate-pulse' : ''}`}>{P.liveArmed ? '⚠ مرة ثانية للتأكيد' : '⚠ إرسال'} <kbd className="text-[10px] bg-white/20 rounded px-1">F10</kbd></button>
         : <span className="h-8 px-2 rounded bg-gray-100 text-gray-400 text-[11px] flex items-center" title="يُفعّل بمفتاح الكاتب المعتمد من المالك" data-tour="pos-order-send">🔒 مُعطّل</span>}
       <CounselSendButton customerId={P.picCustomer?.id || P.customer?.id} itemIds={P.lines.map(l => l.item)} branchId={P.branch} />
       <button onClick={P.reset} title="أمر جديد" data-tour="pos-order-reset" className="h-8 px-2 rounded border text-red-600 hover:bg-red-50">↺</button>
@@ -1149,7 +1149,7 @@ const POS_SHORTCUTS = [
   ['F6', 'بحث بالصور'],
   ['F7', 'بدائل مؤكدة للصنف المحدد في البحث'],
   ['F9', 'معاينة الإرسال'],
-  ['F10', 'إرسال فعلي (عند التفعيل)'],
+  ['F10', 'إرسال فعلي (عند التفعيل) — اضغطه مرتين للتأكيد'],
 ]
 function KeyboardLegend() {
   const [open, setOpen] = useState(() => { try { return localStorage.getItem('pos_shortcuts_open') === '1' } catch { return false } })
