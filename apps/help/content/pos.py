@@ -646,6 +646,15 @@ SCREENS = [
              'open_hint': T('«مُعطّل» يعني الإرسال الفعلي مقفول من الإدارة.', '"Disabled" means real sending is switched off by management.')},
         ],
         'hints': [
+            {'target': 'pos-mobile-platform-drafts', 'label': T('🛵 طلبات المنصات', '🛵 Platform orders'),
+             'text': T('طلبات المنصات المقبولة بانتظار الكاشير. تتسجل بيع آجل بالكامل على حساب المنصة — بلا نقدي ولا PIC. '
+                       '«معاينة» لا تكتب شيئًا، «إرسال» يكتب فعليًا.',
+                       'Accepted platform orders waiting for the cashier. Posted 100% credit on the platform account, no cash or PIC. '
+                       '"Preview" writes nothing; "Send" writes for real.'),
+             'when': T('يظهر بس لما يكون فيه طلبات منصات مقبولة في فرعك.', 'Only shown when your branch has accepted platform orders.'),
+             'warn': T('لو SOFTECH رفض صنف «غير مسموح صرفه لهذا التعاقد»، الصنف مقفول على حساب المنصة — كلّم المسؤول عن حسابات العملاء.',
+                       'If SOFTECH refuses an item as "not allowed for this contract", the item is closed on the platform account — call whoever manages customer accounts.'),
+             'open_hint': T('زر 🛵 تحت اختيار الفرع.', 'The 🛵 button under the branch picker.')},
             {'target': 'pos-mobile-guided', 'label': T('🧭 موجّه', '🧭 Guided'),
              'text': T('يفتح الوضع الموجّه: الأمر خطوة بخطوة بملء الشاشة.', 'Opens guided mode: the order step by step, full screen.'),
              'when': T('«الوضع الكامل ✕» يرجّعك للشاشة العادية.', '"Full mode ✕" takes you back to the normal screen.')},
@@ -809,7 +818,7 @@ SCREENS = [
              'open_hint': T('يظهر بعد ما تختار نتيجة في بحث الأصناف على الموبايل.', 'Appears after you highlight a result in the mobile item search.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('قائمة الفروع فيها فروعك بس، والمرتجع اتشال من نقطة البيع', 'The branch list holds your own branches only, and returns left the POS screen'),
+        'change_note': T('زر 🛵 طلبات المنصات تحت اختيار الفرع: ترسل طلبات طلبات وغيرها للكاشير من الموبايل', 'A 🛵 Platform orders button under the branch picker sends Talabat and other platform orders to the cashier from the phone'),
     },
     {
         'key': 'pos.exceptions',

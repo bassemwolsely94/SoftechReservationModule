@@ -16,6 +16,7 @@ import SalespersonPicker from '../../components/SalespersonPicker'
 import POSCustomerModal from '../../components/POSCustomerModal'
 import UnitsQtyModal from '../../components/UnitsQtyModal'
 import FefoGroupChip from '../../pos/batch/FefoGroupChip'
+import PlatformDraftsButton from '../../pos/platform/PlatformDraftsButton'
 import { QueueIndicator, numFieldHandlers, STEP_HINT } from '../POSOrderPage'
 import ContractAssist, { ClaimField } from '../../pos/contract/ContractAssist'
 import usePosOrder, { CHANNELS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS } from '../../hooks/usePosOrder'
@@ -80,6 +81,7 @@ export default function MobilePOSOrderPage() {
           <option value="">— اختر الفرع —</option>
           {P.branches.map(b => <option key={b.id} value={b.id}>{b.name_ar || b.name} ({b.softech_branch_id})</option>)}
         </select>
+        <PlatformDraftsButton mobile branch={P.branch} writerEnabled={!!P.ref?.writer_enabled} />
         <div className="grid grid-cols-2 gap-2">
           <select value={P.docKind} onChange={e => P.setDocKind(e.target.value)} className="border rounded px-2 py-2">
             {P.docKinds.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}

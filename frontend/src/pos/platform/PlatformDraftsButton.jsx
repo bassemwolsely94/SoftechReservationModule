@@ -3,6 +3,7 @@
  * Shown only when there is at least one. Each order keeps the platform's own lines (not edited here);
  * the server prices it, posts it 100% آجل on the platform's account and refuses any cash/card tender.
  * «معاينة» = dry run (nothing written). «إرسال» appears only while the writer switch is on.
+ * `mobile`: full-width button in the /m/pos config band; the list opens inline under it, not as a floating panel.
  */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -16,7 +17,7 @@ const errText = e => {
   return d?.detail || e?.message || 'خطأ'
 }
 
-export default function PlatformDraftsButton({ branch, writerEnabled }) {
+export default function PlatformDraftsButton({ branch, writerEnabled, mobile = false }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(null)
@@ -48,13 +49,15 @@ export default function PlatformDraftsButton({ branch, writerEnabled }) {
   }
 
   return (
-    <div className="relative" data-tour="pos-platform-drafts">
+    <div className="relative" data-tour={mobile ? 'pos-mobile-platform-drafts' : 'pos-platform-drafts'}>
       <button onClick={() => setOpen(o => !o)} title="طلبات المنصات بانتظار الإرسال للكاشير"
-              className="h-8 px-2 rounded border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100">
-        🛵 {rows.length}
+              className={`${mobile ? 'w-full py-2' : 'h-8 px-2'} rounded border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100`}>
+        🛵 {mobile ? `طلبات المنصات (${rows.length})` : rows.length}
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 end-0 w-[30rem] max-w-[90vw] bg-white border rounded-lg shadow-lg p-2 text-[12px]">
+        <div className={mobile
+          ? 'mt-1 bg-white border rounded-lg p-2 text-[13px]'
+          : 'absolute z-30 mt-1 end-0 w-[30rem] max-w-[90vw] bg-white border rounded-lg shadow-lg p-2 text-[12px]'}>
           <div className="flex items-center justify-between mb-1">
             <b>طلبات المنصات — بيع آجل على حساب المنصة</b>
             <button onClick={() => q.refetch()} className="text-gray-500" title="تحديث">↻</button>
@@ -72,10 +75,10 @@ export default function PlatformDraftsButton({ branch, writerEnabled }) {
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <button disabled={busy === r.id} onClick={() => run(r, false)}
-                          className="px-2 py-0.5 rounded border hover:bg-gray-50 disabled:opacity-40">🧾 معاينة</button>
+                          className={`${mobile ? 'px-3 py-1.5' : 'px-2 py-0.5'} rounded border hover:bg-gray-50 disabled:opacity-40`}>🧾 معاينة</button>
                   {writerEnabled && (
                     <button disabled={busy === r.id} onClick={() => run(r, true)}
-                            className="px-2 py-0.5 rounded bg-red-600 text-white disabled:opacity-40">⚠ إرسال للكاشير</button>
+                            className={`${mobile ? 'px-3 py-1.5' : 'px-2 py-0.5'} rounded bg-red-600 text-white disabled:opacity-40`}>⚠ إرسال للكاشير</button>
                   )}
                   {busy === r.id && <span className="text-gray-400">…</span>}
                 </div>
