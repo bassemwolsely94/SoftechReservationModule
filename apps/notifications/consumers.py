@@ -13,6 +13,7 @@ ChatterConsumer       — live chatter thread for a specific record
     Group: chatter_{model_name}_{record_id}
     Receives: new_chatter events pushed by ChatterMessage._push_chatter_realtime()
 """
+import asyncio
 import json
 import logging
 
@@ -22,6 +23,9 @@ from channels.db import database_sync_to_async
 from apps.access.ws import ZoneGuardMixin
 
 logger = logging.getLogger('elrezeiky.notifications')
+
+# A burst of changes (a job sending 50 notifications) becomes one counts frame per open tab.
+COUNTS_DEBOUNCE_SECONDS = 0.5
 
 
 class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
@@ -43,8 +47,12 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
 
         self.profile_id = profile.id
         self.group_name = f'notifications_user_{self.profile_id}'
+        self._counts_task = None
 
+        from .live import LIVE_STAFF_GROUP
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        # perf Stage 5: every staff socket hears "freshness changed" (domain keys + time only)
+        await self.channel_layer.group_add(LIVE_STAFF_GROUP, self.channel_name)
         await self.accept()
         await self.zone_start()
 
@@ -53,8 +61,13 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         await self.zone_stop()
+        task = getattr(self, '_counts_task', None)
+        if task and not task.done():
+            task.cancel()
         if hasattr(self, 'group_name'):
+            from .live import LIVE_STAFF_GROUP
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            await self.channel_layer.group_discard(LIVE_STAFF_GROUP, self.channel_name)
 
     async def receive(self, text_data):
         """
@@ -79,18 +92,56 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
                 await self.send(text_data=json.dumps({
                     'event': 'marked_read', 'id': notif_id, 'updated': count
                 }))
+                if count:
+                    await self._counts_to_all_tabs()
 
         elif action == 'mark_all_read':
             count = await self._mark_all_read()
             await self.send(text_data=json.dumps({
                 'event': 'all_marked_read', 'count': count
             }))
+            if count:
+                await self._counts_to_all_tabs()
 
     # ── Channel layer event handlers ──────────────────────────────────────────
 
     async def notification_message(self, event):
         """Forward a pushed notification payload to the WebSocket client."""
         await self.send(text_data=json.dumps(event['data']))
+
+    async def notification_counts(self, event):
+        """The user's unread counts changed (live.request_counts_push). Debounced: one counts frame
+        per burst, computed here so only users with an open tab pay for it."""
+        task = getattr(self, '_counts_task', None)
+        if task and not task.done():
+            return
+        self._counts_task = asyncio.ensure_future(self._debounced_counts())
+
+    async def _debounced_counts(self):
+        try:
+            await asyncio.sleep(COUNTS_DEBOUNCE_SECONDS)
+            await self._send_counts()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.debug('counts push skipped for profile %s: %s', getattr(self, 'profile_id', None), exc)
+
+    async def live_freshness(self, event):
+        """A sync run / lane finished (live.broadcast_freshness): domain keys + time, nothing else."""
+        from .live import freshness_message
+        await self.send(text_data=json.dumps(freshness_message(event)))
+
+    async def _send_counts(self):
+        counts = await self._category_counts()
+        if counts is not None:
+            await self.send(text_data=json.dumps({'event': 'category_counts', **counts}))
+
+    async def _counts_to_all_tabs(self):
+        """After a read on this socket, refresh the counts on every tab of this user."""
+        try:
+            await self.channel_layer.group_send(self.group_name, {'type': 'notification.counts'})
+        except Exception as exc:
+            logger.debug('counts fan-out skipped: %s', exc)
 
     # ── DB helpers ────────────────────────────────────────────────────────────
 
@@ -101,6 +152,13 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
             return StaffProfile.objects.get(user=user)
         except StaffProfile.DoesNotExist:
             return None
+
+    @database_sync_to_async
+    def _category_counts(self):
+        from apps.users.models import StaffProfile
+        from .views import unread_category_counts
+        profile = StaffProfile.objects.filter(pk=self.profile_id).first()
+        return unread_category_counts(profile) if profile else None
 
     async def _send_pending(self):
         """

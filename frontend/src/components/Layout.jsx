@@ -6,6 +6,7 @@ import ErrorBoundary from './ErrorBoundary'
 import PageSuspense from './PageSuspense'
 import { NAV_GROUPS, navItemVisible } from './navGroups'
 import useNotificationStore from '../store/notificationStore'
+import useLiveStore, { MAIN_SYNC_DOMAINS, pollWhileSocketDown, useOnFreshnessChange } from '../store/liveStore'
 import { useQuery } from '@tanstack/react-query'
 import { syncApi } from '../api/client'
 import { formatDistanceToNow } from 'date-fns'
@@ -174,11 +175,15 @@ export default function Layout() {
   const displayedGroupId = hoverGroup ?? pinnedGroup
   const displayedGroup   = visibleGroups.find(g => g.id === displayedGroupId)
 
-  const { data: syncStatus } = useQuery({
+  // perf Stage 5: refetch when a main sync lane finishes (freshness_changed over the socket);
+  // the slow poll is a fallback for a down socket (it was a 60 s poll on every tab).
+  const liveUp = useLiveStore(s => s.socketUp)
+  const { data: syncStatus, refetch: refetchSyncStatus } = useQuery({
     queryKey: ['syncStatus'],
     queryFn: () => syncApi.status().then(r => r.data),
-    refetchInterval: 60_000,
+    refetchInterval: pollWhileSocketDown(liveUp),
   })
+  useOnFreshnessChange(() => { refetchSyncStatus() }, MAIN_SYNC_DOMAINS)
 
   function handleRailEnter(groupId) {
     clearTimeout(hoverTimer.current)

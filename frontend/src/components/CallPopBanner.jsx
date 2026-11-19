@@ -14,7 +14,11 @@
 import { useEffect, useState } from 'react'
 import api, { customersApi } from '../api/client'
 import { Icon, Badge } from '../pos/design'
+import { isPbxSocketOpen, subscribePbxEvents } from '../hooks/useScreenPop'
 
+const PBX_FALLBACK_POLL_MS = 15_000   // socket down
+const PBX_SAFETY_POLL_MS   = 60_000   // socket open: events drive it
+const CALL_EVENTS = new Set(['incoming_call', 'call_answered', 'call_ended'])
 const ACTIVE_STATES = new Set(['ringing', 'answered', 'queued', 'on_hold', 'transferred'])
 const pick = (c) => ({ id: c.id, name: c.name, phone: c.phone, softech_pic: c.softech_pic })
 
@@ -33,16 +37,39 @@ export default function CallPopBanner({ onLoadCustomer, onNewCustomer }) {
     return () => { alive = false }
   }, [])
 
-  // poll live sessions only on a call-center terminal
+  // live sessions, only on a call-center terminal. perf Stage 5: the AMI bridge already pushes
+  // incoming_call / call_answered / call_ended over the PBX socket, so read /pbx/live/ when one
+  // arrives (and once more a moment later, for the ring to reach this extension). The timer is only
+  // a safety net: 60 s while the socket is open, 15 s while it is down (it was a 6 s poll).
   useEffect(() => {
     if (!myExt) return
     let alive = true
-    const poll = () => api.get('/pbx/live/', { params: { fresh: 1 } })
-      .then(({ data }) => { if (alive) setSessions(Array.isArray(data) ? data : []) })
-      .catch(() => {})
+    let lastPoll = 0
+    const poll = () => {
+      lastPoll = Date.now()
+      return api.get('/pbx/live/', { params: { fresh: 1 } })
+        .then(({ data }) => { if (alive) setSessions(Array.isArray(data) ? data : []) })
+        .catch(() => {})
+    }
     poll()
-    const t = setInterval(poll, 6000)
-    return () => { alive = false; clearInterval(t) }
+    const followUps = new Set()
+    const unsubscribe = subscribePbxEvents((msg) => {
+      if (!msg || !CALL_EVENTS.has(msg.type)) return
+      poll()
+      const f = setTimeout(() => { followUps.delete(f); poll() }, 2500)
+      followUps.add(f)
+    })
+    const t = setInterval(() => {
+      if (document.hidden) return
+      const every = isPbxSocketOpen() ? PBX_SAFETY_POLL_MS : PBX_FALLBACK_POLL_MS
+      if (Date.now() - lastPoll >= every - 500) poll()
+    }, PBX_FALLBACK_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(t)
+      followUps.forEach(clearTimeout)
+      unsubscribe()
+    }
   }, [myExt])
 
   const call = sessions.find(s =>

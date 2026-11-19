@@ -8,9 +8,10 @@
  *  • KPI mode (legacy): pass dataThrough/daysElapsed/… to show the KPI board's
  *    MTD completeness + a rollup-rebuild button. Unchanged.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { syncApi, kpiApi } from '../api/client'
+import { FALLBACK_POLL_MS, useOnFreshnessChange } from '../store/liveStore'
 
 // Domains served by the fast lane (stock+sales+branches, ~15s to refresh).
 const FAST_DOMAINS = new Set(['stock', 'sales', 'branches'])
@@ -34,14 +35,26 @@ function fmtAge(seconds) {
 function DomainFreshness({ domains, canEdit, compact, onRefresh }) {
   const qc = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)
-  const { data } = useQuery({
+  // perf Stage 5: refetch when the server says one of these domains changed (freshness_changed).
+  // A 5-min poll stays (was 60 s) so a sync that STOPS still turns the bar amber without any event.
+  // The forced refresh still polls fast until it lands.
+  const { data, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['data-freshness', domains.join(',')],
     queryFn: () => syncApi.freshness(domains).then(r => r.data),
-    refetchInterval: refreshing ? 4000 : 60000,
+    refetchInterval: refreshing ? 4000 : FALLBACK_POLL_MS,
   })
+  useOnFreshnessChange(() => { refetch() }, domains)
+  // Age the "منذ X د" labels on the client between fetches (a re-render each minute, no request).
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const sinceFetch = dataUpdatedAt ? Math.max(0, (Date.now() - dataUpdatedAt) / 1000) : 0
 
   const doms = data?.domains || {}
   const list = domains.map(k => ({ key: k, ...(doms[k] || {}) })).filter(d => d.label_ar)
+    .map(d => (d.age_seconds == null ? d : { ...d, age_seconds: d.age_seconds + sinceFetch }))
   const anyStale = list.some(d => d.stale)
   const lane = domains.every(d => FAST_DOMAINS.has(d)) ? 'fast' : 'full'
   // Only offer the sync-trigger button when EVERY domain is refreshable by it.
