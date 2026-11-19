@@ -391,6 +391,4 @@ class ScreenViewTrackingCostTests(TestCase):
                                         for i in range(300)])
         later = self._post('/b')
         self.assertEqual(len(later), len(first), [q['sql'][:120] for q in later])
-        print('\nscreen-view queries:', len(later))
-        for q in later:
-            print('  ', q['time'], q['sql'][:160])
+        self.assertLessEqual(len(later), 4)
