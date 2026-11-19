@@ -45,6 +45,10 @@ def _bxgy(**kw):
     return Offer.objects.create(**d)
 
 
+# the shape writer.push_order returns for a sale that really posted
+_POSTED = {'mode': 'commit', 'ok': True, 'wrote_to_softech': True, 'docnumber': 1}
+
+
 @override_settings(POS_OFFERS_EXECUTION_ENABLED=True, POS_WRITER_ENABLED=True)
 class PushConsumeTests(TestCase):
     def setUp(self):
@@ -58,10 +62,10 @@ class PushConsumeTests(TestCase):
         order_attach.apply_offers_to_order(o)   # attaches offer to cheaper line
         return o
 
-    def _live_push(self, order):
+    def _live_push(self, order, result=None):
         with patch('apps.pos_orders.views.validate_order'), \
              patch('apps.pos_orders.views.writer.writer_enabled', return_value=True), \
-             patch('apps.pos_orders.views.writer.push_order', return_value={'pushed': True}):
+             patch('apps.pos_orders.views.writer.push_order', return_value=result or _POSTED):
             return self.client_.post(PUSH.format(order.id),
                                      {'dry_run': False, 'confirm': True}, format='json')
 
@@ -95,6 +99,13 @@ class PushConsumeTests(TestCase):
         with patch('apps.pos_orders.views.writer.push_order', return_value={'pushed': True, 'dry_run': True}):
             r = self.client_.post(PUSH.format(order.id), {'dry_run': True}, format='json')
         self.assertEqual(r.status_code, 200)
+        self.assertFalse(OfferApplication.objects.filter(pos_order=order, was_applied=True).exists())
+
+    def test_failed_push_consumes_nothing(self):
+        # D-12: uses are committed only when the sale is really in SOFTECH (ok / already pushed)
+        offer = _bxgy(max_uses_total=5)
+        order = self._order_with_offer(offer)
+        self._live_push(order, result={'mode': 'commit', 'ok': False, 'wrote_to_softech': False})
         self.assertFalse(OfferApplication.objects.filter(pos_order=order, was_applied=True).exists())
 
     def test_repush_is_idempotent(self):
