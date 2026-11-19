@@ -13,6 +13,7 @@ import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import ReturnWindowTab from '../components/ReturnWindowTab'
+import NearExpiryWorklistTab from '../components/NearExpiryWorklistTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
@@ -1391,6 +1392,7 @@ export default function BatchesPage() {
           { key: 'audit',  label: '📅 تدقيق صلاحيات الشراء' },
           { key: 'suppliers', label: '🏭 أداء الموردين (صلاحية)' },
           { key: 'reorder', label: '♻️ مراجعة الشراء' },
+          { key: 'near_expiry', label: '🧭 قائمة عمل قرب الانتهاء' },
           { key: 'rebalance', label: '🔁 إنقاذ قبل الانتهاء' },
           { key: 'disposal', label: '🗑️ إتلاف/مرتجع' },
           { key: 'return_window', label: '📆 تقويم المرتجع' },
@@ -1413,6 +1415,7 @@ export default function BatchesPage() {
       {tab === 'suppliers' && <SupplierScorecardTab />}
       {tab === 'reorder' && <ProcurementReviewTab />}
       {tab === 'disposal' && <DisposalTab />}
+      {tab === 'near_expiry' && <NearExpiryWorklistTab />}
       {tab === 'rebalance' && <RebalanceWorklistTab />}
       {tab === 'return_window' && <ReturnWindowTab />}
     </div>

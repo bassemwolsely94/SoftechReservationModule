@@ -128,7 +128,7 @@ SCREENS = [
         'key': 'batches.main',
         'routes': ['/batches'],
         'title': T('الدفعات والانتهاء', 'Batches & expiry'),
-        'summary': T('ثمانية تبويبات لإدارة الصلاحية من الرصد حتى القرار، منها تقويم مرتجع الموردين.', 'Eight tabs to manage expiry from monitoring to decision, including the supplier return calendar.'),
+        'summary': T('تسعة تبويبات لإدارة الصلاحية من الرصد حتى القرار، منها قائمة عمل قرب الانتهاء وتقويم مرتجع الموردين.', 'Nine tabs to manage expiry from monitoring to decision, including the near-expiry worklist and the supplier return calendar.'),
         'audience': T('الصيادلة والجودة والمشتريات والمشرفون.', 'Pharmacists, quality, purchasing and supervisors.'),
         'tabs': [
             {'key': 'alerts', 'title': T('🚨 قرب الانتهاء', '🚨 Near expiry'),
@@ -142,6 +142,15 @@ SCREENS = [
              'body': T('جودة تواريخ الصلاحية من كل موزّع رئيسي: متوسط الصلاحية المتبقية عند الاستلام ونسبة التوريد «قصير الأجل» — ورقة تفاوض لشروط التوريد والمرتجعات.', 'The expiry quality from each main distributor: average remaining shelf life on receipt and the share of "short-dated" supply — a negotiation sheet for supply and return terms.')},
             {'key': 'reorder', 'title': T('♻️ مراجعة الشراء', '♻️ Purchase review'),
              'body': T('أصناف تُشترى قصيرة الأجل بشكل متكرر مع معدل البيع الشهري — إشارة لتقليل كمية إعادة الطلب أو التفاوض أو تغيير المصدر.', 'Items repeatedly bought short-dated, with monthly sales — a signal to reduce reorder quantity, negotiate or change source.')},
+            {'key': 'near_expiry', 'title': T('🧭 قائمة عمل قرب الانتهاء', '🧭 Near-expiry worklist'),
+             'body': T('التشغيلات اللي مش هتتباع قبل ما تنتهي بمعدل بيع فرعها (نفس قاعدة «الأقدم صلاحية أولاً» ومعدل آخر 90 يوم، خلال 180 يوماً)، مرتبة بالقيمة المعرّضة بسعر التكلفة. فروع البيع بس — الرئيسي والمخازن 102/103/105 والفرع المغلق مش داخلين. '
+                       'لكل تشغيلة إجراء مقترح واحد بترتيب ثابت: (1) «مرتجع للمورد» لو للمورد سياسة مرتجع والنافذة مفتوحة أو هتفتح الشهر الجاي ولسه فيه وقت تبعتها للرئيسي — بياخد الكمية المعرّضة كلها؛ (2) «نقل لفرع يبيعه» لو فيه فرع بيبيع الصنف ويلحق يصرّفه (نفس حساب «إنقاذ قبل الانتهاء»؛ مش لأصناف الثلاجة ولا المحتفظ بها استراتيجياً)؛ (3) «ركن قرب الانتهاء / بيع أولاً» — علامة على الرف بس، من غير أي تغيير في السعر، ومش لصنف موقوف أو «ارتجاع فقط» ولا لو فاضل أقل من 30 يوم؛ (4) «قبول الخسارة» للباقي (بسبب مكتوب). عمود «المقترح» بيبيّن التقسيم لو الكمية اتقسمت. '
+                       'علّم السطور واختار الإجراء ثم «تسجيل الإجراء»، أو Enter على السطر لقبول المقترح. «طلب مرتجع» بيعمل طلب في «📆 تقويم المرتجع» (مرة واحدة للتشغيلة)، و«مسودة تحويل» بتعمل طلب تحويل مسودة في مسار التحويلات المعتاد وتربطه بالتشغيلة — ولو فيه تحويل مفتوح للصنف من نفس الفرع الزر بيقول «ربط» بدل ما يعمل واحد تاني. لكل تشغيلة إجراء مفتوح واحد؛ لو غيّرت رأيك بيتعدّل وبيتسجّل في سجل المراجعة. '
+                       '«📊 ماذا حدث؟»: بعد 30 يوماً من الاختيار (أو عند الانتهاء، أو لما التشغيلة تختفي من الرصيد) النظام بيقيس من حركات المخزون: بيع (115/80 ناقص مرتجع البيع 30)، نقل (125 لفرع؛ وللرئيسي = «أُرسل للمرتجع» لو الإجراء مرتجع)، هالك/عجز (160/150)، وانتهى على الرف أو ما زال على الرف. حركة من غير تاريخ صلاحية بتتوزّع على تشغيلات الصنف الأقدم صلاحية أولاً، وكل حركة بتتحسب مرة واحدة. النقص اللي مالوش حركة «غير مفسَّر» ومابيتحسبش إنقاذ، و«أُنقذ» = الجزء المعرّض بس. الفرع بيشوف ويختار لتشغيلات فرعه بس. لا شيء يُكتب في SOFTECH.',
+                       'Lots that will not sell before they expire at their branch\'s rate (the same "earliest expiry first" rule and last-90-day rate, within 180 days), ranked by value at risk at cost. Sales branches only — HQ, stores 102/103/105 and the closed branch are left out. '
+                       'Each lot gets one suggested action in a fixed order: (1) "Return to supplier" when the supplier has a return policy, the window is open or opens next month, and there is still time to send it to HQ — it takes the whole at-risk quantity; (2) "Move to a branch that sells it" when a branch sells the item fast enough (the same maths as "Rescue before expiry"; not for fridge or strategic-hold items); (3) "Near-expiry corner / sell first" — a shelf flag only, with no price change, never for a stopped or "return only" item, and not with fewer than 30 days left; (4) "Accept the loss" for the rest (with a written reason). The "Suggested" column shows the split when the quantity is divided. '
+                       'Tick lines, pick the action and press "Record action", or press Enter on a line to accept the suggestion. "Request return" makes a request in "📆 Return calendar" (once per lot), and "Draft transfer" makes a draft transfer request through the usual transfer flow and links it to the lot — when an open transfer for the item already leaves the branch, the button says "Link" instead of making a second one. A lot has one open action; changing your mind updates it and is written to the audit log. '
+                       '"📊 What happened?": 30 days after the choice (or at expiry, or when the lot leaves the balance) the system measures from the stock movements: sold (115/80 minus sales returns 30), moved (125 to a branch; to HQ = "sent for return" when the action was a return), written off / count deficit (160/150), and expired on the shelf or still on the shelf. A movement without an expiry date is shared over the item\'s lots earliest expiry first, and each movement counts once. A drop with no movement is "unexplained" and never counts as saved, and "saved" is only the at-risk part. A branch sees and acts on its own lots only. Nothing is written to SOFTECH.')},
             {'key': 'rebalance', 'title': T('🔁 إنقاذ قبل الانتهاء', '🔁 Rescue before expiry'),
              'body': T('تشغيلات لن تُباع في فرعها قبل انتهائها، والفروع التي تبيع الصنف أسرع وتكفي لتصريفها (الأقدم صلاحية أولاً). الزر يُنشئ «مسودة طلب تحويل» تمر بمسار التحويلات المعتاد. ما «لا يوجد فرع يستوعبه» أو «متأخر للنقل» يحتاج خصماً أو مرتجعاً.',
                        'Batches that will not sell in their branch before expiry, and branches that sell the item faster and can absorb them (oldest expiry first). The button creates a "draft transfer request" that goes through the usual transfer flow. Lines with "no branch can absorb" or "too late to move" need a discount or a return.')},
@@ -173,11 +182,11 @@ SCREENS = [
         'related': ['stockcount.sessions', 'transfers.new', 'catalog.inventory'],
         'tour': [
             {'target': 'batches-main-tabs', 'label': T('🚨 قرب الانتهاء · 📦 أرصدة الصلاحية · …', '🚨 Near expiry · 📦 Expiry balances · …'),
-             'text': T('ثماني تبويبات من الرصد للقرار: قرب الانتهاء، الأرصدة، تدقيق الشراء، الموردين، مراجعة الشراء، الإنقاذ، الإتلاف/المرتجع، وتقويم المرتجع.',
-                       'Eight tabs from monitoring to decision: near expiry, balances, purchase audit, suppliers, purchase review, rescue, disposal/return, and the return calendar.'),
+             'text': T('تسع تبويبات من الرصد للقرار: قرب الانتهاء، الأرصدة، تدقيق الشراء، الموردين، مراجعة الشراء، قائمة العمل، الإنقاذ، الإتلاف/المرتجع، وتقويم المرتجع.',
+                       'Nine tabs from monitoring to decision: near expiry, balances, purchase audit, suppliers, purchase review, worklist, rescue, disposal/return, return calendar.'),
              'more': T(
-                 '• «قرب الانتهاء» و«أرصدة الصلاحية»: الرصد اليومي.\n• «تدقيق صلاحيات الشراء» و«أداء الموردين» و«مراجعة الشراء»: هل بنشتري قصير الأجل ومن مين.\n• «إنقاذ قبل الانتهاء»: ينشئ مسودة طلب تحويل لفرع بيبيع أسرع.\n• «إتلاف/مرتجع»: اعتماد وتنفيذ القرارات.',
-                 '• "Near expiry" and "Expiry balances": daily monitoring.\n• "Purchase-expiry audit", "Supplier expiry performance" and "Purchase review": are we buying short-dated, and from whom.\n• "Rescue before expiry": creates a draft transfer request to a branch that sells faster.\n• "Disposal/return": approving and completing decisions.')},
+                 '• «قرب الانتهاء» و«أرصدة الصلاحية»: الرصد اليومي.\n• «تدقيق صلاحيات الشراء» و«أداء الموردين» و«مراجعة الشراء»: هل بنشتري قصير الأجل ومن مين.\n• «قائمة عمل قرب الانتهاء»: إجراء واحد لكل تشغيلة مش هتتباع، وبعدين «ماذا حدث؟».\n• «إنقاذ قبل الانتهاء»: ينشئ مسودة طلب تحويل لفرع بيبيع أسرع.\n• «إتلاف/مرتجع»: اعتماد وتنفيذ القرارات.',
+                 '• "Near expiry" and "Expiry balances": daily monitoring.\n• "Purchase-expiry audit", "Supplier expiry performance" and "Purchase review": are we buying short-dated, and from whom.\n• "Near-expiry worklist": one action per lot that will not sell, then "What happened?".\n• "Rescue before expiry": creates a draft transfer request to a branch that sells faster.\n• "Disposal/return": approving and completing decisions.')},
             {'target': 'batches-main-scope', 'label': T('خلال 180 يوم · كل الفروع · كل المخازن', 'Within 180 days · All branches'),
              'text': T('حدد المدة، وعلّم فرعاً أو أكثر ومخزناً أو أكثر. في «أرصدة الصلاحية» تختار كمان الوضع: قرب الانتهاء، نطاق، منتهية، أو الكل.',
                        'Set the period and tick one or more branches and stores. In "Expiry balances" you also pick the mode: near expiry, range, expired, or all.'),
@@ -285,6 +294,30 @@ SCREENS = [
                  'Click any column title to sort (e.g. "Value at risk" or "Earliest expiry"); a red row is an expired item.\n• "🗑️ Disposal/return" opens a window: the decision (destroy, return to supplier, quarantine, review), quantity and reason, then "Record decision".\n• The decision is saved as a draft in the "Disposal/return" tab and deducts nothing in SOFTECH.')},
         ],
         'hints': [
+            {'target': 'batches-main-near-expiry-list', 'label': T('🧭 قائمة العمل', '🧭 Worklist'),
+             'text': T('التشغيلات اللي مش هتتباع قبل انتهائها، بإجراء مقترح واحد لكل تشغيلة.', 'Lots that will not sell before they expire, with one suggested action each.'),
+             'open_hint': T('تبويب «🧭 قائمة عمل قرب الانتهاء».', '"🧭 Near-expiry worklist" tab.')},
+            {'target': 'batches-main-near-expiry-outcomes', 'label': T('📊 ماذا حدث؟', '📊 What happened?'),
+             'text': T('الإجراءات المختارة ونتيجتها بعد 30 يوماً: اتباع، اتنقل، اترجع، هالك، انتهى — وكام اتنقذ وكام ضاع.', 'Chosen actions and their result after 30 days: sold, moved, returned, written off, expired — and how much was saved or lost.'),
+             'open_hint': T('تبويب «🧭 قائمة عمل قرب الانتهاء».', '"🧭 Near-expiry worklist" tab.')},
+            {'target': 'batches-main-near-expiry-chips', 'label': T('مرتجع · نقل · بيع أولاً · خسارة', 'Return · Move · Sell first · Loss'),
+             'text': T('القيمة وعدد السطور لكل إجراء مقترح؛ اضغط واحد لعرض سطوره بس، واضغطه تاني للكل.', 'Value and line count per suggested action; click one to show only its lines, again for all.')},
+            {'target': 'batches-main-near-expiry-grid', 'label': T('جدول قائمة العمل', 'Worklist grid'),
+             'text': T('↑↓ تنقل، مسافة تحديد، Ctrl+A الكل، Enter يسجّل الإجراء المقترح للسطر (المرتجع بيعمل «طلب مرتجع»).', '↑↓ move, Space ticks, Ctrl+A all, Enter records the suggested action (a return makes a "Request return").'),
+             'when': T('«قبول الخسارة» مابيتسجّلش بـ Enter — محتاج سبب.', '"Accept the loss" is never recorded by Enter — it needs a reason.')},
+            {'target': 'batches-main-near-expiry-bulk', 'label': T('الإجراء للمحدد…', 'Action for ticked…'),
+             'text': T('اختار إجراء للسطور المعلّمة: نقل، بيع أولاً، أو قبول الخسارة (بسبب).', 'Pick an action for the ticked lines: move, sell first, or accept the loss (with a reason).'),
+             'open_hint': T('للي عنده صلاحية «تعديل» على الأصناف.', 'For Catalog «edit» holders.')},
+            {'target': 'batches-main-near-expiry-choose', 'label': T('تسجيل الإجراء', 'Record action'),
+             'text': T('يسجّل الإجراء للسطور المعلّمة؛ لو للتشغيلة إجراء مفتوح بيتعدّل بدل ما يتكرر، وبيتسجّل في سجل المراجعة.', 'Records the action for the ticked lines; a lot with an open action is updated, never duplicated, and it is audited.')},
+            {'target': 'batches-main-near-expiry-return', 'label': T('طلب مرتجع', 'Request return'),
+             'text': T('يعمل طلب مرتجع في «📆 تقويم المرتجع» للسطور المقترح لها مرتجع، ويربطه بالتشغيلة. مرة واحدة لكل تشغيلة.', 'Makes a return request in "📆 Return calendar" for lines suggested for return and links it to the lot. Once per lot.')},
+            {'target': 'batches-main-near-expiry-transfer', 'label': T('مسودة تحويل / ربط', 'Draft transfer / Link'),
+             'text': T('يعمل مسودة طلب تحويل للفرع المقترح بالكمية المقترحة ويربطها بالتشغيلة؛ «ربط» لو فيه تحويل مفتوح للصنف من نفس الفرع.', 'Makes a draft transfer to the suggested branch for the suggested qty and links it; "Link" when an open transfer already exists.'),
+             'open_hint': T('على سطر مقترح له نقل — لمن يقدر يعمل طلب تحويل.', 'On a line suggested for a move — for people who can create transfers.')},
+            {'target': 'batches-main-near-expiry-check', 'label': T('🔄 قياس النتائج الآن', '🔄 Measure results now'),
+             'text': T('يقيس نتيجة الإجراءات اللي جه ميعادها دلوقتي بدل انتظار القياس اليومي (6:20 صباحاً). من الأرصدة المحلية بس.', 'Measures the actions that are due now instead of waiting for the daily check (6:20 am). Local mirrors only.'),
+             'open_hint': T('في «📊 ماذا حدث؟» — للمدير والصيادلة والمشتريات.', 'In "📊 What happened?" — admin, pharmacists and purchasing.')},
             {'target': 'batches-main-audit-sync', 'label': T('🔄 مزامنة بيانات الشراء (٣ سنوات)', '🔄 Sync purchase data (3 years)'),
              'text': T('يسحب صلاحيات فواتير الشراء من SOFTECH لكل الفروع في الخلفية. قراءة بس — مابيكتبش في SOFTECH.',
                        'Pulls the expiry dates of purchase invoices from SOFTECH for every branch in the background. Read only — never writes to SOFTECH.'),
@@ -362,7 +395,7 @@ SCREENS = [
              'open_hint': T('بعد «+ مورد» أو «تعديل».', 'After "+ Supplier" or "Edit".')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('«📆 تقويم المرتجع»: سطور بلا فاتورة بنفس شهر الصلاحية تأخذ المورد من سجل الشراء («من سجل الشراء») بدل «مورد غير معروف»',
-                         '"📆 Return calendar": lines with no invoice in the same expiry month take the supplier from the purchase history ("from purchase history") instead of "unknown supplier"'),
+        'change_note': T('تبويب جديد «🧭 قائمة عمل قرب الانتهاء»: إجراء مقترح واحد لكل تشغيلة لن تُباع قبل انتهائها، وتسجيل الاختيار، و«📊 ماذا حدث؟» بعد 30 يوماً',
+                         'New "🧭 Near-expiry worklist" tab: one suggested action per lot that will not sell before expiry, the recorded choice, and "📊 What happened?" after 30 days'),
     },
 ]
