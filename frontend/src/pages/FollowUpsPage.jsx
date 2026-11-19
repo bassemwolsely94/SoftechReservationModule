@@ -39,6 +39,8 @@ import CallListsPanel from '../components/followups/CallListsPanel'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
 import useRoles, { roleOptions } from '../hooks/useRoles'
+import { useToast } from '../components/ui'
+import { useConfirm } from '../components/InlineConfirm'
 
 // ─────────────────────────────────────────────
 //  Constants / config
@@ -594,6 +596,7 @@ function TaskCard({ task, onSelect, onQuickAction, onPinToggle, isSelected, onSe
 //  Feature 6 — CustomerGroupCard
 // ─────────────────────────────────────────────
 function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
+  const toast = useToast()
   const [expanded,      setExpanded]      = useState(false)
   const [selectedItems, setSelectedItems] = useState([])   // task IDs to include in WA message
   const [waMsg,         setWaMsg]         = useState('')
@@ -644,7 +647,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
       // re-renders all group cards and resets the composing state to false.
       // onMutate() is called when the user explicitly closes the composer.
     } catch (e) {
-      alert('فشل: ' + (e?.response?.data?.detail || e.message))
+      toast.error('فشل: ' + (e?.response?.data?.detail || e.message))
     } finally { setBuilding(false) }
   }
 
@@ -652,7 +655,7 @@ function CustomerGroupCard({ group, onOpenTask, onQuickAction, onMutate }) {
   const markWhatsappSent = () => {
     if (!waSent) return
     followupsApi.multiWhatsapp(waSent.ids, waSent.includeUpsell, true)
-      .catch(e => alert('فُتح واتساب لكن تعذّر تسجيل التواصل: ' + (e?.response?.data?.detail || e.message)))
+      .catch(e => toast.error('فُتح واتساب لكن تعذّر تسجيل التواصل: ' + (e?.response?.data?.detail || e.message)))
   }
 
   const closeComposer = () => {
@@ -1183,6 +1186,7 @@ function AssignPanel({ task, acting, doAction, branches = [] }) {
 //  Task Detail Drawer
 // ─────────────────────────────────────────────
 function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
+  const toast = useToast()
   const assignPanelBranches = branches
   const qc = useQueryClient()
   const { data: task, isLoading } = useQuery({
@@ -1570,9 +1574,9 @@ function TaskDrawer({ taskId, onClose, onMutate, branches = [] }) {
                               if (!code) return
                               try {
                                 await followupsApi.assignVoucher(task.id, code)
-                                alert(`✅ القسيمة ${code} خُصِّصت للعميل`)
+                                toast.success(`القسيمة ${code} خُصِّصت للعميل`)
                               } catch (e) {
-                                alert('فشل: ' + (e?.response?.data?.detail || e.message))
+                                toast.error('فشل: ' + (e?.response?.data?.detail || e.message))
                               }
                             }}
                             className="btn-secondary text-xs px-3 whitespace-nowrap disabled:opacity-50">
@@ -2106,6 +2110,8 @@ const PERSONAL_TABS = [
 ]
 
 export default function FollowUpsPage() {
+  const toast = useToast()
+  const { confirm: confirmInline, ask, ui: confirmUi } = useConfirm()
   const { user }  = useAuthStore()
   const qc        = useQueryClient()
   const [filters, setFilters]           = useState(DEFAULT_FILTERS)
@@ -2217,6 +2223,7 @@ export default function FollowUpsPage() {
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
+      {confirmUi}
       {/* ── Sticky header ── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto space-y-3">
@@ -2248,9 +2255,9 @@ export default function FollowUpsPage() {
                     onClick={async () => {
                       try {
                         const { data } = await followupsApi.backfillTxDetail()
-                        alert(`تم تحديث ${data.tasks_updated} مهمة بتفاصيل المعاملة`)
+                        toast.success(`تم تحديث ${data.tasks_updated} مهمة بتفاصيل المعاملة`)
                       } catch (e) {
-                        alert('فشل: ' + (e?.response?.data?.detail || e.message))
+                        toast.error('فشل: ' + (e?.response?.data?.detail || e.message))
                       }
                       qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
@@ -2261,8 +2268,8 @@ export default function FollowUpsPage() {
                     onClick={async () => {
                       try {
                         const { data } = await followupsApi.updatePriorityScores()
-                        alert(`تم تحديث درجة الأولوية لـ ${data.tasks_updated} مهمة`)
-                      } catch (e) { alert('فشل: ' + e.message) }
+                        toast.success(`تم تحديث درجة الأولوية لـ ${data.tasks_updated} مهمة`)
+                      } catch (e) { toast.error('فشل: ' + e.message) }
                       qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
                     className="btn-secondary text-xs px-3 py-2">
@@ -2270,11 +2277,11 @@ export default function FollowUpsPage() {
                   </button>
                   <button data-tour="followups-tasks-admin-cleanup"
                     onClick={async () => {
-                      if (!confirm('سيتم إلغاء المهام المنتهية الصلاحية (5+ محاولات، 30+ يوم). متابعة؟')) return
+                      if (!await confirmInline('سيتم إلغاء المهام المنتهية الصلاحية (5+ محاولات، 30+ يوم). متابعة؟', { tone: 'danger', confirmLabel: 'إلغاء المهام' })) return
                       try {
                         const { data } = await followupsApi.cleanupDead({ dry_run: false })
-                        alert(`تم إلغاء ${data.cancelled} مهمة منتهية`)
-                      } catch (e) { alert('فشل: ' + e.message) }
+                        toast.success(`تم إلغاء ${data.cancelled} مهمة منتهية`)
+                      } catch (e) { toast.error('فشل: ' + e.message) }
                       qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                     }}
                     className="btn-secondary text-xs px-3 py-2 text-red-600">
@@ -2285,15 +2292,15 @@ export default function FollowUpsPage() {
                       try {
                         const { data } = await followupsApi.deduplicate({ dry_run: true })
                         if (data.tasks_cancelled === 0) {
-                          alert('✅ لا توجد مهام مكررة')
+                          toast.success('لا توجد مهام مكررة')
                           return
                         }
-                        if (!confirm(`سيتم إلغاء ${data.tasks_cancelled} مهمة مكررة في ${data.groups_affected} مجموعة. متابعة؟`)) return
+                        if (!await confirmInline(`سيتم إلغاء ${data.tasks_cancelled} مهمة مكررة في ${data.groups_affected} مجموعة. متابعة؟`, { confirmLabel: 'دمج' })) return
                         const { data: res } = await followupsApi.deduplicate({ dry_run: false })
-                        alert(`✅ تم دمج ${res.tasks_cancelled} مهمة مكررة`)
+                        toast.success(`تم دمج ${res.tasks_cancelled} مهمة مكررة`)
                         qc.invalidateQueries({ queryKey: ['followup-tasks'] })
                         qc.invalidateQueries({ queryKey: ['followup-grouped'] })
-                      } catch (e) { alert('فشل: ' + e.message) }
+                      } catch (e) { toast.error('فشل: ' + e.message) }
                     }}
                     className="btn-secondary text-xs px-3 py-2 text-orange-600">
                     🔀 إزالة التكرار
@@ -2314,9 +2321,9 @@ export default function FollowUpsPage() {
                         if (result.tasks_created)    parts.push(`${result.tasks_created} مهمة جديدة`)
                         if (result.tasks_escalated)  parts.push(`${result.tasks_escalated} ${fa()} فائت`)
                         if (result.tasks_auto_closed) parts.push(`${result.tasks_auto_closed} مُغلق آلياً`)
-                        if (parts.length) alert('تم: ' + parts.join(' · '))
+                        if (parts.length) toast.success('تم: ' + parts.join(' · '))
                       } catch (e) {
-                        alert('فشل التحديث: ' + (e?.response?.data?.detail || e.message || ''))
+                        toast.error('فشل التحديث: ' + (e?.response?.data?.detail || e.message || ''))
                       } finally { setRegenerating(false) }
                     }}>
                     🔄 توليد المهام
@@ -2559,7 +2566,7 @@ export default function FollowUpsPage() {
                               selectedIds, 'apply_preset', { preset_id: pr.id, note: batchNote },
                             )
                             const errs = res.data.errors?.length || 0
-                            if (errs > 0) alert(`تم ${res.data.processed} · فشل ${errs}`)
+                            if (errs > 0) toast.warning(`تم ${res.data.processed} · فشل ${errs}`)
                             invalidate(); clearSelection()
                           } catch { } finally { setBatchRunning(false) }
                         }}
@@ -2605,14 +2612,14 @@ export default function FollowUpsPage() {
                   ].map(b => (
                     <button data-tour="followups-tasks-bulk-status" key={b.action} disabled={batchRunning}
                       onClick={async () => {
-                        if (b.action === 'cancel' && !confirm(`إلغاء ${selectedIds.length} مهمة؟`)) return
+                        if (b.action === 'cancel' && !await confirmInline(`إلغاء ${selectedIds.length} مهمة؟`, { tone: 'danger', confirmLabel: 'إلغاء المهام' })) return
                         setBatchRunning(true)
                         try {
                           const res = await followupsApi.bulkAction(
                             selectedIds, b.action, { note: batchNote },
                           )
                           const errs = res.data.errors?.length || 0
-                          if (errs > 0) alert(`تم ${res.data.processed} · فشل ${errs}`)
+                          if (errs > 0) toast.warning(`تم ${res.data.processed} · فشل ${errs}`)
                           invalidate(); clearSelection()
                         } catch { } finally { setBatchRunning(false) }
                       }}
@@ -2638,7 +2645,7 @@ export default function FollowUpsPage() {
                 {/* Campaign button */}
                 <button data-tour="followups-tasks-bulk-campaign" disabled={batchRunning}
                   onClick={async () => {
-                    const campName = prompt('اسم الحملة:')
+                    const campName = await ask('اسم الحملة:', { confirmLabel: 'إنشاء الحملة', input: { required: true } })
                     if (!campName) return
                     const template = `أهلا بحضرتك يا فندم،\n{{customer_name}} 🌿\n\nنتواصل معكم من صيدلية الرزيقي للتذكير بدواء/منتج (*{{item_name}}*) يقترب موعد نفاده.\n\nصيدليات الرزيقي — نهتم بصحتكم 💙`
                     setBatchRunning(true)
@@ -2646,10 +2653,10 @@ export default function FollowUpsPage() {
                       const res = await followupsApi.createCampaign({
                         task_ids: selectedIds, name: campName, message_template: template,
                       })
-                      alert(`✅ حملة "${campName}" أُنشئت — ${res.data.estimated_reach} رسالة`)
+                      toast.success(`حملة "${campName}" أُنشئت — ${res.data.estimated_reach} رسالة`)
                       clearSelection()
                     } catch (e) {
-                      alert('فشل: ' + (e?.response?.data?.detail || e.message))
+                      toast.error('فشل: ' + (e?.response?.data?.detail || e.message))
                     } finally { setBatchRunning(false) }
                   }}
                   className="px-3 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 transition-all disabled:opacity-40">
