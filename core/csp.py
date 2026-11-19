@@ -15,6 +15,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from core.limits import limits_cache
 
 logger = logging.getLogger('elrezeiky.csp')
 
@@ -28,6 +29,7 @@ _DISPOSITIONS = {'enforce': 'enforce', 'report': 'report-only'}
 
 class CspReportThrottle(AnonRateThrottle):
     scope = 'csp_report'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
 
 
 @api_view(['POST'])

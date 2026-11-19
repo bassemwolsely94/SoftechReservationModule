@@ -11,6 +11,8 @@ from pathlib import Path
 from decouple import config
 from datetime import timedelta
 
+from config.cache_config import build_caches
+
 # Force UTF-8 (with replacement) on stdout/stderr so emoji / Arabic / em-dash in
 # our logs never crash the cp1256 Windows console. Settings load on every entry
 # point (manage.py, ASGI/daphne, wsgi, `python -c`), so this covers them all.
@@ -261,6 +263,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Performance Stage 2: marks the request thread so its DB connections get the web-only
+    # statement timeout (WEB_STATEMENT_TIMEOUT_ENABLED, default off). First, so a connection
+    # opened by any later middleware is covered too.
+    'core.middleware.statement_timeout.WebStatementTimeoutMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -322,12 +328,12 @@ DATABASES = {
         'PASSWORD': config('PG_PASSWORD', default=''),
         'HOST': config('PG_HOST', default='localhost'),
         'PORT': config('PG_PORT', default='5432'),
-        # CONN_MAX_AGE=0: close the PG connection after every request.
-        # With Django's ASGI thread-pool each thread holds one connection while
-        # CONN_MAX_AGE>0; on a multi-core dev machine that quickly exhausts
-        # PostgreSQL's default max_connections=100.
-        # For production behind pgbouncer set CONN_MAX_AGE=None instead.
-        'CONN_MAX_AGE': 0,
+        # DB_CONN_MAX_AGE (default 0 = close after every request). Under Daphne every HTTP
+        # request runs on its own new thread (Django's ThreadSensitiveContext), and Django keeps
+        # one connection per thread: a persistent connection is never reused by the next request
+        # and stays open until its dead thread is collected. Keep 0 on Daphne; pool with
+        # pgbouncer if connections run short (runbook §13.6, performance Stage 2).
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=0, cast=int),
         'CONN_HEALTH_CHECKS': True,   # Django 4.1+ — validate before reuse
         'OPTIONS': {
             'connect_timeout': 10,
@@ -344,16 +350,21 @@ DATABASES = {
 DATABASES['audit_log'] = {**DATABASES['default'], 'TEST': {'MIRROR': 'default'}}
 
 # ── CACHE ──────────────────────────────────────────────────────────────────────
-# Per-process memory. Holds every rate counter (DRF throttles, N6 per-phone caps, single-use
-# proof-of-work keys, N3/N4/N5 counters and log dedupe). Django's default of 300 entries culls
-# them under load, which silently removes every limit (N6 C1); a restart forgets all counts.
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'elrezeiky-default',
-        'OPTIONS': {'MAX_ENTRIES': config('CACHE_MAX_ENTRIES', default=50000, cast=int)},
-    }
-}
+# Two aliases (performance Stage 2, config/cache_config.py; runbook §13.6):
+#   default  plain caches + log dedupe + compute-once locks. Redis: fails OPEN (an error = a miss).
+#   limits   every security counter (core/limits.py): DRF throttles, login unknown-identifier
+#            lockout, 2FA code replay / tries, N6 proof-of-work + per-phone caps, N5 bulk-read
+#            counters. Redis: fails CLOSED (an error = 503 "try again shortly"), its own DB with
+#            maxmemory-policy noeviction.
+# No CACHE_REDIS_URL / LIMITS_REDIS_URL (dev, tests, office) → one per-process LocMem shared by
+# both aliases. MAX_ENTRIES stays high: Django's default 300 culls counters under load and silently
+# removes every limit (N6 C1). Set both URLs BEFORE enabling the extra web processes, or each
+# process keeps its own counts.
+CACHES = build_caches(
+    cache_url=config('CACHE_REDIS_URL', default=''),
+    limits_url=config('LIMITS_REDIS_URL', default=''),
+    max_entries=config('CACHE_MAX_ENTRIES', default=50000, cast=int),
+)
 
 # ── REST FRAMEWORK ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
@@ -1194,6 +1205,12 @@ PUBLIC_MIN_FILL_SECONDS = config('PUBLIC_MIN_FILL_SECONDS', default=3, cast=int)
 PUBLIC_PHONE_DAILY_MAX  = config('PUBLIC_PHONE_DAILY_MAX', default=3, cast=int)   # portal sign-in link, per phone, Cairo day
 PUBLIC_NOTIFY_DAILY_MAX = config('PUBLIC_NOTIFY_DAILY_MAX', default=10, cast=int)  # /notify (shelf QR), per phone, Cairo day
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
+# Performance Stage 2 (design §10): statement timeout for WEB requests only (request threads of
+# the Daphne processes, both the default and audit_log connections). The scheduler, management
+# commands and background threads (PIC export, OCR) never get it. Ships OFF; switch on only after
+# the long work has moved out of web requests (Stages 3-4).
+WEB_STATEMENT_TIMEOUT_ENABLED = config('WEB_STATEMENT_TIMEOUT_ENABLED', default=False, cast=bool)
+WEB_STATEMENT_TIMEOUT_MS = config('WEB_STATEMENT_TIMEOUT_MS', default=30000, cast=int)
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
 EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024
 # P-58: capture GS1 DataMatrix pack codes on receive / sale (apps/trace). OFF until EDA

@@ -40,7 +40,31 @@ def is_hq_not_configured(exc) -> bool:
     return isinstance(exc, HQNotConfigured)
 
 
+STATEMENT_TIMEOUT_MESSAGE = 'استغرق الطلب وقتاً أطول من المسموح — حاول مرة أخرى أو ضيّق نطاق البحث'
+
+
+def is_statement_timeout(exc) -> bool:
+    """A query cancelled by the web-only statement timeout (performance Stage 2, SQLSTATE 57014)."""
+    from django.db.utils import OperationalError
+    if not isinstance(exc, OperationalError):
+        return False
+    cause = getattr(exc, '__cause__', None)
+    return getattr(cause, 'pgcode', None) == '57014' or 'statement timeout' in str(exc)
+
+
 def api_exception_handler(exc, context):
+    from core.limits import LimitsUnavailable, refusal_body, RETRY_AFTER_SECONDS
+    if isinstance(exc, LimitsUnavailable):
+        # performance Stage 2 / owner §9: the security-counter store is unreachable -> refuse
+        set_rollback()
+        return Response(refusal_body(), status=503,
+                        headers={'Retry-After': str(RETRY_AFTER_SECONDS)})
+    if is_statement_timeout(exc):
+        view = (context or {}).get('view')
+        logger.warning('statement timeout: %s answered 503',
+                       type(view).__name__ if view is not None else 'unknown view')
+        set_rollback()
+        return Response({'detail': STATEMENT_TIMEOUT_MESSAGE, 'code': 'statement_timeout'}, status=503)
     if is_hq_not_configured(exc):
         # the view name and the branch count only — no request data, no secrets, no phones
         view = (context or {}).get('view')

@@ -46,6 +46,7 @@ from rest_framework.decorators import (
     api_view, authentication_classes, permission_classes, throttle_classes,
 )
 from rest_framework.throttling import AnonRateThrottle
+from core.limits import limits_cache
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import DENIED, DeliveryModulePermission, driver_of, guard
 from core import branch_scope
@@ -1458,6 +1459,7 @@ def delivery_tracking_link(request, pk):
 class PublicTrackThrottle(AnonRateThrottle):
     """Per-IP cap on the anonymous tracking link (N6); tokens are signed, this stops enumeration."""
     scope = 'public_track'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
     rate = '600/hour'
 
 

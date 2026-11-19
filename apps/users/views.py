@@ -7,6 +7,7 @@ from core.auth_cookies import set_auth_cookies, set_device_cookie
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import AnonRateThrottle
+from core.limits import limits_cache
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -25,6 +26,7 @@ class LoginRateThrottle(AnonRateThrottle):
     Applied ONLY to login_view — no other endpoint is affected.
     """
     scope = 'login'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
 
 from . import roles
 from .models import StaffProfile, ERPUser, UserActivityLog, RoleModuleAccess, ROLE_CHOICES, MODULE_CHOICES, ACTION_CHOICES

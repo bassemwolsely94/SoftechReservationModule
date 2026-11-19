@@ -28,7 +28,7 @@ import uuid
 
 from django.conf import settings
 from django.core import signing
-from django.core.cache import cache
+from core.limits import limits_cache   # fail-closed security counters (performance Stage 2)
 from django.utils import timezone
 
 logger = logging.getLogger('elrezeiky.public_guard')
@@ -146,17 +146,17 @@ def _check(data: dict, form: str, phone) -> None:
     if leading_zero_bits(digest) < int(settings.PUBLIC_POW_DIFFICULTY):
         raise GuardError('bad_solution')
 
-    if not cache.add(f'public:pow:{pid}', 1, _ttl()):
+    if not limits_cache.add(f'public:pow:{pid}', 1, _ttl()):
         raise GuardError('replayed')
 
     phone = normalize_phone(phone)
     if phone:
         key = _phone_key(form, phone)
-        if (cache.get(key) or 0) >= daily_max(form):
+        if (limits_cache.get(key) or 0) >= daily_max(form):
             raise GuardError('phone_limit')
-        if cache.add(key, 1, 86400 + 3600):   # outlives the Cairo day the key names
+        if limits_cache.add(key, 1, 86400 + 3600):   # outlives the Cairo day the key names
             return
         try:
-            cache.incr(key)
+            limits_cache.incr(key)
         except ValueError:                     # expired between get and incr
-            cache.add(key, 1, 86400 + 3600)
+            limits_cache.add(key, 1, 86400 + 3600)

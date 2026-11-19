@@ -10,6 +10,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
+from core.limits import limits_cache
 
 from apps.audit.models import AuditLog
 from apps.users.permissions import IsAdminRole
@@ -27,6 +28,7 @@ _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
 class WhoamiThrottle(SimpleRateThrottle):
     """60/min per client address, signed in or not (the badge calls it on every focus)."""
     scope = 'access_whoami'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
 
     def get_cache_key(self, request, view):
         return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}

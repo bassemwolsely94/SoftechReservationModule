@@ -13,7 +13,7 @@ cannot tell a real account from a made-up one by when the 429 appears.
 import hashlib
 from datetime import timedelta
 
-from django.core.cache import cache
+from core.limits import limits_cache   # fail-closed security counters (performance Stage 2)
 from django.utils import timezone
 
 FAIL_LIMIT = 5
@@ -109,7 +109,7 @@ def _unknown_key(identifier):
 
 def _unknown_times(identifier, now):
     horizon = now - WINDOW - LOCK_FOR
-    return [t for t in (cache.get(_unknown_key(identifier)) or []) if t > horizon]
+    return [t for t in (limits_cache.get(_unknown_key(identifier)) or []) if t > horizon]
 
 
 def unknown_identifier_locked(identifier: str) -> bool:
@@ -121,5 +121,5 @@ def unknown_identifier_locked(identifier: str) -> bool:
 def note_unknown_failure(identifier: str) -> None:
     now = timezone.now()
     times = _unknown_times(identifier, now) + [now]
-    cache.set(_unknown_key(identifier), times[-4 * FAIL_LIMIT:],
+    limits_cache.set(_unknown_key(identifier), times[-4 * FAIL_LIMIT:],
               int((WINDOW + LOCK_FOR).total_seconds()))

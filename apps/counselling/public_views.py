@@ -16,6 +16,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from core.limits import limits_cache
 
 from apps.audit.models import AuditLog
 
@@ -28,6 +29,7 @@ _GONE = {'detail': 'الرابط غير صالح أو منتهي الصلاحي�
 class PublicCounselThrottle(AnonRateThrottle):
     """Per-IP cap on the anonymous counselling link (tokens are signed; this stops enumeration)."""
     scope = 'public_counsel'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
     rate = '600/hour'
 
 

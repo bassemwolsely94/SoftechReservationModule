@@ -27,6 +27,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
+from core.limits import limits_cache
 
 from .models import SoftechIdentityClaim, PersonalWidget, DocumentCommentEdit, DocumentRevision
 from .serializers import IdentityClaimSerializer, PersonalWidgetSerializer
@@ -128,6 +129,7 @@ def resolve_person_key(widget: PersonalWidget, profile) -> str:
 class PersonSearchThrottle(UserRateThrottle):
     """30 live personsdata searches per user per hour (N0/H1)."""
     scope = 'personal_person_search'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
 
 
 @api_view(['GET'])
