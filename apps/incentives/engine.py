@@ -606,6 +606,19 @@ class CalculationResult(NamedTuple):
     # Only populated in simulate mode with write_log=False (for get_my_progress)
     raw_transactions:     list  = []   # list of pending transaction dicts
     total_qty_map:        dict  = {}   # {(staff_id, item_code): Decimal}
+    # People whose finalized settlement kept this run from touching their rows (D-16)
+    finalized_user_ids:   list  = []
+
+
+def _finalized_user_ids(program, period_start, period_end, user_ids=None) -> set:
+    """StaffProfile ids with a finalized settlement for this program + period (optionally scoped)."""
+    from .models import IncentiveSettlement
+    qs = IncentiveSettlement.objects.filter(
+        program=program, period_start=period_start, period_end=period_end, is_finalized=True,
+    )
+    if user_ids:
+        qs = qs.filter(user_id__in=user_ids)
+    return set(qs.values_list('user_id', flat=True))
 
 
 # ── Near-expiry stock query (for dashboard — uses stkbalexpiry) ───────────────
@@ -773,7 +786,8 @@ def calculate(
     period_end   : inclusive end date
     user_ids     : optional list of StaffProfile PKs to restrict processing
     simulate     : if True, compute results without writing to DB
-    force        : if True, recalculate even if settlements are finalized
+    force        : if True, recalculate the people whose settlement is still open even
+                   though others are finalized (finalized ones are never touched — D-16)
     triggered_by : StaffProfile running this (written to CalcLog)
     """
     from .models import (
@@ -785,25 +799,19 @@ def calculate(
 
     program = IncentiveProgram.objects.get(pk=program_id)
 
-    # ── Guard: finalization lock ──────────────────────────────────────────────
+    # ── Guard: finalization lock (D-16, owner 2026-11-19 "Refuse unless unlocked") ──
+    # A finalized settlement is never touched by a run, forced or not. Without force a run that
+    # meets one is refused; with force it recalculates only the people whose settlement is still
+    # open. To change a finalized settlement an admin unlocks it first (settlement unlock, audited).
+    # The check is repeated under the program row lock in the persist block below.
     if not simulate:
-        locked = IncentiveSettlement.objects.filter(
-            program=program,
-            period_start=period_start,
-            period_end=period_end,
-            is_finalized=True,
-        )
-        if locked.exists() and not force:
+        locked_uids = _finalized_user_ids(program, period_start, period_end, user_ids)
+        if locked_uids and not force:
             raise ValueError(
-                f'Period {period_start}→{period_end} has finalized settlements for '
-                f'"{program.name}". Pass force=True to recalculate.'
+                f'الفترة {period_start} → {period_end} فيها تسويات مُعتمدة لبرنامج «{program.name}» '
+                f'({len(locked_uids)} مندوب). اختر «إعادة الاحتساب للمفتوح فقط» ليُعاد احتساب '
+                f'غير المُعتمَدين فقط، أو اطلب من المدير فتح اعتماد التسوية أولاً.'
             )
-        if locked.exists() and force:
-            logger.warning(
-                'calculate: force-recalculating finalized period %s->%s for program %d',
-                period_start, period_end, program_id,
-            )
-            locked.update(is_finalized=False, finalized_at=None, finalized_by=None)
 
     # ── Load active rules (sorted by priority ASC, prefetch rule_items) ───────
     rules = list(
@@ -1137,48 +1145,69 @@ def calculate(
         )
 
     # ── Persist ───────────────────────────────────────────────────────────────
-    deleted, _ = IncentiveTransaction.objects.filter(
-        program=program,
-        period_start=period_start,
-        period_end=period_end,
-    ).delete()
-    if deleted:
-        logger.info('calculate: deleted %d stale transactions', deleted)
-
-    IncentiveTransaction.objects.bulk_create(
-        [IncentiveTransaction(**kw) for kw in to_create],
-        batch_size=500,
-    )
-
-    duration = time.monotonic() - t_start
+    # One transaction (BE-10 / D-16): the program row is locked so two runs for the same program
+    # queue instead of interleaving their delete + insert (which doubled the period), and a crash
+    # in bulk_create rolls the delete back instead of leaving the period empty. Settlements that
+    # are finalized are re-read under the lock; their people's transactions are kept as they are.
+    from django.db import transaction as db_transaction
     from django.utils import timezone
-    log_entry = IncentiveCalculationLog.objects.create(
-        program=program,
-        triggered_by=triggered_by,
-        period_start=period_start,
-        period_end=period_end,
-        mode='calculate',
-        status='done',
-        transactions_created=len(to_create),
-        skipped_person_codes=skipped_codes,
-        user_summaries={str(s['user_id']): s for s in user_summaries},
-        finished_at=timezone.now(),
-        duration_seconds=round(duration, 2),
-    )
+    with db_transaction.atomic():
+        IncentiveProgram.objects.select_for_update().only('id').get(pk=program.pk)
+        finalized_uids = _finalized_user_ids(program, period_start, period_end, user_ids)
+        if finalized_uids and not force:
+            raise ValueError(
+                f'الفترة {period_start} → {period_end} اعتُمدت أثناء الاحتساب — أعد المحاولة.'
+            )
+
+        stale = IncentiveTransaction.objects.filter(
+            program=program, period_start=period_start, period_end=period_end,
+        )
+        if user_ids:
+            # a run scoped to some people rebuilds only their rows
+            stale = stale.filter(user_id__in=user_ids)
+        if finalized_uids:
+            stale = stale.exclude(user_id__in=finalized_uids)
+        deleted, _ = stale.delete()
+        if deleted:
+            logger.info('calculate: deleted %d stale transactions', deleted)
+
+        to_write = [kw for kw in to_create if kw['user'].pk not in finalized_uids]
+        IncentiveTransaction.objects.bulk_create(
+            [IncentiveTransaction(**kw) for kw in to_write],
+            batch_size=500,
+        )
+        for s_ in user_summaries:
+            s_['finalized'] = s_['user_id'] in finalized_uids
+
+        duration = time.monotonic() - t_start
+        log_entry = IncentiveCalculationLog.objects.create(
+            program=program,
+            triggered_by=triggered_by,
+            period_start=period_start,
+            period_end=period_end,
+            mode='calculate',
+            status='done',
+            transactions_created=len(to_write),
+            skipped_person_codes=skipped_codes,
+            user_summaries={str(s['user_id']): s for s in user_summaries},
+            finished_at=timezone.now(),
+            duration_seconds=round(duration, 2),
+        )
 
     logger.info(
-        'calculate: DONE program=%d period=%s->%s created=%d skipped=%s duration=%.1fs',
-        program_id, period_start, period_end, len(to_create),
+        'calculate: DONE program=%d period=%s->%s created=%d kept_finalized=%d skipped=%s duration=%.1fs',
+        program_id, period_start, period_end, len(to_write), len(finalized_uids),
         skipped_codes or 'none', duration,
     )
 
     return CalculationResult(
-        created=len(to_create),
+        created=len(to_write),
         total_by_user={str(uid): float(v) for uid, v in total_by_user.items()},
         user_summaries=user_summaries,
         skipped_person_codes=skipped_codes,
         simulated=False,
         log_id=log_entry.id,
+        finalized_user_ids=sorted(finalized_uids),
     )
 
 

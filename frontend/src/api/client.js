@@ -1372,9 +1372,12 @@ export const incentivesApi = {
   createProgram:  (data)         => api.post('/incentives/programs/', data),
   updateProgram:  (id, data)     => api.patch(`/incentives/programs/${id}/`, data),
   deleteProgram:  (id)           => api.delete(`/incentives/programs/${id}/`),
+  // D-17: a program with transactions/settlements/logs can't be deleted (409) — archive it instead
+  archiveProgram: (id, data)     => api.post(`/incentives/programs/${id}/archive/`, data || {}),
 
   // Calculate — body: { period_start, period_end, user_ids?, force? }
-  // Returns 409 if period is finalized and force is not true
+  // Returns 409 if the period has finalized settlements and force is not true; with force only
+  // open (non-finalized) settlements are recalculated — finalized ones are never touched (D-16)
   calculate:      (id, data)     => api.post(`/incentives/programs/${id}/calculate/`, data),
 
   // Simulate (dry-run) — same body as calculate; never writes to DB
@@ -1421,6 +1424,8 @@ export const incentivesApi = {
   listSettlements: (params)      => api.get('/incentives/settlements/', { params }),
   getSettlement:   (id)          => api.get(`/incentives/settlements/${id}/`),
   receipt:         (id)          => api.get(`/incentives/settlements/${id}/receipt/`),
+  // D-16: admin only, written reason required; audited before/after
+  unlockSettlement: (id, reason) => api.post(`/incentives/settlements/${id}/unlock/`, { reason }),
 
   // Adjustment Entries — manual +/- corrections per user per period
   // params: { program, user, period_start, period_end }
