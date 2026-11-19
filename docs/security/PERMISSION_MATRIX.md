@@ -54,11 +54,13 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `ledger` | all | — | — | — | — | — | — | — | — | VCAX | all — finance GL is company-level: every /api/finance/gl/ endpoint refuses branch-scoped users (B-1) |
 | `tax_invoicing` | all | — | — | — | — | — | — | — | — | VCEA | all — fiscal documents belong to the taxpayer and a claim spans branches; RBAC module only (accountant, admin) |
 | `counselling` | all | V | VCEA | V | — | — | — | V | V | — | all — usage sheets are chain content; card sends record the sending branch (own POS branch_scope on the assistant) |
+| `marketplace` | all | VC | VC | — | V | — | — | VCEAX | VX | — | own — orders, platform stores and push logs carry their branch (branch_scope; per-branch qty on listings); channels, listings, settlement are company-level (edit/approve = supervisor); webhooks = own gate |
 | `usage_print` | all | — | VC | VC | — | — | — | VCE | — | — | own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide |
 | `hr_attendance` | all | — | — | — | — | — | — | — | — | — | all — company-level by decision (2026-11-07): admins and named grantees only, never branch-scoped (apps/hr/attendance/access.py) |
 | `data_health` | all | — | — | — | — | — | — | V | V | — | all — company-level by nature; admin, supervisor and quality manager only |
 | `crews` | all | — | — | — | — | — | — | — | — | — | all — company-level by design (spec 2026-11-13 §10): crews group people across branches; admin only by default |
-| `rpa` | all | — | — | — | VC | — | — | VCEA | VCA | — | branch — jobs scoped by RpaJob.branch via core.branch_scope; recipes/devices company-level (admin) |
+| `rpa` | all | — | — | — | VC | — | — | VCEA | VCA | — | branch — jobs scoped by RpaJob.branch via core.branch_scope; recipes/devices company-level (admin); portal jobs (/rpa/portals) are company-level — ordered for HQ, seen by rpa.view holders |
+| `alerts` | all | — | — | — | — | — | — | VCE | — | — | all — company-level: phone-alert policies and announcements (audience picks roles/branches); admin + supervisor by default |
 
 ## Record-state and separation-of-duty rules enforced on the server
 

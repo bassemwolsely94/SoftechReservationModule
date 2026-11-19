@@ -226,28 +226,21 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
 
     # ── Submit ────────────────────────────────────────────────────────────────
 
-    @action(detail=True, methods=['post'])
-    def submit(self, request, pk=None):
-        tr = self.get_object()
-        profile = _profile(request)
-
+    def _submit_refusal(self, profile, tr):
+        """None when the request side may submit tr now, else (status, detail)."""
         if not _can_request_side(profile, tr):
-            return Response(
-                {'detail': 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم تقديم الطلب'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
+            return status.HTTP_403_FORBIDDEN, 'فقط موظفو الفرع الطالب أو المشرفون يمكنهم تقديم الطلب'
         if not tr.can_submit:
-            return Response(
-                {'detail': 'لا يمكن تقديم هذا الطلب — تأكد من إضافة أصناف وأن الحالة صحيحة'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return status.HTTP_400_BAD_REQUEST, 'لا يمكن تقديم هذا الطلب — تأكد من إضافة أصناف وأن الحالة صحيحة'
+        return None
 
+    def _mark_submitted(self, profile, tr):
         tr.status = 'pending'
         tr.submitted_at = timezone.now()
         tr.save(update_fields=['status', 'submitted_at', 'updated_at'])
-
         _system_log(tr, f'تم تقديم الطلب بواسطة {profile.full_name}')
+
+    def _announce_submitted(self, profile, tr):
         phone_alert_hooks.on_transfer_submitted(tr, profile)
         _notify(
             tr,
@@ -255,6 +248,47 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             f'فرع {tr.requesting_branch} يطلب تحويل {tr.items.count()} صنف. يرجى المراجعة.',
             'transfer_request',
         )
+
+    def create(self, request, *args, **kwargs):
+        """POST /transfers/ — ?submit=1 saves AND submits in one transaction (full audit FE-11).
+
+        Before, the screen called create then submit: a refused or failed submit left a draft behind,
+        and pressing save again made a second request. Now a refused submit saves nothing.
+        """
+        if request.query_params.get('submit') not in ('1', 'true'):
+            return super().create(request, *args, **kwargs)
+        from django.db import transaction
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = _profile(request)
+        with transaction.atomic():
+            self.perform_create(serializer)
+            tr = serializer.instance
+            refusal = self._submit_refusal(profile, tr)
+            if refusal:
+                transaction.set_rollback(True)
+            else:
+                self._mark_submitted(profile, tr)
+        if refusal:
+            code, detail = refusal
+            return Response({'detail': detail}, status=code)
+        self._announce_submitted(profile, tr)
+        tr.refresh_from_db()
+        return Response(TransferRequestDetailSerializer(tr, context={'request': request}).data,
+                        status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        tr = self.get_object()
+        profile = _profile(request)
+
+        refusal = self._submit_refusal(profile, tr)
+        if refusal:
+            code, detail = refusal
+            return Response({'detail': detail}, status=code)
+
+        self._mark_submitted(profile, tr)
+        self._announce_submitted(profile, tr)
 
         return Response(
             TransferRequestDetailSerializer(tr, context={'request': request}).data
@@ -970,6 +1004,11 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         profile = _profile(request)
         if not profile:
             return Response({'detail': 'مطلوب تسجيل الدخول'}, status=status.HTTP_401_UNAUTHORIZED)
+        # an Analytics hub report: analytics view, as the middleware maps it (UAT W2, 2026-11-19)
+        from core.permissions import deny_unless
+        denied = deny_unless(request, 'analytics', 'view')
+        if denied is not None:
+            return denied
 
         days = max(1, min(int(request.query_params.get('days', 30)), 365))
         since = timezone.now() - timedelta(days=days)

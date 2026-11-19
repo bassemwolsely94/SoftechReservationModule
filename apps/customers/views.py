@@ -52,6 +52,15 @@ class CustomerViewSet(viewsets.ModelViewSet):
     ordering            = ['name']
     empty_last_fields   = ('segment',)     # blank segment ('' not NULL) sorts last too
 
+    def paginate_queryset(self, queryset):
+        page = super().paginate_queryset(queryset)
+        if self.action == 'list':
+            # D1: other-branch customers returned by a full-phone search open by id for a while
+            raw = self.request.query_params.get('search', '')
+            if access.full_phone_q(raw) is not None:
+                access.remember_found(self.request.user, raw, page if page is not None else queryset[:200])
+        return page
+
     def get_queryset(self):
         qs = Customer.objects.select_related(
             'preferred_branch', 'created_by__user',
@@ -77,6 +86,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
             self.action == 'health_profile_view' and self.request.method != 'GET')
         if writing and not access.can_edit(self.request.user, obj):
             raise PermissionDenied('هذا العميل تابع لفرع آخر — التعديل لفرعه أو لمركز الاتصال.')
+        # D1: another branch's customer opens only after a full-phone find (ids are sequential)
+        if not writing and not access.can_read(self.request.user, obj):
+            raise PermissionDenied('هذا العميل تابع لفرع آخر — ابحث عنه برقم الهاتف كاملاً لفتحه.')
         return obj
 
     def get_serializer_class(self):

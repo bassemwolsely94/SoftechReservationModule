@@ -382,13 +382,18 @@ function DeltaSection({ title, hint, rows, tone, children }) {
 function ChangesTab({ med, q }) {
   const qc = useQueryClient()
   const [dismissItem, setDismissItem] = useState(null)
-  const { data, isLoading } = useQuery({ queryKey: ['shortage-deltas'],
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['shortage-deltas'],
     queryFn: () => purchasingApi.shortageDeltas().then(r => r.data) })
   const confirm = useMutation({ mutationFn: (id) => purchasingApi.shortageFlag({ item_id: id, source: 'auto' }), onSuccess: () => invalidate(qc), onError: onErr })
   const notShortage = useMutation({ mutationFn: (id) => purchasingApi.shortageDismiss({ item_id: id, reason: 'not_shortage' }), onSuccess: () => invalidate(qc), onError: onErr })
   const clear = useMutation({ mutationFn: (id) => purchasingApi.shortageUnflag(id), onSuccess: () => invalidate(qc), onError: onErr })
   const retrieve = useMutation({ mutationFn: (id) => purchasingApi.shortageRetrieve(id), onSuccess: () => invalidate(qc), onError: onErr })
   if (isLoading) return <p className="text-gray-400 py-8 text-center">جارٍ التحميل…</p>
+  if (isError || !data) return (
+    <p className="text-red-600 py-8 text-center">
+      تعذّر تحميل التغييرات. <button onClick={() => refetch()} className="underline">إعادة المحاولة</button>
+    </p>
+  )
   const flt = (arr) => (arr || []).filter(c => matchFilter(c, med, q))
   const newRows = flt(data.new), recovering = flt(data.recovering), reEntered = flt(data.re_entered)
   return (

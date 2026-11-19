@@ -118,10 +118,12 @@ def _search_customers(raw, *, limit, user=None):
     qs = Customer.objects.filter(q)
     if user is not None and (limit_q := access.findable_q(user, raw)) is not None:
         qs = qs.filter(limit_q)          # B-2: other branches only on a full phone
-    rows = qs.only(
+    rows = list(qs.only(
         'id', 'name', 'phone', 'whatsapp_phone', 'softech_pic', 'segment',
         'preferred_branch_id', 'created_by_id',
-    )[:limit]
+    )[:limit])
+    if user is not None:
+        access.remember_found(user, raw, rows)          # D1: a full-phone find opens the detail
     out = [{
         'type': 'customer',
         'id': c.id,

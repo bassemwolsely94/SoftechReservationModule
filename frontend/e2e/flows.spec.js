@@ -41,8 +41,11 @@ test.describe('transfer request', () => {
     await page.getByText('E2E PARACETAMOL 500MG 20 TAB').first().click()
     await page.getByPlaceholder('الكمية').fill('2')
 
+    // «حفظ وتقديم» is the default (FE-11, covered by transfer-send.spec.js); this test keeps the
+    // draft path working: untick it and the plain create is used.
+    await page.locator('[data-tour="transfers-new-send-now"] input[type="checkbox"]').uncheck()
     const created = page.waitForResponse(r => /\/api\/transfers\/$/.test(r.url()) && r.request().method() === 'POST')
-    await page.getByRole('button', { name: /حفظ كمسودة|إرسال/ }).last().click()
+    await page.getByRole('button', { name: /حفظ كمسودة/ }).last().click()
     const res = await created
     expect(res.status(), await res.text()).toBe(201)
     const body = await res.json()

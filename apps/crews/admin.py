@@ -32,3 +32,4 @@ class CrewRuleAdmin(_ReadOnly):
 class CrewManualMemberAdmin(_ReadOnly):
     list_display = ('crew', 'mode', 'employee', 'softech_usercode', 'pbx_extension', 'valid_from',
                     'valid_to', 'voided_at')
+

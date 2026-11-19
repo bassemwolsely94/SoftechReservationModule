@@ -544,19 +544,20 @@ class KpiBoardCallCenterTargetSaveTests(TestCase):
     choices, so the edit never saved."""
 
     def setUp(self):
+        from apps.crews.models import Crew
         from apps.tests.factories import make_user
-        self.cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False,
-                                     kind=Branch.KIND_CALL_CENTER)
+        # crews piece 2b Part B: the call center is the crew (was the fake «CC» branch)
+        self.cc = Crew.objects.create(name='الكول سنتر', type='call_center')
         _, _, self.client = make_user('kpi_admin', role='admin', access_all=True)
 
     def _post(self, metric, value):
         return self.client.post('/api/incentives/targets/', {
-            'scope_type': 'branch', 'branch': self.cc.id, 'metric': metric,
+            'scope_type': 'crew', 'crew': self.cc.id, 'metric': metric,
             'period_start': '2026-10-01', 'period_end': '2026-10-31', 'target_value': value,
         }, format='json')
 
     def test_pic_count_target_saves_and_shows_on_board(self):
-        KpiActualRollup.objects.create(branch=self.cc, year=2026, month=10,
+        KpiActualRollup.objects.create(crew=self.cc, year=2026, month=10,
                                        metric=KpiActualRollup.M_PIC_COUNT, value=Decimal('399'))
         r = self._post('pic_count', 500)
         self.assertEqual(r.status_code, 201, r.content)
@@ -567,7 +568,7 @@ class KpiBoardCallCenterTargetSaveTests(TestCase):
 
     def test_call_count_target_saves_and_actual_reads_rollup(self):
         from apps.incentives.models import SalesTarget
-        KpiActualRollup.objects.create(branch=self.cc, year=2026, month=10,
+        KpiActualRollup.objects.create(crew=self.cc, year=2026, month=10,
                                        metric=KpiActualRollup.M_CALL_COUNT, value=Decimal('1639'))
         r = self._post('call_count', 2200)
         self.assertEqual(r.status_code, 201, r.content)
@@ -583,20 +584,21 @@ class ForecastEnginePicCountTests(TestCase):
         from apps.forecasting.engine import ForecastEngine
         from apps.forecasting.models import ForecastScenario, ForecastResult
         from apps.incentives.models import SalesTarget
+        from apps.crews.models import Crew
         br = Branch.objects.create(softech_branch_id='997', code='997', name='PB', is_operational=True)
-        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center', is_operational=False,
-                                     kind=Branch.KIND_CALL_CENTER)
-        for b in (br, cc):            # a branch pic_count rollup must still be ignored
+        cc = Crew.objects.create(name='الكول سنتر', type='call_center')
+        for who in ({'branch': br}, {'crew': cc}):     # a branch pic_count rollup must still be ignored
             for (y, m, v) in [(2025, 9, 400), (2026, 8, 450), (2026, 7, 420)]:
-                KpiActualRollup.objects.create(branch=b, year=y, month=m,
-                                               metric='pic_count', value=Decimal(v))
+                KpiActualRollup.objects.create(year=y, month=m, metric='pic_count',
+                                               value=Decimal(v), **who)
         sc = ForecastScenario.objects.create(name='p', year=2026, month=9, model='a',
                                              incentive_threshold=Decimal('0.90'))
         eng = ForecastEngine()
         eng.generate(sc)
         self.assertFalse(ForecastResult.objects.filter(scenario=sc, metric='pic_count')
-                         .exclude(scope_key='CC').exists())
+                         .exclude(scope_key=f'crew:{cc.pk}').exists())
         eng.commit(sc)
-        t = SalesTarget.objects.get(branch=cc, metric='pic_count', period_start=date(2026, 9, 1))
+        t = SalesTarget.objects.get(scope_type=SalesTarget.SCOPE_CREW, crew=cc, metric='pic_count',
+                                    period_start=date(2026, 9, 1))
         self.assertEqual(float(t.target_value), 500.0)     # 400×1.10÷0.90 = 488.9 → step 50 up
         self.assertFalse(SalesTarget.objects.filter(branch=br, metric='pic_count').exists())

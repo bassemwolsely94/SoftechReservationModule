@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { batchesApi, branchesApi, transfersApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { usePermission } from '../hooks/usePermission'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
@@ -258,7 +259,6 @@ function RebalanceWorklistTab() {
 function PurchaseExpiryAuditTab() {
   const navigate = useNavigate()
   const user     = useAuthStore(s => s.user)
-  const isAdmin  = ['admin', 'supervisor'].includes(user?.role)
   // the sync button: catalog edit (admin / pharmacist / purchasing), as the server (Z-11g)
   const canSync = ['admin', 'pharmacist', 'purchasing'].includes(user?.role)
 
@@ -904,7 +904,6 @@ const _TIER = {
 
 function LiveStockExpiryTab({ initialMode = 'near', modeSwitch = false }) {
   const user    = useAuthStore(s => s.user)
-  const isAdmin = ['admin', 'supervisor'].includes(user?.role)
   // the sync button: catalog edit (admin / pharmacist / purchasing), as the server (Z-11g)
   const canSync = ['admin', 'pharmacist', 'purchasing'].includes(user?.role)
 
@@ -1248,7 +1247,10 @@ const _DISPOSAL_STATUS = [{ code: 'draft', name: 'مسودة' }, { code: 'approv
                           { code: 'done', name: 'منفّذ' }, { code: 'cancelled', name: 'ملغي' }]
 function DisposalTab() {
   const user = useAuthStore(s => s.user)
-  const canApprove = ['admin', 'quality_manager', 'supervisor'].includes(user?.role)
+  const catalogView = usePermission('catalog', 'view')
+  // approve / done: the managers the server names (apps/batches/views.py DISPOSAL_MANAGERS, owner
+  // 2026-11-01) — and the screen's matrix grant (catalog view), so a removed grant hides it (UAT D5)
+  const canApprove = ['admin', 'quality_manager', 'supervisor'].includes(user?.role) && catalogView
   const qc = useQueryClient()
   const [statusF, setStatusF] = useState([])     // multi-select ([] = all)
 

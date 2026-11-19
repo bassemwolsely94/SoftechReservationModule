@@ -14,14 +14,19 @@ from .serializers import (
 from core import branch_scope                                     # noqa: E402
 from core.permissions import matrix_permission                     # noqa: E402
 from core.permissions import RouteModulePermission  # round 2, owner answers 2026-11-05
+from apps.users.roles import ROLES
 
 # QA inspections sit in the `hr` module (as the middleware maps /api/qa/) — Batch 4, Z-9c: reads
 # need view; writes need a grant beyond view, export included, because the quality manager —
 # whose screen this is — holds hr view + export (viewer, view only, could create inspections).
 _QA_WRITE = ('create', 'edit', 'approve', 'finalize', 'export')
-# The accountant's hr grant is self-service only (owner 2026-11-06), not QA inspections.
+# Every role holds hr for its own self-service, so the matrix alone let call center, purchasing,
+# salesperson, delivery and viewer read (and the first four file) inspections. Only the roles the
+# registry marks qa_inspections work them (UAT W2, owner 2026-11-19); the accountant stays out as
+# before (owner 2026-11-06). The /m/qa tab shows the same roles.
+_QA_EXCLUDED = tuple(r.key for r in ROLES if not r.qa_inspections)
 QA = matrix_permission('hr', post=_QA_WRITE, edit=_QA_WRITE, delete=('edit', 'delete'),
-                       exclude_roles=('accountant',))
+                       exclude_roles=_QA_EXCLUDED)
 
 
 def _profile(request):

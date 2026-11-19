@@ -566,6 +566,8 @@ export const targetsApi = {
   create: (data)        => api.post('/incentives/targets/', data),
   update: (id, data)    => api.patch(`/incentives/targets/${id}/`, data),
   remove: (id)          => api.delete(`/incentives/targets/${id}/`),
+  // live call-center crews a target can name (served under the targets permission)
+  crews:  ()            => api.get('/incentives/targets/crews/'),
 }
 
 // Branch-KPI forecasting (doc 16)
@@ -719,6 +721,8 @@ export const transfersApi = {
   list:    (params) => api.get('/transfers/', { params }),
   get:     (id)     => api.get(`/transfers/${id}/`),
   create:  (data)   => api.post('/transfers/', data),
+  // save + submit in one server transaction: a refused submit saves nothing (full audit FE-11)
+  createAndSubmit: (data) => api.post('/transfers/', data, { params: { submit: 1 } }),
   update:  (id, data) => api.patch(`/transfers/${id}/`, data),
   delete:  (id)     => api.delete(`/transfers/${id}/`),
 
@@ -3048,6 +3052,38 @@ export const rpaApi = {
   revokeDevice:  (id)        => api.post(`/rpa/devices/${id}/revoke/`),
 }
 
+// Supplier-portal robot (/rpa/portals). The server owns every rule (rounding, four-eyes, retry gates).
+export const rpaPortalApi = {
+  portals:        ()             => api.get('/rpa/portal/portals/'),
+  setPortal:      (key, data)    => api.patch(`/rpa/portal/portals/${key}/`, data),        // admin; audited
+  accounts:       ()             => api.get('/rpa/portal/accounts/'),
+  addAccount:     (data)         => api.post('/rpa/portal/accounts/', data),               // admin; no secrets
+  editAccount:    (id, data)     => api.patch(`/rpa/portal/accounts/${id}/`, data),        // admin; audited
+  buylists:       (params)       => api.get('/rpa/portal/buylists/', { params }),
+  buylist:        (id)           => api.get(`/rpa/portal/buylists/${id}/`),
+  fromPivot:      (snapshot_id)  => api.post('/rpa/portal/buylists/from-pivot/', { snapshot_id }),
+  fromIsr:        (push_id)      => api.post('/rpa/portal/buylists/from-isr/', { push_id }),
+  upload:         (formData)     => api.post('/rpa/portal/buylists/upload/', formData),     // multipart
+  pick:           (id, line_id, supplier) => api.post(`/rpa/portal/buylists/${id}/pick/`, { line_id, supplier }),
+  sendOther:      (id, supplier) => api.post(`/rpa/portal/buylists/${id}/send-other/`, { supplier }),
+  sendOtherXlsx:  (id, supplier) => api.post(`/rpa/portal/buylists/${id}/send-other/?format=xlsx`, { supplier },
+                                             { responseType: 'blob' }),
+  jobs:           (params)       => api.get('/rpa/portal/jobs/', { params }),
+  createJob:      (data)         => api.post('/rpa/portal/jobs/', data),
+  job:            (id)           => api.get(`/rpa/portal/jobs/${id}/`),
+  approveJob:     (id, reasons)  => api.post(`/rpa/portal/jobs/${id}/approve/`, { reasons }),
+  cancelJob:      (id, reason)   => api.post(`/rpa/portal/jobs/${id}/cancel/`, { reason }),
+  discovery:      (jobId)        => api.get(`/rpa/portal/discovery/${jobId}/`),
+  confirmCode:    (availability_line_id) => api.post('/rpa/portal/discovery/confirm/', { availability_line_id }),
+  noneOfThese:    (buyline_id)   => api.post('/rpa/portal/discovery/none/', { buyline_id }),
+  baskets:        (params)       => api.get('/rpa/portal/baskets/', { params }),
+  basket:         (id)           => api.get(`/rpa/portal/baskets/${id}/`),
+  // action: 'retry' | 'link_order' | 'cancel' (+ order_ref, confirm_none, confirm_placed_order_cancel, reason)
+  resolveBasket:  (id, data)     => api.post(`/rpa/portal/baskets/${id}/resolve/`, data),
+  historyCheck:   (id)           => api.post(`/rpa/portal/baskets/${id}/history-check/`),
+  remainders:     ()             => api.get('/rpa/portal/remainders/'),
+}
+
 // ── Pick zones (replenishment picking-sheet classification) ───────────────────
 
 export const pickZonesApi = {
@@ -3173,6 +3209,40 @@ export const usagePrintApi = {
   },
   settings:     ()              => api.get('/usage-print/settings/'),
   saveSettings: (data)          => api.put('/usage-print/settings/', data),
+}
+
+// Marketplace / delivery-app channels (doc 38) — flag + RBAC enforced server-side (apps/marketplace/access.py).
+// Nothing here writes to SOFTECH; accepting an order only creates a POS draft.
+export const marketplaceApi = {
+  channels:      (params = {})  => api.get('/marketplace/channels/', { params }),
+  createChannel: (data)         => api.post('/marketplace/channels/', data),
+  updateChannel: (id, data)     => api.patch(`/marketplace/channels/${id}/`, data),
+  pushStock:     (id)           => api.post(`/marketplace/channels/${id}/push-stock/`),
+  stores:        (params = {})  => api.get('/marketplace/stores/', { params }),
+  createStore:   (data)         => api.post('/marketplace/stores/', data),
+  updateStore:   (id, data)     => api.patch(`/marketplace/stores/${id}/`, data),
+  listings:      (params = {})  => api.get('/marketplace/listings/', { params }),
+  createListing: (data)         => api.post('/marketplace/listings/', data),
+  approve:       (id, data = {}) => api.post(`/marketplace/listings/${id}/approve/`, data),
+  unapprove:     (id)           => api.post(`/marketplace/listings/${id}/unapprove/`),
+  orders:        (params = {})  => api.get('/marketplace/orders/', { params }),
+  order:         (id)           => api.get(`/marketplace/orders/${id}/`),
+  manualOrder:   (data)         => api.post('/marketplace/orders/manual/', data),
+  accept:        (id)           => api.post(`/marketplace/orders/${id}/accept/`),
+  reject:        (id, reason)   => api.post(`/marketplace/orders/${id}/reject/`, { reason }),
+  setStatus:     (id, to_status, note = '') => api.post(`/marketplace/orders/${id}/status/`, { to_status, note }),
+  pushLog:       (params = {})  => api.get('/marketplace/push-log/', { params }),
+  settlements:   (params = {})  => api.get('/marketplace/settlements/', { params }),
+  settlement:    (id, params = {}) => api.get(`/marketplace/settlements/${id}/`, { params }),
+  uploadSettlement: ({ channel, file, period_from, period_to, column_map }) => {
+    const fd = new FormData()
+    fd.append('channel', channel)
+    fd.append('file', file)
+    if (period_from) fd.append('period_from', period_from)
+    if (period_to) fd.append('period_to', period_to)
+    fd.append('column_map', JSON.stringify(column_map || {}))
+    return api.post('/marketplace/settlements/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 }
 
 export const stockAuditApi = {
@@ -3351,6 +3421,10 @@ export const taxInvoicingApi = {
   egsSheet:        ()             => api.get('/tax-invoicing/codes/sheet/'),
   egsSheetBuild:   (data = {})    => api.post('/tax-invoicing/codes/sheet/build/', data),
   egsSheetDownload: (number, kind) => api.get(`/tax-invoicing/codes/sheet/${number}/download/`, { params: { kind }, responseType: 'blob' }),
+  egsAgent:        ()             => api.get('/tax-invoicing/codes/sheet/agent/'),
+  egsAgentFetch:   ()             => api.post('/tax-invoicing/codes/sheet/agent/fetch/'),
+  egsAgentWrite:   (data = {})    => api.post('/tax-invoicing/codes/sheet/agent/write/', data),
+  egsAgentImport:  (data)         => api.post('/tax-invoicing/codes/sheet/agent/import/', data),
   codesSend:       (data)         => api.post('/tax-invoicing/codes/send/', data),
   codesRefresh:    (data)         => api.post('/tax-invoicing/codes/refresh/', data),
   codesCheck:      (data)         => api.post('/tax-invoicing/codes/check/', data),

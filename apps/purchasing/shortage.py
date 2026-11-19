@@ -90,20 +90,24 @@ def _latest_run(run):
             .order_by('-started_at').first())
 
 
-def item_signals(run=None):
-    """
-    Per-item shortage signals for the run: item_id → dict. Covers every stockable
-    item that has demand, PLUS any confirmed/dismissed item (so its state is known
-    even when its signal is currently quiet). Includes catalog flags.
-    """
+# The sales + stock sums behind item_signals are one GROUP BY over a year of sales lines. The
+# Market Shortage screen loads candidates, deltas and confirmed in parallel and each needed them
+# (deltas and confirmed twice), so the screen never finished on production-sized data (UAT W2,
+# 2026-11-19). They are cached per engine run and day for SIGNALS_CACHE_SECONDS, computed once
+# while concurrent callers wait. Item flags (in_shortage / dismissed) are read live every time.
+SIGNALS_CACHE_SECONDS = 600
+_SIGNALS_WAIT_SECONDS = 120
+
+
+def _signals_key(run):
+    from django.utils import timezone
+    return f'purchasing:shortage:signals:{run.pk}:{timezone.localdate().isoformat()}'
+
+
+def _compute_sales_and_stock(run):
     from django.db import connection
     from django.db.models import Sum
     from apps.purchasing.models import ItemDemandMetrics
-    from apps.catalog.models import Item
-
-    run = _latest_run(run)
-    if run is None:
-        return {}, None
 
     stock = {r['item_id']: float(r['s'] or 0)
              for r in ItemDemandMetrics.objects.filter(run=run)
@@ -122,6 +126,49 @@ def item_signals(run=None):
         """)
         sales = {r[0]: (float(r[1] or 0), float(r[2] or 0), int(r[3] or 0))
                  for r in cur.fetchall()}
+    return stock, sales
+
+
+def _sales_and_stock(run):
+    """(stock, sales) for the run — cached; one computation while parallel callers wait."""
+    import time
+    from django.core.cache import cache
+
+    key = _signals_key(run)
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    lock = key + ':lock'
+    if not cache.add(lock, 1, _SIGNALS_WAIT_SECONDS):
+        deadline = time.monotonic() + _SIGNALS_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            time.sleep(0.25)
+            hit = cache.get(key)
+            if hit is not None:
+                return hit
+            if cache.get(lock) is None:       # the computing call failed — compute here
+                break
+    try:
+        value = _compute_sales_and_stock(run)
+        cache.set(key, value, SIGNALS_CACHE_SECONDS)
+        return value
+    finally:
+        cache.delete(lock)
+
+
+def item_signals(run=None):
+    """
+    Per-item shortage signals for the run: item_id → dict. Covers every stockable
+    item that has demand, PLUS any confirmed/dismissed item (so its state is known
+    even when its signal is currently quiet). Includes catalog flags.
+    """
+    from apps.catalog.models import Item
+
+    run = _latest_run(run)
+    if run is None:
+        return {}, None
+
+    stock, sales = _sales_and_stock(run)
 
     items = {i.id: i for i in Item.objects.filter(is_stockable=True).only(
         'id', 'softech_id', 'name', 'unit_price', 'pack_price', 'medicine_type',
@@ -223,12 +270,13 @@ def ensure_snapshot(run=None):
     safe to call on every screen load; only the first call per run writes.
     """
     from apps.purchasing.models import ShortageSnapshot, ShortageObservation
-    sig, run = item_signals(run)
+    run = _latest_run(run)
     if run is None:
         return None
     snap = ShortageSnapshot.objects.filter(run=run).first()
-    if snap is not None:
+    if snap is not None:                 # the usual case: no signal computation needed
         return snap
+    sig, run = item_signals(run)
 
     snap = ShortageSnapshot.objects.create(
         run=run,

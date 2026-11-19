@@ -1674,6 +1674,8 @@ def customer_search(request):
         )
         .order_by('name')[:limit]
     )
+    qs = list(qs)
+    customer_access.remember_found(request.user, q, qs)   # D1: a full-phone find opens the detail
 
     results = []
     for c in qs:

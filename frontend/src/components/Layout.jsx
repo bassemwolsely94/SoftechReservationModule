@@ -13,6 +13,7 @@ import { ar } from 'date-fns/locale'
 import NotificationBell from './NotificationBell'
 import NetworkBadge from './NetworkBadge'
 import ZoneBanner from './ZoneBanner'
+import QueryErrorStrip from './QueryErrorStrip'
 import ModuleNotificationBell from './ModuleNotificationBell'
 import ThemeToggle from './ThemeToggle'
 import DrugAssistantDrawer from '../counselling/DrugAssistantDrawer'
@@ -418,6 +419,8 @@ export default function Layout() {
           </div>
         </header>
         <ZoneBanner />
+        {/* a failed read on this screen says so, instead of looking like "no data" (FE-7) */}
+        <QueryErrorStrip />
 
         {/* Page content */}
         <div className="flex-1 overflow-auto">

@@ -71,11 +71,13 @@ const CrewsPage = lazy(() => import('./pages/CrewsPage'))
 const DataHealthPage = lazy(() => import('./pages/DataHealthPage'))
 const PicAnalyticsPage = lazy(() => import('./pages/PicAnalyticsPage'))
 const UsagePrintPage = lazy(() => import('./pages/UsagePrintPage'))
+const MarketplacePage = lazy(() => import('./pages/MarketplacePage'))
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'))
 const PermissionsMatrixPage = lazy(() => import('./pages/PermissionsMatrixPage'))
 const PickZonesPage = lazy(() => import('./pages/PickZonesPage'))
 const CodeMapsPage = lazy(() => import('./pages/CodeMapsPage'))
 const RpaPage = lazy(() => import('./pages/RpaPage'))
+const SupplierPortalsPage = lazy(() => import('./pages/SupplierPortalsPage'))
 const PhoneAlertsPage = lazy(() => import('./pages/PhoneAlertsPage'))
 const ErpPermissionsPage = lazy(() => import('./pages/ErpPermissionsPage'))
 const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
@@ -227,21 +229,23 @@ const queryClient = new QueryClient({
 // `roles` (when present) gates the tab; MobileLayout filters by the user's role. Reservations /
 // transfers follow the matrix's view grant (Batch 4, Z-11i — delivery / purchasing saw tabs that
 // loaded nothing); roles without reservations land on «لوحتي» (MobileReservationsPage redirects).
+// Demand, shortage, delivery, approvals, vouchers and stock count follow the matrix's view grant too
+// (UAT W2, owner 2026-11-19): the role lists here hid tabs whose data the server serves those roles.
 const MOBILE_TABS = [
   { to: '/m/me',           label: 'لوحتي',      icon: '🙋' },
   { to: '/m/pos',          label: 'نقطة البيع', icon: '🧾', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor'] },
   { to: '/m/reservations', label: 'الحجوزات',  icon: '📋', roles: MOBILE_RESERVATION_ROLES },
   { to: '/m/transfers',    label: 'التحويلات', icon: '🔀', roles: MOBILE_TRANSFER_ROLES },
-  { to: '/m/demand',       label: 'الطلب الضائع', icon: '🔍', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
-  { to: '/m/shortage',     label: 'النواقص',   icon: '🚨', roles: ['admin', 'pharmacist', 'call_center', 'salesperson', 'purchasing', 'supervisor', 'quality_manager'] },
-  { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', roles: ['admin', 'call_center', 'supervisor', 'quality_manager', 'pharmacist'] },
-  { to: '/m/approvals',    label: 'الموافقات', icon: '✔️', roles: ['admin', 'supervisor', 'purchasing'], badge: 'approvals' },
+  { to: '/m/demand',       label: 'الطلب الضائع', icon: '🔍', module: 'demand' },
+  { to: '/m/shortage',     label: 'النواقص',   icon: '🚨', module: 'shortage' },
+  { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', module: 'delivery' },
+  { to: '/m/approvals',    label: 'الموافقات', icon: '✔️', module: 'approvals', badge: 'approvals' },
   { to: '/m/items',        label: 'الأصناف',   icon: '🔎' },
   { to: '/m/customers',    label: 'العملاء',   icon: '👥', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
-  { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
+  { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', module: 'vouchers' },
   { to: '/m/tasks',        label: 'المهام',    icon: '✅', module: 'tasks' },
   { to: '/m/daily-count',  label: 'جردي اليوم', icon: '🧮', feature: 'daily_count' },
-  { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', roles: ['admin', 'pharmacist', 'supervisor', 'quality_manager'] },
+  { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', module: 'stockcount' },
   { to: '/m/qa',           label: 'مراجعة الجودة', icon: '🧹', roles: ['admin', 'quality_manager', 'supervisor', 'pharmacist'] },
   { to: '/m/attendance',   label: 'الحضور',    icon: '🕐' },
   { to: '/m/my-incentives', label: 'حوافزي',   icon: '🏅' },
@@ -452,15 +456,16 @@ export default function App() {
             <Route path="replacement/:id"       element={<RequireRole roles={['admin','supervisor','purchasing','quality_manager','pharmacist']}><ReplacementCaseDetailPage /></RequireRole>} />
             <Route path="pos"                   element={<POSOrderPage />} />
             <Route path="usage-print"           element={<UsagePrintPage />} />
-            <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']}><ExceptionCenterPage /></RequireRole>} />
+            <Route path="marketplace"           element={<MarketplacePage />} />
+            <Route path="pos/exceptions"        element={<RequireRole roles={['admin','supervisor','pharmacist']} module="pos"><ExceptionCenterPage /></RequireRole>} />
             <Route path="recommendations"       element={<RecommendationsPage />} />
             <Route path="inventory"          element={<InventoryDashboard />} />
             <Route path="stock-count"        element={<StockCountPage />} />
             <Route path="shortage"           element={<ShortagePage />} />
             <Route path="purchasing"         element={<PurchasingDashboard />} />
             <Route path="market-shortage"    element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><MarketShortagePage /></RequireRole>} />
-            <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><PhantomSalesPage /></RequireRole>} />
-            <Route path="cash-optimization"  element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><CashOptimizationPage /></RequireRole>} />
+            <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><PhantomSalesPage /></RequireRole>} />
+            <Route path="cash-optimization"  element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><CashOptimizationPage /></RequireRole>} />
 
             {/* ── Procurement hub (4 tabs) ──────────────────────────────
                 /procurement              → redirects to /procurement/overview
@@ -493,6 +498,8 @@ export default function App() {
             <Route path="tax-invoicing" element={<TaxInvoicingPage />} />
             {/* SOFTECH screen robot: gated by the `rpa` module grant (server enforces every action) */}
             <Route path="rpa" element={<RpaPage />} />
+            {/* Supplier-portal robot (Pharma Overseas): same `rpa` grant; company-level data, server-enforced */}
+            <Route path="rpa/portals" element={<SupplierPortalsPage />} />
 
             {/* ── Insurance Claims Module ───────────────────────────────── */}
             <Route path="insurance"                           element={<InsuranceClaimsPage />} />
@@ -557,9 +564,9 @@ export default function App() {
               element={<RequireRole roles={['admin','supervisor']}><UserManagementPage /></RequireRole>} />
             {/* pick zones: picking-sheet classification (read: all staff) */}
             <Route path="pick-zones" element={<PickZonesPage />} />
-            {/* phone alerts (WhatsApp): admin + supervisor */}
+            {/* phone alerts (WhatsApp): admin + supervisor, and the matrix's settings view (UAT D5) */}
             <Route path="phone-alerts"
-              element={<RequireRole roles={['admin','supervisor']}><PhoneAlertsPage /></RequireRole>} />
+              element={<RequireRole module="alerts"><PhoneAlertsPage /></RequireRole>} />
             {/* permissions matrix: admin only */}
             <Route path="permissions"
               element={<RequireRole roles={['admin']}><PermissionsMatrixPage /></RequireRole>} />

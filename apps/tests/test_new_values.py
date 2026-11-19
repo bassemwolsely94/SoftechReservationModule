@@ -136,8 +136,9 @@ class NewValueFlowTests(TestCase):
                 self.assertIsInstance(absent, frozenset)
                 self.assertLessEqual(absent, known, f'{name}: unknown tag')
         by_name = {n: a for n, _b, a in new_value_registry.EXPORTS}
-        # the KPI board has a call-center block by design; the picking sheet only checks presence
-        self.assertNotIn(new_value_registry.CALL_CENTER, by_name['kpi_export'])
+        # the KPI workbook's call-center block reads the crew, so a call-center BRANCH never
+        # shows (crews piece 2b Part B); the picking sheet only checks presence
+        self.assertIn(new_value_registry.CALL_CENTER, by_name['kpi_export'])
         self.assertEqual(by_name['transits_picking_sheet'], frozenset())
 
     def test_branch_list_default_scope(self):

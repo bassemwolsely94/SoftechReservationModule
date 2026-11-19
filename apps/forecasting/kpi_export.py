@@ -97,8 +97,10 @@ WEIGHTS = {'AC': 0.5, 'AD': 0.1, 'AE': 0.1, 'AF': 0.05, 'AG': 0.1, 'AH': 0.15}
 
 
 # ── forecast targets (A / B / avg) over the scope ────────────────────────────
-def _roll(branch_id, year, month, metric):
-    r = K.objects.filter(branch_id=branch_id, year=year, month=month, metric=metric).first()
+def _roll(branch_id, year, month, metric, *, crew_id=None):
+    """One rollup value — a branch's, or the call-center crew's when crew_id is given."""
+    who = {'crew_id': crew_id} if crew_id is not None else {'branch_id': branch_id}
+    r = K.objects.filter(year=year, month=month, metric=metric, **who).first()
     return Decimal(r.value) if r else Decimal('0')
 
 
@@ -148,10 +150,11 @@ def forecast_targets(year, month, *, incentive_threshold=Decimal('0.90'),
 
 def cc_targets(year, month, *, incentive_threshold=Decimal('0.90'),
                benchmark_growth=Decimal('0.30'), factors=None):
-    """Call-center targets (sales/profit/beauty/orders) per model from the CC rollup history."""
-    from apps.branches.models import Branch
-    cc = Branch.objects.filter(softech_branch_id='CC').first()
-    if not cc:
+    """Call-center targets (sales/profit/beauty/orders) per model from the call-center crew's
+    rollup history (KpiActualRollup crew rows)."""
+    from apps.forecasting.call_center import call_center_crew
+    crew = call_center_crew()
+    if not crew:
         return None
     fac = factors or ForecastEngine.DEFAULT_FACTORS
     thr = incentive_threshold or Decimal('0.90')
@@ -166,21 +169,22 @@ def cc_targets(year, month, *, incentive_threshold=Decimal('0.90'),
     out = {}
     for name, (metric, fkey) in cc_map.items():
         g, wl, wp, wy = fac[fkey]
-        base = _roll(cc.id, by, bm, metric)
-        lmv = _roll(cc.id, ly, lm, metric)
-        pmv = _roll(cc.id, py, pm, metric)
+        base = _roll(None, by, bm, metric, crew_id=crew.id)
+        lmv = _roll(None, ly, lm, metric, crew_id=crew.id)
+        pmv = _roll(None, py, pm, metric, crew_id=crew.id)
         ma, mb = ForecastEngine.compute_models(
             base, lmv, pmv, growth=g, w_lm=wl, w_pm=wp, w_yoy=wy,
             seasonality=Decimal('1'), bench=benchmark_growth, infl=Decimal('0'), promo=Decimal('0'))
         out[name] = {'a': ma / thr, 'b': mb / thr, 'avg': (ma + mb) / 2 / thr}
-    out['_cc_id'] = cc.id
+    out['_crew_id'] = crew.id
     return out
 
 
-def _achieved(branch_id, year, month):
-    """Per-branch achieved dict from the rollup (net of returns)."""
+def _achieved(branch_id, year, month, *, crew_id=None):
+    """Per-branch (or call-center crew) achieved dict from the rollup (net of returns)."""
+    who = {'crew_id': crew_id} if crew_id is not None else {'branch_id': branch_id}
     rows = {r['metric']: Decimal(r['value']) for r in K.objects.filter(
-        branch_id=branch_id, year=year, month=month).values('metric', 'value')}
+        year=year, month=month, **who).values('metric', 'value')}
     g = lambda m: float(rows.get(m, Decimal('0')))
     return {'cash': g(K.M_CASH), 'delivery': g(K.M_DELIVERY), 'regular': g(K.M_REGULAR),
             'credit': g(K.M_CREDIT), 'profit': g(K.M_GROSS_PROFIT),
@@ -384,9 +388,10 @@ def _write_cc_block(ws, cc, mkey, put, steps, L):
     _mgmt_branch_formula(put, t_r, L, achieved=True)
     # achieved row — CC achieved (from rollup). CC stores cash_delivery as ONE metric
     # (no cash/delivery/عميل دائم split), so read it directly for sales.
-    cc_ach = _achieved(cc['_cc_id'], _CC_CTX['year'], _CC_CTX['month']) if cc else None
-    cc_sales = float(_roll(cc['_cc_id'], _CC_CTX['year'], _CC_CTX['month'], K.M_CASH_DELIVERY)) if cc else 0
-    cc_calls = float(_roll(cc['_cc_id'], _CC_CTX['year'], _CC_CTX['month'], K.M_CALL_COUNT)) if cc else 0
+    ym = (_CC_CTX['year'], _CC_CTX['month'])
+    cc_ach = _achieved(None, *ym, crew_id=cc['_crew_id']) if cc else None
+    cc_sales = float(_roll(None, *ym, K.M_CASH_DELIVERY, crew_id=cc['_crew_id'])) if cc else 0
+    cc_calls = float(_roll(None, *ym, K.M_CALL_COUNT, crew_id=cc['_crew_id'])) if cc else 0
     a, g = a_r, t_r
     put(f'D{a}', 'المحقق', align=CTR, font=BOLD)
     put(f'E{a}', _whole(cc_sales) if cc else 0, fmt=MONEY)
@@ -468,6 +473,8 @@ def _write_mgmt_block(ws, put, L):
 
 
 # module-level CC context (year/month) for the CC achieved lookup inside _write_cc_block
+# the legacy workbook's call-center row (23) in _read_legacy_achieved's result
+LEGACY_CALL_CENTER_KEY = 'call_center'
 _CC_CTX = {'year': None, 'month': None}
 
 
@@ -489,7 +496,7 @@ def _read_legacy_achieved(path):
             'beauty': ws[f'Y{ra}'].value,
         }
     # call center (row 23): E23 sales, H23 profit, K23 beauty, N23 orders
-    out['CC'] = {'cash_delivery': ws['E23'].value, 'gross_profit': ws['H23'].value,
+    out[LEGACY_CALL_CENTER_KEY] = {'cash_delivery': ws['E23'].value, 'gross_profit': ws['H23'].value,
                  'beauty': ws['K23'].value, 'customer_count': ws['N23'].value}
     return out
 
@@ -510,12 +517,15 @@ def _write_recon_sheet(ws, year, month, legacy_path):
     MLAB = {'cash_delivery': 'نقدى+توصيل', 'credit': 'آجل', 'gross_profit': 'معامل الربحية',
             'customer_count': 'عدد العملاء', 'beauty': 'التجميل'}
     metrics = ['cash_delivery', 'credit', 'gross_profit', 'customer_count', 'beauty']
-    branches = {b.code: b for b in Branch.objects.filter(code__in=[c for c in legacy if c != 'CC'])}
-    cc = Branch.objects.filter(softech_branch_id='CC').first()
+    codes = [c for c in legacy if c != LEGACY_CALL_CENTER_KEY]
+    branches = {b.code: b for b in Branch.objects.filter(code__in=codes)}
+    from apps.forecasting.call_center import call_center_crew
+    crew = call_center_crew()
 
-    def emit(code, name, bid, legvals):
+    def emit(code, name, bid, legvals, crew_id=None):
         for m in metrics:
-            new = float(_roll(bid, year, month, m)) if bid else 0.0
+            new = (float(_roll(bid, year, month, m, crew_id=crew_id)) if (bid or crew_id)
+                   else 0.0)
             old = legvals.get(m)
             old = float(old) if old is not None else None
             diff = (new - old) if old is not None else None
@@ -535,12 +545,12 @@ def _write_recon_sheet(ws, year, month, legacy_path):
             ws.cell(row=r, column=7, value=(round(pct, 4) if pct is not None else '—')).number_format = PCT
             ws.cell(row=r, column=8, value=note)
 
-    for code in order_codes(c for c in legacy if c != 'CC'):
+    for code in order_codes(codes):
         if code in branches:
             b = branches[code]
             emit(code, getattr(b, 'name_ar', '') or b.name, b.id, legacy[code])
-    if 'CC' in legacy and cc:
-        emit('CC', 'الكول سنتر', cc.id, legacy['CC'])
+    if LEGACY_CALL_CENTER_KEY in legacy and crew:
+        emit('', crew.name, None, legacy[LEGACY_CALL_CENTER_KEY], crew_id=crew.id)
     widths = [8, 24, 14, 16, 16, 14, 10, 16]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w

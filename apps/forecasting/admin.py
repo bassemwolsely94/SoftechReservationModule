@@ -46,8 +46,8 @@ class BeautyClassRuleAdmin(admin.ModelAdmin):
 
 @admin.register(KpiActualRollup)
 class KpiActualRollupAdmin(admin.ModelAdmin):
-    list_display  = ['branch', 'year', 'month', 'metric', 'value', 'computed_at']
-    list_filter   = ['year', 'month', 'metric', 'branch']
+    list_display  = ['branch', 'crew', 'year', 'month', 'metric', 'value', 'computed_at']
+    list_filter   = ['year', 'month', 'metric', 'branch', 'crew']
     readonly_fields = ['computed_at']
 
 
@@ -67,7 +67,7 @@ class ForecastScenarioAdmin(admin.ModelAdmin):
 
 @admin.register(ForecastResult)
 class ForecastResultAdmin(admin.ModelAdmin):
-    list_display  = ['scenario', 'branch', 'metric', 'base_value',
+    list_display  = ['scenario', 'branch', 'crew', 'metric', 'base_value',
                      'model_a', 'model_b', 'forecast_value', 'target_value']
     list_filter   = ['scenario', 'metric']
 
@@ -94,6 +94,14 @@ class BacktestResultAdmin(admin.ModelAdmin):
 @admin.register(CallCenterConfig)
 class CallCenterConfigAdmin(admin.ModelAdmin):
     list_display  = ['id', 'sales_agent_usercodes', 'call_agent_extensions', 'cdr_enabled', 'updated_at']
+    # crews piece 2b Part B: the agents are the call-center crew's members now; nothing reads
+    # these two lists except the crew seed / comparison, so they are kept read-only
+    readonly_fields = ['sales_agent_usercodes', 'call_agent_extensions', 'updated_at']
+    fieldsets = [
+        ('الوكلاء', {'fields': ['sales_agent_usercodes', 'call_agent_extensions'],
+                     'description': 'انتقلت إلى طاقم الكول سنتر — عدّل أعضاء الطاقم من شاشة الأطقم.'}),
+        (None, {'fields': ['cdr_enabled', 'updated_at']}),
+    ]
 
 
 @admin.register(UnitCountExclusion)

@@ -644,11 +644,10 @@ def push_unsubscribe(request):
 
 # ── Announcements / internal broadcast ─────────────────────────────────────────
 
-_BROADCAST_ROLES = frozenset({'admin', 'supervisor'})
-
-
 def _can_broadcast(profile):
-    return bool(profile and (profile.role in _BROADCAST_ROLES))
+    # publishing = `alerts` create (owner 2026-11-17: admin + supervisor by default, users 0058)
+    from core.permissions import matrix_allows
+    return bool(profile and matrix_allows(profile, 'alerts', 'create'))
 
 
 @api_view(['GET', 'POST'])

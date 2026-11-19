@@ -39,6 +39,7 @@ from __future__ import annotations
 import datetime
 
 from config.sybase import get_sybase_connection
+from core.errors import public_error
 
 DB = 'SOFTECHDB9.dbo'
 
@@ -145,7 +146,7 @@ def search_persons(q: str, kind: str | None = None, limit: int = 25) -> list[dic
     try:
         rows = _rows(sql, params, rowcount=limit)
     except Exception as e:  # pragma: no cover — surfaced to UI
-        return [{'_error': str(e)[:200]}]
+        return [{'_error': public_error(None, e)}]
     return [
         {
             'person_code':   str(r.get('personcode') or '').strip(),
@@ -254,7 +255,7 @@ def supplier_transactions(person_code: str, days: int = 90, limit: int = 300) ->
             ORDER BY sm.docdate DESC
         """, [pc, int(days)], rowcount=limit)
     except Exception as e:
-        return {'error': str(e)[:200]}
+        return {'error': public_error(None, e)}
     return {'summary': summary, 'lines': lines, 'days': int(days)}
 
 
@@ -304,7 +305,7 @@ def supplier_payments(person_code: str, days: int = 180, limit: int = 300) -> di
     try:
         out['cheques'] = _person_cheques(pc, int(days), limit)
     except Exception as e:
-        out['cheques'] = [{'_error': str(e)[:200]}]
+        out['cheques'] = [{'_error': public_error(None, e)}]
     return out
 
 
@@ -354,7 +355,7 @@ def customer_transactions(person_code: str, days: int = 180, limit: int = 300) -
             ORDER BY sm.docdate DESC
         """, [pc, int(days)], rowcount=limit)
     except Exception as e:
-        return {'error': str(e)[:200]}
+        return {'error': public_error(None, e)}
     return {'summary': summary, 'lines': lines, 'days': int(days)}
 
 
@@ -378,5 +379,5 @@ def customer_payments(person_code: str, days: int = 180, limit: int = 300) -> di
     try:
         out['cheques'] = _person_cheques(pc, int(days), limit)
     except Exception as e:
-        out['cheques'] = [{'_error': str(e)[:200]}]
+        out['cheques'] = [{'_error': public_error(None, e)}]
     return out

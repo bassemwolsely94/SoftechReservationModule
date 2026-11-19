@@ -719,6 +719,10 @@ accountant POST /api/tax-invoicing/receipts/configs/
 accountant POST /api/tax-invoicing/signing/smoke-test/
 accountant POST /api/tax-invoicing/signing-agent/next/
 accountant POST /api/tax-invoicing/signing-agent/jobs/987654321/result/
+# reason: S5 — the seal-PC agent's file endpoints (EGS sheet fetch/write) answer only the agent token
+#   plus the dedicated finalize account, like signing-agent/next/ and jobs/<id>/result/ above.
+accountant GET /api/tax-invoicing/signing-agent/files/987654321/download/
+accountant POST /api/tax-invoicing/signing-agent/files/987654321/result/
 
 # reason: data lifecycle Stage 5 (design 2026-11-07 §7) — supervisor and quality manager hold data_health view
 #   for Growth, Problems and the refresh only; the register, held files and their thumbnails are admin only
@@ -749,3 +753,38 @@ supervisor PATCH /api/rpa/recipes/987654321/
 supervisor POST /api/rpa/recipes/
 supervisor POST /api/rpa/recipes/987654321/approve/
 supervisor POST /api/rpa/screens/x/
+
+# reason: UAT W2 (owner 2026-11-19, per-screen split) — the salesperson board (each rep's sales against
+#   target) is for the analysts who set the targets (forecasting ANALYST_ROLES: admin, supervisor,
+#   purchasing), reads too, as its menu entry; analytics view alone is not enough.
+call_center GET /api/forecasting/salesperson-board/
+pharmacist GET /api/forecasting/salesperson-board/
+quality_manager GET /api/forecasting/salesperson-board/
+viewer GET /api/forecasting/salesperson-board/
+
+# reason: UAT W2 (owner 2026-11-19, per-screen split) — branch QA inspections only for roles the registry
+#   marks qa_inspections (admin, pharmacist, supervisor, quality manager); every role holds hr for its own
+#   self-service, which is not QA (apps/qa/views.py, apps/users/roles.py).
+call_center GET /api/qa/inspections/
+call_center GET /api/qa/inspections/987654321/
+call_center GET /api/qa/templates/
+call_center POST /api/qa/inspections/
+call_center POST /api/qa/inspections/987654321/submit/
+delivery GET /api/qa/inspections/
+delivery GET /api/qa/inspections/987654321/
+delivery GET /api/qa/templates/
+delivery POST /api/qa/inspections/
+delivery POST /api/qa/inspections/987654321/submit/
+purchasing GET /api/qa/inspections/
+purchasing GET /api/qa/inspections/987654321/
+purchasing GET /api/qa/templates/
+purchasing POST /api/qa/inspections/
+purchasing POST /api/qa/inspections/987654321/submit/
+salesperson GET /api/qa/inspections/
+salesperson GET /api/qa/inspections/987654321/
+salesperson GET /api/qa/templates/
+salesperson POST /api/qa/inspections/
+salesperson POST /api/qa/inspections/987654321/submit/
+viewer GET /api/qa/inspections/
+viewer GET /api/qa/inspections/987654321/
+viewer GET /api/qa/templates/

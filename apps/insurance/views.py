@@ -586,6 +586,17 @@ class InsuranceClaimViewSet(viewsets.ModelViewSet):
         data  = ser.validated_data
 
         old_status = claim.status
+        # UAT W5b P2 (2026-11-17): a submitted (locked) claim does not slide back to an editable
+        # status — changes go through a supplement (ملحق). Admin may reopen with a written reason.
+        reopening = claim.is_locked and data['status'] in (InsuranceClaim.STATUS_DRAFT, InsuranceClaim.STATUS_READY)
+        if reopening:
+            prof = getattr(request.user, 'staff_profile', None)
+            if not (request.user.is_superuser or (prof is not None and prof.is_admin)):
+                return Response({'error': 'المطالبة مقفولة بعد التقديم — أي تعديل يتم بملحق، أو يفتحها مدير النظام.',
+                                 'code': 'claim_locked'}, status=status.HTTP_409_CONFLICT)
+            if not (data.get('notes') or '').strip():
+                return Response({'error': 'اكتب سبب إعادة فتح المطالبة المقدَّمة.', 'code': 'reason_required'},
+                                status=status.HTTP_400_BAD_REQUEST)
         claim.status = data['status']
         if data.get('submitted_at'):
             claim.submitted_at = data['submitted_at']

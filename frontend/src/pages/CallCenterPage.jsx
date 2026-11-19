@@ -17,6 +17,7 @@ import { callCenterApi, branchesApi, followupsApi, recommendationsApi, pbxApi } 
 import useScreenPop from '../hooks/useScreenPop'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import useAuthStore from '../store/authStore'
+import { usePermission, usePermissionAny } from '../hooks/usePermission'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
@@ -456,9 +457,14 @@ const CC_STATUS_META = {
   closed:    { label: '🔒 مغلقة',         cls: 'bg-gray-100 text-gray-700'    },
 }
 
+// Case writes (note, assign, resolve, close) — the API takes callcenter create, edit or approve
+// (apps/callcenter/views.py CALLCENTER); the matrix decides, not a role list (UAT D5).
+const CC_WRITE = ['create', 'edit', 'approve']
+
 function CaseChatPanel({ caseId, onClose }) {
   const qc = useQueryClient()
   const { user } = useAuthStore()
+  const canEdit = usePermissionAny('callcenter', CC_WRITE)
   const [noteText, setNoteText]       = useState('')
   const [attachFile, setAttachFile]   = useState(null)
   const [attachType, setAttachType]   = useState('image')
@@ -518,7 +524,6 @@ function CaseChatPanel({ caseId, onClose }) {
   }
 
   const sm = cas ? (CC_STATUS_META[cas.status] || { label: cas.status, cls: 'bg-gray-100' }) : {}
-  const canEdit = ['admin', 'supervisor', 'call_center', 'quality_manager'].includes(user?.role)
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-end" dir="rtl"
@@ -1339,6 +1344,7 @@ function MyQueuePanel({ onOpenCase }) {
 
 export default function CallCenterPage() {
   const { user }   = useAuthStore()
+  const ccView     = usePermission('callcenter', 'view')   // the manager tab's dashboards (GET)
   const qc         = useQueryClient()
   const [tab, setTab]           = useState('operator')  // 'operator' | 'manager'
   useHelpTab(tab)
@@ -1500,7 +1506,7 @@ export default function CallCenterPage() {
   const multipleCustomers = (data?.customers?.length ?? 0) > 1
   const needsPicker       = multipleCustomers && !customer && selectedCustomerId !== '__unknown__'
 
-  const isManager  = ['admin', 'supervisor', 'quality_manager'].includes(user?.role)
+  const isManager  = ['admin', 'supervisor', 'quality_manager'].includes(user?.role) && ccView
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">

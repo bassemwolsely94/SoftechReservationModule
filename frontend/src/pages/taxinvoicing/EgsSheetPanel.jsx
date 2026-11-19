@@ -2,12 +2,14 @@
  * «ملف أكواد الإيصالات (المحصّل)» — the Invoicer's bulk EGS sheet (ElRezeiky_Bulk_EGS_Items.xlsx), batch S3. Display
  * only: the server builds each version (in the background, one at a time), checks it, and says why an item was left
  * out or a build refused. This panel shows the latest version, starts a build, polls only while one runs, and
- * downloads the full file or the new rows.
+ * downloads the full file or the new rows. Below it, «الجهاز المحلي» (EgsAgentPart, batch S5): the seal PC's agent
+ * reads and writes the live sheet in D:\invoicer_mini.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { taxInvoicingApi } from '../../api/client'
 import { ActionMsg, Btn, Failed, fmtInt, fmtTime, Loading, Notice, Section, useAction } from './ui'
+import EgsAgentPart from './EgsAgentPart'
 
 const POLL_MS = 4000
 const FULL_NAME = 'ElRezeiky_Bulk_EGS_Items.xlsx'      // the name the Invoicer reads
@@ -68,7 +70,8 @@ export default function EgsSheetPanel() {
           <Btn variant="primary" disabled={act.pending || running} onClick={() => act.run(() => taxInvoicingApi.egsSheetBuild({}), 'بدأ البناء')}>
             {running ? 'جارٍ البناء…' : 'بناء نسخة جديدة'}
           </Btn>
-          <Btn disabled={act.pending || !v.has_file} title={v.has_file ? '' : 'ملف هذه النسخة لم يعد محفوظاً'}
+          <Btn disabled={act.pending || !v.has_file || !v.whole_workbook}
+            title={!v.whole_workbook ? v.not_whole : v.has_file ? '' : 'ملف هذه النسخة لم يعد محفوظاً'}
             onClick={() => download('full')}>تنزيل الملف كاملاً</Btn>
           <Btn disabled={act.pending || !v.has_file || !(v.added + v.coded)} onClick={() => download('new')}>الصفوف الجديدة فقط</Btn>
         </>
@@ -77,6 +80,7 @@ export default function EgsSheetPanel() {
         <p className="text-sm text-gray-500">لا توجد نسخة محفوظة من ملف الأكواد — يُخزَّن ملف المالك أولاً (egs_sheet_seed).</p>
       ) : (
         <div className="space-y-2 text-sm">
+          {!v.whole_workbook && <p className="text-amber-700" data-testid="egs-sheet-not-whole">{v.not_whole}</p>}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-gray-700">
             <span>صفوف مكوّدة <b>{fmtInt(v.coded_rows)}</b> من {fmtInt(v.total_rows)}</span>
             <span>أُضيف في هذه النسخة <b>{fmtInt(v.added)}</b></span>
@@ -97,10 +101,11 @@ export default function EgsSheetPanel() {
           )}
           <BuildState build={d.build} />
           <Notice tone="amber">{REMINDER}</Notice>
-          <p className="text-xs text-gray-500">القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات.</p>
+          <p className="text-xs text-gray-500">لا يتغير في الملف إلا خلايا الصفوف التي تُكوَّد؛ معادلات L–P باقية ونتيجتها محفوظة.</p>
         </div>
       )}
       <div className="mt-2"><ActionMsg msg={act.msg} /></div>
+      {!q.isLoading && !q.error && <div className="mt-3"><EgsAgentPart /></div>}
     </Section>
   )
 }

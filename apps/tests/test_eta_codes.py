@@ -156,6 +156,13 @@ class MatchAndReportTests(Fixture, TestCase):
         self.assertEqual(got['6221111111111'], 'A3')
         self.assertEqual(got['EG-999-ZZ'], '')
 
+    def test_a_long_egs_tail_is_kept_whole(self):
+        """Real ETA codes EG-<tax id>-124510124197 (two item codes joined) were stored as '1245101241'."""
+        EtaCodeUsage.objects.create(system='production', code_type='EGS', item_code='EG-100200300-124510124197',
+                                    status='Approved')
+        eta_codes.match('production')
+        self.assertEqual(EtaCodeUsage.objects.get(item_code='EG-100200300-124510124197').itemcode, '124510124197')
+
     def test_report_buckets_count_only_approved(self):
         eta_codes.match('production')
         rep = eta_codes.report('production')

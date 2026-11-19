@@ -60,6 +60,11 @@ const api = vi.hoisted(() => ({
   egsSheet: vi.fn(() => Promise.resolve({ data: { versions: [], build: { state: 'idle' }, pending: { ready: 0, skipped: [] }, can_build: false } })),
   egsSheetBuild: vi.fn(),
   egsSheetDownload: vi.fn(),
+  egsAgent: vi.fn(() => Promise.resolve({ data: { switch: false, agent: { at: null, version: null, outdated: true }, live: null,
+    last_fetch: null, held: null, jobs: [], busy: false, has_version: true, can_approve: false } })),
+  egsAgentFetch: vi.fn(),
+  egsAgentWrite: vi.fn(),
+  egsAgentImport: vi.fn(),
   codeCancel: vi.fn(),
   codingPrepare: vi.fn(),
   codingGs1: vi.fn(),
@@ -83,6 +88,7 @@ const { HistoryProgress } = await import('./SettingsTab')
 const { default: HistoryTab } = await import('./HistoryTab')
 const { default: QueueTab } = await import('./QueueTab')
 const { default: EgsSheetPanel, REMINDER } = await import('./EgsSheetPanel')
+const { default: EgsAgentPart, OUTDATED, SWITCH_OFF: AGENT_SWITCH_OFF, jobResult } = await import('./EgsAgentPart')
 const { default: ProductionRequestsPanel, SWITCH_OFF, FIRST_ONLY } = await import('./ProductionRequestsPanel')
 
 const line = (id, status) => ({
@@ -807,7 +813,7 @@ describe('production coding queue', () => {
 
 describe('Invoicer codes file panel', () => {
   const version = (extra = {}) => ({ number: 2, built_at: '2026-11-17T10:00:00Z', source: 'build', built_by: 'محاسب', note: '',
-    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, ...extra })
+    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, whole_workbook: true, not_whole: '', ...extra })
   const sheet = (extra = {}) => ({ data: { versions: [version(), version({ number: 1, source: 'seed', added: 0, coded: 0 })],
     build: { state: 'idle' }, pending: { ready: 4, skipped: [{ itemcode: '500', why: 'لا توجد فئة GPC للصنف' }] }, can_build: true, ...extra } })
 
@@ -818,7 +824,8 @@ describe('Invoicer codes file panel', () => {
     expect(screen.getByText('36,010')).toBeTruthy()
     expect(screen.getByText(REMINDER)).toBeTruthy()
     expect(REMINDER).toBe('بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات')
-    expect(screen.getByText('القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات.')).toBeTruthy()
+    expect(screen.getByText('لا يتغير في الملف إلا خلايا الصفوف التي تُكوَّد؛ معادلات L–P باقية ونتيجتها محفوظة.')).toBeTruthy()
+    expect(screen.queryByTestId('egs-sheet-not-whole')).toBeNull()
     expect(screen.queryByText(/لا توجد فئة GPC للصنف/)).toBeNull()
     expect(screen.getByText('تُرك في هذه النسخة').querySelector('b').textContent).toBe('2')
     expect(screen.getByRole('button', { name: /متروك الآن/ }).textContent).toContain('1')
@@ -841,6 +848,17 @@ describe('Invoicer codes file panel', () => {
     await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'new'))
   })
 
+  it('an old version that lost workbook parts says so and cannot be downloaded in full', async () => {
+    const why = 'هذه النسخة بُنيت قبل 18 نوفمبر 2026 بطريقة أسقطت أجزاءً من ملف المالك'
+    api.egsSheet.mockResolvedValue(sheet({ versions: [version({ whole_workbook: false, not_whole: why })] }))
+    show(<EgsSheetPanel />)
+    expect((await screen.findByTestId('egs-sheet-not-whole')).textContent).toBe(why)
+    const full = screen.getByRole('button', { name: 'تنزيل الملف كاملاً' })
+    expect(full.disabled).toBe(true)
+    expect(full.title).toBe(why)
+    expect(screen.getByRole('button', { name: 'الصفوف الجديدة فقط' }).disabled).toBe(false)
+  })
+
   it('shows a refused build with its reasons, such as a duplicate itemcode in the held sheet', async () => {
     api.egsSheet.mockResolvedValue(sheet({ build: { state: 'refused', refused: ['كود صنف مكرر في العمود J: 300'], finished_at: '2026-11-17T10:02:00Z' } }))
     show(<EgsSheetPanel />)
@@ -861,6 +879,131 @@ describe('Invoicer codes file panel', () => {
     await screen.findByText(/النسخة 2/)
     expect(screen.queryByRole('button', { name: 'بناء نسخة جديدة' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'تنزيل الملف كاملاً' })).toBeNull()
+  })
+})
+
+
+describe('seal PC agent part of the Invoicer codes file panel', () => {
+  const codes = items => ({ count: items.length, items })
+  const state = (extra = {}) => ({ data: {
+    switch: false, agent: { at: '2026-11-18T01:00:00Z', version: 2, min_version: 2, outdated: false }, live: null,
+    last_fetch: null, held: null, jobs: [], busy: false, has_version: true, can_approve: true, ...extra } })
+  const fetchRow = (extra = {}) => ({ id: 5, finished_at: '2026-11-18T03:00:00Z', live: { coded_rows: 36011, total_rows: 36500 },
+    latest: 2, matches_version: null, hand_edits: true, current: true, has_copy: true, importable: true, import_removes: 0,
+    added_vs_latest: codes(['900']), removed_vs_latest: codes([]), ...extra })
+
+  it('shows the agent, the switch off as preview only, and asks for a read and a preview', async () => {
+    api.egsAgent.mockResolvedValue(state())
+    api.egsAgentFetch.mockResolvedValue({ data: { job: { id: 1 } } })
+    api.egsAgentWrite.mockResolvedValue({ data: { job: { id: 2, mode: 'preview', status: 'pending' } } })
+    show(<EgsAgentPart />)
+    expect(await screen.findByText(AGENT_SWITCH_OFF)).toBeTruthy()
+    expect(screen.getByText('إصدار البرنامج').querySelector('b').textContent).toBe('2')
+    expect(screen.queryByText(OUTDATED)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'اكتب الآن' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'اقرأ الملف الحالي' }))
+    await waitFor(() => expect(api.egsAgentFetch).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'معاينة الآن' }))
+    await waitFor(() => expect(api.egsAgentWrite).toHaveBeenCalledWith({}))
+    expect(await screen.findByText('طُلبت المعاينة — لا يُكتب شيء في الملف')).toBeTruthy()
+  })
+
+  it('says «اكتب الآن» with the switch on and reports nothing to write', async () => {
+    api.egsAgent.mockResolvedValue(state({ switch: true }))
+    api.egsAgentWrite.mockResolvedValue({ data: { job: null } })
+    show(<EgsAgentPart />)
+    fireEvent.click(await screen.findByRole('button', { name: 'اكتب الآن' }))
+    expect(await screen.findByText('الملف الحالي هو آخر نسخة — لا شيء يُكتب')).toBeTruthy()
+  })
+
+  it('warns when the seal PC runs an old agent', async () => {
+    api.egsAgent.mockResolvedValue(state({ agent: { at: '2026-11-18T01:00:00Z', version: 0, outdated: true } }))
+    show(<EgsAgentPart />)
+    expect(await screen.findByText(OUTDATED)).toBeTruthy()
+    expect(OUTDATED).toContain('حدّث برنامج الختم على جهاز الختم')
+  })
+
+  it('lists the differences of the last read on demand', async () => {
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow({ hand_edits: false, matches_version: 2, importable: false }) }))
+    show(<EgsAgentPart />)
+    expect(await screen.findByText('مطابق للنسخة 2')).toBeTruthy()
+    expect(screen.queryByText('900')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /في الملف الحالي وليس في النسخة 2/ }))
+    expect(screen.getByText('900')).toBeTruthy()
+    expect(screen.queryByTestId('egs-agent-held')).toBeNull()
+  })
+
+  it('a hold offers the import, and the removals checkbox only when the import drops coded items', async () => {
+    const held = { id: 9, version: 2, added: codes(['900']), removed: codes(['0200']) }
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow({ import_removes: 1 }), held }))
+    api.egsAgentImport.mockResolvedValue({ data: { version: { number: 3 } } })
+    show(<EgsAgentPart />)
+    const box = await screen.findByTestId('egs-agent-held')
+    expect(within(box).getByText(/الكتابة موقوفة/).textContent).toContain('+1 / −1')
+    const importBtn = within(box).getByRole('button', { name: 'استورد التعديلات' })
+    expect(importBtn.disabled).toBe(true)
+    fireEvent.click(within(box).getByRole('checkbox'))
+    fireEvent.click(importBtn)
+    await waitFor(() => expect(api.egsAgentImport).toHaveBeenCalledWith({ job: 5, allow_removals: true }))
+  })
+
+  it('no removals: no checkbox, the import goes at once', async () => {
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow(), held: { id: 9, version: 2, added: codes(['900']), removed: codes([]) } }))
+    api.egsAgentImport.mockResolvedValue({ data: { version: { number: 3 } } })
+    show(<EgsAgentPart />)
+    const box = await screen.findByTestId('egs-agent-held')
+    expect(within(box).queryByRole('checkbox')).toBeNull()
+    fireEvent.click(within(box).getByRole('button', { name: 'استورد التعديلات' }))
+    await waitFor(() => expect(api.egsAgentImport).toHaveBeenCalledWith({ job: 5, allow_removals: false }))
+  })
+
+  it('writing over hand edits asks for a reason inline, then sends override with it', async () => {
+    api.egsAgent.mockResolvedValue(state({ last_fetch: fetchRow(), held: { id: 9, version: 2, added: codes(['900']), removed: codes([]) } }))
+    api.egsAgentWrite.mockResolvedValue({ data: { job: { id: 3, mode: 'preview', status: 'pending' } } })
+    show(<EgsAgentPart />)
+    fireEvent.click(await screen.findByRole('button', { name: 'اكتب فوقها' }))
+    const confirm = screen.getByRole('button', { name: 'تأكيد المعاينة فوقها' })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('سبب الكتابة فوق التعديلات'), { target: { value: 'المالك طلب' } })
+    fireEvent.click(confirm)
+    await waitFor(() => expect(api.egsAgentWrite).toHaveBeenCalledWith({ override: true, note: 'المالك طلب' }))
+  })
+
+  it('offers no buttons without the approve permission', async () => {
+    api.egsAgent.mockResolvedValue(state({ can_approve: false, last_fetch: fetchRow(), held: { id: 9, version: 2, added: codes(['900']), removed: codes([]) } }))
+    show(<EgsAgentPart />)
+    await screen.findByTestId('egs-agent-held')
+    for (const name of ['اقرأ الملف الحالي', 'معاينة الآن', 'استورد التعديلات', 'اكتب فوقها']) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+  })
+
+  it('shows recent jobs with their outcome and polls only while one waits', async () => {
+    const jobs = [
+      { id: 2, kind: 'egs_write', mode: 'preview', status: 'busy', override: false, created_at: '2026-11-18T03:05:00Z', error: 'the sheet stayed in use', result: {} },
+      { id: 1, kind: 'egs_fetch', mode: 'preview', status: 'pending', override: false, created_at: '2026-11-18T03:00:00Z', error: '', result: {} },
+    ]
+    api.egsAgent.mockResolvedValue(state({ jobs, busy: true }))
+    show(<EgsAgentPart />)
+    const grid = await screen.findByLabelText('مهام جهاز الختم')
+    expect(within(grid).getByText('the sheet stayed in use')).toBeTruthy()
+    expect(within(grid).getByText('الملف مفتوح في المحصّل')).toBeTruthy()
+    await waitFor(() => expect(api.egsAgent.mock.calls.length).toBeGreaterThan(1), { timeout: 6000 })
+  }, 10000)
+
+  it('does not poll when no job waits', async () => {
+    api.egsAgent.mockResolvedValue(state())
+    show(<EgsAgentPart />)
+    await screen.findByText(AGENT_SWITCH_OFF)
+    await new Promise(r => setTimeout(r, 4500))
+    expect(api.egsAgent.mock.calls.length).toBe(1)
+  }, 8000)
+
+  it('words each job outcome', () => {
+    expect(jobResult({ kind: 'egs_write', status: 'done', result: { preview: true, would_write: true } })).toBe('معاينة: كان سيُكتب')
+    expect(jobResult({ kind: 'egs_write', status: 'done', result: { written: true, backup: 'b.xlsx' } })).toBe('كُتب الملف · نسخة احتياطية b.xlsx')
+    expect(jobResult({ kind: 'egs_write', status: 'held', result: { added: 1, removed: 0 } })).toBe('+1 / −0 عن آخر نسخة')
+    expect(jobResult({ kind: 'egs_fetch', status: 'done', result: { coded_rows: 5, total_rows: 9, matches_version: 2 } })).toBe('مكوّد 5 من 9 · = النسخة 2')
   })
 })
 

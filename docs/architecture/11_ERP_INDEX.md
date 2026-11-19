@@ -15,6 +15,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | 35 | [35_FINANCE_GENERAL_LEDGER.md](35_FINANCE_GENERAL_LEDGER.md) | ✅ Plan 1 BUILT (2026-11-04) — Plans 2 (SOFTECH drafting) and 3 (close & reconcile) planned | Finance General Ledger (دفتر الأستاذ العام): finance's own 4-digit chart of accounts, opening entry 1-1-2026, manual entries with approval (JV numbers) and reversal, trial balance, account statement, trading/P&L, financial position, branch P&L, year comparison; role `accountant`, RBAC module `ledger`; `/api/finance/gl/`, `/finance/{coa,journal,trial-balance,ledger,statements}`. No SOFTECH reads or writes. |
 | — | [Softech screen RPA design](../superpowers/specs/2026-11-16-softech-screen-rpa-design.md) | ✅ STAGE 1 BUILT (2026-11-17) — switch `RPA_SOFTECH_ENTRY_ENABLED` OFF, dry-run only | SOFTECH screen robot (روبوت الإدخال): an attended Windows agent (`rpa_agent/`, device-token) types bulk spreadsheet data into SOFTECH screens (DataLoad-style) from approved, frozen recipes. Stage 1 = إذن صرف لفرع (doc 125), dry-run only: types the document then cancels it. Four-eyes approval of jobs and recipes, `RPA-<id>` reference + fingerprint lookup before every document, 10-minute lease then needs_person (never re-queued), screenshots per run. New `apps/rpa`, screen `/rpa`; SOFTECH access read-only in Stage 1. Plan: `../superpowers/plans/2026-11-16-softech-rpa-stage1.md`. |
 | 36 | [36_DATA_LIFECYCLE.md](36_DATA_LIFECYCLE.md) | ✅ Stages 1 and 3 BUILT (2026-11-07), Stage 5 BUILT (2026-11-12); every new rule in preview, nothing switched on | Data lifecycle (`apps/data_lifecycle`): rule register with floors, preview/on modes and a circuit breaker; row rules (`rate_runs`, transit notes and events); file rules with a 30-day holding folder and restore (locked until the VPS); table-size history; `/data-health` screen (growth, rules, held files, data problems; daily snapshot); findings (notifications are never read). No SOFTECH reads or writes. |
+| 38 | [38_MARKETPLACE_CHANNELS_RESEARCH.md](38_MARKETPLACE_CHANNELS_RESEARCH.md) | 🟡 M1 INFRASTRUCTURE BUILT (2026-11-18), switches OFF, no platform connected | Marketplace / delivery-app channels (`apps/marketplace`): channels + per-branch stores, supervisor-approved listings (nothing listed by default; Rx only by explicit approval), order intake (manual + webhook), accept → POS draft on the platform's SOFTECH account (credit sale, cashier settles), dry-run stock/status push (`MARKETPLACE_PUSH_ENABLED` off), settlement file import + matching; `/marketplace` screen. Switch `MARKETPLACE_ENABLED`. No SOFTECH writes. |
 | 33 | [33_PIC_ANALYTICS.md](33_PIC_ANALYTICS.md) | ✅ BUILT (2026-11-03, branch `claude/pic-analytics`, based on PR 41) | PIC Analytics (تحليلات الـ PIC): PIC-centric customer dashboard + Excel report — new vs returning vs reactivated, frequency, overdue, retention/cohorts, per-branch/salesperson/channel/category, call-center, missed/unanswered calls, new numbers. Read-only: day-fact + rollup tables built from the SOFTECH sales mirror and PBX CDR; no SOFTECH writes. New `apps/pic_analytics`. |
 | 34 | [34_DRUG_ASSISTANT_COUNSELLING.md](34_DRUG_ASSISTANT_COUNSELLING.md) | ✅ BUILT (2026-11-03) — all switches OFF | Project 4: pharmacist-approved usage sheets (`/counselling`, AI drafts only), staff drug assistant (POS F7 «معلومات وبدائل», Ctrl+K, `/m/items`, product tab; verified vs unverified alternatives, drafts only to pharmacists), staff-sent WhatsApp counselling card (no medicine name; private `/c/:token` page; audit + opt-out); read helpers shared with the dosage-label printer. |
 | 13 | [13_DEMAND_EVOLUTION_ROADMAP.md](13_DEMAND_EVOLUTION_ROADMAP.md) | ✅ BUILT (2026-06-12) | `apps/demand` evolved from a passive lost-sales log into an active recovery + intelligence engine: 4 loops shipped (back-in-stock recovery + ROI, confirmed valuation + reconciliation vs purchasing engine, value-weighted buy signal + therapeutic substitution, customer unmet-demand profile + churn). Plus Demand↔Reservation bridge and module-scoped notifications (demand/followups). Migrations demand/0003–0006, notifications/0015. |
@@ -62,13 +63,8 @@ This is the primary navigation document for the ElRezeiky platform.
 | Network Access (trusted networks, request zone, device registry) | `apps/access` | COMPLETE (N1 log only; N2 device registry: enroll, approve/block/retire, remember 2FA on approved devices) | [network-device-access design](../security/2026-10-31-network-device-access-design.md) |
 | ERP Sync | `apps/sync` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#sync) |
 | Finance | `apps/finance` | COMPLETE | [02_MODULE_REGISTRY.md](02_MODULE_REGISTRY.md#finance) |
-| Product Enrichment | `apps/enrichment` | PARTIAL | |
-| Recommendations | `apps/recommendations` | PARTIAL | |
-| Campaigns | `apps/campaigns` | PARTIAL | |
-| Cheques | `apps/cheques` | PARTIAL | |
 | Deliveries | `apps/delivery` | PARTIAL (backend complete) | |
-| Payments | `apps/payments` | PARTIAL | |
-| Tasks | `apps/tasks` | PARTIAL | |
+| Marketplace channels (المنصات والتطبيقات) | `apps/marketplace` | M1 BUILT (switches OFF) | [38_MARKETPLACE_CHANNELS_RESEARCH.md](38_MARKETPLACE_CHANNELS_RESEARCH.md) — RBAC module `marketplace`; flag `MARKETPLACE_ENABLED`; push switch `MARKETPLACE_PUSH_ENABLED` |
 | Customer Portal (external PWA) | `apps/portal` | COMPLETE | Stateless signed-token auth; no models. See note below. |
 | Branch QA Inspections | `apps/qa` | COMPLETE (mobile) | Templates + pass/fail/na inspections + score |
 | HR Attendance (geofenced) | `apps/hr` | COMPLETE (mobile) | AttendanceRecord; GPS clock in/out vs branch coords |
@@ -139,6 +135,7 @@ This is the primary navigation document for the ElRezeiky platform.
 | Tasks | `/api/tasks/` | tasks |
 | Cheques | `/api/cheques/` | cheques |
 | Delivery | `/api/delivery/` | deliveries |
+| Marketplace (doc 38) | `/api/marketplace/` | marketplace — `channels/` (+ `push-stock/`), `stores/`, `listings/` (+ `approve/` `unapprove/`), `orders/` (+ `manual/`, `accept/`, `reject/`, `status/`), `push-log/`, `settlements/`; `webhooks/<channel_code>/` own gate (no staff session) |
 | Payments | `/api/payments/` | payments |
 | Recommendations | `/api/recommendations/` | recommendations |
 | **POS Orders (indirect-POS writeback)** | `/api/pos-orders/` | pos_orders — list/create + `reference/` + `batches/` + `discount-suggest/` + `queue-status/` + `flush/` + `{id}/ready\|push\|cancel/` + **`contract-assist/{config,patients,history,field-values,approval-check}/`** + **`fefo-split/`** (POS Speed Wave; also `/api/items/softech-search/?network=1`, `/api/customers/address-suggest/`, `/api/composition/alternatives/`) |
@@ -300,6 +297,7 @@ Full schema: [03_DATABASE_DICTIONARY.md](03_DATABASE_DICTIONARY.md)
 | WhatsApp Inbox | `/whatsapp/inbox` | WhatsApp | COMPLETE |
 | PBX Live | `/pbx/live` | PBX | COMPLETE |
 | Delivery Dashboard | `/delivery` (`dispatch\|my\|analytics`) | Delivery | COMPLETE |
+| Marketplace channels (المنصات والتطبيقات) | `/marketplace` (tabs orders / manual / listings / channels / settlement) | Marketplace | BUILT (dark — `MARKETPLACE_ENABLED`) |
 | Payments | `/payments` | Payments | PARTIAL |
 | Payment Audit | `/payment-audit` | Payments | PARTIAL |
 | Tasks | `/tasks` (`dashboard\|schedules\|:id`) | Tasks | PARTIAL |
@@ -432,7 +430,7 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | `seed_kpi_config` | forecasting | Seed branch-KPI config: `ChannelBucketMap` (from `SoftechPersonClassif`) + `BeautyClassRule` (doc 16); never overwrites owner edits unless `--reset-defaults` | One-time setup |
 | `build_kpi_rollups` | forecasting | Materialise `KpiActualRollup` monthly branch actuals from `PurchaseHistory` (`--year --month` \| `--months N`) (doc 16) | Daily / monthly close |
 | `backfill_sales_history` | sync | One-time historical `PurchaseHistory` backfill from SOFTECH month-by-month (`--months N` \| `--start --end`) + rebuild KPI rollups (doc 16 Phase 3.5) | One-time setup |
-| `build_call_center_rollups` | forecasting | Call-center KPI overlay → `KpiActualRollup` (sales/profit/beauty/orders from agents `{62,63,64}` + `call_count` from Issabel CDR, `--cdr-csv` or live) (doc 16 Phase 5) | Monthly / on CDR pull |
+| `build_crew_rollups` | crews | Call-center crew KPIs → `KpiActualRollup` crew rows (sales/profit/beauty/orders/PICs from the crew's dated seller codes, net of returns + `call_count` from Issabel CDR, `--cdr-csv` or live); replaced `build_call_center_rollups` (crews piece 2b Part B) | `rollup_refresh` (stale months) / on CDR pull |
 | `sync_in_transit` | transits | SOFTECH doccode-125 → InTransitTransfer cache (expiry/batch per line; receiver = header `cust_branch_code`; receipt = 25-doc via `docnumber2` link — docnumbers are per-branch sequences, never globally unique). `--doc N --date YYYY-MM-DD` for indexed single-doc debug | Every 15 min |
 | `seed_pick_zones` | transits | Bootstrap default pick zones + classification rules (PickZone tables; then managed from `/pick-zones`) | One-time setup |
 | `seed_approval_workflows` | approvals | Seed approval workflows (+ HR/operational categories) | One-time setup |
@@ -492,8 +490,8 @@ Full report: [09_TECHNICAL_DEBT_REPORT.md](09_TECHNICAL_DEBT_REPORT.md)
 | Message broker | Redis | — |
 | Task scheduling | APScheduler | 3.10.4 |
 | Primary DB | PostgreSQL | — |
-| ERP DB | Sybase (ODBC) | — |
-| ERP connector | pyodbc | — |
+| ERP DB | Sybase ASE | — |
+| ERP connector | jConnect JDBC via jpype (`config/sybase.py`) | — |
 | OCR | Google Gemini API + pytesseract + EasyOCR | — |
 | Fuzzy matching | rapidfuzz | — |
 | QR codes | qrcode | — |

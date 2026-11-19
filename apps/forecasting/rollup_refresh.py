@@ -16,6 +16,14 @@ re-touches today/yesterday every few minutes, so the CURRENT month is additional
 throttled to once per CURRENT_MIN_AGE (a closed month rebuilds as soon as late sales land).
 Deep history is rebuilt by backfill_sales_history itself. Idempotent upserts only;
 local DB only (the call-center step reads SOFTECH/Issabel, SELECT only).
+
+The rows that decide staleness are the ones a rebuild rewrites: the retail branches'
+(build_kpi_rollups) and the call-center crew's (build_crew_rollups, crews piece 2b Part B —
+before, the crew month froze when sales synced after its build: the October 2026 cause).
+Rows nobody rebuilds (a closed / call-center branch, an archived crew) never pin a month stale.
+A crew's month counts as computed at its LATEST row: build_crew_rollups keeps (does not touch) a
+row it cannot recompute (CDR / SOFTECH unreachable), and that kept row's old computed_at must
+not make the month stale forever.
 """
 import logging
 import threading
@@ -52,14 +60,19 @@ def month_status(year, month, now=None):
     """{year, month, computed_at, sales_synced_at, stale, current} for one month."""
     from django.db.models import Max, Min
     from django.utils import timezone
+    from apps.branches.models import Branch
     from apps.customers.models import PurchaseHistory
+    from apps.forecasting.call_center import call_center_crew_ids
     from apps.forecasting.models import KpiActualRollup
     now = now or timezone.now()
     today = timezone.localdate(now)
     start, end = _month_range(year, month)
-    computed = (KpiActualRollup.objects.filter(year=year, month=month)
-                .exclude(branch__softech_branch_id='CC')
-                .aggregate(m=Min('computed_at'))['m'])
+    month_rows = KpiActualRollup.objects.filter(year=year, month=month)
+    built = [month_rows.filter(branch__in=Branch.objects.retail()).aggregate(m=Min('computed_at'))['m']]
+    for crew_id in call_center_crew_ids():
+        built.append(month_rows.filter(crew_id=crew_id).aggregate(m=Max('computed_at'))['m'])
+    built = [t for t in built if t is not None]
+    computed = min(built) if built else None
     synced = (PurchaseHistory.objects.filter(invoice_date__gte=start, invoice_date__lt=end)
               .aggregate(m=Max('last_synced'))['m'])
     current = (year, month) == (today.year, today.month)
@@ -80,15 +93,15 @@ def stale_months(today=None, now=None):
 
 
 def rebuild(months):
-    """Rebuild branch + call-center rollups for the given months (oldest first)."""
+    """Rebuild branch + call-center crew rollups for the given months (oldest first)."""
     from django.core.management import call_command
     done = []
     for (y, m) in sorted(months):
         call_command('build_kpi_rollups', year=y, month=m, verbosity=0)
         try:
-            call_command('build_call_center_rollups', year=y, month=m, verbosity=0)
+            call_command('build_crew_rollups', year=y, month=m, verbosity=0)
         except Exception as exc:
-            logger.warning('[kpi-refresh] CC rollup %s-%02d skipped: %s', y, m, exc)
+            logger.warning('[kpi-refresh] call-center crew rollup %s-%02d skipped: %s', y, m, exc)
         done.append((y, m))
     return done
 

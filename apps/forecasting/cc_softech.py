@@ -10,8 +10,12 @@ when its linked original doc-115 sale was placed by a CC sales agent.
                      r_docnumber → a doc-115 sale by a CC agent  (EXISTS, no join fan-out)
   CC return profit = Σ (transprice_total − transqty·newcostprice) over the same lines
 
-Used by build_call_center_rollups to turn gross CC sales/profit into NET.
+Used by apps.crews.kpi (build_crew_rollups) to turn the crew's gross sales/profit into NET.
 Validated Jun-2026: returns 5,745 (sheet 5,105) → net 827,988 vs 828,628 (≈0.08%).
+
+The agent usercodes are `?` parameters (quotes stripped, as the old inlined list did, so the
+result is unchanged). This is the legacy number-only rule; the call-center crew uses
+apps.crews.softech_returns (this rule plus a date match on r_docdate).
 """
 from decimal import Decimal
 
@@ -27,7 +31,7 @@ def cc_returns_from_softech(year, month, agent_usercodes):
         return {'amount': Decimal('0'), 'profit': Decimal('0'), 'docs': 0}
     from config.sybase import get_sybase_connection
     start, end = _month_bounds_str(year, month)
-    agents = ','.join("'%s'" % str(a).replace("'", "") for a in agent_usercodes)
+    agents = [str(a).replace("'", "") for a in agent_usercodes]
     sql = f"""
         SELECT
             SUM(r.transprice_total) AS amt,
@@ -39,13 +43,13 @@ def cc_returns_from_softech(year, month, agent_usercodes):
           AND EXISTS (
               SELECT 1 FROM stktrans o
               WHERE o.branchcode = r.branchcode AND o.doccode = '115'
-                AND o.docnumber = r.r_docnumber AND o.usercode IN ({agents})
+                AND o.docnumber = r.r_docnumber AND o.usercode IN ({','.join('?' * len(agents))})
           )
     """
     conn = get_sybase_connection()
     try:
         cur = conn.cursor()
-        cur.execute(sql)
+        cur.execute(sql, agents)
         row = cur.fetchone()
     finally:
         conn.close()

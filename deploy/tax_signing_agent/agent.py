@@ -6,6 +6,12 @@ deploy/tax_signing_agent/agent.py — the signing agent on the PC that holds the
     python agent.py selftest                           asks for the PIN, signs a local text, verifies it
     python agent.py run [--once]                       pulls jobs from the server, signs, returns them
 
+Version 2 also reads and writes Invoicer's bulk EGS sheet (ElRezeiky_Bulk_EGS_Items.xlsx) in the folder set
+as [agent] invoicer_dir, for the server's file jobs (egs_fetch, egs_write). The folder comes from config.ini,
+never from the server. A write is made only in write mode, after the received bytes match their SHA-256 and
+the live file is still the one the server expects; it goes through a .new file and a backup, and anything
+that goes wrong leaves the live file untouched.
+
 The agent only makes outbound HTTPS calls; nothing connects to it. The PIN comes from a prompt or
 TAX_TOKEN_PIN, stays in this process, and is never logged, written or sent. The agent signs in to the
 server with its own staff account (TAX_AGENT_PASSWORD, prompt) and sends the agent token as well; a
@@ -24,9 +30,13 @@ import configparser
 import datetime as dt
 import getpass
 import hashlib
+import json
 import logging
 import os
+import re
+import shutil
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
@@ -46,6 +56,9 @@ API_LOGIN = '/api/auth/login/'
 API_REFRESH = '/api/auth/refresh/'
 API_NEXT = '/api/tax-invoicing/signing-agent/next/'
 API_RESULT = '/api/tax-invoicing/signing-agent/jobs/{id}/result/'
+API_FILE_DOWNLOAD = '/api/tax-invoicing/signing-agent/files/{id}/download/'   # built from the job id only:
+API_FILE_RESULT = '/api/tax-invoicing/signing-agent/files/{id}/result/'       # no URL or path from the server
+AGENT_VERSION = 2       # sent on every call; the server offers file jobs only to version >= 2
 SECRET_CONFIG_KEYS = {'pin', 'token_pin', 'agent_token', 'password', 'secret'}
 
 # PKCS#11 v2.x values, written out so the behaviour does not depend on what a binding exposes.
@@ -343,7 +356,8 @@ def _bits():
 class Server:
     """The two agent endpoints. Refuses plain HTTP and redirects, so the agent token cannot leak."""
 
-    def __init__(self, base_url, agent_token, *, username='', password='', ca_bundle='', http=None, timeout=20):
+    def __init__(self, base_url, agent_token, *, username='', password='', ca_bundle='', http=None, timeout=20,
+                 file_timeout=180):
         if not str(base_url).lower().startswith('https://'):
             raise ConfigError('[server] url must start with https://')
         if not agent_token:
@@ -359,6 +373,7 @@ class Server:
         self._refresh = ''
         self.verify = ca_bundle or True
         self.timeout = timeout
+        self.file_timeout = file_timeout      # the server checks an uploaded sheet inside the request
         self.http = http or self._session()
 
     def __repr__(self):
@@ -371,12 +386,20 @@ class Server:
         session.trust_env = False   # no proxy or .netrc from the machine's environment
         return session
 
-    def _send(self, path, body, headers):
+    def _send(self, path, body, headers, *, method='post', files=None, timeout=None):
         """One request. The sign-in cookies the server also sets are dropped: the agent sends its token
         in the Authorization header only, and never X-Requested-With (that is the browser's mark)."""
+        url, timeout = self.base_url + path, timeout or self.timeout
         try:
-            response = self.http.post(self.base_url + path, headers=headers, json=body, timeout=self.timeout,
-                                      allow_redirects=False, verify=self.verify)
+            if method == 'get':
+                response = self.http.get(url, headers=headers, timeout=timeout, allow_redirects=False,
+                                         verify=self.verify)
+            elif files is not None:
+                response = self.http.post(url, headers=headers, data=body, files=files, timeout=timeout,
+                                          allow_redirects=False, verify=self.verify)
+            else:
+                response = self.http.post(url, headers=headers, json=body, timeout=timeout,
+                                          allow_redirects=False, verify=self.verify)
         except OSError as exc:      # requests' errors are OSError, TLS failures included
             raise ServerUnreachable(f'cannot reach the server: {type(exc).__name__}') from exc
         jar = getattr(self.http, 'cookies', None)
@@ -425,12 +448,13 @@ class Server:
         self._access = self._refresh = ''
         self.sign_in()
 
-    def _post(self, path, body):
+    def _post(self, path, body, **options):
         if not self._access:
             self.sign_in()
         for attempt in (1, 2):
-            headers = {'Authorization': f'Bearer {self._access}', 'X-Tax-Agent-Token': self._agent_token}
-            response = self._send(path, body, headers)
+            headers = {'Authorization': f'Bearer {self._access}', 'X-Tax-Agent-Token': self._agent_token,
+                       'X-Tax-Agent-Version': str(AGENT_VERSION)}
+            response = self._send(path, body, headers, **options)
             if response.status_code == 401 and attempt == 1:
                 self._renew()      # access tokens last an hour; the server answers 401 once one runs out
                 continue
@@ -465,6 +489,329 @@ class Server:
             raise ServerUnreachable(f'the server answered {response.status_code}')
         return True
 
+    def download_file(self, job_id):
+        """The version file of an egs_write job: the response as it came (status, content, headers)."""
+        return self._post(API_FILE_DOWNLOAD.format(id=int(job_id)), None, method='get', timeout=self.file_timeout)
+
+    def post_file_result(self, job_id, status, *, result=None, error='', file_bytes=None):
+        """True if the server took it; False if the job is no longer waiting for us, or the server refused the
+        uploaded copy (it then marks the job failed itself)."""
+        path = API_FILE_RESULT.format(id=int(job_id))
+        if file_bytes is None:
+            response = self._post(path, {'status': status, 'result': result or {}, 'error': error[:1000]})
+        else:
+            form = {'status': status, 'result': json.dumps(result or {}), 'error': error[:1000]}
+            response = self._post(path, form, files={'file': (LIVE_NAME, file_bytes, XLSX_TYPE)},
+                                  timeout=self.file_timeout)
+        if response.status_code == 404:
+            return False
+        if response.status_code in (400, 413):
+            detail = ''
+            try:
+                detail = str((response.json() or {}).get('detail') or '')[:200]
+            except (ValueError, AttributeError):
+                pass
+            log.error('file job %s: the server refused the result (%s) %s', job_id, response.status_code, detail)
+            return False
+        if response.status_code != 200:
+            raise ServerUnreachable(f'the server answered {response.status_code}')
+        return True
+
+
+# ── Invoicer's bulk EGS sheet (file jobs, version 2) ───────────────────────────────────────────
+
+LIVE_NAME = 'ElRezeiky_Bulk_EGS_Items.xlsx'        # the name the Invoicer reads
+NEW_NAME = 'ElRezeiky_Bulk_EGS_Items.new.xlsx'     # the next sheet, written beside it before the swap
+BACKUP_FOLDER = 'backup'
+BACKUP_KEEP = 30
+BACKUP_NAME = re.compile(r'^ElRezeiky_Bulk_EGS_Items\.(\d{8}-\d{6})(?:-(\d+))?\.xlsx$')
+MAX_SHEET_BYTES = 20 * 1024 * 1024                 # the server's upload cap
+XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+FILE_KINDS = ('egs_fetch', 'egs_write')
+DONE, FAILED, BUSY = 'done', 'failed', 'busy'
+SHA256_HEX = re.compile(r'^[0-9a-f]{64}$')
+
+
+class FileBusy(AgentError):
+    """Invoicer or Excel held the sheet for the whole retry window."""
+
+
+class LiveChanged(AgentError):
+    """The live sheet is not the one the server expects to replace."""
+
+
+@dataclass
+class SheetPlace:
+    """Where the sheet lives, from config.ini only. `retries` PermissionError retries, `retry_seconds` apart."""
+    invoicer_dir: str
+    sleep: object = time.sleep
+    now: object = dt.datetime.now
+    retries: int = 5
+    retry_seconds: float = 24      # 5 retries over about two minutes
+
+    @property
+    def folder(self):
+        return Path(self.invoicer_dir)
+
+    @property
+    def live(self):
+        return self.folder / LIVE_NAME
+
+    @property
+    def new(self):
+        return self.folder / NEW_NAME
+
+    @property
+    def backup_dir(self):
+        return self.folder / BACKUP_FOLDER
+
+    @property
+    def excel_owner_file(self):
+        return self.folder / ('~$' + LIVE_NAME)     # Excel's mark that someone has the sheet open
+
+
+def _sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_copy(path):
+    """The bytes of `path`, read from a temporary copy outside the Invoicer folder: the file itself is only ever
+    opened for reading, by the copy."""
+    fd, temp = tempfile.mkstemp(prefix='egs_sheet_', suffix='.xlsx')
+    os.close(fd)
+    try:
+        shutil.copyfile(path, temp)
+        with open(temp, 'rb') as handle:
+            return handle.read()
+    finally:
+        try:
+            os.unlink(temp)
+        except OSError:
+            log.warning('could not remove the temporary copy %s', temp)
+
+
+def _with_retries(place, call, what):
+    """call() with PermissionError (the file is in use) retried; (value, retries used). FileBusy at the end."""
+    for attempt in range(place.retries + 1):
+        try:
+            return call(), attempt
+        except PermissionError:
+            if attempt == place.retries:
+                break
+            log.warning('%s: the sheet is in use; retry %s of %s in %ss', what, attempt + 1, place.retries,
+                        place.retry_seconds)
+            place.sleep(place.retry_seconds)
+    raise FileBusy(f'{what}: the sheet stayed in use (Invoicer or Excel) for the whole retry window')
+
+
+def _live_state(place):
+    """{'sha256', 'size', 'data', 'locked', 'retries'} of the live sheet, from a copy; None when it is not there."""
+    if not place.live.is_file():
+        return None
+    data, retries = _with_retries(place, lambda: read_copy(place.live), 'reading the live sheet')
+    return {'sha256': _sha256(data), 'size': len(data), 'data': data,
+            'locked': bool(retries) or place.excel_owner_file.exists(), 'retries': retries}
+
+
+def _backup_dir_writable(place):
+    """Best effort, and writes nothing: on Windows this only sees the read-only flag."""
+    target = place.backup_dir if place.backup_dir.is_dir() else place.folder
+    return target.is_dir() and os.access(target, os.W_OK)
+
+
+def _outcome(status, result, error='', file_bytes=None):
+    return {'status': status, 'result': result, 'error': error, 'file': file_bytes}
+
+
+def check_place(place):
+    """An error text when the configured folder cannot be used; '' when it can."""
+    if not str(place.invoicer_dir or '').strip():
+        return 'invoicer_dir is not set in [agent] of config.ini; the agent does not touch the sheet without it'
+    if not place.folder.is_dir():
+        return f'invoicer_dir {place.invoicer_dir} is not a folder on this PC'
+    return ''
+
+
+def fetch_live(place):
+    """egs_fetch: a copy of the live sheet for the server. Nothing in the Invoicer folder is written."""
+    problem = check_place(place)
+    if problem:
+        return _outcome(FAILED, {}, problem)
+    try:
+        live = _live_state(place)
+    except FileBusy as exc:
+        return _outcome(BUSY, {'locked': True, 'retries': place.retries}, str(exc))
+    except OSError as exc:
+        return _outcome(FAILED, {}, f'cannot copy the live sheet: {type(exc).__name__}')
+    if live is None:
+        return _outcome(FAILED, {}, f'{LIVE_NAME} is not in {place.invoicer_dir}')
+    result = {'live_sha256': live['sha256'], 'live_size': live['size'], 'locked': live['locked'],
+              'retries': live['retries']}
+    if live['size'] > MAX_SHEET_BYTES:
+        return _outcome(FAILED, result, f'the live sheet is larger than {MAX_SHEET_BYTES // (1024 * 1024)} MB')
+    return _outcome(DONE, result, file_bytes=live['data'])
+
+
+def _backup_path(place):
+    stamp = place.now().strftime('%Y%m%d-%H%M%S')
+    path, n = place.backup_dir / f'ElRezeiky_Bulk_EGS_Items.{stamp}.xlsx', 0
+    while path.exists():
+        n += 1
+        path = place.backup_dir / f'ElRezeiky_Bulk_EGS_Items.{stamp}-{n}.xlsx'
+    return path
+
+
+def prune_backups(place, keep=BACKUP_KEEP):
+    """Keep the newest `keep` backups (by the time in their name). Only our own backup names are touched."""
+    found = []
+    if place.backup_dir.is_dir():
+        for path in place.backup_dir.iterdir():
+            match = BACKUP_NAME.match(path.name)
+            if match and path.is_file():
+                found.append(((match.group(1), int(match.group(2) or 0)), path))
+    found.sort(key=lambda row: row[0], reverse=True)
+    removed = []
+    for _, path in found[keep:]:
+        try:
+            path.unlink()
+            removed.append(path.name)
+        except OSError as exc:
+            log.warning('could not remove the old backup %s: %s', path.name, type(exc).__name__)
+    return removed
+
+
+def _make_backup(place, live_sha256):
+    """Copy the live sheet into backup\\ and check the copy is the live sheet this write expects to replace."""
+    place.backup_dir.mkdir(exist_ok=True)
+    path = _backup_path(place)
+    try:
+        _with_retries(place, lambda: shutil.copyfile(place.live, path), 'backing up the live sheet')
+    except (FileBusy, OSError):
+        _remove_quietly(path)       # never leave a partial backup behind
+        raise
+    with open(path, 'rb') as handle:
+        copied = _sha256(handle.read())
+    if copied != live_sha256:
+        path.unlink(missing_ok=True)
+        raise LiveChanged('the live sheet changed while it was being backed up')
+    return path
+
+
+def _remove_quietly(path):
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError as exc:
+        log.error('could not remove %s: %s', Path(path).name, type(exc).__name__)
+
+
+def _replace_if_unchanged(place, live_sha256):
+    """One swap attempt. The live sheet is read again (from a copy) right before it is replaced: an edit saved
+    while we waited for Invoicer or Excel to let go would otherwise be lost (it is in neither the backup nor the
+    new sheet)."""
+    if _sha256(read_copy(place.live)) != live_sha256:
+        raise LiveChanged('the live sheet changed while waiting to replace it')
+    os.replace(place.new, place.live)
+
+
+def _swap(place, data, expected, live, result):
+    """Write mode, after every check: .new beside the live sheet, a backup, then os.replace. The live sheet is
+    replaced whole or not at all, and .new never stays behind."""
+    try:
+        with open(place.new, 'wb') as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        with open(place.new, 'rb') as handle:
+            if _sha256(handle.read()) != expected:
+                return _outcome(FAILED, result, 'the new sheet did not save correctly; live sheet untouched')
+        backup = _make_backup(place, live['sha256'])
+        result['backup'] = backup.name
+        result['backups_removed'] = len(prune_backups(place))
+        try:
+            _, retries = _with_retries(place, lambda: _replace_if_unchanged(place, live['sha256']),
+                                       'replacing the live sheet')
+        except FileBusy as exc:
+            result.update({'locked': True, 'retries': place.retries})
+            return _outcome(BUSY, result, f'{exc}; live sheet untouched')
+        result['retries'] = retries
+    except LiveChanged as exc:
+        result['live_changed'] = True
+        return _outcome(FAILED, result, f'live_changed: {exc}; live sheet untouched')
+    except FileBusy as exc:
+        return _outcome(BUSY, result, f'{exc}; live sheet untouched')
+    except OSError as exc:
+        return _outcome(FAILED, result, f'could not write the sheet ({type(exc).__name__}); live sheet untouched')
+    finally:
+        if place.new.exists():
+            _remove_quietly(place.new)
+    result['written'] = True
+    try:
+        after = _live_state(place)
+    except (FileBusy, OSError):
+        after = None    # Invoicer opened the new sheet at once; the swap itself is done
+    result['live_sha256_after'] = after['sha256'] if after else ''
+    if after is not None and after['sha256'] != expected:
+        return _outcome(FAILED, result, 'the live sheet was replaced but reads back different; copy '
+                                        f'{result["backup"]} back from the backup folder')
+    return _outcome(DONE, result)
+
+
+def write_sheet(place, job, download):
+    """egs_write. `download(job_id)` returns the server's response. Unless both the job and the server's
+    X-Job-Mode say 'write', this is a preview: nothing is written in the Invoicer folder, and the result says
+    what a write would do."""
+    expected = str(job.get('sha256') or '').lower()
+    result = {'version': job.get('version'), 'sha256': expected, 'job_mode': job.get('mode')}
+    problem = check_place(place)
+    if problem:
+        return _outcome(FAILED, result, problem)
+    if not SHA256_HEX.match(expected):
+        return _outcome(FAILED, result, 'the job carries no valid SHA-256; nothing written')
+    if place.new.exists():
+        if job.get('mode') == 'write':      # ours, left by a crash; a preview still writes nothing here
+            _remove_quietly(place.new)
+            result['stale_new_removed'] = not place.new.exists()
+        else:
+            result['stale_new'] = True
+    try:
+        response = download(job['id'])
+    except ServerUnreachable as exc:
+        return _outcome(FAILED, result, f'the download failed ({exc}); nothing written')
+    if response.status_code != 200:
+        return _outcome(FAILED, result, f'the download answered {response.status_code}; nothing written')
+    data = response.content or b''
+    headers = response.headers or {}
+    received, header_sha = _sha256(data), str(headers.get('X-Content-SHA256') or '').lower()
+    header_mode = str(headers.get('X-Job-Mode') or '')
+    result.update({'received_size': len(data), 'received_sha256': received, 'header_mode': header_mode})
+    if received != expected or header_sha != expected:
+        return _outcome(FAILED, result, 'the downloaded sheet does not match its SHA-256 (truncated or changed); '
+                                        'nothing written')
+    writing = job.get('mode') == 'write' and header_mode == 'write'
+    result['backup_dir_writable'] = _backup_dir_writable(place)
+    try:
+        live = _live_state(place)
+    except FileBusy:
+        live = None
+        result.update({'locked': True, 'retries': place.retries})
+        if writing:
+            return _outcome(BUSY, result, 'the live sheet stayed in use while it was being read; live sheet untouched')
+    except OSError as exc:
+        return _outcome(FAILED, result, f'cannot copy the live sheet ({type(exc).__name__}); nothing written')
+    if live is not None:
+        result.update({'live_sha256_before': live['sha256'], 'live_size': live['size'], 'locked': live['locked']})
+    live_matches = live is not None and live['sha256'] == str(job.get('live_sha256') or '').lower()
+    result['live_changed'] = live is not None and not live_matches
+    if not writing:
+        result.update({'preview': True, 'would_write': live_matches and result['backup_dir_writable']})
+        return _outcome(DONE, result)
+    if live is None:
+        return _outcome(FAILED, result, f'{LIVE_NAME} is not in {place.invoicer_dir}; nothing written')
+    if not live_matches:
+        return _outcome(FAILED, result, 'live_changed: the live sheet is not the one this write expects to '
+                                        'replace (edited since the last read); live sheet untouched')
+    return _swap(place, data, expected, live, result)
+
 
 class Backoff:
     def __init__(self, base, cap=300):
@@ -481,8 +828,11 @@ class Backoff:
 
 class Agent:
     def __init__(self, token, server, *, sleep=time.sleep, poll_seconds=5, busy_budget_seconds=40,
-                 result_attempts=6, retry_base_seconds=2):
+                 result_attempts=6, retry_base_seconds=2, invoicer_dir='', now=dt.datetime.now,
+                 swap_retries=5, swap_retry_seconds=24):
         self.token, self.server, self.sleep = token, server, sleep
+        self.sheet = SheetPlace(invoicer_dir, sleep=sleep, now=now, retries=swap_retries,
+                                retry_seconds=swap_retry_seconds)
         self.poll_seconds = poll_seconds
         self.busy_budget_seconds = busy_budget_seconds
         self.result_attempts = result_attempts
@@ -520,6 +870,44 @@ class Agent:
         return False
 
     def handle(self, job):
+        """One job, by kind: a sheet file job, else a signing job (document or smoke)."""
+        if job.get('kind') in FILE_KINDS:
+            return self.handle_file(job)
+        return self.handle_signing(job)
+
+    def _report_file(self, job_id, outcome):
+        """Network trouble retries the same answer; the sheet is never read or written twice for one job."""
+        backoff = Backoff(self.retry_base_seconds, cap=30)
+        for attempt in range(self.result_attempts):
+            try:
+                return self.server.post_file_result(job_id, outcome['status'], result=outcome['result'],
+                                                    error=outcome['error'], file_bytes=outcome['file'])
+            except ServerUnreachable as exc:
+                log.warning('file job %s: could not send the result (%s)', job_id, exc)
+                if attempt + 1 < self.result_attempts:
+                    self.sleep(backoff.next_delay())
+        log.error('file job %s: the result was not delivered; the server will time this job out', job_id)
+        return False
+
+    def handle_file(self, job):
+        """egs_fetch or egs_write. True if the job ended 'done' and the server took the answer."""
+        job_id, kind = job.get('id'), job.get('kind')
+        if job_id is None:
+            log.error('the server sent a file job without an id; ignored')
+            return False
+        if kind == 'egs_fetch':
+            outcome = fetch_live(self.sheet)
+        else:
+            outcome = write_sheet(self.sheet, job, self.server.download_file)
+        taken = self._report_file(job_id, outcome)
+        r = outcome['result']
+        log.info('job=%s kind=%s mode=%s status=%s sha256=%s backup=%s delivered=%s%s', job_id, kind,
+                 job.get('mode'), outcome['status'], r.get('sha256') or r.get('live_sha256') or '',
+                 r.get('backup', ''), 'yes' if taken else 'no',
+                 f" error={outcome['error']}" if outcome['error'] else '')
+        return bool(taken) and outcome['status'] == DONE
+
+    def handle_signing(self, job):
         """One job. True if a signature reached the server. FatalError passes up after being reported."""
         job_id, text = job.get('id'), job.get('canonical_text')
         if job_id is None:
@@ -727,7 +1115,8 @@ def main(argv=None, *, p11=None, http=None, env=None, prompt=None, out=None, sle
                       allow_low_pin_count=args.allow_low_pin_count, pin=pin)
         if args.command == 'selftest':
             return self_test(token, out, count=max(1, args.count), pause_seconds=args.pause, sleep=sleep)
-        agent = Agent(token, server, sleep=sleep, poll_seconds=float(agent_section.get('poll_seconds', '5') or 5))
+        agent = Agent(token, server, sleep=sleep, poll_seconds=float(agent_section.get('poll_seconds', '5') or 5),
+                      invoicer_dir=agent_section.get('invoicer_dir', '').strip())
         log.info('agent started; server %s; token module %s', server.base_url, module)
         return agent.run(once=args.once)
     except FatalError as exc:

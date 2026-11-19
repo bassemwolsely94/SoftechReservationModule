@@ -27,6 +27,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import transaction
+from django.http import HttpResponse
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Sum
 from django.shortcuts import get_object_or_404
@@ -45,9 +46,10 @@ from core.errors import public_error
 from core.threads import start_thread
 from core.permissions import _get_profile, matrix_allows, matrix_permission
 
-from . import coding, environment, eta_client, gpc, item_import, receipts, services, signing, submission
+from . import coding, egs_agent, environment, eta_client, gpc, item_import, receipts, services, signing, submission
 from .models import (TaxBuyerProfile, TaxChannelRule, TaxCodeRequest, TaxDocument, TaxDocumentLine, TaxExclusionBasis,
-                     TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxReceipt, TaxReceiptBranchConfig, TaxReceiptLine, TaxSigningJob)
+                     TaxIssuerProfile, TaxItemProfile, TaxLineReview, TaxReceipt, TaxReceiptBranchConfig, TaxReceiptLine, TaxSigningJob,
+                     TaxAgentFileJob)
 
 logger = logging.getLogger('elrezeiky.tax_invoicing')
 MODULE = 'tax_invoicing'
@@ -762,13 +764,23 @@ def agent_next_job(request):
     if not _agent_allowed(request):
         return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
     signing.expire_stale_jobs()
+    version = egs_agent.agent_version(request.headers)
+    try:
+        egs_agent.record_seen(version)
+    except Exception:       # "last seen" is for the screen; it never stops a signing job
+        logger.warning('signing agent: last-seen not recorded', exc_info=True)
     with transaction.atomic():
         job = TaxSigningJob.objects.select_for_update(skip_locked=True).filter(status=TaxSigningJob.PENDING).first()
-        if job is None:
-            return Response({'job': None})
-        job.status, job.claimed_at = TaxSigningJob.CLAIMED, timezone.now()
-        job.save(update_fields=['status', 'claimed_at'])
-    return Response({'job': {'id': job.id, 'kind': job.kind, 'canonical_text': job.canonical_text, 'sha256': job.canonical_sha256}})
+        if job is not None:
+            job.status, job.claimed_at = TaxSigningJob.CLAIMED, timezone.now()
+            job.save(update_fields=['status', 'claimed_at'])
+    if job is not None:     # signing first, unchanged for every agent version
+        return Response({'job': {'id': job.id, 'kind': job.kind, 'canonical_text': job.canonical_text, 'sha256': job.canonical_sha256}})
+    if version >= egs_agent.MIN_AGENT_VERSION:      # an old agent never receives a file job
+        file_job = egs_agent.claim_next()
+        if file_job is not None:
+            return Response({'job': egs_agent.payload(file_job)})
+    return Response({'job': None})
 
 
 @api_view(['POST'])
@@ -792,6 +804,71 @@ def agent_job_result(request, pk):
             services.audit('signing_smoke_result', actor=job.requested_by, entity='signing', entity_id=job.pk,
                            after={'passed': row.passed, 'thumbprint': row.thumbprint, 'detail': row.detail})
     return Response({'ok': True})
+
+
+# File jobs for the agent (S5, egs_agent.py): same token + account, and only agents of version >= 2. The download
+# is the stored version file byte for byte (application/octet-stream, not an attachment: never stamped by the
+# export middleware); the result may carry the live sheet as a multipart upload (20 MB cap, xlsx + DataEntry).
+AGENT_FILE = matrix_permission(MODULE, get=('finalize',), post=('finalize',))
+
+
+def _file_agent_refusal(request):
+    if not _agent_allowed(request) or egs_agent.agent_version(request.headers) < egs_agent.MIN_AGENT_VERSION:
+        return Response({'detail': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, AGENT_FILE])
+def agent_file_download(request, pk):
+    refused = _file_agent_refusal(request)
+    if refused:
+        return refused
+    job = TaxAgentFileJob.objects.select_related('version').filter(
+        pk=pk, kind=TaxAgentFileJob.KIND_WRITE, status=TaxAgentFileJob.CLAIMED).first()
+    if job is None:
+        return Response({'detail': 'no such claimed job'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        data = egs_agent.download_bytes(job)
+    except egs_agent.EgsAgentError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
+    services.audit('egs_sheet_served', entity=egs_agent.ENTITY, entity_id=job.pk,
+                   after={'version': job.version.number, 'sha256': job.sha256, 'size': len(data), 'mode': job.mode})
+    response = HttpResponse(data, content_type='application/octet-stream')
+    response['X-Content-SHA256'] = job.sha256
+    response['X-Job-Mode'] = job.mode
+    response['Content-Length'] = str(len(data))
+    return response
+
+
+@api_view(['POST'])
+@parser_classes([JSONParser, MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated, AGENT_FILE])
+def agent_file_result(request, pk):
+    refused = _file_agent_refusal(request)
+    if refused:
+        return refused
+    try:
+        declared = int(request.META.get('CONTENT_LENGTH') or 0)
+    except ValueError:
+        declared = 0
+    job = TaxAgentFileJob.objects.select_related('version').filter(pk=pk, status=TaxAgentFileJob.CLAIMED).first()
+    if job is None:
+        return Response({'detail': 'no such claimed job'}, status=status.HTTP_404_NOT_FOUND)
+    if declared > egs_agent.MAX_UPLOAD + 1024 * 1024:       # refused before the body is read; the job fails
+        egs_agent.record_result(job, TaxAgentFileJob.FAILED, error=egs_agent.UPLOAD_TOO_BIG)
+        return Response({'detail': egs_agent.UPLOAD_TOO_BIG}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+    upload = request.FILES.get('file')
+    if upload is not None and upload.size > egs_agent.MAX_UPLOAD:
+        egs_agent.record_result(job, TaxAgentFileJob.FAILED, error=egs_agent.UPLOAD_TOO_BIG)
+        return Response({'detail': egs_agent.UPLOAD_TOO_BIG}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+    try:
+        job = egs_agent.record_result(job, str(request.data.get('status') or ''), result=request.data.get('result'),
+                                      error=str(request.data.get('error') or ''),
+                                      upload=upload.read() if upload is not None else None)
+    except egs_agent.EgsAgentError as exc:
+        return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'ok': True, 'status': job.status})
 
 
 # ── E-receipts ─────────────────────────────────────────────────────────────────────────────────

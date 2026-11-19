@@ -16,13 +16,27 @@ Returns raw CDR rows; the counting rule lives in apps.forecasting.callcount so t
 CSV importer and the live pull produce identical numbers.
 """
 from decouple import config
+from django.conf import settings
+
+
+class CdrNotLive(RuntimeError):
+    """The live PBX is off limits in this process (a test run without ISSABEL_TESTS_ALLOW_LIVE)."""
+
+
+def _live() -> bool:
+    return getattr(settings, 'ISSABEL_CDR_LIVE', True)
 
 
 def cdr_configured() -> bool:
+    if not _live():         # a test run never reaches the real PBX
+        return False
     return bool(config('ISSABEL_CDR_USER', default='') and config('ISSABEL_CDR_PASSWORD', default=''))
 
 
 def get_cdr_connection():
+    if not _live():
+        raise CdrNotLive('Issabel CDR is not reachable from a test run (settings.ISSABEL_CDR_LIVE is '
+                         'False) — mock config.issabel or set ISSABEL_TESTS_ALLOW_LIVE=True.')
     import pymysql
     return pymysql.connect(
         host=config('ISSABEL_CDR_HOST', default='192.168.1.155'),

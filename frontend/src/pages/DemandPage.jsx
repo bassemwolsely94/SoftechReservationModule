@@ -663,7 +663,7 @@ useEffect(() => {
             </button>
             {canSeeDashboard && (
               <button
-                onClick={() => navigate('/demand/dashboard')}
+                onClick={() => navigate('/demand/dashboard')} data-perm="analytics:view"
                 className="btn-secondary text-sm" data-tour="demand-list-dashboard">
                 📊 لوحة الطلب الضائع
               </button>

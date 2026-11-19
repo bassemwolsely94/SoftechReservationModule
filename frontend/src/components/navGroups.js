@@ -22,10 +22,10 @@ export const NAV_GROUPS = [
     id: 'operations', label: 'العمليات', section: 'العمليات',
     items: [
       { to: '/pos',           icon: '🧾', label: 'نقطة البيع',        roles: ['admin','call_center','pharmacist','salesperson','supervisor'] },
-      { to: '/pos/exceptions', icon: '🛠️', label: 'مركز الاستثناءات', roles: ['admin','supervisor','pharmacist'] },
+      { to: '/pos/exceptions', icon: '🛠️', label: 'مركز الاستثناءات', roles: ['admin','supervisor','pharmacist'], module: 'pos' },
       { to: '/usage-print',   icon: '🏷️', label: 'طريقة الاستخدام',   roles: [], cap: 'can_usage_print' },
       { to: '/reservations',  icon: '📋', label: 'الحجوزات',         roles: ['admin','call_center','pharmacist','salesperson','supervisor','viewer','quality_manager'] },
-      { to: '/missed-sales',  icon: '🛒', label: 'مبيعات فائتة',     roles: ['admin','call_center','pharmacist','salesperson','supervisor','quality_manager'] },
+      { to: '/missed-sales',  icon: '🛒', label: 'مبيعات فائتة',     roles: ['admin','call_center','pharmacist','salesperson','supervisor','quality_manager'], module: 'reservations' },
       { to: '/transfers',     icon: '🔀', label: 'طلبات التحويل',    roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/transits',      icon: '🚛', label: 'التحويلات قيد النقل', roles: ['admin','call_center','pharmacist','salesperson','purchasing','supervisor','viewer','quality_manager'] },
       { to: '/demand',        icon: '🔍', label: 'الطلب الضائع',     roles: ['admin','call_center','pharmacist','salesperson','supervisor','viewer','quality_manager'] },
@@ -33,6 +33,7 @@ export const NAV_GROUPS = [
       { to: '/followups/reminders', icon: '💬', label: 'تذكيرات الصرف واتساب', roles: ['admin','call_center','supervisor','quality_manager'] },
       { to: '/delivery',      icon: '🚚', label: 'توصيل الطلبات',    roles: ['admin','pharmacist','delivery','call_center','supervisor','quality_manager'] },
       { to: '/delivery/dispatch', icon: '🧭', label: 'لوحة التوزيع',  roles: ['admin','call_center','supervisor','quality_manager'] },
+      { to: '/marketplace',   icon: '🛍️', label: 'المنصات والتطبيقات', roles: [], cap: 'can_marketplace' },
       { to: '/rider',         icon: '🛵', label: 'مهام السائق',       roles: ['admin','delivery','supervisor'] },
       { to: '/stock-count',   icon: '📦', label: 'الجرد الفعلي',     roles: ['admin','pharmacist','supervisor','quality_manager'] },
       { to: '/tasks',         icon: '✅', label: 'المهام التشغيلية', roles: null, module: 'tasks' },
@@ -76,8 +77,8 @@ export const NAV_GROUPS = [
       { to: '/stock-audit',          icon: '🔎', label: 'تدقيق حركات المخزون', roles: ['admin','supervisor','quality_manager'], cap: 'can_stock_audit' },
       { to: '/shortage',             icon: '🚨', label: 'النواقص',         roles: ['admin','pharmacist','call_center','salesperson','purchasing','supervisor','quality_manager'] },
       { to: '/market-shortage',      icon: '📉', label: 'نواقص السوق',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
-      { to: '/phantom-sales',        icon: '🩹', label: 'مبيعات وهمية',    roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
-      { to: '/cash-optimization',    icon: '💰', label: 'تحسين الكاش',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'] },
+      { to: '/phantom-sales',        icon: '🩹', label: 'مبيعات وهمية',    roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'], module: 'analytics' },
+      { to: '/cash-optimization',    icon: '💰', label: 'تحسين الكاش',     roles: ['admin','pharmacist','purchasing','supervisor','quality_manager'], module: 'analytics' },
       { to: '/catalog-intelligence', icon: '🧠', label: 'ذكاء الكتالوج',   roles: ['admin','pharmacist','purchasing'] },
       { to: '/chronic-classifier',   icon: '🧬', label: 'الأدوية المزمنة',  roles: ['admin','pharmacist','call_center','supervisor'] },
       { to: '/composition',          icon: '⚗️', label: 'تنقية المواد الفعّالة', roles: ['admin','pharmacist','purchasing','supervisor'] },
@@ -97,6 +98,8 @@ export const NAV_GROUPS = [
       { to: '/invoices',          icon: '🧾', label: 'فواتير الموردين',   roles: ['admin','purchasing'] },
       { to: '/pricing-approvals', icon: '🏷️', label: 'موافقات الأسعار', roles: ['admin','purchasing','pharmacist','supervisor','quality_manager'] },
       { to: '/discount-alignment', icon: '🎯', label: 'مطابقة الخصومات', roles: ['admin','purchasing','pharmacist','supervisor','quality_manager'] },
+      // supplier-portal robot: shown by the matrix grant rpa.view (the server checks every action)
+      { to: '/rpa/portals',      icon: '🛒', label: 'مواقع الموردين',   roles: null, module: 'rpa' },
     ],
   },
   {
@@ -109,6 +112,10 @@ export const NAV_GROUPS = [
       { to: '/targets',     icon: '🎯', label: 'الأهداف البيعية',  roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/kpi-board',   icon: '📊', label: 'لوحة مؤشرات الفروع', roles: ['admin','supervisor','purchasing','pharmacist','quality_manager','viewer'] },
       { to: '/salesperson-board', icon: '🧑‍💼', label: 'متابعة المندوبين', roles: ['admin','supervisor','purchasing'] },
+      // The lost-demand dashboard is an analytics page (the server checks analytics view): purchasing
+      // holds analytics but not demand, so it had no menu way in (UAT W2, owner 2026-11-19). The
+      // recovery list stays under «الطلب الضائع»: its follow-up actions are demand work.
+      { to: '/demand/dashboard', icon: '🔍', label: 'تحليلات الطلب الضائع', roles: null, module: 'analytics' },
       { to: '/forecast-scenarios', icon: '🔮', label: 'سيناريوهات التنبؤ', roles: ['admin','supervisor','purchasing'] },
       { to: '/insights',    icon: '📋', label: 'التقارير السردية', roles: ['admin','supervisor','purchasing','quality_manager','viewer'] },
       { to: '/referral-stats', icon: '🩺', label: 'إحالات الأطباء', roles: ['admin','supervisor','pharmacist','quality_manager','viewer'] },
@@ -147,7 +154,7 @@ export const NAV_GROUPS = [
     items: [
       { to: '/audit',            icon: '🛡️', label: 'المراجعة والأمان', roles: ['admin','supervisor','quality_manager'] },
       { to: '/users',            icon: '👤', label: 'المستخدمون',        roles: ['admin','supervisor'] },
-      { to: '/phone-alerts',     icon: '📲', label: 'تنبيهات الموبايل',   roles: ['admin','supervisor'] },
+      { to: '/phone-alerts',     icon: '📲', label: 'تنبيهات الموبايل',   roles: null, module: 'alerts' },
       { to: '/permissions',      icon: '🔐', label: 'الصلاحيات',         roles: ['admin'] },
       { to: '/erp-permissions',  icon: '🧩', label: 'صلاحيات Softech',   roles: ['admin'] },
       { to: '/settings',         icon: '⚙️', label: 'الإعدادات',         roles: ['admin','pharmacist'] },

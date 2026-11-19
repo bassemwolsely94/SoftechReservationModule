@@ -932,7 +932,9 @@ class EtaReconUncodedItem(models.Model):
 class EtaCodeUsage(models.Model):
     """One code-usage request ETA holds for us in one system (the portal's code-usage history), whatever its status
     (Approved / Rejected / Submitted). A read-only mirror: only eta_codes.fetch writes it. `itemcode` is our SOFTECH
-    code once the EGS/GS1 code is matched to an item."""
+    code once the EGS/GS1 code is matched to an item. It is as long as `item_code`: ETA holds EGS codes whose tail is
+    not one SOFTECH code (EG-<tax id>-124510124197, two codes joined; ASSET100), and on Postgres bulk_update casts to
+    the column's length, which cut those tails silently while the field was 10 long."""
     system = models.CharField(max_length=12, choices=ETA_SYSTEMS)
     code_type = models.CharField(max_length=10)
     item_code = models.CharField(max_length=100)
@@ -942,7 +944,7 @@ class EtaCodeUsage(models.Model):
     status = models.CharField(max_length=30, blank=True, default='')
     gpc = models.CharField(max_length=10, blank=True, default='')
     request_id = models.CharField(max_length=30, blank=True, default='')
-    itemcode = models.CharField(max_length=10, blank=True, default='', db_index=True)
+    itemcode = models.CharField(max_length=100, blank=True, default='', db_index=True)
     fetched_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -955,8 +957,9 @@ class TaxEgsSheetVersion(models.Model):
     know which items are coded. Version 1 is the owner's file as seeded; later versions are builds that only code
     uncoded rows or append rows (S3). The file lives under TAX_EGS_SHEET_DIR (newest 10 kept); the row is kept for
     good. `coded_itemcodes` = every SOFTECH itemcode coded in this version (the receipts recon reads it)."""
-    SOURCE_SEED, SOURCE_BUILD = 'seed', 'build'
-    SOURCE_CHOICES = [(SOURCE_SEED, 'ملف المالك'), (SOURCE_BUILD, 'بناء')]
+    SOURCE_SEED, SOURCE_BUILD, SOURCE_FETCH = 'seed', 'build', 'fetch'
+    SOURCE_CHOICES = [(SOURCE_SEED, 'ملف المالك'), (SOURCE_BUILD, 'بناء'),
+                      (SOURCE_FETCH, 'الملف الحالي على جهاز الختم')]
 
     number = models.IntegerField(unique=True)
     sha256 = models.CharField(max_length=64)
@@ -973,6 +976,10 @@ class TaxEgsSheetVersion(models.Model):
                                  related_name='+')
     built_at = models.DateTimeField(auto_now_add=True)
     note = models.CharField(max_length=300, blank=True, default='', db_default='')
+    # True = every part of the owner's workbook is in this file (a seed, a fetched copy, or a build that edited
+    # cells in place). Builds before 2026-11-18 re-saved the workbook through openpyxl and lost its other parts:
+    # those versions are never downloaded in full nor written to the seal PC.
+    whole_workbook = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         verbose_name = 'نسخة ملف أكواد المحصّل'
@@ -980,3 +987,46 @@ class TaxEgsSheetVersion(models.Model):
 
     def __str__(self):
         return f'EGS sheet v{self.number}'
+
+
+class TaxAgentFileJob(models.Model):
+    """A file task for the signing agent on the seal PC (doc 36, S5). `egs_fetch` = upload a copy of the live
+    Invoicer sheet (read only, the agent copies it first); `egs_write` = replace the live sheet with `version`'s file
+    (mode 'write', only with TAX_EGS_SHEET_AGENT_WRITE_ENABLED) or only report what it would do (mode 'preview').
+    `sha256` = the hash of exactly the bytes the download serves; `live_sha256` = the live file the write expects
+    to replace (the last fetch's). A 'held' write is never offered to the agent: the last fetch showed hand edits
+    (apps/tax_invoicing/egs_agent.py). Folders on the seal PC come from the agent's own config, never from here."""
+    KIND_FETCH, KIND_WRITE = 'egs_fetch', 'egs_write'
+    KIND_CHOICES = [(KIND_FETCH, 'قراءة الملف الحالي'), (KIND_WRITE, 'كتابة نسخة')]
+    MODE_PREVIEW, MODE_WRITE = 'preview', 'write'
+    MODE_CHOICES = [(MODE_PREVIEW, 'معاينة'), (MODE_WRITE, 'كتابة')]
+    PENDING, CLAIMED, DONE, FAILED, BUSY, HELD = 'pending', 'claimed', 'done', 'failed', 'busy', 'held'
+    STATUS_CHOICES = [(PENDING, 'بالانتظار'), (CLAIMED, 'لدى جهاز الختم'), (DONE, 'تم'), (FAILED, 'فشل'),
+                      (BUSY, 'الملف مفتوح في المحصّل'), (HELD, 'موقوف: تعديلات يدوية في الملف')]
+    OPEN = (PENDING, CLAIMED)
+
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    mode = models.CharField(max_length=7, choices=MODE_CHOICES, default=MODE_PREVIEW, db_default=MODE_PREVIEW)
+    status = models.CharField(max_length=7, choices=STATUS_CHOICES, default=PENDING, db_default=PENDING,
+                              db_index=True)
+    version = models.ForeignKey(TaxEgsSheetVersion, null=True, blank=True, on_delete=models.PROTECT,
+                                related_name='agent_jobs')
+    sha256 = models.CharField(max_length=64, blank=True, default='', db_default='')
+    live_sha256 = models.CharField(max_length=64, blank=True, default='', db_default='')
+    then_write = models.BooleanField(default=False, db_default=False)     # fetch: ask for a write on its result
+    override = models.BooleanField(default=False, db_default=False)       # write: «اكتب فوقها» by a person
+    fetched_file = models.CharField(max_length=200, blank=True, default='', db_default='')
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True, default='', db_default='')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'مهمة ملف لجهاز الختم'
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return f'{self.kind} #{self.pk} ({self.status})'

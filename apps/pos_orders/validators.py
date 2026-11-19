@@ -77,7 +77,11 @@ def validate_order(order, *, for_push=False):
         errs['store_code'] = 'كود المخزن مطلوب.'
 
     # ── customer / channel ────────────────────────────────────────────────────
-    if order.channel in CLAIM_CHANNELS and not (order.softech_pic or '').strip():
+    # A platform account's sale (doc 38) needs no PIC: native «عميل دائم» sales often carry none
+    # (phcode NULL, verified branch 140 2026-11-17/18) — the platform's customer is not our PIC.
+    from .platform_accounts import is_platform_order
+    platform_sale = is_platform_order(order)
+    if order.channel in CLAIM_CHANNELS and not platform_sale and not (order.softech_pic or '').strip():
         errs['softech_pic'] = 'عميل التعاقد/التأمين يتطلب تحديد العميل (PIC).'
     # Home-Delivery PIC is a "must provide to SAVE" rule (SOFTECH config) — enforce it only on
     # the live push, never on the dry-run preview, so previewing a delivery order isn't blocked.
@@ -139,8 +143,13 @@ def validate_order(order, *, for_push=False):
     # ── payments ──────────────────────────────────────────────────────────────
     pays = list(order.payments.all())
     pay_errs = []
+    # platform account (doc 38): 100% آجل — a cash/card row would leave the platform's balance short
+    from .platform_accounts import CREDIT_ONLY_MSG
+    platform = order.doc_kind == 'sale' and platform_sale
     for i, p in enumerate(pays):
         pe = {}
+        if platform and p.pay_type != 'credit':
+            pe['pay_type'] = CREDIT_ONLY_MSG
         if p.pay_type not in PAYTYPE_TO_SOFTECH:
             pe['pay_type'] = 'طريقة سداد غير صحيحة.'
         if _d(p.amount) <= 0:
@@ -174,7 +183,8 @@ def validate_order(order, *, for_push=False):
             due = _d(order.doc_value) - _d(order.change_discount)
             if abs(total - due) > Decimal('0.01'):
                 errs['payments'] = f'مجموع طرق السداد ({total}) لا يساوي المطلوب ({due}).'
-        if order.channel in CLAIM_CHANNELS and not order.source_companies_raw:
+        # platform sale: the writer emits the bare companiesitems row native «عميل دائم» sales carry
+        if order.channel in CLAIM_CHANNELS and not platform_sale and not order.source_companies_raw:
             errs['claim'] = ('بيانات المريض/المطالبة مطلوبة لعميل التعاقد/التأمين '
                              '(انسخ من أمر يحتوي عليها حتى يكون قابلاً للإرجاع).')
 

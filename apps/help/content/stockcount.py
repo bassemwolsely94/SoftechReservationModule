@@ -436,7 +436,7 @@ SCREENS = [
             {'target': 'stockcount-sessions-new', 'label': T('+ جلسة جديدة', '+ New session'),
              'text': T('نموذج جلسة جرد: الاسم، كود الفرع، النوع، الفترة، المستندات والفلاتر. الأكواد حروف وأرقام فقط (مثل 130 أو IT001).',
                        'Count session form: name, branch code, type, period, documents, filters. Codes are letters and digits only (e.g. 130, IT001).'),
-             'open_hint': T('يظهر لمن عنده صلاحية الإنشاء.', 'Shows for users with create permission.'),
+             'open_hint': T('يظهر لمن عنده صلاحية «إنشاء» في موديول الجرد (مصفوفة الصلاحيات).', 'Shows for users with "create" on the stock-count module (Permissions Matrix).'),
              'more': T(
                  'بيفتح «إنشاء جلسة جرد جديدة»: اسم الجلسة وكود الفرع (إجباريين)، النوع (مبني على الحركات، جرد شامل، جرد مفلتر)، الفترة وأكواد المستندات، وفلاتر كود المستخدم والتصنيف.\n• «بدء سريع» بيملا الإعداد لحالات شائعة زي مبيعات النهارده أو جرد شامل للفرع.\n• «إنشاء الجلسة» بيحفظها «مسودة» ويختارها — لسه مفيش لقطة. الزر بيظهر لمن له الصلاحية.',
                  'Opens "Create a new count session": session name and branch code (required), the type (transaction-based, full count, filtered count), the period and document codes, and user-code and category filters.\n• "Quick start" fills the setup for common cases such as today\'s sales or a full branch count.\n• "Create session" saves it as "Draft" and selects it — no snapshot yet. The button shows to those with permission.')},
@@ -529,8 +529,9 @@ SCREENS = [
              'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
              'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر حالة الجلسات يقبل الآن أكثر من اختيار', 'The session status filter now takes several choices'),
+        'updated': '2026-11-17',
+        'change_note': T('زر «+ جلسة جديدة» بيظهر لكل من عنده صلاحية «إنشاء» في موديول الجرد (زي الصيدلي)، مش للمدير بس',
+                         'The "+ New session" button shows to anyone with "create" on the stock-count module (e.g. a pharmacist), not only admins'),
     },
     {
         'key': 'stockcount.mobile',
@@ -540,7 +541,7 @@ SCREENS = [
                      'يعمل بدون إنترنت مؤقتاً — يُسجَّل عند عودة الاتصال.',
                      'The list of count sessions, and inside a session live counting in the aisle: scan or search the item, type the counted quantity, and the difference vs the snapshot shows at once. '
                      'Works briefly offline — it is saved when the connection returns.'),
-        'audience': T('العادّون في الفرع.', 'Counters at the branch.'),
+        'audience': T('العدّادون في الفرع، وكل من له صلاحية الجرد.', 'Counters at the branch, and anyone with stock-count access.'),
         'tips': [T('بتشوف جلسات جرد فرعك بس.', "You see your own branch's count sessions only.")],
         'steps': [
             T('افتح الجلسة (يجب أن تكون اللقطة مأخوذة من الكمبيوتر).', 'Open the session (the snapshot must already be taken on the desktop).'),
@@ -602,8 +603,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية الجرد في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives stock-count access'),
     },
     {
         'key': 'stockcount.daily_mobile',

@@ -400,8 +400,8 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد زر «ملغي» على الكارت.', 'After the "Cancelled" button on a card.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والأولوية والحالة تقبل الآن أكثر من اختيار معاً', 'Branch, priority and status filters now take several choices at once'),
+        'updated': '2026-11-17',
+        'change_note': T('اللي مقفول عنده رقم العميل مبيشوفهوش كمان في تصدير Excel والإيصال ومشاركة واتساب', 'Staff whose customer numbers are hidden no longer see them in the Excel export, the receipt or the WhatsApp share either'),
     },
     {
         'key': 'reservations.list',
@@ -627,6 +627,8 @@ SCREENS = [
               'After dispensing: the "ERP document match" section looks for the sales invoice in SOFTECH (by document number or automatically by items and date) and shows whether it is matched, partial or not found.'),
         ],
         'tips': [
+            T('لو صنف إضافي ما اتحفظش وقت إنشاء الحجز، بيظهر تنبيه أحمر فوق الصفحة باسمه وكميته — أضفه من «الأصناف».',
+              'If an extra item failed to save when the reservation was created, a red notice at the top names it and its quantity — add it from "Items".'),
             T('صور الروشتة الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل) من غير ما تتأثر القراءة. تقدر تمسح صورة أو تبدّلها زي الأول، والصورة المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
               'New prescription photos are shrunk automatically (longest side 2000 px) without hurting readability. You can delete or replace a photo as before; a removed photo is kept 30 days before it is gone for good.'),
             T('الملف اللي عدّى مدة الاحتفاظ بيظهر مكانه «أُزيل وفق سياسة الاحتفاظ» ومعاه التاريخ.',
@@ -791,8 +793,8 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('الصور الجديدة بتتصغّر والمحذوفة بتتحفظ ٣٠ يومًا.', 'New photos are shrunk and deleted ones are kept 30 days.'),
+        'updated': '2026-11-18',
+        'change_note': T('صنف إضافي ما اتحفظش وقت الإنشاء بيظهر في تنبيه بدل ما يختفي.', 'An extra item that failed to save at creation now shows in a notice instead of vanishing.'),
     },
     {
         'key': 'reservations.mobile_list',

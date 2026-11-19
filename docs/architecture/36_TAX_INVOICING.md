@@ -4,7 +4,8 @@ E-invoices for finalized insurance claims and e-receipts for branch POS sales, s
 Authority (ETA). API prefix `/api/tax-invoicing/`, RBAC module `tax_invoicing`, route `/tax-invoicing`.
 
 **Live sending is off.** Flags `TAX_ETA_SUBMIT_ENABLED` and `TAX_ERECEIPT_SUBMIT_ENABLED` default to False and
-go through `writer_allowed`. No SOFTECH writes: e-receipt import is SELECT only.
+go through `writer_allowed`. No SOFTECH writes: e-receipt import is SELECT only. The one write outside the server
+is the Invoicer's sheet on the seal PC, behind `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` (off = preview; batch S5 below).
 
 ## Boundaries
 
@@ -183,7 +184,10 @@ treatment the accountant already confirmed.
 reads `codetypes/requests/my` (read only; `--probe` fetches one page, prints its shape, writes nothing). Rows are
 kept as the best per code by status rank (approved/active 3, submitted/pending 2, other 1); a partial fetch never
 downgrades a row. `eta_codes.report()` buckets: on ETA but not in the sheet, in the sheet but not on ETA, and counts
-(usages, active, matched, unmatched, sheet).
+(usages, active, matched, unmatched, sheet). `itemcode` (the matched SOFTECH code) is as long as `item_code`: ETA
+holds EGS codes whose tail is not one SOFTECH code (124510124197 = two codes joined, ASSET100); before migration
+0023 (2026-11-19) the field was 10 long and Postgres' `bulk_update` cast cut those tails to 10 characters. They match
+no item, so the sheet build lists them as "no tax profile".
 
 **GPC GS1 load.** `manage.py load_gpc_bricks --gs1-json PATH` loads the GS1 brick list (May 2026) with `source` set;
 the workbook's own bricks keep `source='workbook'`. `gpc.known(code, official_only=True)` accepts only a brick from a
@@ -255,24 +259,33 @@ The panel polls `GET codes/sheet/` only while a build runs. Nothing new to write
 **Newly coded item** = no keep-out decision, VAT treatment confirmed (taxable 14 or exempt; another confirmed rate is
 skipped «نسبة الضريبة المعتمدة ليست 14٪ ولا معفاة»), and a code ETA production holds (profile approved with
 `coding_env='production'`, or an approved/active production `EtaCodeUsage` matched to the item). Each one either codes
-its existing uncoded row or gets a new row after the last item row (style of the row above, inside the table and
-autofilter). Skipped items are listed with their reason (unconfirmed VAT, no brick, no tax id, ...).
+its existing uncoded row or gets a new row after the last item row (a copy of that row: styles and formulas, inside
+the table and autofilter when they reached it). Skipped items are listed with their reason (unconfirmed VAT, no brick,
+no tax id, ...).
 
-**Coded rows are never rewritten.** A..K stay as they are. Only L, N, O, P change form: every row's formula is written
-as the value it computes (the Invoicer may read without Excel recalculating). A value the owner typed instead of a
-formula is kept on an untouched row even when it differs from the formula (item 114109: N typed 1). Text written from
-SOFTECH / ETA that starts with '=' is saved as text, never as a formula.
+**The owner's workbook is edited in place, never re-saved** (`egs_xlsx.patch`, 2026-11-18). The build changes only
+the DataEntry cells of the rows it codes or appends, inside the sheet's XML; every other part of the file (other
+sheets, defined names, styles, shared strings, Power Query connections, the data model, custom XML, the calculation
+chain) keeps its bytes, and the build refuses a result where any other part changed. On a row it codes it sets A, G
+(with the date style of a coded row) and K (the confirmed rate), and fills B..F and I only where they are empty (a 0
+brick counts as empty): a typed name or brick is never replaced. L, N, O, P keep their formulas and get the results
+Excel would compute, so a reader that does not recalculate reads the right values. Rows it does not write keep their
+exact XML, typed values included (item 114109: N typed 1). Text is written as inline strings, never as a formula.
+
+**Versions built before this** (2026-11-18, version 2 on the office) re-saved the workbook through openpyxl: they lost
+the owner's other parts, turned L–P into values and replaced typed names. They carry `whole_workbook = False`: their
+full download answers 409, the seal PC never gets them, and the next build starts from the latest whole version (a
+seed, a fetched copy or an in-place build).
 
 **Checks** (any failure → no version, Arabic reasons shown in the panel): same sheet names and DataEntry header; no
 duplicate J (100 and '100' are the same) and no duplicate coded B; every coded row has A in {EGS, GS1}, B, I ≠ 0, K in
-{0, 0.14}; L–P equal their formulas' values (or the kept typed values); no keep-out item newly coded; coded-row count ≥
-the held version's; the saved file re-opens with the same counts. A held sheet that already has a duplicate itemcode is
+{0, 0.14}; on the rows written, L–P equal their formulas' values; no keep-out item newly coded; coded-row count ≥
+the held version's; no zip part other than DataEntry (and its tables) changed; the saved file re-opens with the same
+counts. A held sheet that already has a duplicate itemcode is
 refused this way until the owner fixes it.
 
 **Versions** (`TaxEgsSheetVersion`): files under `TAX_EGS_SHEET_DIR` (default `private/egs_sheets`, outside media and
 git); the newest 10 files are kept, every row stays. The receipts reconciliation reads `latest().coded_itemcodes`.
-Saving with openpyxl keeps defined names (e.g. `CodeTypes`) and the other sheets, but formulas on the other sheets
-lose their cached values until Excel recalculates them.
 
 **Downloads** (`GET codes/sheet/<n>/download/?kind=full|new`, approve, audited `egs_sheet_download`): `full` = the
 stored workbook as `ElRezeiky_Bulk_EGS_Items.xlsx`; `new` = the header and only the rows that version added or coded.
@@ -280,8 +293,96 @@ Not passed through `core/export_safety` (an input workbook, not a report; docume
 export middleware's stamp changes the document properties only, so a downloaded file's hash differs from the stored
 one; the cells do not.
 
-**Replacing the Invoicer's file** is done by a person until S5: download the full file, put it in D:\invoicer_mini,
-then close Excel — an open file stops receipt uploads.
+**Replacing the Invoicer's file** by hand still works: download the full file, put it in D:\invoicer_mini, then close
+Excel — an open file stops receipt uploads. From S5 the seal PC's agent can do it (next section).
+
+## ملف الأكواد للمحصّل — الكتابة عبر جهاز الختم (batch S5)
+
+The signing agent on the seal PC (192.168.1.8, `deploy/tax_signing_agent`, README "The bulk EGS sheet") reads and
+writes the live `D:\invoicer_mini\ElRezeiky_Bulk_EGS_Items.xlsx`. Server code `egs_agent.py`; agent endpoints in
+`views.py`; person endpoints in `egs_sheet_views.py`; panel part «الجهاز المحلي (192.168.1.8)» (`EgsAgentPart.jsx`)
+inside «ملف أكواد الإيصالات (المحصّل)».
+
+**Outward write channel.** `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` (`config/writers.py`, default False, writer instance
+only, forced False in tests) is the only thing that lets a file on the seal PC be replaced. It is the owner's switch.
+Off = every write job is a **preview**: the agent downloads and checks the version and reports what it would do (live
+size/hash, in use or not, backup folder writable, `would_write`), and writes nothing in D:\invoicer_mini.
+
+**Jobs** (`TaxAgentFileJob`): `egs_fetch` (upload a copy of the live sheet) and `egs_write` (mode `preview` | `write`,
+the version, `sha256` of the served bytes, `live_sha256` = the live file the write expects to replace). Status
+pending → claimed → done | failed | busy; `held` = a write that is never offered (hand edits). One open job of each
+kind (advisory lock). A claimed job with no answer in 30 min, or a pending one nobody collected in 24 h, fails.
+Person endpoints (`/api/tax-invoicing/codes/sheet/agent/`): `GET` state (view): switch, agent last poll + version,
+last fetch with its difference from the latest version, the hold that stands, the last 20 jobs; `POST fetch/`,
+`POST write/` (`{override: true, note}` = «اكتب فوقها», a reason required), `POST import/` (`{job, allow_removals}`) —
+all `approve`. The panel polls only while a job is pending or claimed.
+
+**Handshake.** The agent sends `X-Tax-Agent-Version`; the server records the last poll and version (`SystemSetting`
+`tax_signing_agent_seen`, at most once a minute). File jobs go only to version ≥ 2, and only when no signing job
+waits; an old agent (no header) keeps receiving signing jobs only. The panel warns «حدّث برنامج الختم على جهاز الختم»
+below version 2. The agent polls only while the eSeal token is plugged in, so file jobs, like signing, wait for it.
+
+**Exact-bytes download.** `GET signing-agent/files/<job>/download/` (agent token + finalize account) serves exactly the
+stored version file as `application/octet-stream`, with `X-Content-SHA256` and `X-Job-Mode`. No export stamping.
+The server re-hashes the file first (changed → the job fails). The agent checks the hash of the bytes it received
+against both the job and the header; a mismatch or truncated download → failed, nothing written.
+
+**Switch re-checked twice.** At claim: a `write` job created while the switch was on is claimed as `preview` if it is
+off now (audited `egs_sheet_switch_off_at_claim`). At serve: a `write` job is not served once the switch is off
+(fails, `egs_sheet_switch_off_at_serve`). The agent writes only when the job and `X-Job-Mode` both say `write`.
+
+**Swap on the agent (write mode).** The live file must still hash to the job's `live_sha256` (else **refused,
+`live_changed`**, untouched). Then: write `ElRezeiky_Bulk_EGS_Items.new.xlsx` beside it and re-check its hash → copy
+the live file to `backup\ElRezeiky_Bulk_EGS_Items.<YYYYMMDD-HHMMSS>.xlsx` and check the copy is the expected live file
+→ keep the newest **30** backups → `os.replace(new, live)` → read back and compare. A file held by Invoicer/Excel
+(PermissionError) is retried 5 times, 24 s apart (≈2 min), then the job reports **busy**, `.new` is removed and the
+live file is untouched. Before **each** `os.replace` attempt the live file is copied and re-hashed: an edit saved
+while the agent waited → refused (`live_changed`), the edit kept. A stale `.new` is removed at the start of a write
+(not in preview); a backup copy that fails is removed. Any other failure also leaves the live file as it was. The
+server counts a write-mode `done` only when the report has `written: true` and `live_sha256_after` = the version's
+hash; otherwise the job is recorded **failed** and audited `egs_sheet_write_anomaly`. Paths come only from the agent's
+`config.ini` (`invoicer_dir`); the server never sends one. The agent never opens the live file in place: a fetch
+copies it to a temp file first.
+
+**Hand edits** = the live file (last fetch) is none of our versions: compared by hash first, else by the set of
+coded itemcodes among the newest 50 versions. So a re-saved file with the same coded itemcodes is still that version,
+and an edit that leaves the coded itemcodes the same (e.g. a changed name or price on a coded row) is **invisible**
+to this check. When the live file is the latest version, «اكتب الآن» does nothing. When it has hand edits, a write is
+**held** (`egs_sheet_write_held`, once per fetch) and the panel shows what the live file has that the latest version
+lacks and the reverse. Two ways out:
+- «استورد التعديلات» — the fetched copy becomes the next version (`source='fetch'`, audited `egs_sheet_imported`).
+  Only the **latest fetch** may be imported, only while no real write came after it (an older copy would undo
+  coded items), and not while a write job is pending or claimed (checked under the job lock). A copy that lacks coded items of the latest version needs `allow_removals` (the checkbox «أقبل حذف
+  أصناف» shows only then; the removed list is audited). The copy is re-hashed and re-validated first.
+- «اكتب فوقها» — a person, with a written reason, writes the latest version over the edits (audited
+  `egs_sheet_write_override`); still a preview while the switch is off.
+
+**Uploads** (fetch results): 20 MB cap (checked on the declared length before reading), must be a zip that unpacks to
+≤ 200 MB and an xlsx with the DataEntry header. The newest 10 fetched copies are kept under
+`TAX_EGS_SHEET_DIR/fetched/`.
+
+**Nightly** `egs_sheet_agent_nightly` (03:00, `SCHEDULER_JOB_GUARDS`): one fetch; with the switch on, its result asks
+for a write (nothing when the live file already is the latest version, held on hand edits).
+
+**Audit** (entity `egs_sheet_agent`): `egs_sheet_fetch_requested`, `egs_sheet_write_requested`,
+`egs_sheet_write_override`, `egs_sheet_write_held`, `egs_sheet_served`, `egs_sheet_fetched`, `egs_sheet_written`,
+`egs_sheet_previewed`, `egs_sheet_busy`, `egs_sheet_failed`, `egs_sheet_switch_off_at_claim` / `_at_serve`;
+`egs_sheet_imported` on entity `egs_sheet`.
+
+**Rollback.**
+1. Turn `TAX_EGS_SHEET_AGENT_WRITE_ENABLED` off: every later write is a preview, and a claimed write is not served.
+2. On the seal PC: close Excel and Invoicer, copy the chosen backup from `D:\invoicer_mini\backup` to
+   `D:\invoicer_mini\ElRezeiky_Bulk_EGS_Items.xlsx`.
+3. Press «اقرأ الملف الحالي» so the server knows the live file again.
+4. To roll back the agent itself: copy the previous `agent.py` back; an old agent gets signing jobs only.
+
+A rollback lasts only while the switch is off, or until a newer version supersedes it (a restored backup is one of
+our versions, so the next write with the switch on replaces it).
+
+**One job at a time.** A sheet write held by Invoicer can occupy the agent loop for several minutes (retries while
+reading, backing up and swapping); signing jobs wait meanwhile. Acceptable while signing via the agent is not live;
+revisit before it is. The panel's `busy` (which drives its polling) counts a claimed job, or a pending one only when
+the agent is version ≥ 2; the state GET expires stale jobs first.
 
 ## طلبات الإنتاج (production code requests, batch S4)
 

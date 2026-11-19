@@ -145,10 +145,11 @@ class CallCenterTests(CallBase):
         self.assertEqual(row['call_to_purchase_pct'], 50.0)
 
     def test_team_new_pics_sold_and_branch_manager_refused(self):
-        from apps.forecasting.models import CallCenterConfig
-        cfg = CallCenterConfig.get_solo()
-        cfg.sales_agent_usercodes = ['u1']
-        cfg.save()
+        # the team = the call-center crew's seller codes in the period (crews piece 2b Part B)
+        from apps.crews.models import Crew, CrewManualMember
+        crew = Crew.objects.create(name='الكول سنتر', type='call_center')
+        CrewManualMember.objects.create(crew=crew, mode='include', softech_usercode='u1',
+                                        valid_from=D(2026, 1, 1), reason='t')
         self.call(D(2026, 10, 3), 'N1', ext='15')
         # N1's first fact day (10-05) has rows for u1 and u2 -> counts once
         self.assertEqual(call_center(self.flt(), self.mgmt)['team_new_pics_sold'], 1)

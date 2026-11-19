@@ -63,6 +63,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
     can_usage_print  = drf_serializers.SerializerMethodField()   # Project 5: flag ON + RBAC usage_print view
     can_hr_attendance = drf_serializers.SerializerMethodField()  # admin or a named attendance grantee
+    can_marketplace  = drf_serializers.SerializerMethodField()   # doc 38: flag ON + RBAC marketplace view
     features = drf_serializers.SerializerMethodField()           # switches for features that ship dark
 
     def get_features(self, obj):
@@ -97,6 +98,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.usage_print.access import can_open
         return can_open(obj.user)
 
+    def get_can_marketplace(self, obj):
+        from apps.marketplace.access import can_open
+        return can_open(obj.user)
+
     class Meta:
         model  = StaffProfile
         fields = [
@@ -106,7 +111,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
             'features',
         ]
 
@@ -830,19 +835,24 @@ def my_permissions_view(request):
     Non-admins receive only their role's RoleModuleAccess grants;
     missing entries default to False.
     """
-    profile = getattr(request.user, 'staff_profile', None)
+    role, perms = effective_permissions(request.user)
+    return Response({'role': role, 'permissions': perms})
+
+
+def effective_permissions(user):
+    """-> (role, {module: {action: bool}}) exactly as /api/users/my-permissions/ answers it.
+    Shared with the UAT expectations export so the browser suite judges against the same truth."""
+    profile = getattr(user, 'staff_profile', None)
     role = getattr(profile, 'role', 'viewer')
 
     # Admins are unrestricted
-    if role == 'admin' or request.user.is_superuser:
+    if role == 'admin' or user.is_superuser:
         all_modules = [v for v, _ in MODULE_CHOICES]
         all_actions = [v for v, _ in ACTION_CHOICES]
-        perms = {m: {a: True for a in all_actions} for m in all_modules}
-        return Response({'role': 'admin', 'permissions': perms})
+        return 'admin', {m: {a: True for a in all_actions} for m in all_modules}
 
     rows = RoleModuleAccess.objects.filter(role=role).values('module', 'action', 'is_allowed')
     perms = {}
     for row in rows:
         perms.setdefault(row['module'], {})[row['action']] = row['is_allowed']
-
-    return Response({'role': role, 'permissions': perms})
+    return role, perms

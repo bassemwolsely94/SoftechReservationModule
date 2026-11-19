@@ -442,8 +442,9 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('تصحيح الصنف في مراجعة الاستيراد بقى بنفس خانة البحث (Ctrl+F1 للبحث المتقدم)', 'Correcting an item in the import review uses the shared search box (Ctrl+F1 for advanced search)'),
+        'updated': '2026-11-18',
+        'change_note': T('بعد «إنشاء» القائمة الجديدة بتتفتح على طول وبتظهر في القائمة من غير تحديث الصفحة؛ تصحيح الصنف في مراجعة الاستيراد بقى بنفس خانة البحث (Ctrl+F1 للبحث المتقدم)',
+                         'After "Create" the new list opens straight away and shows in the list without reloading the page; correcting an item in the import review uses the shared search box (Ctrl+F1 for advanced search)'),
     },
     {
         'key': 'shortage.market',
@@ -580,8 +581,8 @@ SCREENS = [
              'text': T('يعرض المستبعدة بسبب واحد بس، والرقم = عددها.', 'Shows dismissed items with one reason only; the number = their count.'),
              'open_hint': T('في تبويب «المستبعدة».', 'In the "Dismissed" tab.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('التصنيف يقبل أكثر من اختيار', 'The class filter takes several choices'),
+        'updated': '2026-11-19',
+        'change_note': T('الشاشة بتفتح أسرع: حسابات المحرك بتتعمل مرة واحدة لكل تشغيل، ولو التغييرات ما اتحملتش يظهر زر «إعادة المحاولة»', 'Opens faster: the engine figures are worked out once per run, and if the changes fail to load a «إعادة المحاولة» (retry) button shows'),
     },
     {
         'key': 'shortage.phantom',
@@ -657,7 +658,7 @@ SCREENS = [
         'title': T('النواقص (موبايل)', 'Shortages (mobile)'),
         'summary': T('تسجيل النواقص من بين الأرفف: افتح قائمة (أو أنشئ واحدة بعنوان اختياري)، أضف الصنف الناقص بسرعة، أو الصق قائمة، أو بالصوت، أو بصورة، ثم «إرسال القائمة». يعمل بدون إنترنت مؤقتاً.',
                      'Record shortages in the aisle: open a list (or create one with an optional title), add missing items quickly, or paste a list, use voice or a photo, then "Submit list". Works briefly offline.'),
-        'audience': T('العاملون في الفروع.', 'Branch staff.'),
+        'audience': T('موظفو الفروع، وكل من له صلاحية النواقص.', 'Branch staff, and anyone with shortage access.'),
         'tips': [T('بتشوف قوائم فرعك بس.', "You see your own branch's lists only.")],
         'steps': [
             T('«قائمة نواقص جديدة» ← «إنشاء وبدء التسجيل».', '"New shortage list" → "Create and start".'),
@@ -737,7 +738,7 @@ SCREENS = [
                        'After pasting, or after "📷 Photo" fills the lines — review them first. Offline, it imports once the connection is back (📴).'),
              'open_hint': T('اضغط «📋 لصق قائمة» في قائمة مفتوحة.', 'Tap "📋 Paste a list" in an open list.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('التبويب يظهر الآن لكل من له صلاحية النواقص في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives shortage access'),
     },
 ]

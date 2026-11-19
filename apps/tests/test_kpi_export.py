@@ -21,8 +21,9 @@ TARGET_ROWS, ACH_ROWS = [8, 10, 12, 14, 16], [9, 11, 13, 15, 17]
 from apps.forecasting.engine import round_up_step, ForecastEngine
 
 
-def _roll(branch, y, m, metric, value):
-    K.objects.create(branch=branch, year=y, month=m, metric=metric, value=Decimal(str(value)))
+def _roll(branch, y, m, metric, value, crew=None):
+    K.objects.create(branch=branch, crew=crew, year=y, month=m, metric=metric,
+                     value=Decimal(str(value)))
 
 
 class KpiExportTests(TestCase):
@@ -297,16 +298,18 @@ class KpiExportLayoutTests(TestCase):
         # planted out of display order on purpose: the export must follow display_order
         for i, (code, order) in enumerate(sorted(FIVE)):
             _plant_branch(code, order, 1.0 + i * 0.15)
-        cc = Branch.objects.create(softech_branch_id='CC', code='CC', name='Call Center',
-                                   name_ar='الكول سنتر', kind=Branch.KIND_CALL_CENTER)
+        # the call-center block reads the call-center crew's rows (crews piece 2b Part B); same
+        # figures as the old fake «CC» branch, so the workbook stays identical to the golden file
+        from apps.crews.models import Crew
+        cc = Crew.objects.create(name='الكول سنتر', type='call_center')
         for (y, m, k) in [(2025, 10, 1.0), (2026, 9, 1.1), (2026, 8, 1.2)]:
-            _roll(cc, y, m, K.M_CASH_DELIVERY, round(200_000 * k))
-            _roll(cc, y, m, K.M_GROSS_PROFIT, round(40_000 * k))
-            _roll(cc, y, m, K.M_BEAUTY, round(20_000 * k))
-            _roll(cc, y, m, K.M_CUSTOMERS, round(500 * k))
+            _roll(None, y, m, K.M_CASH_DELIVERY, round(200_000 * k), crew=cc)
+            _roll(None, y, m, K.M_GROSS_PROFIT, round(40_000 * k), crew=cc)
+            _roll(None, y, m, K.M_BEAUTY, round(20_000 * k), crew=cc)
+            _roll(None, y, m, K.M_CUSTOMERS, round(500 * k), crew=cc)
         for metric, v in [(K.M_CASH_DELIVERY, 75_000), (K.M_GROSS_PROFIT, 14_000),
                           (K.M_BEAUTY, 6_000), (K.M_CUSTOMERS, 150), (K.M_CALL_COUNT, 900)]:
-            _roll(cc, 2026, 10, metric, v)
+            _roll(None, 2026, 10, metric, v, crew=cc)
 
     def _build(self):
         return build_target_workbook(2026, 10, models=('a', 'b', 'avg'), days_elapsed=8)
