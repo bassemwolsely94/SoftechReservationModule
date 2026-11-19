@@ -150,12 +150,12 @@ SCREENS = [
                        'The log of disposal or return decisions for expired items: draft → approval (manager/quality) → "Done" after applying it manually in SOFTECH. The system never deducts stock automatically.')},
             {'key': 'return_window', 'title': T('📆 تقويم المرتجع', '📆 Return calendar'),
              'body': T('أي مورد يأخذ أي تشغيلة مرتجع، وقبل أي تاريخ. النافذة من شهرين قبل شهر الانتهاء حتى شهر بعده (حسب سياسة المورد)، والحالات: «تفتح الشهر القادم»، «داخل النافذة»، «تُغلق هذا الشهر»، «فاتت النافذة». '
-                       'السطور: رفوف الفروع ومخازن الرئيسي ومخزن 105 (لا 102 ولا 103 ولا الفرع المغلق). المورد مستنتج من فواتير الشراء بنفس الصنف وشهر الصلاحية، وبجانبه «الثقة»: مطابق، نفس الشهر، أكثر من مورد (اختر واحداً)، أو مورد غير معروف. '
+                       'السطور: رفوف الفروع ومخازن الرئيسي ومخزن 105 (لا 102 ولا 103 ولا الفرع المغلق). المورد مستنتج من فواتير الشراء بنفس الصنف وشهر الصلاحية، وبجانبه «الثقة»: مطابق، نفس الشهر، أكثر من مورد (اختر واحداً)، أو مورد غير معروف. لو مفيش فاتورة بنفس شهر الصلاحية، المورد يُؤخذ من سجل الشراء — آخر من باع لنا الصنف خلال 36 شهراً قبل انتهائه — ويظهر «من سجل الشراء» (تخمين: راجعه قبل «طلب مرتجع»). '
                        '«طلب مرتجع» يُنشئ مسودة في «إتلاف/مرتجع» (مرة واحدة لكل سطر)، و«⬇️ تصدير للمورد» يُخرج ملفاً لإدخاله في نظام المورد، ثم تُسجّل رد المورد في السطر (مقبول / جزئي / مرفوض). عمود «سابقاً» يلخّص ردوده السابقة على نفس الصنف. '
                        'عند إدخال مستند المرتجع (120) في SOFTECH يُغلق السطر تلقائياً بالمورد والصنف — مستند المرتجع لا يحمل تاريخ صلاحية، فالمطابقة لا تفرّق بين التشغيلات. سطور الفرع تقول «أرسل للرئيسي قبل…» (قبل إغلاق النافذة بـ 14 يوماً افتراضياً)، والنقل تحويل عادي في SOFTECH. '
                        'سياسات الموردين في أسفل التبويب يعدّلها قسم المشتريات، ويُسجَّل كل تعديل.',
                        'Which supplier takes back which batch, and by when. The window runs from two months before the expiry month to one month after (per supplier policy); the states are "opens next month", "in window", "closes this month" and "window missed". '
-                       'Lines are branch shelves, HQ stores and store 105 (not 102, 103 or the closed branch). The supplier is inferred from purchase invoices with the same item and expiry month, shown with a "confidence": exact, same month, several suppliers (pick one), or unknown supplier. '
+                       'Lines are branch shelves, HQ stores and store 105 (not 102, 103 or the closed branch). The supplier is inferred from purchase invoices with the same item and expiry month, shown with a "confidence": exact, same month, several suppliers (pick one), or unknown supplier. When no invoice has the same expiry month, the supplier comes from the purchase history — whoever last sold us the item within 36 months before its expiry — shown as "from purchase history" (a guess: check it before "Request return"). '
                        '"Request return" creates a draft in "Disposal/return" (once per line), "⬇️ Export for supplier" produces a sheet to enter in the supplier\'s own system, then you record the supplier\'s answer on the line (accepted / partial / rejected). The "Before" column summarises past answers for the same item. '
                        'When the return document (120) is entered in SOFTECH, the line closes by itself on supplier and item — the return document carries no expiry date, so the match cannot tell batches apart. Branch lines say "send to HQ before…" (14 days before the window closes by default); the move is a normal SOFTECH transfer. '
                        'Supplier policies at the bottom of the tab are edited by purchasing, and every change is logged.')},
@@ -361,8 +361,8 @@ SCREENS = [
              'when': T('النافذة الافتراضية من شهرين قبل شهر الانتهاء لشهر بعده.', 'The default window is two months before the expiry month to one month after.'),
              'open_hint': T('بعد «+ مورد» أو «تعديل».', 'After "+ Supplier" or "Edit".')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والمخزن والتصنيف والحالة والمورد والموقع تقبل الآن أكثر من اختيار',
-                         'Branch, store, class, status, supplier and location filters now take several choices'),
+        'updated': '2026-11-19',
+        'change_note': T('«📆 تقويم المرتجع»: سطور بلا فاتورة بنفس شهر الصلاحية تأخذ المورد من سجل الشراء («من سجل الشراء») بدل «مورد غير معروف»',
+                         '"📆 Return calendar": lines with no invoice in the same expiry month take the supplier from the purchase history ("from purchase history") instead of "unknown supplier"'),
     },
 ]

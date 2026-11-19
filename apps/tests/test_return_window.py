@@ -106,6 +106,74 @@ class AttributionTests(Base):
         self.assertEqual(match[('D', D(2026, 12, 15))]['confidence'], 'none')
 
 
+def _bought(item, supplier, day, doc='P1', doccode='10'):
+    from apps.catalog.models import Item
+    from apps.procurement.models import PurchaseLine
+    return PurchaseLine.objects.create(branch_code='100', supplier_code=supplier, doc_number=doc, doc_date=day,
+                                       item_code=item, item=Item.objects.filter(softech_id=item).first(),
+                                       doccode=doccode, is_return=doccode == '120',
+                                       net_value=Decimal('100'), raw_value=Decimal('100'))
+
+
+class HistoryAttributionTests(Base):
+    """C03: no purchase-expiry entry for the item and month → the supplier who sold us the item,
+    labelled «من سجل الشراء», a person confirms."""
+
+    def att(self, *pairs):
+        from apps.batches.return_calendar import attribute
+        return attribute(list(pairs))
+
+    def test_one_policy_supplier_in_history(self):
+        _bought('D', '565', D(2025, 6, 1))
+        a = self.att(('D', D(2026, 12, 15)))[('D', D(2026, 12, 15))]
+        self.assertEqual((a['confidence'], a['suppliers'], a['source']), ('history', ['565'], 'history'))
+
+    def test_two_policy_suppliers_need_a_person(self):
+        _bought('D', '565', D(2025, 6, 1)); _bought('D', '260', D(2026, 3, 1), doc='P2')
+        a = self.att(('D', D(2026, 12, 15)))[('D', D(2026, 12, 15))]
+        self.assertEqual((a['confidence'], a['suppliers']), ('ambiguous', ['260', '565']))   # most recent first
+
+    def test_a_supplier_without_policy_is_named_not_unknown(self):
+        _bought('D', '777', D(2026, 2, 1))
+        a = self.att(('D', D(2026, 12, 15)))[('D', D(2026, 12, 15))]
+        self.assertEqual((a['confidence'], a['suppliers'], a['others']), ('none', [], ['777']))
+
+    def test_out_of_range_purchases_and_returns_do_not_count(self):
+        _bought('D', '565', D(2023, 6, 1))                        # more than 36 months before the expiry
+        _bought('D', '565', D(2027, 1, 5), doc='P2')               # after the expiry
+        _bought('D', '260', D(2026, 5, 1), doc='P3', doccode='120')  # a return to the supplier
+        a = self.att(('D', D(2026, 12, 15)))[('D', D(2026, 12, 15))]
+        self.assertEqual((a['confidence'], a['suppliers'], a['others']), ('none', [], []))
+
+    def test_an_expiry_entry_always_wins_over_history(self):
+        _entry('D', '260', D(2026, 12, 15))
+        _bought('D', '565', D(2026, 6, 1))
+        a = self.att(('D', D(2026, 12, 15)))[('D', D(2026, 12, 15))]
+        self.assertEqual((a['confidence'], a['suppliers'], a['source']), ('exact', ['260'], 'entries'))
+
+    def test_calendar_line_request_and_no_policy_name(self):
+        from apps.batches.return_calendar import request_returns
+        from apps.batches.models import ExpiryDisposalRecord
+        from apps.procurement.models import SupplierProfile
+        _bought('D', '565', D(2026, 1, 1))
+        _bought('F', '888', D(2026, 1, 1), doc='P2')
+        SupplierProfile.objects.create(supplier_code='888', supplier_name='S888 from profile')
+        _stock('D')
+        _stock('F', qty='2')
+        c = self.cal()
+        d = next(l for l in c['lines'] if l['item_code'] == 'D')
+        self.assertEqual((d['supplier_code'], d['confidence'], d['confidence_label']), ('565', 'history', 'من سجل الشراء'))
+        self.assertEqual(c['no_policy'], [{'supplier_code': '888', 'supplier_name': 'S888 from profile', 'value': 20.0}])
+        self.assertEqual(c['suppliers']['565']['open']['value'], 100.0)
+        from apps.tests.factories import make_user
+        _, staff, _ = make_user('buyer_c03', role='purchasing', branch=self.hq)
+        made = request_returns([{'branch_code': '130', 'store_code': '101', 'item_code': 'D',
+                                 'batch_no': 'L1', 'expiry_date': '2026-12-15', 'supplier_code': '565'}],
+                               staff, today=TODAY)
+        self.assertEqual(made, 1)
+        self.assertEqual(ExpiryDisposalRecord.objects.get(item_code='D').match_confidence, 'history')
+
+
 class CalendarTests(Base):
 
     def setUp(self):
