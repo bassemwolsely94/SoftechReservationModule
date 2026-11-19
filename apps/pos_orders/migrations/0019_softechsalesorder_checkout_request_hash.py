@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('pos_orders', '0017_missed_sales_and_calls'),
+        ('pos_orders', '0018_poslivecheckgap'),
     ]
 
     operations = [

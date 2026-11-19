@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 
 from apps.pos_orders import writer
 from apps.pos_orders.models import SoftechSalesOrder
-from .factories import make_branch, make_branch2, make_call_center, make_user
+from .factories import make_branch, make_branch2, make_call_center, make_supervisor, make_user
 
 BASE = '/api/pos-orders/'
 CHECKOUT = BASE + 'checkout/'
@@ -88,7 +88,9 @@ class CheckoutSwitchTests(TestCase):
 class CheckoutFlowTests(TestCase):
     def setUp(self):
         self.branch = make_branch()
-        _, _, self.cc = make_call_center('cc_ck_flow')
+        # supervisor: the claim-channel baskets carry a 15% discount, which only a manager may set
+        # (views.validate_contract_discount_role — same rule on both paths)
+        _, _, self.cc = make_supervisor('sup_ck_flow')
 
     def test_preview_returns_server_totals_and_saves_nothing(self):
         r = self.cc.post(PREVIEW, _checkout(self.branch.id), format='json')
@@ -525,7 +527,9 @@ class OldNewParityTests(TestCase):
 
     def setUp(self):
         self.branch = make_branch()
-        _, _, self.cc = make_call_center('cc_ck_parity')
+        # supervisor: the claim-channel baskets carry a 15% discount, which only a manager may set
+        # (views.validate_contract_discount_role — same rule on both paths)
+        _, _, self.cc = make_supervisor('sup_ck_parity')
 
     def _old(self, basket, tenders):
         r = self.cc.post(BASE, basket, format='json')

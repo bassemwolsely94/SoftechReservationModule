@@ -490,7 +490,7 @@ already-rounded unit price by the fraction without rounding the line. On the old
 «مجموع طرق السداد لا يساوي المطلوب» (> 0.01) or as payment rows one piaster off `docvalue` (≤ 0.01).
 
 **Files:** `apps/pos_orders/checkout.py` (endpoints), `pricing.resolve_tenders`, `golden.py` + command
-`pos_checkout_golden` (§4.1, prepared, not run), migration `0018_softechsalesorder_checkout_request_hash`,
+`pos_checkout_golden` (§4.1, prepared, not run), migration `0019_softechsalesorder_checkout_request_hash`,
 `frontend/src/hooks/usePosOrder.js` (new branch; old `submit` body unchanged except the shared payload builder),
 `frontend/e2e/pos-checkout.spec.js`, tests `apps/tests/test_pos_checkout*.py`.
 
