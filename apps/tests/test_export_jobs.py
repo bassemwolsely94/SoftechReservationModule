@@ -235,7 +235,7 @@ class PolicyAndAccessTests(TestCase):
         from core.middleware.module_access import required
         self.assertEqual(required('/api/purchasing/export/jobs/', 'POST'), required('/api/purchasing/export/', 'GET'))
         self.assertEqual(required('/api/purchasing/isr/fulfilment/export/jobs/', 'POST'),
-                         required('/api/purchasing/isr/fulfilment/export/', 'GET'))
+                         required('/api/purchasing/isr/fulfilment/export/', 'POST'))
         self.assertIsNone(required('/api/export-jobs/3/download/', 'GET'))     # own gate in the view
 
 

@@ -252,6 +252,18 @@ _LINE_REMOVAL = re.compile(r'^/api/(?:'
     r')$')
 
 
+def _export_method(path):
+    """The method the direct export at `path` serves: GET when its view has a GET handler, else POST
+    (a body export). An export job's start asks what that request asks (Stage 4)."""
+    from django.urls import Resolver404, resolve
+    try:
+        func = resolve(path).func
+    except Resolver404:
+        return 'GET'
+    cls = getattr(func, 'cls', None) or getattr(func, 'view_class', None)
+    return 'GET' if cls is None or hasattr(cls, 'get') else 'POST'
+
+
 def required(path, method):
     """(module, allowed_actions) the request needs, or None when not checked."""
     parts = path.split('/')
@@ -260,10 +272,12 @@ def required(path, method):
     prefix = parts[2]
     if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
         return None
-    # Performance Stage 4: starting an export job (POST …/export/jobs/) asks what the direct export
-    # (GET …/export/) asked — it builds the same file; the view keeps the export's own checks.
+    # Performance Stage 4: starting an export job (POST …/export/jobs/) asks exactly what the direct
+    # export asks — with ITS method (GET for most, POST for a body export such as ISR fulfilment):
+    # it builds the same file, and the view keeps the export's own checks.
     if method.upper() == 'POST' and path.endswith('/export/jobs/'):
-        return required(path[:-len('jobs/')], 'GET')
+        export_path = path[:-len('jobs/')]
+        return required(export_path, _export_method(export_path))
     # Small daily counts (Project 2) have their own gate, like /api/stock-audit/: every salesperson
     # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
     # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)
