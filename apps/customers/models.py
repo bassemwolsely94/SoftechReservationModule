@@ -512,6 +512,9 @@ class PurchaseHistory(models.Model):
 
     class Meta:
         ordering = ['-invoice_date']
+        # perf Stage 3: MAX(invoice_date) for the freshness bar (was a 1.1 GB seq scan, ~0.4 s).
+        # The Cairo-date expression index (migration 0035) serves the date-range filters.
+        indexes = [models.Index(fields=['invoice_date'], name='customers_ph_invoice_date_idx')]
 
     @property
     def is_return(self):
