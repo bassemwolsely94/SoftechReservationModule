@@ -108,7 +108,8 @@ class BriefTests(Base):
         with mock.patch.object(kpi_board, 'latest_complete_date', return_value=TODAY - dt.timedelta(days=1)):
             t = brief.compose(self.b130, TODAY).text
             self.assertLess(t.index('*اليوم*'), t.index('*أمس*'))
-            self.assertIn('صنف ب — كمية 20 — ينتهي 2027-02-01 (200 ج.م)', t)
+            # the lot's name comes from the stock-expiry mirror (SOFTECH's item name); the fixture stores the code
+            self.assertIn('• B — كمية 20 — ينتهي 2027-02-01 (200 ج.م)', t)
             with mock.patch('apps.insights.today.actions', side_effect=RuntimeError('boom')):
                 t2 = brief.compose(self.b130, TODAY).text
         self.assertNotIn('*اليوم*', t2)
