@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, status
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
@@ -36,7 +37,7 @@ class AuditLogViewSet(StableOrderingMixin, viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module        = 'audit'               # any object's trail = audit view (Batch 4, Z-4)
     rbac_actions       = {None: ()}            # a method the route lacks: DRF answers 405
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['model_name', 'user']     # action: multi-select, see filter_queryset
     search_fields      = ['user_name', 'object_repr', 'note']
     # Grid headers (AuditPage): action code, who, entity type, when. Nothing from `changes` / `ip_address`.

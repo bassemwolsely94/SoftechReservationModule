@@ -9,6 +9,7 @@ from decimal import Decimal
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Max, Min, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import NullIf
 
+from apps.catalog.wildcard import wq
 from apps.customers import access as cust_access
 from apps.customers.models import Customer
 from apps.pbx.cdr import phone_key
@@ -45,7 +46,7 @@ def _search(qs, q):
     q = (q or '').strip()
     if not q:
         return qs
-    cond = Q(name__icontains=q) | Q(softech_pic=q)
+    cond = wq(q, 'name') | Q(softech_pic=q)    # exact id: a PIC code is typed whole
     key = phone_key(q)
     if key:
         t = key[-8:]       # prefilter on the last 8 digits (stored forms differ); exact phone_key compare below

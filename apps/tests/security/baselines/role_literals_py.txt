@@ -183,7 +183,7 @@ apps/users/permissions.py::IsAdminOrCallCenter.has_permission::admin,call_center
 apps/vision/views.py::corpus_accuracy::admin,pharmacist,purchasing,supervisor x1
 apps/vision/views.py::corpus_stats::admin,pharmacist,purchasing,supervisor x1
 apps/vouchers/coupon_dashboard.py::digest_roles::admin,supervisor x1
-apps/vouchers/coupon_views.py::view_roles::admin,purchasing,quality_manager,supervisor x1
+apps/vouchers/coupon_views.py::<module>::admin,purchasing,quality_manager,supervisor x1
 config/settings.py::<module>::admin,call_center,supervisor x1
 config/settings_e2e.py::<module>::accountant,admin,call_center,delivery,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x1
 core/permissions.py::IsNotViewer.has_permission::viewer x1

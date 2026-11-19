@@ -923,6 +923,7 @@ class InsuranceClaimBillingGroup(models.Model):
         if self.filter_relative_degree:
             qs = qs.filter(relative_degree=self.filter_relative_degree)
         if self.filter_dept_name:
+            # saved criterion for a bulk action, not a search box; stays literal contains (S4)
             qs = qs.filter(dept_name__icontains=self.filter_dept_name)
         if self.filter_hi_type_code:
             qs = qs.filter(hi_type_code=self.filter_hi_type_code)

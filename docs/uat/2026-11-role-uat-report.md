@@ -243,8 +243,8 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
   staff; `DAILY_COUNT_ENABLED` at go-live; quality manager `hr:create`; delivery cash rules (above);
   office `DEBUG` off; the rider-shell menu (W2 P2).
 - **Follow-up fixes:** ~~the 60 W2 P1 screens~~ (resolved, `claude/uat-server-gates`, see W2); ~~126 unhandled-403 screens~~ (fixed, `claude/uat-403-screens`: the 13 screens route-guard on their module, so a role without it lands on the dashboard);
-  ~~`/market-shortage` loading~~ (fixed, PR 188); backend role lists still looser than
-  the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons); the 103
+  ~~`/market-shortage` loading~~ (fixed, PR 188); ~~backend role lists still looser than
+  the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons)~~ (fixed, `claude/uat-backend-role-lists`: all four ask the matrix; only procurement changes who may act — the purchasing role gains run / reclassify / override, a bare is_staff account loses them); the 103
   stricter-than-matrix checks (W3).
 - **Housekeeping:** `makemigrations --check` on main wants a migration deleting `reservations.ActivityLog`
   (not from this round); harness fixes from W2 into the shared lib.

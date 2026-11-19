@@ -16,6 +16,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { analyticsApi } from '../api/client'
+import { wildcardMatch } from '../utils/wildcard'
 
 const today   = () => new Date().toISOString().slice(0, 10)
 const daysAgo = d => { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().slice(0, 10) }
@@ -45,7 +46,7 @@ function SearchableMultiSelect({ label, options = [], selected = [], onChange, c
   }, [])
 
   const filtered = query.trim()
-    ? options.filter(o => (o.label || '').toLowerCase().includes(query.trim().toLowerCase()))
+    ? options.filter(o => wildcardMatch(o.label, query))
     : options
 
   const toggle = code => {

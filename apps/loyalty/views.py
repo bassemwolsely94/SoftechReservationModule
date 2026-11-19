@@ -62,7 +62,7 @@ class TransactionListView(generics.ListAPIView):
     def get_queryset(self):
         return PointTransaction.objects.filter(
             account__customer_id=self.kwargs['customer_id']
-        ).order_by('-created_at')[:100]
+        ).select_related('created_by').order_by('-created_at')[:100]
 
 
 class CanAdjustLoyaltyPoints(BasePermission):
@@ -98,6 +98,8 @@ class AdjustPointsView(APIView):
         → Writes Django PointTransaction (IncentiveTransaction lane)
         → Updates points_balance / points_lifetime
         → Call centre redeems these as vouchers via the normal redemption flow
+        → A negative `points` deducts (D-14): reason required, ≤ LOYALTY_REFERRAL_DEDUCT_MAX
+          per deduction unless admin, never below zero
 
     POST {
         points:       int,
@@ -106,6 +108,45 @@ class AdjustPointsView(APIView):
     }
     """
     permission_classes = [IsAuthenticated, CanAdjustLoyaltyPoints]
+
+    @staticmethod
+    def _deduct_referral(account, staff, operator, points, reason):
+        """Referral-points deduction (owner decision D-14, 2026-11-19).
+
+        Before, a negative referral delta was refused (and earlier still it ADDED points —
+        full audit BE-8). The rule now: the adjust roles may deduct with a written reason, at
+        most LOYALTY_REFERRAL_DEDUCT_MAX points per deduction; more than that is admin only.
+        Never below zero. The ledger row is the audit: who (created_by), what (points, source
+        'referral'), when, why (reason) and the balance before/after, taken under the row lock.
+        """
+        if not reason:
+            return Response({'detail': 'اكتب سبب خصم نقاط الإحالة',
+                             'error_code': 'loyalty_reason_required'}, status=400)
+        cap = settings.LOYALTY_REFERRAL_DEDUCT_MAX
+        if points > cap and not (staff and staff.is_admin):
+            return Response({'detail': f'أقصى خصم لنقاط الإحالة {cap} نقطة في المرة — الأكثر لمدير النظام فقط',
+                             'error_code': 'loyalty_referral_deduct_over_limit',
+                             'limit': cap}, status=403)
+        try:
+            tx = account.adjust_points(
+                -points,
+                reason=reason,
+                by_staff=staff,
+                notes=f'خصم نقاط إحالة يدوي — المشغّل: {operator}',
+                source_type='referral',
+                allow_negative=False,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc), 'error_code': 'loyalty_insufficient_points'},
+                            status=400)
+        return Response({
+            'adjust_type':        'referral',
+            'crm_points_balance': tx.balance_after,
+            'balance_before':     tx.balance_before,
+            'delta':              -points,
+            'reason':             reason,
+            'transaction_id':     tx.pk,
+        })
 
     def post(self, request, customer_id):
         from apps.loyalty.pic_bridge import (
@@ -149,16 +190,14 @@ class AdjustPointsView(APIView):
 
         # ── Lane A: referral points — Django only, no SOFTECH required ────────
         if adjust_type == 'referral':
-            # add_points() takes abs(): a negative referral delta used to ADD points (full audit
-            # 2026-11-15, BE-8). Refuse instead of guessing: a referral deduction lane is an owner decision.
             if delta < 0:
-                return Response({'detail': 'نقاط الإحالة إضافة فقط — الخصم غير متاح من هنا'},
-                                status=400)
+                return self._deduct_referral(account, staff, operator, -delta, reason)
             tx = account.add_points(
                 points      = delta,
                 reason      = reason or 'إحالة عميل',
                 source_type = 'referral',
                 notes       = f'تعديل يدوي من مركز الاتصال — المشغّل: {operator}',
+                created_by  = staff,
             )
             return Response({
                 'adjust_type':    'referral',

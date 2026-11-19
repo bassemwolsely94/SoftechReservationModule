@@ -79,9 +79,13 @@ TR_MORE_DHEADER = T(
     '• Once the transfer is issued in SOFTECH a "🚛 In transit ← document number" button opens the shipment on the "In transit" screen.')
 TR_MORE_DDETAILS = T(
     'الفرع الطالب والمصدر، الحالة، مين أنشأه ومين راجعه، ومرجع ERP لو اتكتب.\n'
-    '• تحته قسم «مطابقة مستند ERP» بيقولك المستند في SOFTECH مطابق ولا جزئي ولا مش موجود.',
+    '• تحته قسم «مطابقة مستند ERP» بيقولك المستند في SOFTECH مطابق ولا جزئي ولا مش موجود.\n'
+    '• المطابقة بتدوّر على صرف التبادل (125) في الفرع المصدر. لو الرقم لقيته تحت فرع تاني بس، النتيجة «جزئي» — راجعه بنفسك؛ '
+    'ولو في أكتر من فرع تاني، النتيجة «غير موجود».',
     'Requesting and supplying branch, status, who created and who reviewed it, and the ERP reference if entered.\n'
-    '• Below it the "ERP document match" section tells you whether the SOFTECH document is matched, partial or missing.')
+    '• Below it the "ERP document match" section tells you whether the SOFTECH document is matched, partial or missing.\n'
+    '• The match looks for the transfer issue (125) at the supplying branch. If the number is found only under another branch, '
+    'the result is "Partial" — check it yourself; if it is at more than one other branch, the result is "Not found".')
 TR_MORE_DITEMS = T(
     'الأصناف بالكمية المطلوبة، والمعتمدة بعد الموافقة، والمستلمة بعد تأكيد الاستلام.\n'
     '• قارن المعتمد بالمستلم — أي فرق محتاج متابعة بين الفرعين.',
@@ -832,7 +836,7 @@ SCREENS = [
                        'Count the shipment before confirming — closing is final. The SOFTECH receipt (doc 25) is still required.'),
              'open_hint': T('للفرع الطالب لما الحالة «تم الإرسال للـ ERP».', 'For the requesting branch when the status is "Sent to ERP".')},
             {'target': 'transfers-detail-cancel', 'label': T('إلغاء الطلب', 'Cancel request'),
-             'text': T('يلغي الطلب بعد تأكيد. متاح قبل الاعتماد بس.', 'Cancels the request after a confirmation. Only before approval.'),
+             'text': T('يلغي الطلب. متاح قبل الاعتماد بس. اضغط مرتين: أول ضغطة الزر يحمرّ ويكتب «تأكيد إلغاء الطلب؟» لمدة 4 ثواني، والتانية تنفّذ.', 'Cancels the request. Only before approval. Press twice: the first press turns it red ("Confirm cancel?") for 4 s; the second does it.'),
              'warn': T('الإلغاء نهائي ومش بيترجع. لو الفرع المصدر بدأ يجهّز كلّمه الأول.',
                        'Cancelling is final. If the supplier already started preparing, call them first.'),
              'open_hint': T('للفرع الطالب لما الطلب مسودة أو بانتظار الموافقة أو يحتاج تعديل.', 'For the requesting branch on a draft, waiting or needs-revision request.')},
@@ -907,7 +911,7 @@ SCREENS = [
              'when': T('لأي سؤال أو تنسيق على نفس الطلب بدل التليفون.', 'For any question or coordination on this request instead of a phone call.'),
              'warn': T('الرسالة بتوصل للفرعين على طول؛ الحذف بعدها بيسيب علامة «محذوفة» ظاهرة.', 'The message reaches both branches at once; deleting it later leaves a visible "deleted" mark.')},
             {'target': 'transfers-detail-delete-message', 'label': T('حذف الرسالة', 'Delete message'),
-             'text': T('يحذف رسالتك بعد تأكيد.', 'Deletes your message after a confirmation.'),
+             'text': T('يحذف رسالتك. اضغط مرتين: أول ضغطة الزر يحمرّ ويكتب «حذف؟» لمدة 4 ثواني، والتانية تنفّذ.', 'Deletes your message. Press twice: the first press turns it red ("Delete?") for 4 s; the second does it.'),
              'when': T('لرسالة اتبعتت بالغلط.', 'For a message sent by mistake.'),
              'warn': T('علامة الحذف بتفضل ظاهرة للكل — الحذف مش بيخفي إنك بعت رسالة.', 'The deletion mark stays visible to everyone — it does not hide that you sent a message.'),
              'open_hint': T('يظهر على رسائلك بس، لما تقف عليها.', 'Shows on your own messages only, on hover.')},
@@ -954,8 +958,9 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('صور المرفقات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل).', 'Attachment photos are shrunk automatically (longest side 1600 px).'),
+        'updated': '2026-11-19',
+        'change_note': T('مطابقة SOFTECH بقت بالفرع ونوع المستند: مستند بنفس الرقم في فرع تاني بقى «جزئي» مش «تم التأكيد». صور المرفقات بتتصغّر تلقائيًا (أطول ضلع ١٦٠٠ بكسل).',
+                         'The SOFTECH match now uses branch and document type: a document with the same number at another branch is "Partial", not "Confirmed". Attachment photos are shrunk automatically (longest side 1600 px).'),
     },
     {
         'key': 'transfers.transits',

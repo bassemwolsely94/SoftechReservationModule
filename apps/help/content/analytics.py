@@ -1062,8 +1062,8 @@ SCREENS = [
              'text': T('في أنهي تقارير القاعدة دي تشتغل. الحفظ بـ «حفظ» جنبها.', 'Which reports this rule runs in. Save with "Save" beside it.'),
              'open_hint': T('في «⚙️ القواعد والحدود».', 'In "⚙️ Rules and thresholds".')},
         ],
-        'updated': '2026-11-05',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('توليد التقرير لمن له صلاحية التحليلات (إنشاء أو تعديل أو تصدير) — الأدمن والمشرف والمشتريات ومدير الجودة', 'Generating a report needs analytics create, edit or export — admin, supervisors, purchasing and the quality manager'),
     },
     {
         'key': 'analytics.referral_stats',

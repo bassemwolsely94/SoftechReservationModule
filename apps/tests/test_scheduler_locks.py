@@ -151,6 +151,8 @@ SCHEDULER_JOB_GUARDS = {
     # ── Customer / staff WhatsApp & SMS senders ───────────────────────────────
     'wa_campaign_drain': ('row_lock', 'apps.campaigns.dispatcher.drain_queue', "filter(pk=item.pk, status='pending').update(status='processing')",
         'each queued CUSTOMER WhatsApp is claimed with a conditional UPDATE before it is sent, so a second drain skips it (round 2 R6 fix; before, a plain save let two drains send it twice)'),
+    'followups_nightly': ('advisory_lock', 'apps.followups.nightly.run', 'with pg_lock(_LOCK_KEY) as got:',
+        'C09: pg_try_advisory_lock around ERP auto-close + stale -> missed + generation; generation skips a sale that already made a task (any status); local DB only, no sends, no SOFTECH'),
     'refill_reminders': ('advisory_lock', 'apps.followups.refill_reminders.run', 'with pg_lock(_LOCK_KEY) as got:',
         'pg_try_advisory_lock around the send loop + per-task select_for_update / IntegrityError claim on RefillReminder in _send_one; customer WhatsApp'),
     'rpa_expire_leases': ('row_lock', 'apps.rpa.dispatch.sweep_expired_leases', 'select_for_update(skip_locked=True)',
@@ -195,6 +197,8 @@ SCHEDULER_JOB_GUARDS = {
         'conditional UPDATE to escalated; only the winner logs and notifies (dedup_once)'),
     'inflation_reminder': ('once_per_period_check', 'apps.sync.tasks._run_inflation_reminder', "dedup_key=f'inflation_reminder_{date.today():%Y-%m}'",
         'send_to_admins has no dedup_once: the monthly key only suppresses an UNREAD copy younger than 5 min (racy, not really once a month); web push'),
+    'ap_review_digest': ('once_per_period_check', 'apps.finance.recon_review.weekly_digest', 'dedup_once=True',
+        'C15: one in-app A/P review digest per recipient per ISO week (dedup_key ap_review_<year>_<week>, check-then-create, racy); read-only on the recon mirror, no sends, no SOFTECH'),
     'return_window_digest': ('once_per_period_check', 'apps.batches.return_calendar.monthly_digest', 'dedup_once=True',
         'snapshot get_or_create (unique) + per-month dedup_once digest, check-then-create (racy); web push'),
     'receipt_check_daily': ('once_per_period_check', 'apps.procurement.receipt_check.send_digest', "dedup_key=f'receipt_check_{today.isoformat()}', dedup_once=True",

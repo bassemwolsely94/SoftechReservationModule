@@ -17,6 +17,7 @@ import useServerSort from '../hooks/useServerSort'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { wildcardMatch } from '../utils/wildcard'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card  = { background: '#fff', borderRadius: 10, padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 }
@@ -1155,7 +1156,7 @@ function InsightsTab() {
 
   const top     = data?.top_sources || []
   const filteredRaw = top.filter(r =>
-    (!brandFilter || r.brand.toLowerCase().includes(brandFilter.toLowerCase())) &&
+    (!brandFilter || wildcardMatch(r.brand, brandFilter)) &&
     (srcFilter.length === 0 || srcFilter.includes(r.source_type))
   )
 

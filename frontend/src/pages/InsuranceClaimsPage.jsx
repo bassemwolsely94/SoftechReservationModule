@@ -18,6 +18,8 @@ import MultiSelectFilter from '../components/MultiSelectFilter'
 import InsuranceReceiptResults from '../components/InsuranceReceiptResults'
 import { wildcardMatch } from '../utils/wildcard'
 import { fa } from '../utils/flowArrow'
+import { useToast } from '../components/ui'
+import { useConfirm } from '../components/InlineConfirm'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
@@ -525,6 +527,8 @@ function ImportModal({ subclients, onClose, onCreated }) {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function InsuranceClaimsPage() {
   const navigate = useNavigate()
+  const toast = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [claims, setClaims]           = useState([])
   const [loading, setLoading]         = useState(true)
   const [showImport, setShowImport]   = useState(false)
@@ -612,14 +616,14 @@ export default function InsuranceClaimsPage() {
       if (data.status === 'ok') {
         const m = data.motalba?.upserted ?? 0
         const c = data.companiesitems?.upserted ?? 0
-        alert(`تمت المزامنة بنجاح\nمطالبات: ${m} صف\nبيانات مرضى: ${c} صف`)
+        toast.success('تمت المزامنة بنجاح', `مطالبات: ${m} صف\nبيانات مرضى: ${c} صف`)
         const r = await insuranceApi.cacheStats()
         setCacheStats(r.data)
       } else {
-        alert('فشلت المزامنة: ' + (data.error || 'خطأ غير متوقع'))
+        toast.error('فشلت المزامنة: ' + (data.error || 'خطأ غير متوقع'))
       }
     } catch (e) {
-      alert('فشلت المزامنة: ' + (e?.response?.data?.error || e?.message || 'خطأ'))
+      toast.error('فشلت المزامنة: ' + (e?.response?.data?.error || e?.message || 'خطأ'))
     } finally { setSyncing(false) }
   }
 
@@ -635,11 +639,8 @@ export default function InsuranceClaimsPage() {
   const filteredClaims = useMemo(() => {
     let list = claims
     if (filters.search && searchMode === 'claim') {
-      const q = filters.search.toLowerCase()
       list = list.filter(c =>
-        c.claim_number?.toLowerCase().includes(q) ||
-        wildcardMatch([c.client_name, c.subclient_name], filters.search) ||
-        c.softech_motalba_no?.includes(filters.search)
+        wildcardMatch([c.claim_number, c.client_name, c.subclient_name, c.softech_motalba_no], filters.search)
       )
     }
     if (filters.date_from) {
@@ -690,9 +691,10 @@ export default function InsuranceClaimsPage() {
     const locked = rows.filter(c => c.status && c.status !== 'draft')
     let warn = ''
     if (locked.length) warn = `\n⚠ ${locked.length} منها ليست مسودة (${locked.map(c => c.claim_number).slice(0,5).join('، ')}).`
-    if (!window.confirm(
+    if (!(await confirmInline(
       `حذف ${list.length} مطالبة نهائياً؟\n${nums.slice(0, 12).join('، ')}${nums.length > 12 ? ' …' : ''}` +
-      `${warn}\n\nيُحذف الاستيراد المحلى فقط — بيانات سوفتك لا تتأثر ويمكن إعادة الاستيراد.`)) return
+      `${warn}\n\nيُحذف الاستيراد المحلى فقط — بيانات سوفتك لا تتأثر ويمكن إعادة الاستيراد.`,
+      { tone: 'danger', confirmLabel: 'حذف نهائياً' }))) return
     setDeleting(true)
     let ok = 0, fail = []
     for (const id of list) {
@@ -702,7 +704,7 @@ export default function InsuranceClaimsPage() {
     setSelected(new Set())
     await load()
     setDeleting(false)
-    if (fail.length) alert(`حُذف ${ok}. تعذّر حذف: ${fail.join('، ')}`)
+    if (fail.length) toast.error(`حُذف ${ok}. تعذّر حذف: ${fail.join('، ')}`)
   }
 
   // ── KPIs ───────────────────────────────────────────────────────────────────
@@ -716,6 +718,7 @@ export default function InsuranceClaimsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
+      {confirmUi}
       {/* Page header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">

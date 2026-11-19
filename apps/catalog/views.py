@@ -278,6 +278,8 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     # barcodes__barcode searches the ItemBarcode table (multiple barcodes per item,
     # including EAN-13 / GS1 barcodes scanned with physical barcode readers).
     search_fields = ['name', 'name_scientific', 'barcode', 'softech_id', 'barcodes__barcode']
+    # barcodes are exact codes and distinct() already de-duplicates: keep the pre-S4 join path
+    wildcard_to_many_subquery = False
     ordering_fields = [
         'name', 'softech_id', 'pack_price', 'unit_price', 'is_fast_moving',
         'name_scientific', 'category__name', 'total_stock',
@@ -747,8 +749,8 @@ class VariantGroupListCreateView(generics.ListCreateAPIView):
         qs = CatalogVariantGroup.objects.prefetch_related('members__item')
         q = self.request.query_params.get('q', '').strip()
         if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(name_ar__icontains=q))
+            from .wildcard import wq
+            qs = qs.filter(wq(q, 'name', 'name_ar'))
         return qs
 
     def perform_create(self, serializer):
@@ -798,8 +800,8 @@ class ProductBundleListCreateView(generics.ListCreateAPIView):
         qs = ProductBundle.objects.prefetch_related('items__item')
         q = self.request.query_params.get('q', '').strip()
         if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(name_ar__icontains=q))
+            from .wildcard import wq
+            qs = qs.filter(wq(q, 'name', 'name_ar'))
         active = self.request.query_params.get('active')
         if active is not None:
             qs = qs.filter(is_active=active.lower() == 'true')

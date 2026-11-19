@@ -26,6 +26,8 @@ import CounselSendButton from '../counselling/CounselSendButton'
 import useCounsellingStatus from '../counselling/useCounsellingStatus'
 import { fa } from '../utils/flowArrow'
 import ConsentChips from '../components/ConsentChips'
+import { useToast } from '../components/ui'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -165,12 +167,15 @@ function TimelineEntry({ entry, navigate, onDeleteNote }) {
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{n.note}</p>
           </div>
           {onDeleteNote && (
-            <button data-tour="customers-detail-note-delete"
-              onClick={() => onDeleteNote(n.id)}
+            <ConfirmButton data-tour="customers-detail-note-delete"
+              onConfirm={() => onDeleteNote(n.id)}
+              confirmLabel="تأكيد الحذف؟"
+              title="يحذفها كاتبها أو المدير، وتُحفظ في سجل المراجعة"
               className="text-xs text-gray-300 hover:text-red-400 mt-1 transition-colors"
+              armedClassName="text-xs mt-1 px-2 py-0.5 rounded bg-red-600 text-white font-bold"
             >
               حذف
-            </button>
+            </ConfirmButton>
           )}
         </div>
       </div>
@@ -1206,6 +1211,7 @@ function LoyaltyTab({ customerId }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function ChronicConditionsWidget({ customerId, value, onSaved }) {
+  const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(value || '')
   const [saving, setSaving] = useState(false)
@@ -1217,7 +1223,7 @@ function ChronicConditionsWidget({ customerId, value, onSaved }) {
       onSaved(text)
       setEditing(false)
     } catch (e) {
-      alert(e?.response?.data?.detail || 'تعذّر حفظ الأمراض المزمنة')   // the editor stays open — nothing typed is lost
+      toast.error(e?.response?.data?.detail || 'تعذّر حفظ الأمراض المزمنة')   // the editor stays open — nothing typed is lost
     } finally { setSaving(false) }
   }
 
@@ -1344,6 +1350,7 @@ function UnmetDemandStrip({ customerId, navigate }) {
 
 export default function CustomerDetailPage() {
   const { id } = useParams()
+  const toast = useToast()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuthStore()
@@ -1367,7 +1374,7 @@ export default function CustomerDetailPage() {
   const deleteNoteMutation = useMutation({
     mutationFn: (noteId) => customersApi.deleteNote(id, noteId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['customer', id] }),
-    onError: (e) => alert(e?.response?.data?.detail || 'تعذّر حذف الملاحظة'),
+    onError: (e) => toast.error(e?.response?.data?.detail || 'تعذّر حذف الملاحظة'),
   })
 
   if (isLoading) return (
@@ -1484,9 +1491,7 @@ export default function CustomerDetailPage() {
                   notes={customer.notes || []}
                   reservations={reservations || []}
                   navigate={navigate}
-                  onDeleteNote={(noteId) => {
-                    if (window.confirm('حذف هذه الملاحظة؟ يحذفها كاتبها أو المدير، وتُحفظ في سجل المراجعة.')) deleteNoteMutation.mutate(noteId)
-                  }}
+                  onDeleteNote={(noteId) => deleteNoteMutation.mutate(noteId)}   // «حذف» is a two-step ConfirmButton
                 />
               </>
             )}

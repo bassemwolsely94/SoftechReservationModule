@@ -16,7 +16,7 @@ from django.db.models import (
 )
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 
 from apps.purchasing.access import PURCHASING   # procurement = the purchasing module (Z-7a)
 from rest_framework.response import Response
@@ -43,6 +43,33 @@ from .serializers import (
 )
 from core.threads import start_thread
 from core.multi_filter import filter_in, multi_values
+from rest_framework.permissions import BasePermission
+
+
+class _PurchasingGrant(BasePermission):
+    """Engine runs and supplier classification follow the matrix (UAT W3, owner 2026-11-19):
+    `purchasing` create to run / reclassify, edit to override a category. Was Django is_staff
+    (IsAdminUser), which ignored the app role. SOFTECH supply-group members hold the purchasing
+    grants too (Z-2). matrix_allows fails open on an unseeded module, so until `purchasing` rows
+    exist the old rule (is_staff) decides."""
+    action = 'create'
+    message = 'ليس لديك صلاحية لهذا الإجراء'
+
+    def has_permission(self, request, view):
+        from core.middleware import module_access
+        from core.permissions import matrix_allows
+        user = request.user
+        if 'purchasing' not in module_access.seeded_modules():
+            return bool(user and user.is_staff)
+        return matrix_allows(getattr(user, 'staff_profile', None), 'purchasing', self.action)
+
+
+class ProcurementRun(_PurchasingGrant):
+    action = 'create'
+
+
+class ProcurementEdit(_PurchasingGrant):
+    action = 'edit'
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,9 +155,7 @@ class SupplierPerformanceListView(generics.ListAPIView):
         qs = SupplierProfile.objects.all()
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'supplier_name', 'supplier_code'))
         classif = self.request.query_params.get('classif', '').strip()
         if classif:
             qs = qs.filter(classif_code=classif)
@@ -251,10 +276,7 @@ class SupplierItemMappingListView(generics.ListAPIView):
         qs = SupplierItemMapping.objects.all()
         q = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'item_name') | Q(item_code__icontains=q)
-                | wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'item_name', 'item_code', 'supplier_name', 'supplier_code'))
         supplier_code = self.request.query_params.get('supplier_code', '').strip()
         if supplier_code:
             qs = qs.filter(supplier_code=supplier_code)
@@ -605,11 +627,11 @@ class EngineRunListView(generics.ListAPIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, ProcurementRun])
 def trigger_engine(request):
     """
     Trigger a new procurement engine run in a background thread.
-    Only admin users.
+    Needs `purchasing` create (the matrix: admin, purchasing; supply-group members).
     """
     from .engine import run_procurement_engine
 
@@ -837,13 +859,7 @@ def apply_history_filters(qs, p):
     if buyer:
         qs = qs.filter(buyer_code=buyer)
     if q:
-        qs = qs.filter(
-            Q(item_code__icontains=q)
-            | Q(supplier_code__icontains=q)
-            | Q(doc_number__icontains=q)
-            | Q(buyer_code__icontains=q)
-            | wq(q, 'item__name')
-        )
+        qs = qs.filter(wq(q, 'item_code', 'supplier_code', 'doc_number', 'buyer_code', 'item__name'))
 
     is_return_p = p.get('is_return', '').strip().lower()
     if is_return_p in ('true', '1'):
@@ -1073,9 +1089,7 @@ class SupplierSegmentationListView(generics.ListAPIView):
         if category:
             qs = qs.filter(supplier_category=category)
         if q:
-            qs = qs.filter(
-                wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'supplier_name', 'supplier_code'))
         if min_val:
             qs = qs.filter(purchase_value_365d__gte=min_val)
 
@@ -1155,7 +1169,7 @@ def supplier_segmentation_summary(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, ProcurementEdit])
 def update_supplier_segmentation(request, pk):
     """
     Manually override a supplier's category.
@@ -1496,9 +1510,7 @@ class SupplierPerformanceEnhancedListView(generics.ListAPIView):
         qs = SupplierProfile.objects.all()
         q  = self.request.query_params.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                wq(q, 'supplier_name') | Q(supplier_code__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'supplier_name', 'supplier_code'))
         category = self.request.query_params.get('category', '').strip()
         if category:
             qs = qs.filter(supplier_category=category)
@@ -1633,7 +1645,7 @@ def softech_person_codes(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, ProcurementRun])
 def reclassify_suppliers(request):
     """
     Re-run supplier classification (Stage 2.5 only) against the current rules —

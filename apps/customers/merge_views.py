@@ -6,12 +6,12 @@ call_center); maker-checker enforced in duplicates.approve. Nothing here writes 
   POST /api/customers/merge-candidates/<id>/<mark|approve|reject|swap>/          reject needs {"reason"}
   POST /api/customers/merge-candidates/bulk/  {"action": "mark"|"approve", "strength": "strong", "limit": 100}
 """
-from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from . import duplicates as DUP
 
 
@@ -50,7 +50,7 @@ def candidates(request):
         qs = qs.filter(strength=request.query_params['strength'])
     q = (request.query_params.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(old_pic__icontains=q) | Q(main_pic__icontains=q) | Q(cluster__icontains=q))
+        qs = qs.filter(wq(q, 'old_pic', 'main_pic', 'cluster'))
     rows = list(qs.order_by('cluster', 'old_pic')[:200])
     pics = {p for r in rows for p in (r.old_pic, r.main_pic)}
     names = dict(Customer.objects.filter(softech_pic__in=pics).values_list('softech_pic', 'name'))

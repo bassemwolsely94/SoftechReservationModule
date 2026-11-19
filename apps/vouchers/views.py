@@ -15,10 +15,11 @@ import io
 import logging
 
 import qrcode
+from apps.catalog.wildcard import wq
 from core.multi_filter import filter_in, multi_values
 from core.sort_ordering import explicit_order_by
 from django.db import transaction
-from django.db.models import F, Sum, Count, Q
+from django.db.models import F, Sum, Count
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -145,7 +146,7 @@ class VoucherViewSet(viewsets.ModelViewSet):
         if customer:
             qs = qs.filter(customer_id=customer)
         if search:
-            qs = qs.filter(Q(code__icontains=search) | Q(title__icontains=search))
+            qs = qs.filter(wq(search, 'code', 'title'))
 
         if self.action == 'list':
             # sortable grid headers: whitelisted, NULLs last, unique pk tiebreak (a 400 on anything else)

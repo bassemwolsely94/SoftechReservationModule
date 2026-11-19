@@ -237,28 +237,72 @@ def rank_case(q: str, fields, fold: bool = False) -> Case:
                 default=Value(2), output_field=IntegerField())
 
 
-def filter_and_rank(qs, q: str, fields, *, extra_q: Q | None = None):
+def crosses_to_many(model, field: str) -> bool:
+    """True when the search path `field` walks a to-many relation (reverse FK / M2M), e.g.
+    transfers' `items__item__name` — one parent then joins to many rows."""
+    for part in field.split('__'):
+        try:
+            f = model._meta.get_field(part)
+        except Exception:                     # a lookup / transform, or not a model field
+            return False
+        if f.many_to_many or f.one_to_many:
+            return True
+        if not f.is_relation or f.related_model is None:
+            return False
+        model = f.related_model
+    return False
+
+
+def _to_many_rank(qs, q: str, fields) -> Case:
+    """rank_case for a search reaching to-many fields: each tier is a `pk IN (subquery)` so the
+    parent is not joined to its lines — one row per parent, with its BEST tier."""
+    base = qs.model._base_manager.all()
+
+    def pks(cond):
+        return base.filter(cond).values('pk')
+    return Case(When(pk__in=pks(_any(fields, 'ulike', literal_pattern(q, False))), then=Value(0)),
+                When(pk__in=pks(ordered_q(q, *fields, fold=False)), then=Value(1)),
+                default=Value(2), output_field=IntegerField())
+
+
+def filter_and_rank(qs, q: str, fields, *, extra_q: Q | None = None, to_many_subquery: bool = True):
     """Filter a queryset with the shared rules and order it literal → ordered → any-order
-    (then the queryset's own ordering)."""
+    (then the queryset's own ordering).
+
+    When a search field crosses a to-many relation the match and the rank run as `pk IN
+    (subquery)`, so a parent whose lines match at different tiers comes back ONCE with its best
+    tier (a join would give one row per matching line and inflate GROUP BY counts). Single-valued
+    fields keep the plain filter + CASE, unchanged. to_many_subquery=False keeps the plain join
+    for a caller that de-duplicates itself (WildcardSearchFilter's distinct()) and whose to-many
+    field never ranks differently per line (an exact code — ItemViewSet's barcodes)."""
     if not parse(q)['segments']:
         return qs
+    order = list(qs.query.order_by) or list(qs.model._meta.ordering or [])
+    if to_many_subquery and any(crosses_to_many(qs.model, f) for f in fields):
+        cond = Q(pk__in=qs.model._base_manager.filter(wq(q, *fields)).values('pk'))
+        if extra_q is not None:
+            cond |= extra_q
+        return qs.filter(cond).annotate(_wild_rank=_to_many_rank(qs, q, fields)).order_by('_wild_rank', *order)
     cond = wq(q, *fields)
     if extra_q is not None:
         cond |= extra_q
-    order = list(qs.query.order_by) or list(qs.model._meta.ordering or [])
     return qs.filter(cond).annotate(_wild_rank=rank_case(q, fields)).order_by('_wild_rank', *order)
 
 
 class WildcardSearchFilter(SearchFilter):
     """DRF SearchFilter with the system's search rules (wildcards, order, ranking). DRF's
-    field prefixes (^ = @ $) are ignored — every field is a 'contains' field."""
+    field prefixes (^ = @ $) are ignored — every field is a 'contains' field.
+
+    A view may set `wildcard_to_many_subquery = False` to keep the plain join for to-many search
+    fields (see filter_and_rank); the default is the one-row-per-parent subquery path."""
 
     def filter_queryset(self, request, queryset, view):
         fields = [f.lstrip('^=@$') for f in (self.get_search_fields(view, request) or [])]
         q = request.query_params.get(self.search_param, '')
         if not fields or not parse(q)['segments']:
             return queryset
-        return filter_and_rank(queryset, q, fields).distinct()
+        to_many = getattr(view, 'wildcard_to_many_subquery', True)
+        return filter_and_rank(queryset, q, fields, to_many_subquery=to_many).distinct()
 
 
 # ── item pickers / Ctrl+K: the full tiered search ──────────────────────────────

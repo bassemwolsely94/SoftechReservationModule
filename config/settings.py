@@ -588,6 +588,9 @@ LOYALTY_ADJUST_ROLES = frozenset(
 # identical adjustment (customer, points, reason) is refused as a probable double post.
 LOYALTY_MAX_MANUAL_ADJUST         = config('LOYALTY_MAX_MANUAL_ADJUST', default=1000, cast=int)
 LOYALTY_DUPLICATE_WINDOW_SECONDS  = config('LOYALTY_DUPLICATE_WINDOW_SECONDS', default=120, cast=int)
+# Referral-points deduction (owner decision D-14, 2026-11-19): the largest deduction one
+# adjustment may make; more than this is admin only. A written reason is always required.
+LOYALTY_REFERRAL_DEDUCT_MAX       = config('LOYALTY_REFERRAL_DEDUCT_MAX', default=500, cast=int)
 # Default per-statement timeout (seconds) for INTERACTIVE queries — bounds an
 # HTTP request against a slow/blocked Sybase read. jConnect enforces this as a
 # socket read-timeout (fires as JZ0T3 on fetch), so keep it snappy.
@@ -889,6 +892,16 @@ REFILL_REMINDER_SEND_ENABLED = config('REFILL_REMINDER_SEND_ENABLED', default=Fa
 REFILL_REMINDER_TEMPLATE     = config('REFILL_REMINDER_TEMPLATE', default='refill_reminder')
 REFILL_REMINDER_LANGUAGE     = config('REFILL_REMINDER_LANGUAGE', default='ar')
 REFILL_REMINDER_DAILY_CAP    = config('REFILL_REMINDER_DAILY_CAP', default=300, cast=int)
+# C09 follow-ups nightly (apps/followups/nightly.py): auto-close, stale → missed, generation. Local DB only.
+# Off by default: retire the old backlog first (retire_followup_backlog --apply), then switch on.
+FOLLOWUPS_NIGHTLY_ENABLED   = config('FOLLOWUPS_NIGHTLY_ENABLED', default=False, cast=bool)  # on after the backlog retirement
+FOLLOWUPS_STALE_AFTER_DAYS  = config('FOLLOWUPS_STALE_AFTER_DAYS', default=3, cast=int)
+# C08 refill-due call list (apps/followups/refill_due.py) — the "regular buyer" rule; owner questions in the PR.
+FOLLOWUPS_REFILL_DUE_MIN_PURCHASES    = config('FOLLOWUPS_REFILL_DUE_MIN_PURCHASES', default=3, cast=int)
+FOLLOWUPS_REFILL_DUE_WINDOW_DAYS      = config('FOLLOWUPS_REFILL_DUE_WINDOW_DAYS', default=365, cast=int)
+FOLLOWUPS_REFILL_DUE_OVERDUE_DAYS_MIN = config('FOLLOWUPS_REFILL_DUE_OVERDUE_DAYS_MIN', default=0, cast=int)
+FOLLOWUPS_REFILL_DUE_CHANNELS         = config('FOLLOWUPS_REFILL_DUE_CHANNELS', default='91,90')   # cash, delivery
+FOLLOWUPS_REFILL_DUE_CONSENT          = config('FOLLOWUPS_REFILL_DUE_CONSENT', default='opt_in')  # or not_withdrawn
 # Project 4 (doc 34): staff drug assistant, pharmacist-approved counselling sheets, WhatsApp counselling card.
 DRUG_ASSISTANT_ENABLED      = config('DRUG_ASSISTANT_ENABLED', default=False, cast=bool)
 COUNSELLING_CONTENT_ENABLED = config('COUNSELLING_CONTENT_ENABLED', default=False, cast=bool)
