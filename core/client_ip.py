@@ -20,6 +20,12 @@ def client_ip(request):
     return chain[-min(hops, len(chain))]
 
 
+def meta_for_ip(ip):
+    """request.META carrying `ip` as the client, for a request replayed outside the web request (an
+    export job, performance Stage 4): client_ip() of the replay returns the requester's address."""
+    return {'REMOTE_ADDR': ip} if ip else {}
+
+
 def peer_meta(scope):
     """The request.META entry for the socket peer of a Channels scope (the only other place that
     spells the REMOTE_ADDR key, so client_ip() above reads sockets and requests alike)."""

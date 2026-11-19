@@ -45,6 +45,14 @@ class ViewKindTests(TestCase):
         ExportJob.objects.all().delete()           # frees the one-active-per-kind slot
         return job
 
+    def test_replay_keeps_the_requesters_ip(self):
+        from core.client_ip import client_ip
+        r = self.c.post('/api/stock-audit/findings/export/jobs/', REMOTE_ADDR='10.20.30.40')
+        job = ExportJob.objects.get(pk=r.json()['id'])
+        self.assertEqual(job.params['client_ip'], '10.20.30.40')
+        req = view_kinds.ReplayRequest(user=self.user, ip=job.params['client_ip'])
+        self.assertEqual(client_ip(req), '10.20.30.40')
+
     def test_every_whitelisted_view_resolves(self):
         for key, (dotted, *_r) in view_kinds.VIEW_EXPORTS.items():
             self.assertTrue(callable(view_kinds._load(dotted)), key)

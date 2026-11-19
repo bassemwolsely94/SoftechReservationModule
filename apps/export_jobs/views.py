@@ -75,7 +75,8 @@ def start_view_export(request, rest):
     profile = getattr(request.user, 'staff_profile', None)
     if profile is None or not kind.allowed(request.user):
         return Response({'detail': 'غير مصرح لك.'}, status=status.HTTP_403_FORBIDDEN)
-    params = {'path': orig, 'query': runner.params_of(request.query_params)}
+    from core.client_ip import client_ip
+    params = {'path': orig, 'query': runner.params_of(request.query_params), 'client_ip': client_ip(request)}
     if kind.body:
         params['body'] = dict(request.data)
     return runner.start_response(*runner.start(key, profile, params))

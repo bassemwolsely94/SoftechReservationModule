@@ -46,7 +46,9 @@ def _load(dotted):
 class ReplayRequest:
     """Stands in for the request that started the job: same query / body / user, nothing else."""
 
-    def __init__(self, *, user, method='GET', path='/', query=None, body=None):
+    def __init__(self, *, user, method='GET', path='/', query=None, body=None, ip=None):
+        from core.client_ip import meta_for_ip
+
         from .runner import query_dict
         self.user = user
         self.method = method
@@ -54,7 +56,8 @@ class ReplayRequest:
         self.GET = self.query_params = query_dict(query or {})
         self.POST = {}
         self.data = dict(body or {})
-        self.META = {'REMOTE_ADDR': '127.0.0.1', 'REQUEST_METHOD': method}
+        # the requester's address (core.client_ip at start), so audit rows written by the view keep it
+        self.META = {**meta_for_ip(ip), 'REQUEST_METHOD': method}
         self.headers = {}
         self.COOKIES = {}
         self.FILES = {}
@@ -119,7 +122,8 @@ def call_view(job, user):
     match = resolve(path)
     if key_for_path(path) != job.kind:
         raise PermissionError('the stored path no longer serves this export')
-    req = ReplayRequest(user=user, method=method, path=path, query=p.get('query'), body=p.get('body'))
+    req = ReplayRequest(user=user, method=method, path=path, query=p.get('query'), body=p.get('body'),
+                        ip=p.get('client_ip'))
     inst = _instance(match.func, req, match.kwargs)
     return getattr(inst, method.lower())(req, *match.args, **match.kwargs)
 
