@@ -77,6 +77,13 @@ class RunnerHistoryGateTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "history_found")
         self.assertEqual((result["complete"], result["truncated"]), (True, False))
 
+    def test_an_unreadable_order_is_reported_not_dropped(self):
+        unread = {"order_ref": "", "date": "2026-11-18", "lines": [{"sku": "", "qty": "order number unreadable"}]}
+        result = go(FakeDriver([unread], {"complete": False}))
+        self.assertEqual(result["outcome"], "history_found")       # the server makes it unclear
+        self.assertEqual(result["orders"], [unread])
+        self.assertIs(result["complete"], False)
+
     def test_more_than_the_cap_is_truncated_and_never_complete(self):
         result = go(FakeDriver(orders(runner.MAX_ORDERS + 1), {"complete": True}))
         self.assertEqual(result["outcome"], "history_found")
@@ -106,6 +113,21 @@ class DriverHistoryProofTests(unittest.TestCase):
         # rows all older than the window, pager shown: the next page is older still
         d = self.driver([{"order_ref": "2104300001", "date": "20/10/2026"}], paged=True,
                         HISTORY_PAGING_CONFIRMED=True)
+        self.assertEqual(d.order_history(datetime.date(2026, 11, 17)), [])
+        self.assertEqual(d.history_proof, {"complete": True})
+
+    def test_unreadable_order_number_in_the_window_is_sent_and_never_complete(self):
+        rows = [{"order_ref": "", "date": "18/11/2026"},              # in the window, no number
+                {"order_ref": "  ", "date": ""}]                       # no number, no date
+        d = self.driver(rows, HISTORY_PAGING_CONFIRMED=True)
+        got = d.order_history(datetime.date(2026, 11, 17))
+        self.assertEqual([o["order_ref"] for o in got], ["", ""])
+        self.assertEqual(got[0]["date"], "2026-11-18")
+        self.assertEqual(got[0]["lines"], [{"sku": "", "qty": "order number unreadable"}])
+        self.assertEqual(d.history_proof, {"complete": False})
+
+    def test_unreadable_order_number_before_the_window_is_dropped(self):
+        d = self.driver([{"order_ref": "", "date": "20/10/2026"}], HISTORY_PAGING_CONFIRMED=True)
         self.assertEqual(d.order_history(datetime.date(2026, 11, 17)), [])
         self.assertEqual(d.history_proof, {"complete": True})
 
