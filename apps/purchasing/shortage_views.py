@@ -219,7 +219,7 @@ def shortage_search(request):
     if len(q) < 2:
         return Response({'items': []})
     qs = (Item.objects.filter(is_stockable=True)
-          .filter(Q(softech_id__icontains=q) | wq(q, 'name'))
+          .filter(wq(q, 'softech_id', 'name'))
           .only('id', 'softech_id', 'name', 'unit_price', 'in_shortage', 'shortage_dismissed')[:20])
     return Response({'items': [{
         'item_id': i.id, 'code': i.softech_id, 'name': i.name,

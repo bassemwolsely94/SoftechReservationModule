@@ -7,8 +7,8 @@ reservation was actually processed in SOFTECHDB9 as a sales document
 
 Auto-search mode: when no erp_reference is set, scans stktransm for
 doccode=115 documents in a ±3-day window around fulfillment, scores
-candidates by item overlap using the (branchcode, docnumber) composite
-index in stktrans, and returns the best match.
+candidates by item overlap reading each candidate's stktrans lines by its full
+(branchcode, doccode, docnumber) identity, and returns the best match.
 
 Called by:
   - `check_erp_match` view action (admin manual trigger)
@@ -23,6 +23,24 @@ logger = logging.getLogger('elrezeiky.reservations')
 
 _QTY_TOLERANCE = 0.20   # 20%
 ERP_DOCCODE    = '115'  # مبيعات نقدية — cash sales in SOFTECH
+
+# Sale header by its full identity (docnumber, branchcode, doccode). Bind in that order.
+_QUERY_SALE_HEADER = """SELECT sm.docnumber, sm.doccode, sm.branchcode,
+          sm.docdate, sm.docvalue, sm.usercode, sm.storecode, sm.phcode
+   FROM SOFTECHDB9.dbo.stktransm sm
+   WHERE sm.docnumber = ?
+     AND sm.branchcode = ?
+     AND sm.doccode = ?"""
+
+# The same sale number at ANOTHER branch, bounded by doccode + docdate window.
+# Bind: (docnumber, doccode, date_from, date_to). The caller accepts exactly one row.
+_QUERY_SALE_HEADER_OTHER_BRANCH = """SELECT sm.docnumber, sm.doccode, sm.branchcode,
+          sm.docdate, sm.docvalue, sm.usercode, sm.storecode, sm.phcode
+   FROM SOFTECHDB9.dbo.stktransm sm
+   WHERE sm.docnumber = ?
+     AND sm.doccode = ?
+     AND sm.docdate >= ?
+     AND sm.docdate <= ?"""
 
 
 # ── public helpers ─────────────────────────────────────────────────────────────
@@ -96,6 +114,7 @@ class ReservationERPMatcher:
 
     def __init__(self, reservation):
         self.reservation = reservation
+        self.ambiguous_branches = []   # set by _fetch_sybase when a number is ambiguous
 
     # ── public entry point ────────────────────────────────────────────────────
 
@@ -123,6 +142,12 @@ class ReservationERPMatcher:
                 doc_number = discovered_doc
 
         if header is None:
+            if doc_number and self.ambiguous_branches:
+                return _not_found(
+                    f'المستند رقم {doc_number} غير موجود للفرع {branch_code}، وموجود كمبيعات '
+                    f'({ERP_DOCCODE}) في أكثر من فرع آخر ({"، ".join(self.ambiguous_branches)}) — '
+                    f'لا يمكن تحديد المستند الصحيح تلقائياً.'
+                )
             if doc_number:
                 return _not_found(
                     f'المستند رقم {doc_number} غير موجود في SOFTECH '
@@ -164,6 +189,10 @@ class ReservationERPMatcher:
         user_name  = user_info.get('user_name', '') if user_info else ''
 
         matched_items, match_status = self._match_items(lines)
+        # A sale found under another branch is never a full confirmation (S-8): the same
+        # number exists at every branch, so a person has to check it.
+        if not branch_matched and match_status == 'matched':
+            match_status = 'partial'
 
         branch_note = ''
         if not branch_matched and actual_branch and actual_branch != branch_code:
@@ -223,20 +252,27 @@ class ReservationERPMatcher:
 
     def _fetch_sybase(self, doc_number: str, branch_code: str):
         """
-        4-pass fallback strategy — finds the document even when stktransm
-        branchcode or doccode doesn't perfectly match.
+        Look the sale up by its full SOFTECH identity. Docnumbers run per
+        (branchcode, doccode) — the same number repeats across branches and document
+        types — so a bare docnumber is never enough (audit S-8 / D-10).
 
-        Pass 1: stktransm  docnumber + branchcode + doccode=115
-        Pass 2: stktransm  docnumber + doccode=115  (any branch)
-        Pass 3: stktransm  docnumber only            (any branch, any doccode)
-        Pass 4: stktrans   docnumber + branchcode    (header derived from line table)
+        Pass 1: stktransm  docnumber + reservation branch + doccode=115
+        Pass 2: stktrans   docnumber + reservation branch + doccode=115
+                (header derived from the line table — stktransm replication lag)
+        Pass 3: stktransm  docnumber + doccode=115 at ANOTHER branch, inside a docdate
+                window from the reservation's creation. Used only when exactly one sale
+                comes back; reported with branch_matched=False, which run() never shows
+                as a full match.
 
-        Returns (header_row | None, lines, branch_matched: bool, user_info | None).
+        Lines are always read with the found header's own (docnumber, branch, doccode).
+
+        Returns (header_row | None, lines, branch_matched: bool, user_info | None, customer_info | None).
         ABSOLUTE RULE: SELECT ONLY. Never INSERT/UPDATE/DELETE on Sybase.
         """
         from config.sybase import get_sybase_connection
-        from apps.sync.sybase_queries import QUERY_STKTRANS_LINES, QUERY_STKTRANS_LINES_ANY
+        from apps.sync.sybase_queries import QUERY_STKTRANS_DIRECT_HEADER, QUERY_STKTRANS_LINES
         res_id = self.reservation.id
+        self.ambiguous_branches = []
 
         try:
             doc_num_param = int(doc_number)
@@ -249,95 +285,63 @@ class ReservationERPMatcher:
             cur  = conn.cursor()
 
             # ── Pass 1: stktransm — exact branch + doccode=115 ───────────────
-            cur.execute(
-                """SELECT sm.docnumber, sm.doccode, sm.branchcode,
-                          sm.docdate, sm.docvalue, sm.usercode, sm.storecode, sm.phcode
-                   FROM SOFTECHDB9.dbo.stktransm sm
-                   WHERE sm.docnumber = ?
-                     AND sm.branchcode = ?
-                     AND sm.doccode = ?""",
-                [doc_num_param, branch_code, ERP_DOCCODE]
-            )
+            cur.execute(_QUERY_SALE_HEADER, [doc_num_param, branch_code, ERP_DOCCODE])
             header = cur.fetchone()
             if header is not None:
                 logger.info(
                     f'ReservationERPMatcher [#{res_id}]: Pass 1 hit — '
                     f'doc={doc_number} branch={branch_code}'
                 )
-                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code])
+                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code, ERP_DOCCODE])
                 lines         = cur.fetchall() or []
                 user_info     = _lookup_user(cur, header[5], res_id)
                 customer_info = _fetch_customer_info(cur, str(header[7] or '').strip(), res_id)
                 return header, lines, True, user_info, customer_info
 
-            # ── Pass 2: stktransm — any branch, doccode=115 ──────────────────
-            cur.execute(
-                """SELECT sm.docnumber, sm.doccode, sm.branchcode,
-                          sm.docdate, sm.docvalue, sm.usercode, sm.storecode, sm.phcode
-                   FROM SOFTECHDB9.dbo.stktransm sm
-                   WHERE sm.docnumber = ?
-                     AND sm.doccode = ?""",
-                [doc_num_param, ERP_DOCCODE]
-            )
-            header = cur.fetchone()
-            if header is not None:
-                found_branch = str(header[2] or '').strip()
-                logger.info(
-                    f'ReservationERPMatcher [#{res_id}]: Pass 2 hit — '
-                    f'doc={doc_number} branch={found_branch}'
-                )
-                cur.execute(QUERY_STKTRANS_LINES_ANY, [doc_num_param])
-                lines         = cur.fetchall() or []
-                user_info     = _lookup_user(cur, header[5], res_id)
-                customer_info = _fetch_customer_info(cur, str(header[7] or '').strip(), res_id)
-                return header, lines, False, user_info, customer_info
-
-            # ── Pass 3: stktransm — docnumber only, zero filters ─────────────
-            cur.execute(
-                """SELECT sm.docnumber, sm.doccode, sm.branchcode,
-                          sm.docdate, sm.docvalue, sm.usercode, sm.storecode, sm.phcode
-                   FROM SOFTECHDB9.dbo.stktransm sm
-                   WHERE sm.docnumber = ?""",
-                [doc_num_param]
-            )
-            header = cur.fetchone()
-            if header is not None:
-                found_branch = str(header[2] or '').strip()
-                found_code   = str(header[1] or '').strip()
-                logger.info(
-                    f'ReservationERPMatcher [#{res_id}]: Pass 3 hit — '
-                    f'doc={doc_number} branch={found_branch} doccode={found_code}'
-                )
-                cur.execute(QUERY_STKTRANS_LINES_ANY, [doc_num_param])
-                lines         = cur.fetchall() or []
-                user_info     = _lookup_user(cur, header[5], res_id)
-                customer_info = _fetch_customer_info(cur, str(header[7] or '').strip(), res_id)
-                return header, lines, False, user_info, customer_info
-
-            # ── Pass 4: stktrans direct — branchcode+docnumber (hits composite index)
+            # ── Pass 2: stktrans direct — same branch + doccode, no header yet ──
             # No stktransm row → no phcode/customer info available
             cur.execute("SET ROWCOUNT 1")
-            cur.execute(
-                """SELECT st.docnumber, NULL AS doccode, st.branchcode,
-                          NULL AS docdate, NULL AS docvalue,
-                          NULL AS usercode, st.storecode
-                   FROM SOFTECHDB9.dbo.stktrans st
-                   WHERE st.docnumber = ? AND st.branchcode = ?""",
-                [doc_num_param, branch_code]
-            )
-            header = cur.fetchone()
-            cur.execute("SET ROWCOUNT 0")
+            try:
+                cur.execute(QUERY_STKTRANS_DIRECT_HEADER, [doc_num_param, branch_code, ERP_DOCCODE])
+                header = cur.fetchone()
+            finally:
+                cur.execute("SET ROWCOUNT 0")
             if header is not None:
                 logger.info(
-                    f'ReservationERPMatcher [#{res_id}]: Pass 4 hit — '
-                    f'stktrans direct doc={doc_number}'
+                    f'ReservationERPMatcher [#{res_id}]: Pass 2 hit — '
+                    f'stktrans direct doc={doc_number} branch={branch_code}'
                 )
-                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code])
+                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code, ERP_DOCCODE])
                 lines = cur.fetchall() or []
-                return header, lines, False, None, None
+                return header, lines, True, None, None
+
+            # ── Pass 3: another branch, same doccode, inside the date window ───
+            date_from, date_to = self._doc_window()
+            cur.execute(_QUERY_SALE_HEADER_OTHER_BRANCH, [doc_num_param, ERP_DOCCODE, date_from, date_to])
+            rows = [r for r in (cur.fetchall() or []) if str(r[2] or '').strip() != branch_code]
+            if len(rows) > 1:
+                self.ambiguous_branches = sorted({str(r[2] or '').strip() for r in rows})
+                logger.warning(
+                    f'ReservationERPMatcher [#{res_id}]: doc={doc_number} (115) exists at several '
+                    f'other branches {self.ambiguous_branches} — refusing to guess'
+                )
+                return None, [], False, None, None
+            if rows:
+                header = rows[0]
+                found_branch = str(header[2] or '').strip()
+                logger.info(
+                    f'ReservationERPMatcher [#{res_id}]: Pass 3 hit — '
+                    f'doc={doc_number} branch={found_branch}'
+                )
+                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, found_branch, ERP_DOCCODE])
+                lines         = cur.fetchall() or []
+                user_info     = _lookup_user(cur, header[5], res_id)
+                customer_info = _fetch_customer_info(cur, str(header[7] or '').strip(), res_id)
+                return header, lines, False, user_info, customer_info
 
             logger.warning(
-                f'ReservationERPMatcher [#{res_id}]: all 4 passes failed for doc={doc_number}'
+                f'ReservationERPMatcher [#{res_id}]: doc={doc_number} not found as a 115 at '
+                f'branch {branch_code} or (uniquely) at another branch in {date_from}…{date_to}'
             )
             return None, [], False, None, None
 
@@ -353,6 +357,12 @@ class ReservationERPMatcher:
                     conn.close()
                 except Exception:
                     pass
+
+    def _doc_window(self):
+        """(date_from, date_to) bounding the cross-branch lookup: the day before the
+        reservation was created up to tomorrow (a sale can only follow the reservation)."""
+        from apps.transfers.erp_matcher import doc_window
+        return doc_window(self.reservation.created_at, days_before=1)
 
     def _auto_search(self, branch_code: str):
         """
@@ -474,7 +484,7 @@ class ReservationERPMatcher:
 
                 cur2 = conn.cursor()
                 try:
-                    cur2.execute(QUERY_STKTRANS_LINES, [doc_num_param, hdr_branch])
+                    cur2.execute(QUERY_STKTRANS_LINES, [doc_num_param, hdr_branch, ERP_DOCCODE])
                     lines = cur2.fetchall() or []
                 except Exception as se:
                     logger.warning(
@@ -548,7 +558,7 @@ class ReservationERPMatcher:
         Cross-reference stktrans lines against the reservation item.
         A reservation has a single item, so we get a single-element result list.
 
-        Row layout from QUERY_STKTRANS_LINES / QUERY_STKTRANS_LINES_ANY:
+        Row layout from QUERY_STKTRANS_LINES:
           [0]=itemcode, [1]=transqty, [2]=transprice_total, [3]=storecode, [4]=trans_time
         """
         res = self.reservation
@@ -557,7 +567,8 @@ class ReservationERPMatcher:
             # Manual item — cannot verify by itemcode; header existence is enough
             return [], 'matched'
 
-        # Build itemcode → max qty map (take max across rows to avoid double-counting)
+        # Build itemcode → qty map. The lines belong to ONE sale (docnumber, branch,
+        # doccode), so an item's rows are its batches and are summed (S-8).
         stk_map: dict[str, dict] = {}
         for row in stk_rows:
             itemcode = str(row[0] or '').strip()
@@ -565,7 +576,7 @@ class ReservationERPMatcher:
                 continue
             qty = _to_float(row[1]) or 0.0
             if itemcode in stk_map:
-                stk_map[itemcode]['erp_qty'] = max(stk_map[itemcode]['erp_qty'], qty)
+                stk_map[itemcode]['erp_qty'] += qty
             else:
                 stk_map[itemcode] = {
                     'erp_qty': qty,
@@ -737,7 +748,7 @@ def _build_receipt_lines(stk_rows: list) -> list:
     Build the full list of items from a SOFTECH document (all stktrans lines).
     Enriches itemcode with local catalog name; merges duplicate itemcode rows by summing qty.
 
-    Row layout from QUERY_STKTRANS_LINES / QUERY_STKTRANS_LINES_ANY:
+    Row layout from QUERY_STKTRANS_LINES:
       [0]=itemcode, [1]=transqty, [2]=transprice_total, [3]=storecode, [4]=trans_time
 
     Returns list of dicts: {itemcode, itemname, qty, price, storecode}

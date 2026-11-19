@@ -23,6 +23,7 @@ import { ar } from 'date-fns/locale'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import RemovedFileNote from '../components/RemovedFileNote'
+import { useToast } from '../components/ui'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import StockLookupDrawer from '../components/StockLookupDrawer'
 
@@ -462,6 +463,7 @@ const CC_STATUS_META = {
 const CC_WRITE = ['create', 'edit', 'approve']
 
 function CaseChatPanel({ caseId, onClose }) {
+  const toast = useToast()
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const canEdit = usePermissionAny('callcenter', CC_WRITE)
@@ -496,7 +498,7 @@ function CaseChatPanel({ caseId, onClose }) {
         stream.getTracks().forEach(t => t.stop())
       }
       mediaRecRef.current = rec; rec.start(); setRecording(true)
-    } catch { alert('لا يمكن الوصول للميكروفون') }
+    } catch { toast.error('لا يمكن الوصول للميكروفون') }
   }
   function stopRecording() { mediaRecRef.current?.stop(); setRecording(false) }
 
@@ -511,7 +513,7 @@ function CaseChatPanel({ caseId, onClose }) {
       setNoteText(''); setAttachFile(null)
       qc.invalidateQueries({ queryKey: ['case-detail', caseId] })
       qc.invalidateQueries({ queryKey: ['cc-my-queue'] })
-    } catch (e) { alert(e.response?.data?.detail || 'حدث خطأ') }
+    } catch (e) { toast.error(e.response?.data?.detail || 'حدث خطأ') }
     finally { setPosting(false) }
   }
 
@@ -520,7 +522,7 @@ function CaseChatPanel({ caseId, onClose }) {
       await actionFn(caseId, body)
       qc.invalidateQueries({ queryKey: ['case-detail', caseId] })
       qc.invalidateQueries({ queryKey: ['cc-my-queue'] })
-    } catch (e) { alert(e.response?.data?.detail || 'حدث خطأ') }
+    } catch (e) { toast.error(e.response?.data?.detail || 'حدث خطأ') }
   }
 
   const sm = cas ? (CC_STATUS_META[cas.status] || { label: cas.status, cls: 'bg-gray-100' }) : {}
@@ -820,6 +822,7 @@ function CustomerRecsPanel({ customerId, onAdd }) {
 }
 
 function CallItemsPanel({ savedCallId, customer, branchId }) {
+  const toast = useToast()
   const qc = useQueryClient()
   const [pendingItems, setPendingItems]   = useState([])   // local-only, pre-save
   const [dbItems, setDbItems]             = useState([])   // persisted
@@ -874,7 +877,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       setDbItems(prev => [...prev, ...saved])
       setFlushing(false)
       // a lost item used to vanish silently (full audit C01: no call item was ever stored)
-      if (failed.length) alert(`تعذّر حفظ ${failed.length} صنف مع المكالمة: ${failed.join('، ')} — أضفه مرة أخرى.`)
+      if (failed.length) toast.error(`تعذّر حفظ ${failed.length} صنف مع المكالمة: ${failed.join('، ')} — أضفه مرة أخرى.`)
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedCallId])
@@ -915,7 +918,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       try {
         const { data } = await callCenterApi.addItem(savedCallId, payload)
         setDbItems(p => [...p, data])
-      } catch (e) { alert(e.response?.data?.detail || 'حدث خطأ') }
+      } catch (e) { toast.error(e.response?.data?.detail || 'حدث خطأ') }
     } else {
       setPendingItems(p => [...p, { ...payload, item: catalogItem, _tempId: Date.now() }])
     }
@@ -929,7 +932,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       try {
         const { data } = await callCenterApi.addItem(savedCallId, payload)
         setDbItems(p => [...p, data])
-      } catch (e) { alert(e.response?.data?.detail || 'حدث خطأ') }
+      } catch (e) { toast.error(e.response?.data?.detail || 'حدث خطأ') }
     } else {
       setPendingItems(p => [...p, { ...payload, _tempId: Date.now() }])
     }
@@ -941,7 +944,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       try {
         await callCenterApi.removeItem(savedCallId, item.id)
         setDbItems(p => p.filter(i => i.id !== item.id))
-      } catch (e) { alert(e.response?.data?.detail || 'حدث خطأ') }
+      } catch (e) { toast.error(e.response?.data?.detail || 'حدث خطأ') }
     } else if (item._status === 'pending') {
       setPendingItems(p => p.filter(i => i._tempId !== item._tempId))
     }
@@ -967,7 +970,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
     try {
       await callCenterApi.updateItem(savedCallId, itemId, { quantity })
     } catch (e) {
-      alert(e.response?.data?.detail || 'تعذّر حفظ الكمية')
+      toast.error(e.response?.data?.detail || 'تعذّر حفظ الكمية')
       callCenterApi.getItems(savedCallId).then(r => setDbItems(r.data || [])).catch(() => {})
     }
   }
@@ -1000,7 +1003,7 @@ function CallItemsPanel({ savedCallId, customer, branchId }) {
       qc.invalidateQueries({ queryKey: ['reservations'] })
       qc.invalidateQueries({ queryKey: ['transfers'] })
     } catch (e) {
-      alert(e.response?.data?.detail || 'حدث خطأ في التحويل')
+      toast.error(e.response?.data?.detail || 'حدث خطأ في التحويل')
     } finally {
       setConverting(false)
     }
@@ -1343,6 +1346,7 @@ function MyQueuePanel({ onOpenCase }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CallCenterPage() {
+  const toast = useToast()
   const { user }   = useAuthStore()
   const ccView     = usePermission('callcenter', 'view')   // the manager tab's dashboards (GET)
   const qc         = useQueryClient()
@@ -1390,7 +1394,7 @@ export default function CallCenterPage() {
       await callCenterApi.transcribe(callId)
       setTimeout(() => qc.invalidateQueries({ queryKey: ['cc-lookup'] }), 20_000)
     } catch (e) {
-      alert(e.response?.data?.detail || 'فشل بدء التفريغ')
+      toast.error(e.response?.data?.detail || 'فشل بدء التفريغ')
       setTranscribing(t => ({ ...t, [callId]: false }))
     }
   }
@@ -1422,7 +1426,7 @@ export default function CallCenterPage() {
       await pbxApi.dial({ destination, caller_id_name: name })
       setLogForm(f => ({ ...f, direction: 'outbound' }))
     } catch (e) {
-      alert('فشل بدء المكالمة: ' + (e.response?.data?.detail || e.message))
+      toast.error('فشل بدء المكالمة: ' + (e.response?.data?.detail || e.message))
     } finally {
       setDialLoading(false)
     }
@@ -1481,7 +1485,7 @@ export default function CallCenterPage() {
       qc.invalidateQueries({ queryKey: ['cc-calls'] })
       setSavedCallId(data.id)
     } catch (err) {
-      alert('حدث خطأ أثناء حفظ المكالمة: ' + (err.response?.data?.detail || err.message))
+      toast.error('حدث خطأ أثناء حفظ المكالمة: ' + (err.response?.data?.detail || err.message))
     }
   }
 
@@ -1492,7 +1496,7 @@ export default function CallCenterPage() {
       await callCenterApi.summarize(savedCallId)
       setAiDone(true)
     } catch (e) {
-      alert('فشل التلخيص: ' + (e.response?.data?.detail || e.message))
+      toast.error('فشل التلخيص: ' + (e.response?.data?.detail || e.message))
     } finally {
       setAiLoading(false)
     }

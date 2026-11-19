@@ -141,6 +141,7 @@ class CampaignDispatcher:
             qs = qs.filter(segment__in=segments)
 
         if f.get('chronic_category'):
+            # saved criterion for a bulk action, not a search box; stays literal contains (S4)
             qs = qs.filter(health_profile__chronic_conditions__icontains=f['chronic_category'])
 
         now = timezone.now()

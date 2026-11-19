@@ -252,12 +252,18 @@ class BulkReadScopeTests(BulkReadTests.__base__):
         import subprocess
         import sys
         from django.conf import settings as dj
-        env = dict(os.environ, BULK_READ_PATHS=' /api/a/ , /api/b/ ,')
+        # The child is not a test run, so settings demand a real SECRET_KEY (production guard).
+        # Give it a throwaway one: it only prints a setting. Without this the test passed only
+        # where a developer .env supplies the key and crashed everywhere else (CI, fresh clone).
+        env = dict(os.environ, BULK_READ_PATHS=' /api/a/ , /api/b/ ,',
+                   SECRET_KEY='bulk-read-env-override-test-only-' + 'x' * 40)
         code = ('import django,os;os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings");'
                 'django.setup();from django.conf import settings as s;print(repr(s.BULK_READ_PATHS))')
         out = subprocess.run([sys.executable, '-c', code], env=env, cwd=str(dj.BASE_DIR),
                              capture_output=True, text=True, timeout=120)
-        self.assertEqual(out.stdout.strip().splitlines()[-1], "('/api/a/', '/api/b/')", out.stderr)
+        lines = out.stdout.strip().splitlines()
+        self.assertTrue(lines, f'child printed nothing: {out.stderr[-2000:]}')
+        self.assertEqual(lines[-1], "('/api/a/', '/api/b/')", out.stderr)
         self.assertEqual(dj.BULK_READ_PATHS, ('/api/customers/', '/api/pic-analytics/'))
 
     def test_expired_block_is_cleared(self):

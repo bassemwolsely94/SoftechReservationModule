@@ -4,6 +4,7 @@ apps/erp/views.py — Read-only API for ERP transaction layer.
 All writes happen through sync/tasks.py, never through the API.
 """
 from rest_framework import viewsets, filters
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -24,7 +25,7 @@ class ERPTransactionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     permission_classes = [IsAuthenticated]
     serializer_class   = ERPTransactionSerializer
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['doccode', 'branch', 'phcode']
     search_fields      = ['transaction_id', 'phcode', 'reference_number', 'lines__item_code']
     ordering_fields    = ['transaction_date', 'total_amount']
@@ -111,7 +112,7 @@ class LocalCustomerViewSet(viewsets.ReadOnlyModelViewSet):
     Read-only API for PIC/delivery customers from localcustomers.
     """
     permission_classes = [IsAuthenticated]
-    filter_backends    = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends    = [DjangoFilterBackend, WildcardSearchFilter, filters.OrderingFilter]
     filterset_fields   = ['is_active', 'customer_type', 'branch']
     search_fields      = ['phcode', 'name', 'phone', 'phone_alt']
     ordering           = ['name']

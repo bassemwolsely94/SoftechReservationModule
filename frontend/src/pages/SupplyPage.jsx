@@ -336,8 +336,7 @@ function MiniSelect({ value, onChange, options, title }) {
 // case/space-insensitive match on itemcode + item_name
 function matchesText(l, q) {
   if (!q) return true
-  const t = q.trim().toLowerCase()
-  return String(l.itemcode || '').toLowerCase().includes(t) || wildcardMatch(l.item_name, t)
+  return wildcardMatch([l.itemcode, l.item_name], q)
 }
 
 function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, executing, actionError }) {
@@ -1136,7 +1135,8 @@ function DistributionTab() {
 
       {plan && (
         <div className="flex flex-wrap gap-2" data-tour="purchasing-supply-dist-waves">
-          {['1', '2', '3', '4'].map(w => {
+          {/* wave 5 = the dead-stock lane (C05) — only when the plan was built with it switched on */}
+          {['1', '2', '3', '4', ...(plan.inputs?.dead_stock_lane ? ['5'] : [])].map(w => {
             const t = plan.totals?.waves?.[w] || {}
             return tab(w, `${w} · ${plan.wave_labels?.[w] || ''}`, `${t.moves || 0} حركة · ${egp(t.value)} ج`)
           })}

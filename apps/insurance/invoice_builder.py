@@ -44,7 +44,8 @@ Dataset structure returned by build_invoice_dataset():
 }
 """
 from datetime import date
-from decimal import Decimal
+import logging
+from decimal import ROUND_HALF_UP, Decimal
 from collections import defaultdict, OrderedDict
 
 from .models import (
@@ -57,6 +58,54 @@ from .models import (
 
 # Totals fields a net_override (تجاوز مباشر) moves away from the Power-Query figure.
 _OVERRIDE_FIELDS = ('local_discount', 'imported_discount', 'tarsia_discount', 'total_discount', 'net_after')
+
+logger = logging.getLogger(__name__)
+
+_CENT = Decimal('0.01')
+_COVER_CATEGORIES = ('local', 'imported', 'tarsia')
+# A residual larger than this is not rounding: it means the claim's stored final_* totals are stale
+# (recalculate_claim_final_totals not run after a change). It is still settled, but logged.
+_COVER_RESIDUAL_WARN = Decimal('0.05')
+
+
+def cover_category_discounts(befores: dict, rates: dict, total_discount, override_delta=None) -> dict:
+    """
+    Split the cover page's total discount into its category rows (D-15, owner 2026-11-19).
+
+    The cover TOTAL is never computed here: ``total_discount`` is the claim's own figure
+    (claim.final_total_discount, or the billing group's Power-Query total from
+    _finalised_totals). This only decides how that total is printed across محلى / مستورد / الترسية:
+
+      1. each category discount = before x rate / 100 in Decimal, rounded HALF-UP to 0.01
+         per category (x.xx5 -> up; no float, no banker's rounding);
+      2. plus what net overrides moved in that category (M-3), so the rows include them;
+      3. the residual piaster(s) between the sum of the rows and ``total_discount`` -- left by
+         rounding three categories separately while the claim net is rounded once (M-4) -- is
+         settled on the category with the LARGEST discount (ties: محلى, then مستورد, then الترسية).
+
+    So the category discounts add up to total_discount exactly, and the category nets add up to
+    the claim net. ``befores`` / ``rates`` are keyed by 'local' / 'imported' / 'tarsia';
+    ``override_delta`` by '<category>_discount' as in _OVERRIDE_FIELDS. Returns {category: Decimal}.
+    """
+    override_delta = override_delta or {}
+    disc = {}
+    for cat in _COVER_CATEGORIES:
+        before = Decimal(str(befores.get(cat) or 0))
+        rate = Decimal(str(rates.get(cat) or 0))
+        base = (before * rate / 100).quantize(_CENT, rounding=ROUND_HALF_UP)
+        moved = Decimal(str(override_delta.get(f'{cat}_discount') or 0))
+        disc[cat] = (base + moved).quantize(_CENT, rounding=ROUND_HALF_UP)
+
+    total = Decimal(str(total_discount or 0)).quantize(_CENT, rounding=ROUND_HALF_UP)
+    residual = total - sum(disc.values(), Decimal('0'))
+    if residual:
+        if abs(residual) > _COVER_RESIDUAL_WARN:
+            logger.warning('insurance cover: residual %s against the claim total discount '
+                           '(stale final totals?)', residual)
+        largest = max(_COVER_CATEGORIES, key=lambda c: abs(disc[c]))   # the first wins a tie
+        disc[largest] += residual
+    return disc
+
 
 
 def _zero_totals():
@@ -87,8 +136,14 @@ def _add_to_totals(totals: dict, row: dict):
 
 
 def _float_totals(totals: dict, claim: InsuranceClaim = None) -> dict:
+    """Finalise a totals bucket (see _finalised_totals) and convert to floats for JSON."""
+    return {k: (float(v) if isinstance(v, Decimal) else v)
+            for k, v in _finalised_totals(totals, claim).items() if not k.startswith('_')}
+
+
+def _finalised_totals(totals: dict, claim: InsuranceClaim = None) -> dict:
     """
-    Finalise a totals bucket and convert to floats.
+    Finalise a totals bucket, keeping Decimals.
 
     When `claim` is given, net / discount / per-category discounts are
     RECOMPUTED from the summed splits using the Power-Query formula
@@ -115,8 +170,7 @@ def _float_totals(totals: dict, claim: InsuranceClaim = None) -> dict:
         # what the overrides moved, so the totals equal Σ the printed rows for those prescriptions.
         for field, delta in (totals.get('_override_delta') or {}).items():
             totals[field] = totals[field] + delta
-    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in totals.items()
-            if not k.startswith('_')}
+    return totals
 
 
 def _effective_rx_values(rx: InsuranceClaimPrescription, claim: InsuranceClaim) -> dict:
@@ -456,35 +510,49 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
     imported_disc_pct     = float(claim.applied_imported_disc_pct)
     tarsia_disc_pct       = float(claim.applied_tarsia_disc_pct)
 
+    # Cover figures stay Decimal until the JSON boundary (D-15). Gross / discount / net are the
+    # claim's own totals -- never re-derived here.
     if billing_group is not None:
         # Power-Query-finalise the group's accumulated splits so the group cover
         # matches the same net formula as the whole-claim cover.
-        cover_ft = _float_totals(claim_totals, claim)
-        cover_local_before    = cover_ft['local_before']
-        cover_imported_before = cover_ft['imported_before']
-        cover_tarsia_before   = cover_ft['tarsia_before']
-        cover_gross_before    = cover_ft['gross_before']
-        cover_total_discount  = cover_ft['total_discount']
-        cover_net_after       = cover_ft['net_after']
-        cover_rx_count        = claim_totals['rx_count']
+        cover_t = _finalised_totals(claim_totals, claim)
+        cover_rx_count = claim_totals['rx_count']
     else:
-        cover_local_before    = float(claim.final_local_before)
-        cover_imported_before = float(claim.final_imported_before)
-        cover_tarsia_before   = float(claim.final_tarsia_before)
-        cover_gross_before    = float(claim.final_gross_before)
-        cover_total_discount  = float(claim.final_total_discount)
-        cover_net_after       = float(claim.final_net_after)
-        cover_rx_count        = claim.final_rx_count
+        cover_t = {
+            'local_before':    claim.final_local_before,
+            'imported_before': claim.final_imported_before,
+            'tarsia_before':   claim.final_tarsia_before,
+            'gross_before':    claim.final_gross_before,
+            'total_discount':  claim.final_total_discount,
+            'net_after':       claim.final_net_after,
+        }
+        cover_rx_count = claim.final_rx_count
+    cover_t = {k: Decimal(str(cover_t.get(k) or 0))
+               for k in ('local_before', 'imported_before', 'tarsia_before',
+                         'gross_before', 'total_discount', 'net_after')}
 
-    cover_local_disc      = round(cover_local_before    * local_disc_pct    / 100, 2)
-    cover_imported_disc   = round(cover_imported_before * imported_disc_pct / 100, 2)
-    cover_tarsia_disc     = round(cover_tarsia_before   * tarsia_disc_pct   / 100, 2)
-    # Net overrides (M-3): the category rows carry what the overrides moved, so they add up to the
-    # cover total (which already includes them) instead of the contract-rate figure alone.
-    _ovr = claim_totals['_override_delta']
-    cover_local_disc      = round(cover_local_disc    + float(_ovr['local_discount']), 2)
-    cover_imported_disc   = round(cover_imported_disc + float(_ovr['imported_discount']), 2)
-    cover_tarsia_disc     = round(cover_tarsia_disc   + float(_ovr['tarsia_discount']), 2)
+    # Category rows: half-up per category + net-override moves (M-3); the residual piaster is
+    # settled on the largest category so the rows add up to the claim total exactly (D-15).
+    cover_disc = cover_category_discounts(
+        befores={c: cover_t[f'{c}_before'] for c in _COVER_CATEGORIES},
+        rates={'local': claim.applied_local_disc_pct,
+               'imported': claim.applied_imported_disc_pct,
+               'tarsia': claim.applied_tarsia_disc_pct},
+        total_discount=cover_t['total_discount'],
+        override_delta=claim_totals['_override_delta'],
+    )
+    cover_local_before    = float(cover_t['local_before'])
+    cover_imported_before = float(cover_t['imported_before'])
+    cover_tarsia_before   = float(cover_t['tarsia_before'])
+    cover_local_disc      = float(cover_disc['local'])
+    cover_imported_disc   = float(cover_disc['imported'])
+    cover_tarsia_disc     = float(cover_disc['tarsia'])
+    cover_local_net       = float(cover_t['local_before']    - cover_disc['local'])
+    cover_imported_net    = float(cover_t['imported_before'] - cover_disc['imported'])
+    cover_tarsia_net      = float(cover_t['tarsia_before']   - cover_disc['tarsia'])
+    cover_gross_before    = float(cover_t['gross_before'])
+    cover_total_discount  = float(cover_t['total_discount'])
+    cover_net_after       = float(cover_t['net_after'])
 
     return {
         'claim': {
@@ -505,15 +573,15 @@ def build_invoice_dataset(claim: InsuranceClaim, billing_group=None) -> dict:
         'cover': {
             'local_before':     cover_local_before,
             'local_discount':   cover_local_disc,
-            'local_net':        round(cover_local_before - cover_local_disc, 2),
+            'local_net':        cover_local_net,
             'local_disc_pct':   local_disc_pct,
             'imported_before':  cover_imported_before,
             'imported_discount': cover_imported_disc,
-            'imported_net':     round(cover_imported_before - cover_imported_disc, 2),
+            'imported_net':     cover_imported_net,
             'imported_disc_pct': imported_disc_pct,
             'tarsia_before':    cover_tarsia_before,
             'tarsia_discount':  cover_tarsia_disc,
-            'tarsia_net':       round(cover_tarsia_before - cover_tarsia_disc, 2),
+            'tarsia_net':       cover_tarsia_net,
             'tarsia_disc_pct':  tarsia_disc_pct,
             'gross_before':     cover_gross_before,
             'total_discount':   cover_total_discount,

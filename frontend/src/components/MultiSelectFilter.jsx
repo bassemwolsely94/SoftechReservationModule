@@ -33,9 +33,9 @@ export default function MultiSelectFilter({ label, options = [], selected = [], 
     onChange(selected.includes(code) ? selected.filter(c => c !== code) : [...selected, code])
   }
 
-  const q = search.trim().toLowerCase()
+  const q = search.trim()
   const filtered = q
-    ? options.filter(o => wildcardMatch(o.name, q) || String(o.code).toLowerCase().includes(q))
+    ? options.filter(o => wildcardMatch([o.name, o.code], q))
     : options
 
   const tickShown = () => {

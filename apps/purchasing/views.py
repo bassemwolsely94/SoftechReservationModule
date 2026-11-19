@@ -603,7 +603,7 @@ def _build_metrics_qs(request, run):
     if needs == '1':
         qs = qs.filter(gap__gt=0)
     if search:
-        qs = qs.filter(wq(search, 'item__name') | Q(item__softech_id__icontains=search))
+        qs = qs.filter(wq(search, 'item__name', 'item__softech_id'))
     qs = _apply_item_filters(qs, request.GET)
     return qs
 
@@ -625,7 +625,7 @@ def _build_agg_qs(request, run):
     if needs == '1':
         qs = qs.filter(total_gap__gt=0)
     if search:
-        qs = qs.filter(wq(search, 'item__name') | Q(item__softech_id__icontains=search))
+        qs = qs.filter(wq(search, 'item__name', 'item__softech_id'))
     qs = _apply_item_filters(qs, request.GET)
     return qs
 

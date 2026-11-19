@@ -36,6 +36,7 @@ from rest_framework.views import APIView
 
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
+from apps.catalog.wildcard import wq
 from core import branch_scope
 from core.permissions import matrix_permission
 from core.sort_ordering import explicit_order_by
@@ -215,7 +216,8 @@ class ListingListCreate(_Gate, generics.ListCreateAPIView):
             qs = qs.filter(item_id=item)
         q = (p.get('q') or '').strip()
         if q:
-            qs = qs.filter(Q(item__name__icontains=q) | Q(item__softech_id=q) | Q(external_sku=q))
+            # exact id: an item code / SKU is typed whole
+            qs = qs.filter(wq(q, 'item__name') | Q(item__softech_id=q) | Q(external_sku=q))
         approved = (p.get('approved') or '').strip().lower()
         if approved in ('1', 'true', 'yes'):
             qs = qs.filter(approved=True)

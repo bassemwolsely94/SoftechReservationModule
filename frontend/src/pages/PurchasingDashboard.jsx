@@ -22,12 +22,14 @@ import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import { useToast } from '../components/ui'
+import { useConfirm } from '../components/InlineConfirm'
 import { SortIcon } from '../components/DataTable'
 import useSortableRows from '../hooks/useSortableRows'
 import useClosedBranches from '../hooks/useClosedBranches'
 import SharedSortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import { wildcardMatch } from '../utils/wildcard'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
 // useColWidths(defaults: number[]) → [widths, onResizeStart(e, colIndex)]
@@ -1115,9 +1117,9 @@ function MultiSelect({ label, options = [], value = [], onChange,
   }, [])
   if (!options.length) return null
   const sel = new Set(value)
-  const ql  = q.trim().toLowerCase()
+  const ql  = q.trim()
   const list = (searchable && ql)
-    ? options.filter(o => `${getLabel(o)} ${getVal(o)}`.toLowerCase().includes(ql))
+    ? options.filter(o => wildcardMatch([getLabel(o), getVal(o)], ql))
     : options
   const toggle = v => onChange(sel.has(v) ? value.filter(x => x !== v) : [...value, v])
 
@@ -1512,6 +1514,7 @@ export default function PurchasingDashboard() {
   const wasRunning = useRef(false)
   const runningId = useRef(null)
   const toast      = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
 
   // Fast-poll window: 12 min for full-sync (365d ≈ 8 min), 5 min for incremental
   const maxPollMs = isFullTrigger ? 12 * 60_000 : 5 * 60_000
@@ -1681,11 +1684,11 @@ export default function PurchasingDashboard() {
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Export failed', err)
-      alert('فشل التصدير — تحقق من الاتصال وحاول مرة أخرى')
+      toast.error('فشل التصدير — تحقق من الاتصال وحاول مرة أخرى')
     } finally {
       setExporting(false)
     }
-  }, [viewTab, exportBranch, exportAbc, pivotCoverage, pivotRoundAt])
+  }, [viewTab, exportBranch, exportAbc, pivotCoverage, pivotRoundAt, toast])
 
   // Experimental ADVANCED pathway — parallel current-vs-advanced comparison sheet.
   const handleAdvancedExport = useCallback(async () => {
@@ -1706,11 +1709,11 @@ export default function PurchasingDashboard() {
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Advanced export failed', err)
-      alert('فشل التصدير المتقدم — قد يستغرق وقتاً على كل الفروع؛ جرّب فرعاً واحداً')
+      toast.error('فشل التصدير المتقدم — قد يستغرق وقتاً على كل الفروع؛ جرّب فرعاً واحداً')
     } finally {
       setExporting(false)
     }
-  }, [exportBranch, exportAbc, advBudget])
+  }, [exportBranch, exportAbc, advBudget, toast])
 
   // Advanced SUPPLIER pivot — one row per item, per-branch cols, pack rounding.
   const handleAdvancedPivotExport = useCallback(async () => {
@@ -1727,11 +1730,11 @@ export default function PurchasingDashboard() {
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Advanced pivot export failed', err)
-      alert('فشل تصدير طلب الموردين — قد يستغرق دقيقة على كل الأصناف')
+      toast.error('فشل تصدير طلب الموردين — قد يستغرق دقيقة على كل الأصناف')
     } finally {
       setExporting(false)
     }
-  }, [])
+  }, [toast])
 
   // ── Engine params dialog ──────────────────────────────────────────────────
   const [paramsOpen,  setParamsOpen]  = useState(false)
@@ -1756,7 +1759,7 @@ export default function PurchasingDashboard() {
       qc.invalidateQueries({ queryKey: ['purchasing-config'] })
       setParamsOpen(false)
     } catch (err) {
-      alert('خطأ في حفظ الإعدادات: ' + (err?.response?.data?.errors
+      toast.error('خطأ في حفظ الإعدادات: ' + (err?.response?.data?.errors
         ? JSON.stringify(err.response.data.errors) : err.message))
     } finally {
       setParamsSaving(false)
@@ -1789,7 +1792,7 @@ export default function PurchasingDashboard() {
     },
     onError: (err) => {
       const msg = err?.response?.data?.detail || 'تعذّرت مزامنة التعويض'
-      alert(msg)
+      toast.error(msg)
     },
   })
 
@@ -1870,7 +1873,7 @@ export default function PurchasingDashboard() {
   // Run engine with the currently-displayed params as one-time overrides (does NOT save to DB)
   const handleRunWithParams = () => {
     if (!weightsOk) {
-      alert('مجموع الأوزان يجب أن يكون 1.0 قبل التشغيل')
+      toast.warning('مجموع الأوزان يجب أن يكون 1.0 قبل التشغيل')
       return
     }
     setPreTriggerRunId(runId)
@@ -1880,6 +1883,7 @@ export default function PurchasingDashboard() {
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
+      {confirmUi}
 
       {/* ── Engine params modal ──────────────────────────────────────────────── */}
       {paramsOpen && (
@@ -2411,13 +2415,14 @@ export default function PurchasingDashboard() {
                 {/* ── Catch-up ── robust chunked backfill for when the scheduled
                     sync missed SOFTECH and sales went stale. Emphasised when stale. */}
                 <button data-tour="purchasing-engine-catchup"
-                  onClick={() => {
+                  onClick={async () => {
                     if (isRunning || catchupMutation.isLoading) return
-                    if (!window.confirm(
+                    if (!(await confirmInline(
                       (salesStale ? `المبيعات متأخرة ${saleStaleDays} يوم. ` : '') +
                       'مزامنة تعويضية: تجلب المبيعات المتأخرة على دفعات ثم تعيد تشغيل المحرك.\n'
-                      + 'قد تستغرق عدة دقائق. هل تريد المتابعة؟'
-                    )) return
+                      + 'قد تستغرق عدة دقائق. هل تريد المتابعة؟',
+                      { confirmLabel: 'متابعة' }
+                    ))) return
                     catchupMutation.mutate()
                   }}
                   disabled={isRunning || triggerMutation.isLoading || catchupMutation.isLoading}
@@ -2437,11 +2442,12 @@ export default function PurchasingDashboard() {
                     catch-up and the items sync follow the engine-run rule — Z-11g) */}
                 {isAdmin && (
                 <button data-tour="purchasing-engine-full-sync"
-                  onClick={() => {
+                  onClick={async () => {
                     if (isRunning) return
-                    if (!window.confirm(
-                      'مزامنة كاملة 365 يوم من SOFTECH — ستستغرق 5 – 8 دقائق.\nهل تريد المتابعة؟'
-                    )) return
+                    if (!(await confirmInline(
+                      'مزامنة كاملة 365 يوم من SOFTECH — ستستغرق 5 – 8 دقائق.\nهل تريد المتابعة؟',
+                      { confirmLabel: 'متابعة' }
+                    ))) return
                     triggerMutation.mutate({ full: true })
                   }}
                   disabled={isRunning || triggerMutation.isLoading}
@@ -2456,11 +2462,12 @@ export default function PurchasingDashboard() {
 
                 {/* ── Items catalog sync ── new items + price/itemtrans/امر التوريد updates */}
                 <button data-tour="purchasing-engine-items-sync"
-                  onClick={() => {
+                  onClick={async () => {
                     if (itemsSyncMutation.isLoading) return
-                    if (!window.confirm(
-                      'مزامنة كتالوج الأصناف من SOFTECH: أصناف جديدة + تحديث الأسعار وصلاحيات الحركة وحالة امر التوريد والضرائب.\nهل تريد المتابعة؟'
-                    )) return
+                    if (!(await confirmInline(
+                      'مزامنة كتالوج الأصناف من SOFTECH: أصناف جديدة + تحديث الأسعار وصلاحيات الحركة وحالة امر التوريد والضرائب.\nهل تريد المتابعة؟',
+                      { confirmLabel: 'متابعة' }
+                    ))) return
                     itemsSyncMutation.mutate()
                   }}
                   disabled={itemsSyncMutation.isLoading || itemsSyncRunId != null}

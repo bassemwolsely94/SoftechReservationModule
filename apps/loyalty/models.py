@@ -122,77 +122,114 @@ class LoyaltyAccount(models.Model):
             self.tier = tier
             self.save(update_fields=['tier', 'updated_at'])
 
-    def add_points(self, points: int, reason: str, source_type: str = 'purchase',
-                   source_id: int | None = None, notes: str = '') -> 'PointTransaction':
-        """Earn points — creates a PointTransaction and updates balance."""
-        tx = PointTransaction.objects.create(
-            account=self,
-            points=abs(points),
-            transaction_type='earn',
-            source_type=source_type,
-            source_id=source_id,
-            reason=reason,
-            notes=notes,
-        )
-        self.points_balance  += abs(points)
-        self.points_lifetime += abs(points)
-        self.save(update_fields=['points_balance', 'points_lifetime', 'updated_at'])
-        self.recompute_tier()
+    # ── Balance changes (D-13, owner 2026-11-19) ──────────────────────────────
+    # Every change goes through _apply_change(): it locks the account row (SELECT … FOR UPDATE)
+    # inside a transaction, re-reads the balances, writes the ledger row with the balance
+    # before/after, and saves the new totals. Before, each method did `self.points_balance += n`
+    # on a possibly stale copy, so two changes at the same moment lost one of them
+    # (full audit 2026-11-15, BE-7). Existing balances are not recalculated.
+
+    def _apply_change(self, delta: int, *, transaction_type: str, reason: str,
+                      source_type: str = 'manual', source_id: int | None = None,
+                      notes: str = '', created_by=None, add_lifetime: int = 0,
+                      add_redeemed: int = 0, check=None,
+                      skip_zero: bool = False) -> 'PointTransaction | None':
+        """Apply a signed `delta` under a row lock. `check(locked)` runs on the locked row: it may
+        raise ValueError (nothing is written) or return a new delta (e.g. expiry capped at the
+        balance). With skip_zero, a zero delta writes nothing and returns None."""
+        from django.db import transaction
+        with transaction.atomic():
+            locked = type(self).objects.select_for_update().get(pk=self.pk)
+            if check is not None:
+                checked = check(locked)
+                if checked is not None:
+                    delta = checked
+            if skip_zero and delta == 0:
+                return None
+            before = locked.points_balance
+            after = before + delta
+            tx = PointTransaction.objects.create(
+                account=locked,
+                points=delta,
+                transaction_type=transaction_type,
+                source_type=source_type,
+                source_id=source_id,
+                reason=reason,
+                notes=notes,
+                created_by=created_by,
+                balance_before=before,
+                balance_after=after,
+            )
+            locked.points_balance = after
+            fields = ['points_balance', 'updated_at']
+            if add_lifetime:
+                locked.points_lifetime += add_lifetime
+                fields.append('points_lifetime')
+            if add_redeemed:
+                locked.points_redeemed += add_redeemed
+                fields.append('points_redeemed')
+            locked.save(update_fields=fields)
+            if add_lifetime:
+                locked.recompute_tier()
+        # The caller's copy shows the new state (views read it back for their response).
+        self.points_balance = locked.points_balance
+        self.points_lifetime = locked.points_lifetime
+        self.points_redeemed = locked.points_redeemed
+        self.tier_id = locked.tier_id
+        self.updated_at = locked.updated_at
         return tx
+
+    def add_points(self, points: int, reason: str, source_type: str = 'purchase',
+                   source_id: int | None = None, notes: str = '',
+                   created_by=None) -> 'PointTransaction':
+        """Earn points — creates a PointTransaction and updates balance."""
+        points = abs(points)
+        return self._apply_change(
+            points, transaction_type='earn', reason=reason, source_type=source_type,
+            source_id=source_id, notes=notes, created_by=created_by, add_lifetime=points,
+        )
 
     def redeem_points(self, points: int, reason: str, reward=None,
                       notes: str = '') -> 'PointTransaction':
-        """Redeem points — raises ValueError if balance insufficient."""
+        """Redeem points — raises ValueError if balance insufficient (checked under the lock)."""
         points = abs(points)
-        if self.points_balance < points:
-            raise ValueError(
-                f'رصيد النقاط غير كافٍ: متاح {self.points_balance}، مطلوب {points}'
-            )
-        tx = PointTransaction.objects.create(
-            account=self,
-            points=-points,
-            transaction_type='redeem',
-            source_type='reward',
-            source_id=reward.pk if reward else None,
-            reason=reason,
-            notes=notes,
+
+        def check(locked):
+            if locked.points_balance < points:
+                raise ValueError(
+                    f'رصيد النقاط غير كافٍ: متاح {locked.points_balance}، مطلوب {points}'
+                )
+
+        return self._apply_change(
+            -points, transaction_type='redeem', reason=reason, source_type='reward',
+            source_id=reward.pk if reward else None, notes=notes,
+            add_redeemed=points, check=check,
         )
-        self.points_balance  -= points
-        self.points_redeemed += points
-        self.save(update_fields=['points_balance', 'points_redeemed', 'updated_at'])
-        return tx
 
     def adjust_points(self, points: int, reason: str, by_staff,
-                      notes: str = '') -> 'PointTransaction':
-        """Manual adjustment (positive or negative) by a staff member."""
-        tx = PointTransaction.objects.create(
-            account=self,
-            points=points,
-            transaction_type='adjust',
-            reason=reason,
-            notes=notes,
-            created_by=by_staff,
+                      notes: str = '', source_type: str = 'manual',
+                      allow_negative: bool = True) -> 'PointTransaction':
+        """Manual adjustment (positive or negative) by a staff member.
+        allow_negative=False refuses a deduction that would take the balance below zero."""
+        def check(locked):
+            if not allow_negative and points < 0 and locked.points_balance + points < 0:
+                raise ValueError(
+                    f'رصيد النقاط غير كافٍ: متاح {locked.points_balance}، مطلوب خصم {-points}'
+                )
+
+        return self._apply_change(
+            points, transaction_type='adjust', reason=reason, source_type=source_type,
+            notes=notes, created_by=by_staff,
+            add_lifetime=points if points > 0 else 0, check=check,
         )
-        self.points_balance += points
-        if points > 0:
-            self.points_lifetime += points
-        self.save(update_fields=['points_balance', 'points_lifetime', 'updated_at'])
-        self.recompute_tier()
-        return tx
 
     def expire_points(self, points: int, reason: str = 'انتهاء صلاحية النقاط') -> 'PointTransaction':
-        points = min(abs(points), self.points_balance)
-        if points == 0:
-            return None
-        tx = PointTransaction.objects.create(
-            account=self,
-            points=-points,
-            transaction_type='expire',
-            reason=reason,
+        """Expire up to `points`, capped at the balance read under the lock. None when nothing expires."""
+        wanted = abs(points)
+        return self._apply_change(
+            0, transaction_type='expire', reason=reason, skip_zero=True,
+            check=lambda locked: -min(wanted, max(locked.points_balance, 0)),
         )
-        self.points_balance -= points
-        self.save(update_fields=['points_balance', 'updated_at'])
-        return tx
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -243,7 +280,9 @@ class PointTransaction(models.Model):
     reason           = models.CharField(max_length=255, verbose_name='السبب')
     notes            = models.TextField(blank=True, verbose_name='ملاحظات')
 
-    # Running balance snapshot at the time of this transaction
+    # Balance snapshots around this transaction, taken under the account row lock (D-13).
+    # balance_before is empty on rows written before 2026-11-19.
+    balance_before   = models.IntegerField(null=True, blank=True, verbose_name='الرصيد قبل المعاملة')
     balance_after    = models.IntegerField(default=0, verbose_name='الرصيد بعد المعاملة')
 
     created_by       = models.ForeignKey(

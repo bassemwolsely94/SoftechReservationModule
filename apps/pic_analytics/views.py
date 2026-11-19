@@ -23,6 +23,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from .access import Access
 from .models import PicAnalyticsAccess
 from .queries import groups as q_groups
@@ -116,9 +117,9 @@ def grant_candidates(request):
     granted = set(PicAnalyticsAccess.objects.filter(revoked_at__isnull=True).values_list('staff_id', flat=True))
     qs = StaffProfile.objects.filter(is_active=True).exclude(role='admin').select_related('user', 'branch')
     if q:
-        qs = qs.filter(Q(user__first_name__icontains=q) | Q(user__last_name__icontains=q) |
-                       Q(user__username__icontains=q) | Q(softech_username__icontains=q) |
-                       Q(softech_user_id=q))
+        # exact id: softech_user_id is a code typed whole
+        qs = qs.filter(wq(q, 'user__first_name', 'user__last_name', 'user__username', 'softech_username')
+                       | Q(softech_user_id=q))
     rows = [{'id': p.id, 'name': p.full_name, 'role': p.role, 'branch': p.branch_name,
              'granted': p.id in granted} for p in qs.order_by('branch__softech_branch_id')[:30]]
     return Response({'rows': rows})

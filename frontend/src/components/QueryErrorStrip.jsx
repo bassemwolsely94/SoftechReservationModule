@@ -49,7 +49,7 @@ export default function QueryErrorStrip() {
   const signature = errors.map(e => e.text).join('|')
   if (!errors.length || dismissed === signature) return null
 
-  const retry = () => qc.refetchQueries({ predicate: q => failingQueries(qc.getQueryCache()).includes(q) })
+  const retry = () => qc.refetchQueries({ predicate: cached => failingQueries(qc.getQueryCache()).includes(cached) })
 
   return (
     <div role="alert" data-testid="query-error-strip" dir="rtl"

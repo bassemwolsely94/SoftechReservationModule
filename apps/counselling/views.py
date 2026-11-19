@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.catalog.wildcard import wq
 from core.sort_ordering import explicit_order_by
 
 from . import services
@@ -88,7 +89,8 @@ class ContentListCreate(_ContentGate, generics.ListCreateAPIView):
             qs = qs.filter(status=st)
         q = (self.request.query_params.get('q') or '').strip()
         if q:
-            qs = qs.filter(Q(title__icontains=q) | Q(links__item__name__icontains=q)
+            # exact id: the linked item's code is typed whole
+            qs = qs.filter(wq(q, 'title', 'links__item__name')
                            | Q(links__item__softech_id=q)).distinct()
         return qs.order_by(*explicit_order_by(self.request.query_params.get('ordering'), ORDERING,
                                               ('-updated_at', '-id')))

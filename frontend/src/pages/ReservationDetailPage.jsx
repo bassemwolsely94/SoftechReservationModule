@@ -19,6 +19,8 @@ import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import RemovedFileNote from '../components/RemovedFileNote'
 import { escapeDeep } from '../utils/escapeHtml'
+import { useToast } from '../components/ui'
+import { ConfirmButton, useConfirm } from '../components/InlineConfirm'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -263,7 +265,7 @@ function printCustomerReceipt(rawR, rawPharmacy = null) {
        </table>`
 
   const w = window.open('', '_blank', 'width=420,height=750')
-  if (!w) { alert('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال'); return }
+  if (!w) return false   // the caller shows «يرجى السماح بالنوافذ المنبثقة…» as a toast
   w.document.write(`<!DOCTYPE html>
 <html dir="rtl" lang="ar-u-nu-latn">
 <head>
@@ -492,16 +494,18 @@ function ActivityEntry({ activity, onDelete }) {
           </span>
           {/* Delete button — only for author / admin */}
           {activity.can_delete && onDelete && (
-            <button data-tour="reservations-detail-delete-activity"
-              onClick={() => onDelete(activity.id)}
+            <ConfirmButton data-tour="reservations-detail-delete-activity"
+              onConfirm={() => onDelete(activity.id)}
+              confirmLabel="حذف؟"
               className="text-gray-300 hover:text-red-400 transition-colors p-0.5 rounded"
+              armedClassName="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded"
               title="حذف الرسالة"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-            </button>
+            </ConfirmButton>
           )}
         </div>
 
@@ -820,6 +824,7 @@ const RES_ERP_CFG = {
 }
 
 function ReservationERPMatchPanel({ r, onRefresh }) {
+  const toast = useToast()
   const [checking, setChecking]  = useState(false)
   const [cooldown, setCooldown]  = useState(0)
   const cooldownRef              = useRef(null)
@@ -864,7 +869,7 @@ function ReservationERPMatchPanel({ r, onRefresh }) {
         const match = msg.match(/(\d+)/)
         startCooldown(match ? parseInt(match[1], 10) : 20)
       }
-      alert(msg)
+      toast.error(msg)
     } finally { setChecking(false) }
   }
 
@@ -1231,15 +1236,16 @@ function AllItemsPanel({ r, onRefresh }) {
               <div className="shrink-0 flex items-center gap-1">
                 <div className="text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 tabular-nums">× {line.quantity_requested}</div>
                 {!isLocked && (
-                  <button data-tour="reservations-detail-delete-line"
-                    onClick={async () => {
-                      if (!window.confirm('حذف هذا الصنف؟')) return
+                  <ConfirmButton data-tour="reservations-detail-delete-line"
+                    confirmLabel="حذف؟"
+                    armedClassName="bg-red-600 text-white text-[10px] font-bold rounded px-1.5 py-1"
+                    onConfirm={async () => {
                       await import('../api/client').then(m => m.reservationsApi).then(api => api.deleteLine(r.id, line.id))
                       onRefresh()
                     }}
                     className="text-gray-300 hover:text-red-400 text-xs px-1 py-1"
                     title="حذف"
-                  >✕</button>
+                  >✕</ConfirmButton>
                 )}
               </div>
             </div>
@@ -1346,15 +1352,16 @@ function ReservationLinesPanel({ reservationId, lines, onRefresh }) {
                 {line.item_sale_price} ج.م
               </div>
             )}
-            <button
-              onClick={async () => {
-                if (!window.confirm('حذف هذا الصنف؟')) return
+            <ConfirmButton
+              confirmLabel="حذف؟"
+              armedClassName="bg-red-600 text-white text-[10px] font-bold rounded px-1.5"
+              onConfirm={async () => {
                 await reservationsApi.deleteLine(reservationId, line.id)
                 onRefresh()
               }}
               className="text-gray-300 hover:text-red-400 text-xs px-1"
               title="حذف"
-            >✕</button>
+            >✕</ConfirmButton>
           </div>
         ))}
       </div>
@@ -1474,6 +1481,8 @@ function CustomerHistoryPanel({ reservationId, customerId }) {
 
 export default function ReservationDetailPage() {
   const { id } = useParams()
+  const toast = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const navigate = useNavigate()
   const location = useLocation()
   const qc = useQueryClient()
@@ -1526,17 +1535,18 @@ export default function ReservationDetailPage() {
       setQuickCancel(null)
       invalidate()
     } catch (e) {
-      alert(e.response?.data?.detail || 'تعذّر تغيير الحالة')
+      toast.error(e.response?.data?.detail || 'تعذّر تغيير الحالة')
     } finally { setQuickBusy(false) }
   }
 
+  // the trash button itself is the two-step confirm (ConfirmButton in ActivityEntry); a «deleted»
+  // mark stays visible to everyone
   const handleDeleteActivity = async (activityId) => {
-    if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
     try {
       await reservationsApi.deleteActivity(r.id, activityId)
       invalidate()
     } catch (e) {
-      alert(e.response?.data?.detail || 'تعذّر حذف الرسالة')
+      toast.error(e.response?.data?.detail || 'تعذّر حذف الرسالة')
     }
   }
 
@@ -1555,8 +1565,7 @@ export default function ReservationDetailPage() {
     }
   }
 
-  const handleDeleteImage = async (imageId) => {
-    if (!window.confirm('حذف هذه الصورة؟')) return
+  const handleDeleteImage = async (imageId) => {   // the × is a two-step ConfirmButton
     try {
       await reservationsApi.deleteImage(id, imageId)
       refetchImages()
@@ -1595,6 +1604,7 @@ export default function ReservationDetailPage() {
 
   return (
     <div className="min-h-full bg-gray-50" dir="rtl">
+      {confirmUi}
       {lineErrors.length > 0 && (
         <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
              role="alert" data-testid="reservation-line-errors">
@@ -1684,12 +1694,12 @@ export default function ReservationDetailPage() {
               <CanDo module="demand" action="approve">
                 <button
                   onClick={async () => {
-                    if (!window.confirm('تحويل هذا الحجز إلى طلب ضائع لتتبعه واسترداده لاحقاً عند توفر الصنف؟')) return
+                    if (!(await confirmInline('تحويل هذا الحجز إلى طلب ضائع لتتبعه واسترداده لاحقاً عند توفر الصنف؟', { confirmLabel: 'تحويل' }))) return
                     try {
                       const res = await demandApi.fromReservation({ reservation_id: r.id })
                       if (res?.data?.id) navigate(`/demand/${res.data.id}`)
                     } catch (e) {
-                      alert(e.response?.data?.detail || 'تعذّر التحويل')
+                      toast.error(e.response?.data?.detail || 'تعذّر التحويل')
                     }
                   }}
                   className="text-sm px-3 py-1.5 rounded-lg font-medium border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
@@ -1819,7 +1829,7 @@ export default function ReservationDetailPage() {
                     {img.image_url
                       ? <img src={img.image_url} alt="مرفق" className="rounded-xl border border-gray-200 object-contain w-full max-h-48 cursor-pointer hover:opacity-90" onClick={() => window.open(img.image_url, '_blank')} />
                       : <RemovedFileNote date={img.retention_removed?.image} />}
-                    <button data-tour="reservations-detail-delete-image" onClick={() => handleDeleteImage(img.id)} className="absolute top-1 left-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs hidden group-hover:flex items-center justify-center">×</button>
+                    <ConfirmButton data-tour="reservations-detail-delete-image" onConfirm={() => handleDeleteImage(img.id)} confirmLabel="حذف؟" armedClassName="absolute top-1 left-1 bg-red-600 text-white rounded-full px-2 h-5 text-[10px] font-bold flex items-center justify-center" className="absolute top-1 left-1 bg-red-600 text-white rounded-full w-5 h-5 text-xs hidden group-hover:flex items-center justify-center">×</ConfirmButton>
                   </div>
                 ))}
               </div>
@@ -1891,7 +1901,7 @@ export default function ReservationDetailPage() {
 
                 {/* Print customer receipt */}
                 <button data-tour="reservations-detail-customer-receipt"
-                  onClick={() => printCustomerReceipt(r, pharmacy)}
+                  onClick={() => { if (printCustomerReceipt(r, pharmacy) === false) toast.error('يرجى السماح بالنوافذ المنبثقة لطباعة الإيصال') }}
                   className="w-full flex items-center justify-center gap-2 border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 text-sm font-bold px-3 py-2 rounded-xl transition-colors"
                 >
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal, ROUND_DOWN
 
 from django.db import transaction
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count
 from django.shortcuts import get_object_or_404
 
 from core import branch_scope
@@ -110,11 +110,7 @@ class PlanListCreateView(branch_scope.BranchScopedMixin, generics.ListCreateAPIV
 
         payee_q = self.request.query_params.get('q', '').strip()
         if payee_q:
-            qs = qs.filter(
-                Q(title__icontains=payee_q) |
-                wq(payee_q, 'payee_name') |
-                Q(reference_doc__icontains=payee_q)
-            )
+            qs = qs.filter(wq(payee_q, 'title', 'payee_name', 'reference_doc'))
 
         return qs
 

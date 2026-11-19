@@ -37,6 +37,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from .access import Access
 from .models import (StockAuditAccess, StockAuditFinding, StockAuditRule, StockAuditRuleOverride,
                      StockAuditRun, StockLedgerLine, StockLedgerSyncRun)
@@ -144,7 +145,8 @@ def _filtered(request, acc):
         qs = qs.filter(personcode__in=personcodes_in_channels(channels))
     q = (qp.get('q') or '').strip()
     if q:
-        cond = Q(itemcode=q) | Q(item__name__icontains=q) | Q(message_ar__icontains=q) | Q(personcode=q)
+        # exact ids: an item code, an account code and a document number are typed whole
+        cond = Q(itemcode=q) | wq(q, 'item__name', 'message_ar') | Q(personcode=q)
         if q.isdigit():
             cond |= Q(docnumber=int(q))
         qs = qs.filter(cond)
@@ -620,9 +622,9 @@ def access_candidates(request):
     granted = set(StockAuditAccess.objects.filter(revoked_at__isnull=True).values_list('staff_id', flat=True))
     qs = StaffProfile.objects.filter(is_active=True).exclude(role='admin').select_related('user', 'branch')
     if q:
-        qs = qs.filter(Q(user__first_name__icontains=q) | Q(user__last_name__icontains=q) |
-                       Q(user__username__icontains=q) | Q(softech_username__icontains=q) |
-                       Q(softech_user_id=q))
+        # exact id: softech_user_id is a code typed whole
+        qs = qs.filter(wq(q, 'user__first_name', 'user__last_name', 'user__username', 'softech_username')
+                       | Q(softech_user_id=q))
     rows = [{'id': p.id, 'name': p.full_name, 'role': p.role, 'branch': p.branch_name,
              'granted': p.id in granted} for p in qs.order_by('branch__softech_branch_id')[:30]]
     return Response({'rows': rows})
