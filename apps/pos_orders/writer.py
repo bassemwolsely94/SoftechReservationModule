@@ -976,6 +976,12 @@ def push_order(order: SoftechSalesOrder, *, dry_run=True, live=False, confirmed_
     order.erp_error         = ''
     order.save()
     logger.info('[pos_orders] order=%s PUSHED → softech docnumber=%s', order.pk, w['docnumber'])
+    if w.get('points_rate_unread'):
+        # D-11: posted with 0 points because the rate read failed → one review record (never raises)
+        from .live_checks import record_gap
+        from .models import PosLiveCheckGap
+        record_gap(order, PosLiveCheckGap.KIND_POINTS,
+                   detail='تعذّر قراءة جدول النقاط من الفرع — سُجّل البيع بدون نقاط')
     return {'mode': 'commit', 'wrote_to_softech': True, 'ok': True,
             'order_id': order.pk, 'docnumber': w['docnumber'], 'readback': w, 'plan': plan}
 
@@ -1517,6 +1523,7 @@ def _execute_write(conn, order, seller):
     # earn too (user-confirmed: points accrue at save, not at تسليم حجز; native 705993/549391/549892
     # carry vf4 on the s_doccode=100 line exactly like the dispensed line).
     _rate_by_item, _rep = {}, None
+    _points_unread = False        # D-11: the rate read failed → posted with 0 points, flagged for review
     _pic_earns = bool(order.softech_pic) and _points.channel_earns_points(order.channel)
     if _pic_earns:
         try:
@@ -1534,8 +1541,13 @@ def _execute_write(conn, order, seller):
                     _rate_by_item[code] = rate
             finally:
                 _rdr.close()
-        except Exception:
+        except Exception as exc:
+            # D-11 «Allow + flag» (owner 2026-11-19): the sale still posts exactly as before (0 points);
+            # push_order records a review record so the points are credited once later (live_checks).
             _rate_by_item, _rep = {}, None
+            _points_unread = order.doc_kind == 'sale'
+            logger.warning('[pos_orders] order=%s points rate read failed (%s) - posting with 0 points, '
+                           'flagged for review', order.pk, type(exc).__name__)
     _sign = -1 if order.doc_kind == 'return' else 1
 
     def _slice_points(code, sub_qty, unit_net):
@@ -1684,6 +1696,7 @@ def _execute_write(conn, order, seller):
         'companiesitems5_found': ncomp, 'branchesalescc5_found': ncc,
         'header': [str(x) for x in hdr] if hdr else None,
         'trans_time_stamped': bool(hdr and hdr[6] is not None),
+        'points_rate_unread': _points_unread,                 # D-11 (not a readback check)
     }
 
 

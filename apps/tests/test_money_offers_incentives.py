@@ -12,7 +12,8 @@ Offers — sources:
 Incentives — source: apps/incentives/engine.calculate docstring + views.calculate:
   * a run deletes the period's transactions and rebuilds them (same input → same rows);
   * a finalized period refuses recalculation (ValueError → HTTP 409) unless force=True;
-  * force=True un-finalizes the period's settlements (is_finalized=False, finalized_at/by cleared).
+  * force=True recalculates only the open settlements — a finalized one is never touched
+    (D-16, owner 2026-11-19; an admin unlocks it first — test_incentives_vouchers_d16_d17).
 SOFTECH reads (_fetch_rows / _fetch_cross_period_returns) are replaced by synthetic rows.
 """
 from datetime import date, datetime
@@ -230,14 +231,15 @@ class IncentivePeriodTests(TestCase):
         self.assertEqual(r.status_code, 409, r.content)
         self.assertTrue(IncentiveSettlement.objects.filter(program=self.prog, is_finalized=True).exists())
 
-    def test_forced_recalculation_unfinalizes_the_period(self, *_):
+    def test_forced_recalculation_never_unfinalizes_the_period(self, *_):
+        # D-16 (owner 2026-11-19, "Refuse unless unlocked"): force no longer reopens settlements
         self.calc()
         before = self.rows()
         self.finalize()
         self.calc(force=True)
         self.assertEqual(self.rows(), before)
         for s in IncentiveSettlement.objects.filter(program=self.prog):
-            self.assertEqual((s.is_finalized, s.finalized_at, s.finalized_by_id), (False, None, None))
+            self.assertEqual((s.is_finalized, s.finalized_by_id), (True, self.admin.pk))
 
     def test_finalize_payout_is_transactions_plus_adjustments(self, *_):
         self.calc()

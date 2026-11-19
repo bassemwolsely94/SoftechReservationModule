@@ -26,8 +26,10 @@ MODULE = {
         'title': T('دورة مراجعة الملاحظة', 'Finding review life cycle'),
         'model': 'stock_audit.StockAuditFinding', 'field': 'status',
         'transitions': 'apps.stock_audit.models.StockAuditFinding.TRANSITIONS',
-        'intro': T('إعادة تشغيل الفحوص لا تغيّر حالة المراجعة. الملاحظة المتجاهلة تُفتح تلقائياً فقط إذا زادت قيمتها أكثر من 50%.',
-                   'Re-running the checks never changes a review status. A dismissed finding reopens by itself only if its value grows by more than 50%.'),
+        'intro': T('إعادة تشغيل الفحوص لا تغيّر حالة المراجعة. الملاحظة المتجاهلة تُفتح تلقائياً فقط إذا زادت قيمتها أكثر من 50%. '
+                   'إغلاق جرد «📋 مهمة + جرد مستهدف» بأصناف كلها مطابقة ينقلها إلى «تمت المراجعة».',
+                   'Re-running the checks never changes a review status. A dismissed finding reopens by itself only if its value grows by more than 50%. '
+                   'Closing a "📋 Task + targeted count" count where every item matched moves it to "Reviewed".'),
         'states': [
             {'key': 'open', 'label': T('مفتوح', 'Open'),
              'desc': T('ملاحظة جديدة لم يراجعها أحد بعد.', 'A new finding nobody has reviewed yet.'),
@@ -178,6 +180,8 @@ SCREENS = [
               'Values are at cost before VAT. The SOFTECH sale price includes VAT, so it is removed before comparing.'),
             T('تكرار نفس السطر داخل فاتورة واحدة متوقف افتراضياً: هو طريقة SOFTECH في حفظ الصنف الممسوح وحدة وحدة.',
               'The same line repeated inside one invoice is off by default: it is how SOFTECH saves an item scanned one unit at a time.'),
+            T('📋 جنب حالة الملاحظة = عليها مهمة مفتوحة. افتح الملاحظة لترى رقم المهمة والمسؤول ورابط جلسة الجرد.',
+              '📋 next to a finding’s status = it has an open task. Open the finding to see the task number, its owner and the count session link.'),
             T('الملاحظة تبقى على حالتها بعد كل تشغيل؛ زيادة قيمة المتجاهلة أكثر من 50% تعيد فتحها مع ملاحظة.',
               'A finding keeps its status after every run; a dismissed one whose value grows by over 50% is reopened with a note.'),
             T('عمود «القناة / الحساب» = قناة البيع (نقدي، Delivery، تعاقدات…) وتحتها حساب SOFTECH (نقابة، تعاقد، Walk-In). '
@@ -224,6 +228,22 @@ SCREENS = [
             {'target': 'stock-audit-main-review', 'label': T('✔ تمت المراجعة · تجاهل · ⬆ تصعيد', '✔ Reviewed · Dismiss · ⬆ Escalate'),
              'text': T('سجّل قرارك. التجاهل والتصعيد وإعادة الفتح تحتاج ملاحظة مكتوبة.', 'Record your decision. Dismiss, escalate and reopen need a written note.'),
              'open_hint': T('افتح ملاحظة من القائمة.', 'Open a finding from the list.')},
+            {'target': 'stock-audit-main-task', 'label': T('📋 مهمة + جرد مستهدف', '📋 Task + targeted count'),
+             'text': T('يعمل مهمة لمدير الفرع (أو صيدلي الفرع) وجلسة جرد فيها أصناف الملاحظة بس. إغلاق الجرد يقفل الملاحظة بنتيجته.',
+                       'Makes a task for the branch manager (or branch pharmacist) and a count of just this finding’s items. Closing the count settles it.'),
+             'when': T('لما الملاحظة محتاجة حد في الفرع يعدّ الصنف فعلاً قبل القرار.',
+                       'When the finding needs someone at the branch to actually count the item before deciding.'),
+             'more': T('• كل الأصناف مطابقة ← الملاحظة «تمت المراجعة». فيه فرق ← تفضل مفتوحة والفرق مكتوب عليها.\n'
+                       '• مهمة مفتوحة واحدة بس لكل ملاحظة — الضغط تاني يرجّع نفس المهمة. إلغاء المهمة يسمح بمهمة جديدة.\n'
+                       '• الجرد بيتعمل من شاشة جرد المخزون (لقطة ثم عد ثم إغلاق). مفيش أي كتابة في SOFTECH.',
+                       '• Every item matched → the finding becomes "Reviewed". A difference → it stays open with the difference written on it.\n'
+                       '• Only one open task per finding — pressing again returns the same task. Cancelling the task allows a new one.\n'
+                       '• The count is done on the stock count screen (snapshot, count, close). Nothing is written to SOFTECH.'),
+             'open_hint': T('افتح ملاحظة مفتوحة أو مصعّدة من القائمة.', 'Open an open or escalated finding from the list.')},
+            {'target': 'stock-audit-main-bulk-task', 'label': T('📋 مهمة + جرد للمحددة', '📋 Task + count for selected'),
+             'text': T('مهمة لكل ملاحظة محددة وجرد واحد لكل فرع. اللي ليها مهمة مفتوحة بتتساب.',
+                       'A task per selected finding and one count per branch. Findings that already have an open task are skipped.'),
+             'open_hint': T('حدد ملاحظات مفتوحة (حتى 100 في المرة).', 'Tick open findings (up to 100 at a time).')},
             {'target': 'stock-audit-main-bulk', 'label': T('محددة', 'Selected'),
              'text': T('نفس القرار والملاحظة لكل الملاحظات المحددة مرة واحدة.', 'The same decision and note for all selected findings at once.'),
              'open_hint': T('حدد سطراً أو أكثر.', 'Tick one or more rows.')},
@@ -271,8 +291,8 @@ SCREENS = [
              'when': T('لمدير الفرع اللي عايزه يتابع ملاحظات فرعه بنفسه.', 'For a branch manager who should follow up his branch’s findings himself.'),
              'open_hint': T('ابحث عن الموظف بالاسم أو الكود (حرفين على الأقل). للإدارة.', 'Search the employee by name or code (2+ letters). Admin.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفرع والحالة والخطورة وقناة البيع تقبل الآن أكثر من اختيار',
-                         'Branch, status, severity and sales-channel filters now take several choices'),
+        'updated': '2026-11-19',
+        'change_note': T('«📋 مهمة + جرد مستهدف»: الملاحظة تبقى مهمة لمدير الفرع وجرد لأصنافها، وتتقفل بنتيجة الجرد',
+                         '"📋 Task + targeted count": a finding becomes a task for the branch manager and a count of its items, and closes from the count result'),
     },
 ]

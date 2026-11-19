@@ -81,3 +81,17 @@ class CanViewPos(BasePermission):
         except Exception:
             return False
         return p.role in PUSH_ROLES
+
+
+class CanReviewLiveCheckGaps(BasePermission):
+    """D-11 review list (sales whose live discount-authority / points check could not run) and its
+    actions — the `pos`/edit grant (admin + supervisor in the seed; cashiers hold view/create only).
+    A matrix denial is final; no role allow-list fallback."""
+    def has_permission(self, request, view):
+        p = _profile(request)
+        if not (p and p.is_active):
+            return False
+        if p.role == 'admin':
+            return True
+        from core.permissions import matrix_allows
+        return matrix_allows(p, 'pos', 'edit')

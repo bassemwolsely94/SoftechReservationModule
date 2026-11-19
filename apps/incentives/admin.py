@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import IncentiveProgram, IncentiveRule, IncentiveTransaction, IncentiveSettlement
+from .models import (
+    IncentiveAuditEvent, IncentiveProgram, IncentiveRule, IncentiveSettlement, IncentiveTransaction,
+)
 
 
 class IncentiveRuleInline(admin.TabularInline):
@@ -51,3 +53,20 @@ class IncentiveSettlementAdmin(admin.ModelAdmin):
     search_fields = ['user__user__first_name', 'user__user__last_name', 'user__softech_username']
     readonly_fields = ['total_incentive', 'transaction_count', 'is_finalized',
                        'finalized_at', 'finalized_by', 'created_at', 'updated_at']
+
+
+@admin.register(IncentiveAuditEvent)
+class IncentiveAuditEventAdmin(admin.ModelAdmin):
+    """Append-only (D-16 / D-17): read here, written only by the unlock / archive endpoints."""
+    list_display  = ['created_at', 'action', 'program', 'settlement', 'actor_name']
+    list_filter   = ['action']
+    readonly_fields = [f.name for f in IncentiveAuditEvent._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
