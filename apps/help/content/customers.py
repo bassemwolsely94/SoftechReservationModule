@@ -761,7 +761,7 @@ SCREENS = [
              'when': T('بعد مزامنة جديدة أو لو الأرقام تبدو قديمة.', 'After a fresh sync, or if the figures look old.')},
             {'target': 'pic-analytics-export', 'label': T('⬇ تصدير Excel', '⬇ Export Excel'),
              'text': T('يجهّز ملف Excel بالفلاتر الحالية في الخلفية بشريط تقدّم، وينزّله لوحده أول ما يخلص؛ كل تنزيل بيتسجّل. تقدر تكمّل شغلك وهو بيتجهّز.',
-                       'Builds an Excel file of the current filters in the background with a progress bar, then downloads it; every download is logged. You can keep working while it is built.'),
+                       'Builds an Excel file of the current filters in the background, then downloads it; every download is logged. You can keep working meanwhile.'),
              'when': T('لما تحتاج الأرقام في ملف أو تعرضها على غيرك.', 'When you need the figures in a file or to show someone else.'),
              'open_hint': T('يظهر فقط لمن عنده صلاحية التصدير.', 'Shown only to those allowed to export.')},
             {'target': 'pic-analytics-tabs', 'label': T('التبويبات', 'Tabs'),
