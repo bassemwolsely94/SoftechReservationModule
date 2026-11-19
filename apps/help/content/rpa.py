@@ -119,14 +119,16 @@ SCREENS = [
              'body': T('للمدير فقط. الوصفة هي تسجيل ضغطات شاشة SOFTECH (ملف .dld) مع خريطة الحقول (itemcode و qty و expiry). ارفعها «كمسودة»، '
                        'ثم اضغط «إكمال المسودة» واكتب ما لا يحمله ملف .dld: مفاتيح الإلغاء بدون حفظ (مطلوبة)، والنوافذ المنبثقة المعروفة '
                        '(جزء من العنوان أو النص ومفاتيح الرد)، وقائمة المراجعة قبل البدء، وخانة المرجع إن وُجدت، ثم «حفظ المسودة». '
-                       'المفاتيح الخاصة تُكتب بصيغة DataLoad مثل \\{ESC}. يعتمدها مدير آخر غير من رفعها أو عدّلها (العينان الأربع)، '
+                       'المفاتيح الخاصة تُكتب بصيغة DataLoad مثل \\{ESC}. كل حفظ للمسودة يسجّل اسمك ووقته في عمود «آخر من عدّلها». '
+                       'يعتمدها مدير آخر غير من رفعها وغير آخر من عدّلها (العينان الأربع)، '
                        'والخادم يرفض وصفة ناقصة أو أقدم من المعتمدة. الوصفة المعتمدة تتجمد ولا تتغير، وتكون واحدة معتمدة فقط لكل شاشة. '
                        'الأمر المعتمد يحمل الوصفة المعتمدة وقت اعتماده. زر «تفعيل الشاشة» / «إيقاف الشاشة» أعلى التبويب يحدد هل يستلم الروبوت '
                        'مستندات الشاشة؛ الإدخال الفعلي لا يُفتح في المرحلة الأولى.',
                        'Admin only. A recipe is a recording of the SOFTECH screen keystrokes (a .dld file) with its field map (itemcode, qty, expiry). Upload it '
                        '"as a draft", then press "Complete draft" and fill in what a .dld does not carry: the cancel-without-saving keys (required), the known '
                        'popups (part of the title or text, and the answer keys), the checklist before starting, and the reference field if any, then '
-                       '"Save draft". Special keys are written in DataLoad form, such as \\{ESC}. Another admin, not the one who uploaded or edited it, approves '
+                       '"Save draft". Special keys are written in DataLoad form, such as \\{ESC}. Every draft save records your name and the time in the '
+                       '"Last edited by" column. Another admin, neither the one who uploaded it nor its last editor, approves '
                        'it (four-eyes), and the server refuses an incomplete recipe or one older than the approved one. An approved recipe is frozen and '
                        'unchangeable, and only one is approved per screen. An approved job carries the approved recipe from the moment it was approved. '
                        'The "Enable screen" / "Stop screen" button at the top of the tab sets whether the robot takes the screen\'s documents; live entry '
@@ -155,6 +157,10 @@ SCREENS = [
               'cannot be reached the result stays "dry run succeeded" and the run shows a "SOFTECH not checked" step.'),
             T('لو ظهر في الشريط «تعذر الاتصال بـ SOFTECH للتحقق قبل الإدخال» فالروبوت ينتظر ولن يستلم مستندًا حتى يعود الاتصال.',
               'If the strip says SOFTECH could not be reached for the check before typing, the robot waits and takes no document until the link is back.'),
+            T('لو انقطع الروبوت أثناء الكتابة يتحول المستند وحده إلى «يحتاج مراجعة» بعد انتهاء مهلته (10 دقائق، والفحص كل 5 دقائق)، '
+              'حتى لو لم يكن أي جهاز متصلًا. لا يعود إلى الطابور أبدًا.',
+              'If the robot drops out while typing, the document turns to "needs review" by itself once its lease ends (10 minutes, '
+              'checked every 5 minutes), even with no device online. It never goes back to the queue.'),
             T('الرمز يظهر مرة واحدة فقط. من يملكه يشغّل الروبوت باسمك، فلا ترسله في رسالة.',
               'The token shows only once. Whoever holds it can run the robot in your name, so do not send it in a message.'),
             T('كل جدول يترتب بالضغط على عنوان العمود. أسماء الفروع تظهر بالكود والاسم.',
@@ -164,6 +170,10 @@ SCREENS = [
             {'q': T('لماذا لا أستطيع اعتماد أمر رفعته أنا؟', 'Why can I not approve a job I uploaded?'),
              'a': T('قاعدة العينين الأربع: الرافع والمعتمد شخصان مختلفان، والخادم يرفض اعتماد الرافع نفسه.',
                     'The four-eyes rule: the uploader and the approver are two different people, and the server refuses the uploader.')},
+            {'q': T('لماذا لا أستطيع اعتماد وصفة؟', 'Why can I not approve a recipe?'),
+             'a': T('الخادم يرفض اعتمادها ممن رفعها وممن عدّلها آخر مرة (عمود «آخر من عدّلها»). اطلب من مدير آخر أن يعتمدها.',
+                    'The server refuses its approval by whoever uploaded it and by its last editor (the "Last edited by" '
+                    'column). Ask another admin to approve it.')},
             {'q': T('ظهر «تم رفع هذا الملف من قبل»، ماذا أفعل؟', 'It says "this file was uploaded before", what now?'),
              'a': T('افتح الأمر المذكور في الرسالة من «الأوامر». لو ألغيته يمكنك رفع الملف من جديد.',
                     'Open the job named in the message from "Jobs". If you cancel it you can upload the file again.')},
@@ -204,6 +214,6 @@ SCREENS = [
                        'Screen switch here too.'),
              'open_hint': T('افتح تبويب «الوصفات» (للمدير).', 'Open the "Recipes" tab (admin).')},
         ],
-        'updated': '2026-11-17',
+        'updated': '2026-11-19',
     },
 ]
