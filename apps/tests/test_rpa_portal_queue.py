@@ -324,7 +324,7 @@ class QueueTests(_World, TestCase):
         self.assertEqual(hrun.kind, 'history')
         # the read starts where the robot may first have reached the cart (with the R9 margin)
         self.assertEqual(claim['plan']['since'], queue.history_since(run.started_at).isoformat())
-        queue.report(hrun, self.dev, {'outcome': 'history_none'})
+        queue.report(hrun, self.dev, {'outcome': 'history_none', 'complete': True})
         b = queue.resolve(b, staff=self.boss, action='retry')
         self.assertEqual(b.status, 'ready')
         # cleared: a fresh live run that stops before the cart retries straight away
@@ -511,7 +511,7 @@ class QueueTests(_World, TestCase):
         # nor does a later read that found nothing: one sighting of an order is enough to block
         queue.request_history(b)
         hrun2 = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
-        queue.report(hrun2, self.dev, {'outcome': 'history_none'})
+        queue.report(hrun2, self.dev, {'outcome': 'history_none', 'complete': True})
         with self.assertRaises(queue.QueueError):
             queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='retry')
         # only a person's explicit "nothing was ordered" does - and over a found order, with a
@@ -536,7 +536,8 @@ class QueueTests(_World, TestCase):
             queue.resolve(b, staff=self.boss, action='retry')
         queue.request_history(b)
         hrun2 = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
-        queue.report(hrun2, self.dev, {'outcome': 'history_none', 'account': {'identity_text': IDENTITY}})
+        queue.report(hrun2, self.dev, {'outcome': 'history_none', 'complete': True,
+                                       'account': {'identity_text': IDENTITY}})
         b = queue.resolve(b, staff=self.boss, action='retry')
         self.assertEqual((b.status, b.claimed_by_id), ('ready', None))
 

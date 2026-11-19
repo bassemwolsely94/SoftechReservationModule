@@ -151,6 +151,8 @@ SCHEDULER_JOB_GUARDS = {
         'each queued CUSTOMER WhatsApp is claimed with a conditional UPDATE before it is sent, so a second drain skips it (round 2 R6 fix; before, a plain save let two drains send it twice)'),
     'refill_reminders': ('advisory_lock', 'apps.followups.refill_reminders.run', 'with pg_lock(_LOCK_KEY) as got:',
         'pg_try_advisory_lock around the send loop + per-task select_for_update / IntegrityError claim on RefillReminder in _send_one; customer WhatsApp'),
+    'rpa_expire_leases': ('row_lock', 'apps.rpa.dispatch.sweep_expired_leases', 'select_for_update(skip_locked=True)',
+        'each in_progress document past its lease is taken under a skip_locked row lock and moved once to needs_person (its open run closed as timeout); a second run finds nothing past its lease; local DB only, no sends, no SOFTECH'),
     'rpa_portal_expire_leases': ('row_lock', 'apps.rpa.portal.queue.expire_leases', 'select_for_update(skip_locked=True)',
         'each held basket / open read is taken under a skip_locked row lock and moved once (needs_person / timeout); a second run finds nothing past its lease; local DB only, no sends, no SOFTECH'),
     'rpa_portal_history_check': ('row_lock', 'apps.rpa.portal.queue.daily_history_check', 'select_for_update(skip_locked=True)',

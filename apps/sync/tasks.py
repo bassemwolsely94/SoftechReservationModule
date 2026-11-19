@@ -2311,6 +2311,18 @@ def _run_portal_expire_leases():
         logger.error('[APScheduler] portal lease expiry failed: %s', type(exc).__name__)
 
 
+def _run_rpa_expire_leases():
+    """SOFTECH screen robot: a document held past its lease goes to a person (never back to the queue),
+    even when no device is asking for work. Local DB only, no switch needed (it only stops work)."""
+    try:
+        from apps.rpa.dispatch import sweep_expired_leases
+        n = sweep_expired_leases()
+        if n:
+            logger.info('[APScheduler] rpa leases expired: %s', n)
+    except Exception as exc:
+        logger.error('[APScheduler] rpa lease expiry failed: %s', type(exc).__name__)
+
+
 def _run_portal_history_check():
     """Supplier-portal robot: queue an Order History read for stuck baskets that may have ordered."""
     try:
@@ -3985,6 +3997,12 @@ def start_scheduler():
     # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
     _scheduler.add_job(
         _run_portal_expire_leases, 'interval', minutes=5, id='rpa_portal_expire_leases',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=300,
+    )
+    # SOFTECH screen robot leases (apps/rpa/dispatch.py): every 5 min, local DB only. claim_next
+    # sweeps too, but only while a device asks for work.
+    _scheduler.add_job(
+        _run_rpa_expire_leases, 'interval', minutes=5, id='rpa_expire_leases',
         replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=300,
     )
     # Supplier-portal robot: daily 07:40, an Order History read for every stuck basket that may have

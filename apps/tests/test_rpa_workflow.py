@@ -223,6 +223,45 @@ class RecipeContentTests(_Base):
             workflow.approve_recipe(recipe, editor)
         self.assertEqual(workflow.approve_recipe(recipe, self.approver).status, 'approved')
 
+    def test_edit_records_the_last_editor_on_the_recipe(self):
+        recipe = self._recipe(1, 'draft')
+        self.assertIsNone(recipe.edited_by_id)
+        editor = _staff('t5_ed2')
+        workflow.edit_recipe(recipe, editor, {'header_checklist': ['المخزن 101']})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.edited_by_id, editor.id)
+        self.assertIsNotNone(recipe.edited_at)
+        workflow.edit_recipe(recipe, self.approver, {'header_checklist': ['المخزن 102']})
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.edited_by_id, self.approver.id)
+
+    def test_last_editor_is_refused_even_without_the_audit_log(self):
+        # four-eyes rests on the recipe row, not on AuditLog (which retention may prune)
+        recipe = self._recipe(1, 'draft')
+        editor = _staff('t5_ed3')
+        workflow.edit_recipe(recipe, editor, {'header_checklist': ['المخزن 101']})
+        AuditLog.objects.filter(action='rpa_recipe_edited').delete()
+        with self.assertRaises(PermissionDenied) as ctx:
+            workflow.approve_recipe(recipe, editor)
+        self.assertIn('عدّلتها', str(ctx.exception.detail))
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.status, 'draft')
+
+    def test_an_earlier_editor_is_refused_too(self):
+        # owner ruling: nobody who ever edited the recipe approves it, not only the last editor
+        recipe = self._recipe(1, 'draft')
+        first, last = _staff('t5_ed4'), _staff('t5_ed5')
+        workflow.edit_recipe(recipe, first, {'header_checklist': ['أ']})
+        workflow.edit_recipe(recipe, last, {'header_checklist': ['ب']})
+        for editor in (first, last):
+            with self.assertRaises(PermissionDenied, msg=editor.pk) as ctx:
+                workflow.approve_recipe(recipe, editor)
+            self.assertIn('عدّلتها', str(ctx.exception.detail))
+        recipe.refresh_from_db()
+        self.assertEqual((recipe.status, recipe.edited_by_id), ('draft', last.id))
+        approved = workflow.approve_recipe(recipe, self.approver)     # a third admin
+        self.assertEqual((approved.status, approved.approved_by_id), ('approved', self.approver.id))
+
     def test_edit_refused_for_approved_non_admin_unknown_and_invalid(self):
         approved = self._recipe(1)
         with self.assertRaises(ValidationError):
@@ -279,3 +318,41 @@ class CreateJobBranchTests(_Base):
         dst.softech_branch_id = 'T5D'
         job = workflow.create_job(branch=src, target_branch=dst, **dict(kw, upload=self._upload()))
         self.assertEqual(job.status, 'uploaded')
+
+
+class EditedByBackfillMigrationTests(_Base):
+    """rpa 0006: recipes edited before the column existed take their last editor from the audit trail."""
+
+    def _edit_row(self, recipe, user, when):
+        row = AuditLog.log('rpa_recipe_edited', user=user, obj=recipe, new_data={'header_checklist': ['x']})
+        AuditLog.objects.filter(pk=row.pk).update(created_at=when)
+        return row
+
+    def test_backfill_takes_the_latest_editor_and_skips_rows_without_a_user(self):
+        import importlib
+        from datetime import timedelta
+
+        from django.apps import apps as dj_apps
+        from django.utils import timezone
+        mig = importlib.import_module('apps.rpa.migrations.0006_recipe_edited_by')
+        now = timezone.now()
+        early, late = _staff('t5_bf1'), _staff('t5_bf2')
+        edited = self._recipe(1, 'draft')
+        self._edit_row(edited, early, now - timedelta(hours=2))
+        self._edit_row(edited, late, now - timedelta(hours=1))
+        orphan = self._edit_row(edited, early, now)                  # newest row, but its user is gone
+        AuditLog.objects.filter(pk=orphan.pk).update(user=None)
+        untouched = self._recipe(2, 'draft')
+        only_orphans = self._recipe(3, 'draft')
+        lone = self._edit_row(only_orphans, early, now)
+        AuditLog.objects.filter(pk=lone.pk).update(user=None)
+
+        mig.backfill_last_editor(dj_apps, None)
+
+        edited.refresh_from_db()
+        self.assertEqual(edited.edited_by_id, late.id)
+        self.assertEqual(edited.edited_at, now - timedelta(hours=1))
+        for recipe in (untouched, only_orphans):
+            recipe.refresh_from_db()
+            self.assertIsNone(recipe.edited_by_id, recipe.version)
+            self.assertIsNone(recipe.edited_at, recipe.version)

@@ -137,16 +137,21 @@ class RecipeSerializer(serializers.ModelSerializer):
     screen = serializers.CharField(source='screen.key')
     screen_title = serializers.CharField(source='screen.title_ar')
     created_by_name = serializers.SerializerMethodField()
+    edited_by_name = serializers.SerializerMethodField()
     approved_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = RpaRecipe
         fields = ['id', 'screen', 'screen_title', 'version', 'status', 'window_title', 'cell_delay', 'form_delay',
                   'line_cells', 'save_keys', 'cancel_keys', 'popups', 'header_checklist', 'ref_cells',
-                  'source_filename', 'created_by_name', 'approved_by_name', 'approved_at']
+                  'source_filename', 'created_by_name', 'edited_by_name', 'edited_at', 'approved_by_name',
+                  'approved_at']
 
     def get_created_by_name(self, recipe):
         return _staff_name(recipe.created_by)
+
+    def get_edited_by_name(self, recipe):
+        return _staff_name(recipe.edited_by)
 
     def get_approved_by_name(self, recipe):
         return _staff_name(recipe.approved_by)

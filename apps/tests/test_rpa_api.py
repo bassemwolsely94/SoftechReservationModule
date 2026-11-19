@@ -260,9 +260,14 @@ class RecipeTests(_Base):
         self.assertEqual(edit.status_code, 200, edit.content)
         self.assertEqual(edit.data['cancel_keys'], [{'kind': 'keys', 'value': r'\{ESC}'}])
         self.assertEqual(edit.data['header_checklist'], ['تأكد من المخزن'])
+        self.assertEqual(edit.data['edited_by_name'], self.adm.full_name)
+        self.assertTrue(edit.data['edited_at'])
         ok = self.adm2_c.post(f'/api/rpa/recipes/{rid}/approve/')
         self.assertEqual(ok.status_code, 200, ok.content)
         self.assertEqual(ok.data['status'], 'approved')
+        data = self.adm_c.get('/api/rpa/recipes/').data
+        listed = {r['id']: r for r in (data['results'] if isinstance(data, dict) else data)}
+        self.assertEqual(listed[rid]['edited_by_name'], self.adm.full_name)
         frozen = self.adm_c.patch(f'/api/rpa/recipes/{rid}/', {'header_checklist': ['x']}, format='json')
         self.assertEqual(frozen.status_code, 400)
 
