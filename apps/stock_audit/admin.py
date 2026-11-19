@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import (StockAuditFinding, StockAuditRule, StockAuditRuleOverride, StockAuditRun,
+from .models import (StockAuditFindingTask, StockAuditFinding, StockAuditRule, StockAuditRuleOverride, StockAuditRun,
                      StockLedgerLine, StockLedgerSyncRun)
 
 
@@ -55,6 +55,19 @@ class StockAuditFindingAdmin(admin.ModelAdmin):
                     'value_egp', 'softech_user', 'occurred_at')
     list_filter = ('rule_code', 'severity', 'status', 'branchcode')
     search_fields = ('itemcode', '=docnumber', 'softech_user', 'message_ar')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockAuditFindingTask)
+class StockAuditFindingTaskAdmin(admin.ModelAdmin):
+    """C13 links — read only here; created and closed by apps/stock_audit/finding_tasks.py."""
+    list_display = ('finding', 'task', 'count_session', 'assigned_to', 'status', 'outcome', 'created_at', 'closed_at')
+    list_filter = ('status', 'outcome')
 
     def has_add_permission(self, request):
         return False
