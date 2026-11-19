@@ -15,6 +15,7 @@ import DataFreshnessBar from '../components/DataFreshnessBar'
 import { fa } from '../utils/flowArrow'
 import useSortableRows from '../hooks/useSortableRows'
 import SortHeader from '../components/SortTh'   // shared client-sort header (this file's own SortTh is the server-ordering one)
+import useGridKeyboard from '../hooks/useGridKeyboard'
 
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -888,12 +889,27 @@ const EXC_TYPES = [['', 'كل الأنواع'], ['cancelled_reversed', 'سند �
                    ['duplicate_payment', 'سند مكرر'], ['duplicate_invoice', 'فاتورة مكررة'], ['overpayment', 'دفع زائد'],
                    ['orphan_payment', 'سند بلا فاتورة'], ['unpaid_old', 'فاتورة قديمة'], ['anomaly', 'شذوذ']]
 
+// C15: review state of an exception. A person's decision sticks (the scanners do not raise it again)
+// and never releases a held match by itself — that is approved by hand in «المقترحات».
+const EXC_STATUSES = [['open', 'مفتوح'], ['investigating', 'قيد التحقيق'], ['dismissed', 'ليس خطأ'], ['resolved', 'تم الحل']]
+const EXC_ACTIONS = [
+  { action: 'investigating', label: '🔍 قيد التحقيق', cls: 'border-amber-300 text-amber-800 hover:bg-amber-50' },
+  { action: 'resolved', label: '✅ تم الحل', cls: 'border-green-300 text-green-800 hover:bg-green-50', note: true },
+  { action: 'dismissed', label: '🚫 ليس خطأ', cls: 'border-gray-300 text-gray-700 hover:bg-gray-50', note: true },
+  { action: 'open', label: '↩️ إعادة فتح', cls: 'border-blue-300 text-blue-800 hover:bg-blue-50' },
+]
+
 function ExceptionsTab({ scope }) {
+  const qc = useQueryClient()
   const [etype, setEtype] = useState('')
   const [sev, setSev] = useState('')
+  const [status, setStatus] = useState('open')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState('-created_at')
-  const base = { ...scope, status: 'open', ordering, ...(etype ? { exception_type: etype } : {}), ...(sev ? { severity: sev } : {}) }
+  const [sel, setSel] = useState(() => new Set())
+  const [note, setNote] = useState('')
+  const [result, setResult] = useState(null)
+  const base = { ...scope, status, ordering, ...(etype ? { exception_type: etype } : {}), ...(sev ? { severity: sev } : {}) }
   const key = JSON.stringify(base)
   const [lastKey, setLastKey] = useState(key)
   if (lastKey !== key) { setLastKey(key); setPage(1) }
@@ -903,8 +919,29 @@ function ExceptionsTab({ scope }) {
     queryFn: () => reconciliationApi.exceptions(params).then(r => r.data),
   })
   const rows = data?.results || []
+  const pageIds = rows.map(e => e.id)
+  const picked = pageIds.filter(id => sel.has(id))
+  const allPicked = pageIds.length > 0 && picked.length === pageIds.length
+  const toggle = id => setSel(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const toggleAll = () => setSel(allPicked ? new Set() : new Set(pageIds))
+  const kb = useGridKeyboard({ rows, getKey: e => e.id, onToggle: e => toggle(e.id), onSelectAll: toggleAll })
+  const decide = useMutation({
+    mutationFn: ({ action }) => reconciliationApi.decideExceptions({ ids: picked, action, note: note.trim() }).then(r => r.data),
+    onSuccess: (res, { action }) => {
+      setResult({ ok: true, action, ...res }); setSel(new Set()); setNote('')
+      qc.invalidateQueries({ queryKey: ['recon', 'exceptions'] })
+      qc.invalidateQueries({ queryKey: ['recon', 'dashboard'] })
+    },
+    onError: err => setResult({ ok: false, detail: err.response?.data?.detail || 'تعذّر حفظ القرار' }),
+  })
   return (
     <div>
+      <div className="flex items-center gap-1 mb-2 text-xs flex-wrap" data-tour="finance-reconciliation-exception-status">
+        <span className="text-gray-500 ml-1">الحالة:</span>
+        {EXC_STATUSES.map(([k, l]) => (
+          <button key={k} onClick={() => { setStatus(k); setSel(new Set()); setResult(null) }} className={`px-2 py-0.5 rounded-full border ${status === k ? 'bg-[#022871] text-white border-[#022871]' : 'bg-white border-gray-200 text-gray-600'}`}>{l}</button>
+        ))}
+      </div>
       <div className="flex items-center gap-1 mb-2 text-xs flex-wrap">
         <span className="text-gray-500 ml-1" data-tour="finance-reconciliation-exception-type">النوع:</span>
         {EXC_TYPES.map(([k, l]) => (
@@ -926,17 +963,45 @@ function ExceptionsTab({ scope }) {
         </select>
         <span className="text-gray-400 mr-auto">{data?.count ?? 0}</span>
       </div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap rounded-lg border border-gray-200 bg-white p-2 text-xs"
+           data-tour="finance-reconciliation-exception-decide" data-testid="recon-exception-bar">
+        <label className="flex items-center gap-1 text-gray-600">
+          <input type="checkbox" checked={allPicked} onChange={toggleAll} aria-label="تحديد كل الصفحة" /> الصفحة
+        </label>
+        <span className="text-gray-600 min-w-[4.5rem]">{picked.length ? `محدد: ${picked.length}` : 'لا شيء محدد'}</span>
+        <input value={note} onChange={e => setNote(e.target.value)} aria-label="ملاحظة القرار"
+               placeholder="ملاحظة (مطلوبة مع «تم الحل» و«ليس خطأ»)…"
+               className="flex-1 min-w-[14rem] border border-gray-200 rounded px-2 py-1" />
+        {EXC_ACTIONS.filter(a => a.action !== status).map(a => (
+          <button key={a.action} onClick={() => { setResult(null); decide.mutate({ action: a.action }) }}
+                  disabled={!picked.length || decide.isPending || (a.note && !note.trim())}
+                  title={a.note && !note.trim() ? 'اكتب السبب في الملاحظة' : undefined}
+                  className={`px-2 py-1 rounded border bg-white disabled:opacity-40 ${a.cls}`}>{a.label}</button>
+        ))}
+        {result && (
+          <span role="status" data-testid="recon-exception-result" className={`basis-full ${result.ok ? 'text-green-700' : 'text-red-700'}`}>
+            {result.ok ? `تم: ${result.changed}${result.unchanged ? ` · بدون تغيير ${result.unchanged}` : ''}${result.missing?.length ? ` · غير متاح ${result.missing.length}` : ''}` : result.detail}
+          </span>
+        )}
+      </div>
       {isLoading ? <div className="text-gray-400 py-8 text-center">جارٍ التحميل…</div> : (
-        <div className="space-y-2">
-          {rows.length === 0 && <div className="text-gray-400 py-8 text-center">لا توجد استثناءات مفتوحة في هذا النطاق</div>}
-          {rows.map(e => (
-            <div key={e.id} className={`border rounded-lg p-3 text-sm ${EXC_SEV[e.severity] || EXC_SEV.warning}`}>
+        <div className="space-y-2 focus:outline-none" {...kb.containerProps} data-testid="recon-exception-grid">
+          {rows.length === 0 && <div className="text-gray-400 py-8 text-center">لا توجد استثناءات بهذه الحالة في هذا النطاق</div>}
+          {rows.map(e => {
+            const rp = kb.rowProps(e, { block: true })
+            return (
+            <div key={e.id} {...rp}
+                 className={`border rounded-lg p-3 text-sm ${EXC_SEV[e.severity] || EXC_SEV.warning} ${sel.has(e.id) ? 'outline outline-2 outline-[#022871]/40' : ''} ${rp.className}`}>
               <div className="flex items-center gap-2">
+                <input type="checkbox" checked={sel.has(e.id)} onChange={() => toggle(e.id)} aria-label={`تحديد ${e.exception_type_display} ${e.id}`} />
                 <span className="font-semibold">{e.exception_type_display}</span>
                 <span className="text-xs opacity-70">{e.severity_display}</span>
                 <span className="text-xs mr-auto font-medium">{e.party_code} · {e.party_name}</span>
               </div>
               <div className="text-xs mt-1 opacity-90">{e.detail}</div>
+              {e.status !== 'open' && e.resolution_notes && (
+                <div className="text-[11px] mt-1 whitespace-pre-line text-gray-700">📝 {e.resolution_notes}</div>
+              )}
               {(e.invoice_detail || e.payment_detail) && (
                 <div className="text-[11px] mt-1 opacity-75 flex flex-wrap gap-x-4">
                   {e.invoice_detail && (
@@ -951,7 +1016,8 @@ function ExceptionsTab({ scope }) {
               )}
               {e.invoice_detail && <InvoiceLines invoiceId={e.invoice_detail.id} />}
             </div>
-          ))}
+            )
+          })}
           <Pager page={page} setPage={setPage} count={data?.count} />
         </div>
       )}

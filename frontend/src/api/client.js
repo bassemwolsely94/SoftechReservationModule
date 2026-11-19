@@ -3139,6 +3139,8 @@ export const reconciliationApi = {
   payments:       (params) => api.get('/finance/reconciliation/payments/', { params }),
   candidates:     (params) => api.get('/finance/reconciliation/candidates/', { params }),
   exceptions:     (params) => api.get('/finance/reconciliation/exceptions/', { params }),
+  // C15: bulk decision on exceptions — { ids, action: investigating|resolved|dismissed|open, note }
+  decideExceptions: (data) => api.post('/finance/reconciliation/exceptions/decide/', data),
   runs:           (params) => api.get('/finance/reconciliation/runs/', { params }),
   workbench:      (params) => api.get('/finance/reconciliation/workbench/', { params }),
   approve:        (id, data) => api.post(`/finance/reconciliation/candidates/${id}/approve/`, data || {}),

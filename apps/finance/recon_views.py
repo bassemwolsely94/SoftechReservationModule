@@ -395,6 +395,33 @@ def _guard_write(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, FINANCE_APPROVE])
+def decide_exceptions_view(request):
+    """C15: bulk decision on exceptions — {ids, action: investigating|resolved|dismissed|open, note}.
+    Same gate as approving a match. Mirror only: nothing goes to SOFTECH, and a decision never
+    releases a held match by itself (recon_review)."""
+    denied = _guard_write(request)
+    if denied:
+        return denied
+    from . import recon_review
+    ids = request.data.get('ids') or []
+    if not isinstance(ids, list):
+        return Response({'detail': 'ids must be a list'}, status=400)
+    # only rows this user may see (company-level finance, the same scope as the list)
+    visible = set(_scope(request, ReconException.objects.filter(pk__in=[i for i in ids if str(i).isdigit()]))
+                  .values_list('pk', flat=True))
+    try:
+        res = recon_review.decide([i for i in ids if str(i).isdigit() and int(i) in visible],
+                                  request.data.get('action'), note=request.data.get('note', ''),
+                                  user=_staff(request))
+    except recon_review.ReviewError as e:
+        return Response({'detail': str(e)}, status=400)
+    res['missing'] = sorted(set(res['missing']) | {i for i in ids if not (str(i).isdigit() and int(i) in visible)},
+                            key=str)
+    return Response(res)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, FINANCE_APPROVE])
 def approve_candidate_view(request, pk):
     denied = _guard_write(request)
     if denied:
