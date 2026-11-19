@@ -1,7 +1,8 @@
 # 11 — Bug fix register
 
 Full audit, 2026-11-15, branch `claude/full-project-audit` (from `main` `56870174`). Merged with Wave 0 in
-PR 147 (`851d34d9`); Wave 1 merged 2026-11-16 (PRs 150–154), see below.
+PR 147 (`851d34d9`); Wave 1 merged 2026-11-16 (PRs 150–154); Wave 2 technical clean-ups 2026-11-17 → 19
+(PRs 157, 158, 166, 174, 183, 189, 191, 192), see below.
 
 Only **verified, low-risk** defects were fixed: each one restores the behaviour the code already intended,
 changes no business calculation, writes nothing new to SOFTECH, and has a regression test in
@@ -70,6 +71,32 @@ scheduler.
 | Bell default to action items (rest of PERF-1) | UI behaviour change — owner choice (D-19) |
 | Load test (step 1.7) and extra web processes on the VPS | Owner steps, runbook §13.6–§13.7 |
 
+## Wave 2 (2026-11-17 → 19, on the owner's "go ahead with Wave 2"; each merged on "merge when green")
+
+The low-cost technical clean-ups from [13](13_IMPLEMENTATION_ROADMAP.md) §Wave 2, plus C01 from the Top 10.
+No SOFTECH write, no migration that touches SOFTECH sync, no discount/pricing or checkout change in any of
+them. Each has its own regression tests (backend, vitest and/or Playwright) and in-app help (AR + EN).
+
+| Finding | What changed | PR | State |
+|---|---|---|---|
+| FE-4, FE-5 | TanStack Query v5 call shapes (`invalidateQueries({queryKey})`, `placeholderData`) — saves stop re-fetching the whole page; a guard test keeps old shapes out | 157 (`7430edc0`) | merged |
+| C01 (Top 10) | Network stock in the call centre and omni inbox: reserve / transfer / lost demand from the call, linked to it | 158 (`a7f01afb`) | merged |
+| PERF-4, FE-2 | N+1 queries on reservation / customer / supply lists; a reservation extra line is never dropped silently | 166 (`88d88f8b`) | merged |
+| FE-7 | A failed read shows an error strip (global) or an in-place error with «إعادة المحاولة», not an empty "no data" page | 174 (`a8c6e253`) | merged |
+| FE-11 | A transfer request is saved and sent in one transaction (`?submit=1`); a refused send saves nothing, so a retry cannot duplicate it; «حفظ وتقديم» is the default; the quantity is focused after the item | 183 (`ef6d99b7`) | merged |
+| FE-12 | An expired session signs the same user in again over the page (state kept, the failed request retried once — it had a 401, so nothing ran); otherwise `/login?next=` brings them back; `next` is same-site only | 189 | open, CI |
+| FE-10 | Approvals inbox: tick rows (Space / Ctrl+A), Enter opens the decision, bulk approve / reject (reject needs a reason). Each request still goes through the per-request decide endpoint, so the server checks the approver for every one | 192 | open, CI |
+| FE-19 | The Ctrl+K palette, Customer-360 and drug-assistant drawers load on first open (the first Ctrl+K / open event is replayed); the phone and rider shells load only on their routes. Entry chunk 726.7 → 675.9 kB (212.5 → 197.9 kB gzip) | 191 (this docs PR) | open, CI |
+
+**Wave 2 left open (not built, reason):**
+
+| Item | Why |
+|---|---|
+| Split `api/client.js` per domain (rest of FE-19) | Touches every screen's imports; the entry chunk is still ~676 kB mostly because of it — its own batch |
+| Lazy help panel (rest of FE-19) | Tours, hints and «اعرض لي» offers run while the panel is closed, and `Journeys.jsx` imports from `HelpEditor`; needs the help code split first |
+| BE-15 (the other 19 UTC-date sites) | Each changes a report/job day boundary — reviewed one by one, not batched |
+| The Top 10 business items other than C01 | Each needs the owner's answers (§4 of [09](09_TOP_30_QUICK_WINS.md)) |
+
 ## Verified, not fixed here (reason)
 
 | ID | Why not here |
@@ -78,5 +105,5 @@ scheduler.
 | BE-4, BE-12, BE-13, BE-16, FE-3 | Business rule / checkout (D-11, D-12, D-15, D-18) |
 | BE-7, BE-10, BE-11, BE-21 | Touch earn/expire jobs or need a migration / rule (D-13, D-16, D-17) |
 | ~~PERF-1, PERF-2, PERF-3~~ | Fixed / made opt-in in Wave 1 (above) |
-| FE-4, FE-5, FE-7 | Mechanical but wide (140 + 21 + 82 sites) — Wave 2 batch, needs a browser check per screen |
+| ~~FE-4, FE-5, FE-7~~ | Fixed in Wave 2 (above) |
 | BE-15 (other 19 UTC-date sites) | Each changes a report/job day boundary; reviewed one by one in Wave 2 |
