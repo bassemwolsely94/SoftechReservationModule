@@ -244,6 +244,8 @@ def top_up(system, days=None):
     if not _try_lock(system):
         out['error'] = 'تحميل آخر يعمل الآن لهذه المنظومة'
         return out
+    # UTC on purpose (BE-15 reviewed): the ETA API windows below are built in UTC, so "today" is
+    # the UTC day too. The window ends at the next UTC midnight, which already covers Cairo's day.
     today = timezone.now().date()
     tomorrow = dt.datetime.combine(today + dt.timedelta(days=1), dt.time.min, tzinfo=dt.timezone.utc)
     try:

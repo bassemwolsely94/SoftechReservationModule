@@ -452,7 +452,7 @@ def _match_one_party(run, party, cfg) -> tuple[int, int]:
 def _emit_exceptions(run, party, matched_payment_ids, cfg) -> int:
     """Orphan payments, duplicate payments, and old-unpaid invoices."""
     n = 0
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     # orphan: an unallocated payment the engine could not match at all
     for p in party.payments.filter(is_unallocated=True):

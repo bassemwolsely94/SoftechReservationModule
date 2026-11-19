@@ -116,7 +116,7 @@ class RecipientLocation(models.Model):
 def next_document_number(doc_type: 'DocumentType', on_date=None) -> str:
     """`{PREFIX}-{YYYY}-{NNNNN}` — per type, per year, gap-tolerant."""
     from django.utils import timezone
-    year = (on_date or timezone.now().date()).year
+    year = (on_date or timezone.localdate()).year
     prefix = f'{doc_type.number_prefix}-{year}-'
     last = (CommerceDocument.objects
             .filter(doc_type=doc_type, number__startswith=prefix)

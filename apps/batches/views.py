@@ -1045,7 +1045,7 @@ class StockBatchViewSet(
         if p.get('expiring_in_days'):
             from django.utils import timezone
             from datetime import timedelta
-            cutoff = timezone.now().date() + timedelta(days=int(p['expiring_in_days']))
+            cutoff = timezone.localdate() + timedelta(days=int(p['expiring_in_days']))
             qs = qs.filter(expiry_date__lte=cutoff, is_expired=False, current_qty__gt=0)
         if p.get('is_quarantined'):
             qs = qs.filter(is_quarantined=p['is_quarantined'].lower() == 'true')

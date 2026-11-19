@@ -363,7 +363,7 @@ class HrService:
         try:
             from apps.finance.models import ExpenseRecord
             record = ExpenseRecord.objects.create(
-                expense_date=timezone.now().date(),
+                expense_date=timezone.localdate(),
                 category='payroll',
                 sub_category='salary_advance',
                 branch=advance.staff.branch,
