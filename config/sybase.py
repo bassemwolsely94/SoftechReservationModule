@@ -587,11 +587,12 @@ def _connect_with_retry(driver, jdbc_url, props, label='', interactive=False, no
     for attempt in range(1, attempts + 1):
         t0, failed = time.monotonic(), False
         try:
-            conn = _guard(driver.connect(jdbc_url, props), zone_grant=decision.grant,
-                          observe_only=observe_only, decision=decision, label=label)
             if interactive:
+                # cleared before the attempt (the node was not skipped, so its window is over); a
+                # failure below sets it again. Keeps the `return _guard(` line the guard test reads.
                 _set_dead_node(node_key, False)
-            return conn
+            return _guard(driver.connect(jdbc_url, props), zone_grant=decision.grant,
+                          observe_only=observe_only, decision=decision, label=label)
         except Exception as exc:
             failed = True
             _load().record_connect(label, (time.monotonic() - t0) * 1000, False)
