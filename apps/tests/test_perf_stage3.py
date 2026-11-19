@@ -255,3 +255,96 @@ class StockExpirySummarySameAnswerTests(TestCase):
         self._seed(3)
         self.assertEqual(_count_queries(stock_expiry_summary, include_quarantine=True), small)
         self.assertLessEqual(small, 2)
+
+
+# ── 4a. GET /api/incentives/targets/ ───────────────────────────────────────────────────────────
+
+class IncentiveTargetsBatchTests(TestCase):
+    """The targets list computes every attainment in one batch; each one equals the per-target
+    attainment() (the pre-change path), and the query count does not grow with the targets."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from apps.customers.models import PurchaseHistory, PurchaseHistoryLine
+        from apps.forecasting.models import BeautyClassRule, ChannelBucketMap as C
+        from apps.tests.factories import make_admin, make_branch, make_branch2, make_customer, make_item
+        cls.b1, cls.b2 = make_branch(), make_branch2()
+        cls.admin = make_admin('perf_tgt_admin')
+        for ch, bucket, sub, cust, profit in (('90', C.BUCKET_CASH, '', True, True),
+                                              ('91', C.BUCKET_CASH, 'delivery', True, True),
+                                              ('92', C.BUCKET_CASH, 'regular', False, True),
+                                              ('15', C.BUCKET_CREDIT, '', True, False),
+                                              ('20', C.BUCKET_INSURANCE, '', False, True),
+                                              ('99', C.BUCKET_EXCLUDE, '', False, False)):
+            C.objects.create(person_type='10', channel=ch, bucket=bucket, subtype=sub,
+                             counts_customer=cust, include_in_profit=profit)
+        BeautyClassRule.objects.create(medicine_type='BB')
+        beauty, drug = make_item('كريم', 'PB001'), make_item('دواء', 'PB002')
+        type(beauty).objects.filter(pk=beauty.pk).update(medicine_type='BB')
+        cust = make_customer()
+        today = datetime.date.today()
+        cls.start = today.replace(day=1)
+        cls.end = (cls.start + datetime.timedelta(days=40)).replace(day=1) - datetime.timedelta(days=1)
+        n = 0
+        for branch in (cls.b1, cls.b2):
+            for ch in ('90', '91', '92', '15', '20', '99'):
+                for doc in ('115', '115', '30'):
+                    n += 1
+                    ph = PurchaseHistory.objects.create(
+                        customer=cust, branch=branch, softech_invoice_id=f'pt{n}', doc_code=doc,
+                        sales_channel=ch, softech_phcode=f'P{n % 5}' if n % 4 else '',
+                        softech_user='U1' if n % 2 else 'U2', total_amount=Decimal('10.10') * n,
+                        invoice_date=timezone.make_aware(datetime.datetime.combine(cls.start, datetime.time(13))))
+                    for item, q in ((beauty, '2'), (drug, '1.5')):
+                        PurchaseHistoryLine.objects.create(
+                            purchase=ph, item=item, quantity=Decimal(q), unit_price=Decimal('7.25'),
+                            line_total=Decimal('7.25') * Decimal(q) * n, cost_at_sale=Decimal('3.125'))
+
+    def _targets(self, copies=1, branch_only=False):
+        from apps.incentives.models import SalesTarget as T
+        made = []
+        metrics = sorted(T.KPI_RESOLVER_METRICS) + [T.METRIC_REVENUE, T.METRIC_ORDERS]
+        for _ in range(copies):
+            for metric in metrics:
+                scopes = ((T.SCOPE_BRANCH, self.b1, ''), (T.SCOPE_BRANCH, self.b2, ''),
+                          (T.SCOPE_CHAIN, None, ''), (T.SCOPE_SALESPERSON, None, 'U1'))
+                for scope, branch, user in scopes[:2] if branch_only else scopes:
+                    made.append(T.objects.create(scope_type=scope, branch=branch, softech_user=user,
+                                                 metric=metric, period_start=self.start,
+                                                 period_end=self.end, target_value=Decimal('500')))
+            # an older period, so a second (metric, period) group exists
+            made.append(T.objects.create(scope_type=T.SCOPE_BRANCH, branch=self.b1, metric='cash',
+                                         period_start=self.start - datetime.timedelta(days=31),
+                                         period_end=self.start - datetime.timedelta(days=1),
+                                         target_value=Decimal('100')))
+        return made
+
+    def test_batch_equals_one_by_one(self):
+        from apps.incentives.models import SalesTarget
+        targets = self._targets()
+        batch = SalesTarget.batch_actuals(targets)
+        one_by_one = {t.id: t.actual_value() for t in targets}
+        self.assertEqual(batch, one_by_one)
+        self.assertTrue(any(v for v in batch.values()), 'the seed must produce non-zero actuals')
+
+    def test_list_response_equals_per_target_serialization(self):
+        from apps.incentives.models import SalesTarget
+        from apps.incentives.serializers import SalesTargetSerializer
+        self._targets()
+        res = self.admin[2].get('/api/incentives/targets/')
+        self.assertEqual(res.status_code, 200)
+        rows = res.data['results'] if isinstance(res.data, dict) else res.data
+        expected = {t.id: SalesTargetSerializer(t).data for t in SalesTarget.objects.all()}
+        self.assertEqual(len(rows), len(expected))
+        for row in rows:
+            self.assertEqual(dict(row), dict(expected[row['id']]), row['metric'])
+
+    def test_branch_targets_query_count_is_flat(self):
+        """Branch targets (what the office runs) cost the same whatever their number."""
+        self._targets(1, branch_only=True)
+        with CaptureQueriesContext(connection) as small:
+            self.assertEqual(self.admin[2].get('/api/incentives/targets/').status_code, 200)
+        self._targets(3, branch_only=True)
+        with CaptureQueriesContext(connection) as big:
+            self.assertEqual(self.admin[2].get('/api/incentives/targets/').status_code, 200)
+        self.assertEqual(len(big.captured_queries), len(small.captured_queries))

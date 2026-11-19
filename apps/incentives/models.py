@@ -648,7 +648,8 @@ class SalesTarget(models.Model):
             qs = qs.filter(softech_user=self.softech_user)
         return qs
 
-    def actual_value(self):
+    def actual_value(self, resolver=None):
+        """`resolver`: a KpiResolver to reuse (a list of targets shares one; see batch_actuals)."""
         from django.db.models import Sum
         from apps.customers.models import PurchaseHistoryLine
 
@@ -667,7 +668,7 @@ class SalesTarget(models.Model):
             branch_ids = [self.branch_id] if (self.scope_type == self.SCOPE_BRANCH and self.branch_id) else None
             softech_user = self.softech_user if (self.scope_type == self.SCOPE_SALESPERSON and self.softech_user) else None
             category_id = self.category_id if (self.scope_type == self.SCOPE_CATEGORY and self.category_id) else None
-            return float(KpiResolver().resolve(
+            return float((resolver or KpiResolver()).resolve(
                 self.metric, branch_ids=branch_ids,
                 start=self.period_start, end=self.period_end,
                 softech_user=softech_user, category_id=category_id,
@@ -704,10 +705,37 @@ class SalesTarget(models.Model):
         rets  = ph.filter(doc_code='30').aggregate(s=Sum('total_amount'))['s'] or 0
         return float(sales) - float(rets)
 
-    def attainment(self):
-        """Returns {actual, target, pct, expected_to_date, pace, days_total, days_left}."""
+    @classmethod
+    def batch_actuals(cls, targets):
+        """{target.id: actual_value()} for a list of targets (perf Stage 3: the targets list ran 4–6
+        queries per target). One KpiResolver serves them all, and branch targets on a resolver metric
+        are summed per branch in one grouped query per (metric, period). Same numbers as calling
+        actual_value() on each target; anything without a grouped form still goes target by target."""
+        from collections import defaultdict
+        targets = list(targets)
+        resolver = None
+        if any(t.scope_type != cls.SCOPE_CREW and t.metric in cls.KPI_RESOLVER_METRICS for t in targets):
+            from apps.forecasting.kpi import KpiResolver
+            resolver = KpiResolver()
+        groups = defaultdict(list)
+        for t in targets:
+            if t.scope_type == cls.SCOPE_BRANCH and t.branch_id and t.metric in cls.KPI_RESOLVER_METRICS:
+                groups[(t.metric, t.period_start, t.period_end)].append(t)
+        out = {}
+        for (metric, start, end), group in groups.items():
+            by_branch = resolver.resolve_by_branch(metric, sorted({t.branch_id for t in group}), start, end)
+            if by_branch is not None:
+                out.update({t.id: float(by_branch[t.branch_id]) for t in group})
+        for t in targets:
+            if t.id not in out:
+                out[t.id] = t.actual_value(resolver=resolver)
+        return out
+
+    def attainment(self, actual=None):
+        """Returns {actual, target, pct, expected_to_date, pace, days_total, days_left}.
+        `actual`: an already computed actual_value() (batch_actuals), else it is computed here."""
         from datetime import date
-        actual = self.actual_value()
+        actual = self.actual_value() if actual is None else actual
         target = float(self.target_value or 0)
         today  = date.today()
         days_total = max((self.period_end - self.period_start).days + 1, 1)

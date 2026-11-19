@@ -1889,6 +1889,16 @@ class SalesTargetViewSet(_viewsets.ModelViewSet):
             qs = qs.filter(scope_type=scope)
         return qs
 
+    def get_serializer(self, *args, **kwargs):
+        # A list (page) of targets computes every attainment in one batch: one KpiResolver and one
+        # grouped query per (metric, period) instead of 4–6 queries per target (perf Stage 3).
+        if kwargs.get('many') and args:
+            rows = list(args[0])
+            args = (rows,) + args[1:]
+            context = kwargs.setdefault('context', self.get_serializer_context())
+            context['actuals'] = SalesTarget.batch_actuals(rows)
+        return super().get_serializer(*args, **kwargs)
+
     @action(detail=False, methods=['get'], url_path='crews')
     def crews(self, request):
         """The live call-center crews a target can name. Served here (analytics permission) so a

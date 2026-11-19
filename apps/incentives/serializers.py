@@ -273,7 +273,8 @@ class SalesTargetSerializer(serializers.ModelSerializer):
     category_name = serializers.SerializerMethodField()
 
     def get_attainment(self, obj):
-        return obj.attainment()
+        actuals = self.context.get('actuals') or {}     # a list view batches them (batch_actuals)
+        return obj.attainment(actual=actuals.get(obj.id))
 
     def get_scope_label(self, obj):
         if obj.crew_id:
