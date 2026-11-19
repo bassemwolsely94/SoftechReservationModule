@@ -319,6 +319,10 @@ class InsuranceClaimPrescription(models.Model):
     softech_docnumber = models.CharField(max_length=30, verbose_name='رقم الفاتورة في سوفتك')
     softech_docdate   = models.DateField(verbose_name='تاريخ الصرف')
     softech_branchcode = models.CharField(max_length=10, blank=True, verbose_name='كود الفرع')
+    # SOFTECH numbers each document type separately per branch, so a receipt is
+    # (branch, doccode, docnumber) — 115 sale / 30 return. Blank = a legacy row whose
+    # doccode could not be resolved; guards treat blank as "any doccode".
+    softech_doccode    = models.CharField(max_length=3, blank=True, default='', verbose_name='كود المستند')
     softech_personcode = models.CharField(max_length=20, blank=True, verbose_name='كود العميل')
 
     # Patient info (from Softech — frozen at import)
@@ -368,7 +372,7 @@ class InsuranceClaimPrescription(models.Model):
         verbose_name        = 'روشتة مطالبة'
         verbose_name_plural = 'روشتات المطالبة'
         ordering            = ['softech_docdate', 'sequence']
-        unique_together     = [['claim', 'softech_docnumber']]
+        unique_together     = [['claim', 'softech_branchcode', 'softech_doccode', 'softech_docnumber']]
         indexes             = [GinIndex(fields=['patient_name'], name='ins_rx_pname_trgm',
                                         opclasses=['gin_trgm_ops'])]
 

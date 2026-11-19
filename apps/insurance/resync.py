@@ -249,7 +249,8 @@ def _import_one(claim, docnumber, branch, docdate, doccode, gross, net, pc,
         claim=claim, seq=seq, docnumber=docnumber, docdate=docdate,
         branchcode=branch, personcode=pc, patient_name=patient_name,
         classified_lines=classified_lines, totals=totals,
-        local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc)
+        local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc,
+        doccode=doccode)
 
 
 def apply_resync(claim: InsuranceClaim, approved_change_ids=None,
@@ -392,8 +393,15 @@ def revert_resync(run, user=None) -> dict:
         #    re-imported one for that docnumber first)
         for snap in p.get('changed', []):
             docno = snap['rx'].get('softech_docnumber')
-            InsuranceClaimPrescription.objects.filter(
-                claim=claim, softech_docnumber=docno).delete()
+            # A claim may hold the same number from another branch / doctype (S-8 / D-10),
+            # so delete only THIS receipt. Imported rows only: a manual addition is never
+            # re-synced, and older snapshots carry no doccode.
+            target = InsuranceClaimPrescription.objects.filter(
+                claim=claim, softech_docnumber=docno, is_manual=False,
+                softech_branchcode=snap['rx'].get('softech_branchcode') or '')
+            if snap['rx'].get('softech_doccode'):
+                target = target.filter(softech_doccode=snap['rx']['softech_doccode'])
+            target.delete()
             _restore_prescription(claim, snap)
         recalculate_claim_final_totals(claim)
         run.status = ResyncRun.STATUS_REVERTED

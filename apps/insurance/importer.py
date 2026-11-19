@@ -464,6 +464,7 @@ def _write_prescription_snapshot(
     local_disc: Decimal,
     imported_disc: Decimal,
     tarsia_disc: Decimal,
+    doccode: str = '',
 ) -> InsuranceClaimPrescription:
     """Create one frozen InsuranceClaimPrescription + its InsuranceClaimLine records."""
     rx = InsuranceClaimPrescription.objects.create(
@@ -471,6 +472,7 @@ def _write_prescription_snapshot(
         softech_docnumber  = docnumber,
         softech_docdate    = docdate,
         softech_branchcode = branchcode,
+        softech_doccode    = (doccode or '').strip(),
         softech_personcode = personcode,
         patient_name       = patient_name,
         softech_patient_name = patient_name,   # original — never touched by edits
@@ -675,6 +677,7 @@ def import_claim_by_motalbano_batch(
                 patient_name=patient_name,
                 classified_lines=classified_lines, totals=totals,
                 local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc,
+                doccode=doccode,
             )
 
             claim_local    += totals['local_before']
@@ -846,6 +849,7 @@ def import_claim_from_softech(
                 patient_name=patient_name,
                 classified_lines=classified_lines, totals=totals,
                 local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc,
+                doccode=doccode,
             )
 
             claim_local    += totals['local_before']
@@ -1105,6 +1109,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
         'softech_docnumber':         docnumber,
         'softech_docdate':           docdate,
         'softech_branchcode':        branchcode,
+        'softech_doccode':           _safe(header[1]),
         'softech_personcode':        tx_personcode,
         'softech_ppersoncode':       tx_ppersoncode,
         'patient_name':              patient_name,
@@ -1114,6 +1119,22 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
         'lines':                     classified_lines,
         **totals,
     }
+
+
+def find_receipt_in_claim(claim: InsuranceClaim, docnumber, branchcode=None, doccode=None) -> bool:
+    """Is this receipt already in the claim?  A receipt is (branch, doccode, docnumber)
+    (S-8 / D-10, owner-approved 2026-11-19): the same number at another branch or of another
+    type is a different receipt.  A blank branch/doccode — on either side, e.g. a legacy row
+    whose doccode could not be resolved — matches any value, so the guard never loosens
+    for data it cannot tell apart."""
+    from django.db.models import Q
+    qs = claim.prescriptions.filter(softech_docnumber=str(docnumber).strip())
+    branchcode, doccode = (branchcode or '').strip(), (doccode or '').strip()
+    if branchcode:
+        qs = qs.filter(Q(softech_branchcode=branchcode) | Q(softech_branchcode=''))
+    if doccode:
+        qs = qs.filter(Q(softech_doccode=doccode) | Q(softech_doccode=''))
+    return qs.exists()
 
 
 def find_duplicate_receipt(claim: InsuranceClaim, docnumber: str,
@@ -1212,7 +1233,8 @@ def create_manual_prescription(claim: InsuranceClaim, rx_data: dict,
     from django.db.models import Max
 
     docnumber = str(rx_data['softech_docnumber'])
-    if claim.prescriptions.filter(softech_docnumber=docnumber).exists():
+    if find_receipt_in_claim(claim, docnumber, rx_data.get('softech_branchcode'),
+                             rx_data.get('softech_doccode')):
         raise InsuranceImportError(
             f'الفاتورة رقم {docnumber} مضافة بالفعل في هذه المطالبة.')
 
@@ -1244,6 +1266,7 @@ def create_manual_prescription(claim: InsuranceClaim, rx_data: dict,
             rx_data.get('patient_name', '') or '',
             rx_data.get('lines', []),
             totals, local_disc, imported_disc, tarsia_disc,
+            doccode=rx_data.get('softech_doccode', '') or '',
         )
         rx.is_manual         = True
         rx.manual_position   = position or ''
