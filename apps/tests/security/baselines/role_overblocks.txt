@@ -802,6 +802,10 @@ viewer GET /api/qa/templates/
 pharmacist GET /api/insights/exceptions/
 viewer GET /api/insights/exceptions/
 
+# reason: C04 / P-28 — linking a draft transfer to a near-expiry lot is the move step; it needs
+#   CanCreateTransfer as well as catalog edit (the transfers app does not let purchasing create transfers).
+purchasing POST /api/batches/near-expiry/link-transfer/
+
 # reason: D-11 (owner 2026-11-19) — the review list of sales whose live discount-authority / points check
 #   could not run, its close-with-note and the points re-credit (a picpoints write) are for supervisors
 #   (pos/edit, CanReviewLiveCheckGaps). Cashier roles hold pos view/create only: they make the sales

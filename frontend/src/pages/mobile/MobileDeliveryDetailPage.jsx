@@ -12,6 +12,7 @@ import { deliveryBadgeClass, deliveryStatusLabel } from './deliveryStatus'
 import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { format } from 'date-fns'
 import { ba } from '../../utils/flowArrow'
+import { notify } from '../../components/ui'
 
 function toLatin(s) {
   return s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -51,7 +52,7 @@ export default function MobileDeliveryDetailPage() {
       const { data } = await deliveryApi.trackingLink(id)
       if (data?.whatsapp_url) window.open(data.whatsapp_url, '_blank')
       else if (navigator.share && data?.url) navigator.share({ title: 'تتبع الطلب', url: data.url }).catch(() => {})
-      else if (data?.url && navigator.clipboard) { navigator.clipboard.writeText(data.url); alert('تم نسخ رابط التتبع') }
+      else if (data?.url && navigator.clipboard) { navigator.clipboard.writeText(data.url); notify.success('تم نسخ رابط التتبع') }
     } catch { /* ignore */ }
   }
 

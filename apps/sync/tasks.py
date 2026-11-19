@@ -2573,6 +2573,17 @@ def _run_return_window_reconcile():
         logger.error('[APScheduler] return-window reconcile failed: %s', exc)
 
 
+def _run_near_expiry_outcomes():
+    """C04 / P-28: measure what happened to near-expiry lots whose chosen action is due (local mirrors only)."""
+    try:
+        from apps.batches.near_expiry import evaluate_outcomes
+        out = evaluate_outcomes()
+        if out['closed']:
+            logger.info('[APScheduler] near-expiry outcomes: %s', out)
+    except Exception as exc:
+        logger.error('[APScheduler] near-expiry outcomes failed: %s', exc)
+
+
 def _run_cash_view_snapshot():
     """P-40: keep this Saturday's 13-week cash view for forecast-vs-actual (local DB only; one per date)."""
     try:
@@ -4026,6 +4037,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_return_window_digest, 'cron', day=1, hour=8, minute=15, id='return_window_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
+    # Near-expiry worklist (C04 / P-28): daily outcome check after the 05:30 stock-expiry sweep.
+    _scheduler.add_job(
+        _run_near_expiry_outcomes, 'cron', hour=6, minute=20, id='near_expiry_outcomes',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
     )
     # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
     _scheduler.add_job(

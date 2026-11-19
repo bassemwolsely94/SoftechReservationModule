@@ -592,3 +592,84 @@ class NearExpiryAlert(models.Model):
 
     def __str__(self):
         return f'{self.batch} | {self.threshold_days}d alert'
+
+
+class NearExpiryAction(models.Model):
+    """
+    C04 / P-28: the chosen action for one at-risk lot on the «🧭 قائمة عمل قرب الانتهاء» worklist, and
+    — after `near_expiry_outcome_days` — what really happened to it (apps/batches/near_expiry.py).
+
+    One OPEN row per lot (branch + store + item + batch + expiry): choosing again changes that row
+    (audited), never adds a second one. T0 numbers come from the server's worklist, never from the
+    request. The outcome is measured from the mirrors only (stock-expiry balance + stock ledger
+    115/80/30/125/160/150); nothing here writes to SOFTECH, and «بيع أولاً» never changes a price.
+    """
+    ACTION_CHOICES = [
+        ('return',      'مرتجع للمورد'),
+        ('move',        'نقل لفرع يبيعه'),
+        ('sell_first',  'ركن قرب الانتهاء / بيع أولاً'),
+        ('accept_loss', 'قبول الخسارة'),
+    ]
+    STATUS_CHOICES = [('open', 'مفتوح'), ('closed', 'مُقفل')]
+    OUTCOME_CHOICES = [
+        ('',            '—'),
+        ('sold',        'بيع'),
+        ('moved',       'نُقل'),
+        ('returned',    'أُرسل للمرتجع'),
+        ('written_off', 'هالك / عجز'),
+        ('expired',     'انتهى على الرف'),
+        ('on_hand',     'ما زال على الرف'),
+        ('mixed',       'مختلط'),
+        ('unexplained', 'نقص غير مفسَّر'),
+    ]
+
+    branch_code = models.CharField(max_length=10, db_index=True, verbose_name='الفرع')
+    store_code  = models.CharField(max_length=10, blank=True, verbose_name='المخزن')
+    item_code   = models.CharField(max_length=6, db_index=True, verbose_name='كود الصنف')
+    item_name   = models.CharField(max_length=255, blank=True, verbose_name='اسم الصنف')
+    batch_no    = models.CharField(max_length=50, blank=True, verbose_name='رقم التشغيلة')
+    expiry_date = models.DateField(verbose_name='تاريخ الصلاحية')
+
+    # T0 — the worklist line when the action was first chosen
+    t0_qty         = models.DecimalField(max_digits=14, decimal_places=3, default=0, verbose_name='الكمية عند القرار')
+    t0_at_risk_qty = models.DecimalField(max_digits=14, decimal_places=3, default=0, verbose_name='الكمية المعرّضة')
+    t0_unit_cost   = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name='تكلفة الوحدة')
+    t0_value       = models.DecimalField(max_digits=16, decimal_places=2, default=0, verbose_name='القيمة المعرّضة')
+    t0_daily_rate  = models.DecimalField(max_digits=12, decimal_places=4, default=0, verbose_name='البيع/يوم')
+    suggested_action = models.CharField(max_length=12, choices=ACTION_CHOICES, verbose_name='الإجراء المقترح')
+    split          = models.JSONField(default=dict, blank=True, verbose_name='تقسيم الكمية')
+    suggest_detail = models.JSONField(default=dict, blank=True, verbose_name='تفاصيل الاقتراح')
+
+    chosen_action = models.CharField(max_length=12, choices=ACTION_CHOICES, db_index=True, verbose_name='الإجراء المختار')
+    note          = models.TextField(blank=True, verbose_name='ملاحظة / سبب')
+    chosen_by     = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+', verbose_name='اختار')
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+    due_date      = models.DateField(db_index=True, verbose_name='موعد قياس النتيجة')
+    disposal_record  = models.ForeignKey('batches.ExpiryDisposalRecord', on_delete=models.SET_NULL, null=True,
+                                         blank=True, related_name='+', verbose_name='طلب المرتجع')
+    transfer_request = models.ForeignKey('transfers.TransferRequest', on_delete=models.SET_NULL, null=True,
+                                         blank=True, related_name='+', verbose_name='طلب التحويل')
+
+    status      = models.CharField(max_length=8, choices=STATUS_CHOICES, default='open', db_index=True)
+    outcome     = models.CharField(max_length=12, choices=OUTCOME_CHOICES, blank=True, default='', verbose_name='النتيجة')
+    outcome_qty = models.JSONField(default=dict, blank=True, verbose_name='الكمية حسب النتيجة')
+    saved_value = models.DecimalField(max_digits=16, decimal_places=2, default=0, verbose_name='قيمة أُنقذت')
+    lost_value  = models.DecimalField(max_digits=16, decimal_places=2, default=0, verbose_name='قيمة ضاعت')
+    outcome_at  = models.DateTimeField(null=True, blank=True)
+    ledger_refs = models.JSONField(default=dict, blank=True, verbose_name='حركات الدفتر المستخدمة')
+
+    class Meta:
+        verbose_name        = 'إجراء قرب الانتهاء'
+        verbose_name_plural = 'إجراءات قرب الانتهاء'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['branch_code', 'store_code', 'item_code', 'batch_no', 'expiry_date'],
+                condition=models.Q(status='open'), name='nea_one_open_per_lot'),
+        ]
+        indexes = [models.Index(fields=['status', 'due_date'], name='nea_status_due_idx')]
+
+    def __str__(self):
+        return f'{self.get_chosen_action_display()} — {self.item_code} {self.batch_no} @ {self.branch_code} [{self.status}]'

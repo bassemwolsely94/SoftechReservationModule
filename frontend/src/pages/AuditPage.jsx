@@ -13,6 +13,7 @@ import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import QueryState from '../components/QueryState'
+import { notify } from '../components/ui'
 
 const LOG_SORT_KEYS = ['action', 'user_name', 'model_name', 'created_at']
 
@@ -330,7 +331,7 @@ function AbuseFlagsTab() {
     setScanning(true)
     try {
       const { data } = await auditApi.runDetection(24)
-      alert(`تم الفحص — ${data.total} إشارة جديدة`)
+      notify.success(`تم الفحص — ${data.total} إشارة جديدة`)
       qc.invalidateQueries({ queryKey: ['abuse-flags'] })
       qc.invalidateQueries({ queryKey: ['flag-summary'] })
     } catch { } finally { setScanning(false) }

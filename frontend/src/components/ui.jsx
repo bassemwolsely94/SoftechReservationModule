@@ -302,6 +302,20 @@ function ToastPortal({ toasts, dismiss }) {
   )
 }
 
+// D-25: plain functions outside React (print helpers, module-level error handlers) cannot call
+// useToast(); `notify` reaches the one mounted ToastProvider instead of window.alert.
+let providerAdd = null
+const notifyVia = (type) => (title, message, duration) => {
+  if (providerAdd) providerAdd(type, title, message, duration)
+  else (type === 'error' ? console.error : console.info)(title, message ?? '')   // no provider (tests)
+}
+export const notify = {
+  success: notifyVia('success'),
+  error:   notifyVia('error'),
+  warning: notifyVia('warning'),
+  info:    notifyVia('info'),
+}
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
@@ -309,6 +323,11 @@ export function ToastProvider({ children }) {
     const id = Date.now() + Math.random()
     setToasts(ts => [...ts, { id, type, title, message, duration }])
   }, [])
+
+  useEffect(() => {
+    providerAdd = add
+    return () => { if (providerAdd === add) providerAdd = null }
+  }, [add])
 
   const dismiss = useCallback((id) => {
     setToasts(ts => ts.filter(t => t.id !== id))

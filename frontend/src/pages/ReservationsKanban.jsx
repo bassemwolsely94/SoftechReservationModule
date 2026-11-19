@@ -12,6 +12,7 @@ import { fa } from '../utils/flowArrow'
 import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../components/CancelReasonPicker'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import { notify } from '../components/ui'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -406,7 +407,7 @@ export default function ReservationsKanban() {
           filterBranch, filterPriority, filterStatus, search, dateFrom, dateTo],
           context.previous)
       }
-      alert(err?.response?.data?.detail || 'تعذّر تغيير الحالة')
+      notify.error(err?.response?.data?.detail || 'تعذّر تغيير الحالة')
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['reservations-kanban'] }),
   })

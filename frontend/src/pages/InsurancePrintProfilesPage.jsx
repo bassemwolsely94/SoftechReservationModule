@@ -5,6 +5,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { insuranceApi } from '../api/client'
+import { useToast } from '../components/ui'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 const PLACEHOLDERS = ['{client}', '{subclient}', '{claim_number}', '{month}',
   '{period_from}', '{period_to}', '{call_center}', '{page}', '{pages}', '{rx_count}', '{net}']
@@ -21,6 +23,7 @@ const BLANK = {
 }
 
 export default function InsurancePrintProfilesPage() {
+  const toast = useToast()
   const navigate = useNavigate()
   const [profiles, setProfiles] = useState([])
   const [subclients, setSubclients] = useState([])
@@ -58,12 +61,11 @@ export default function InsurancePrintProfilesPage() {
       else await insuranceApi.createExportProfile(payload, cfg)
       setEditing(null); setWmFile(null); load()
     } catch (e) {
-      alert(e.response?.data ? JSON.stringify(e.response.data) : 'تعذّر الحفظ')
+      toast.error(e.response?.data ? JSON.stringify(e.response.data) : 'تعذّر الحفظ')
     } finally { setSaving(false) }
   }
 
-  const del = async (id) => {
-    if (!window.confirm('حذف ملف الطباعة؟')) return
+  const del = async (id) => {   // «حذف» is a two-step ConfirmButton
     await insuranceApi.deleteExportProfile(id); load()
   }
 
@@ -99,7 +101,7 @@ export default function InsurancePrintProfilesPage() {
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => setEditing(p)} data-tour="insurance-print-profiles-edit" className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200">تعديل</button>
-                  <button onClick={() => del(p.id)} data-tour="insurance-print-profiles-delete" className="px-3 py-1 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100">حذف</button>
+                  <ConfirmButton onConfirm={() => del(p.id)} data-tour="insurance-print-profiles-delete" confirmLabel="حذف ملف الطباعة؟" armedClassName="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded" className="px-3 py-1 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100">حذف</ConfirmButton>
                 </div>
               </div>
             ))}

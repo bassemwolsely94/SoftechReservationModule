@@ -109,6 +109,8 @@ SCHEDULER_JOB_GUARDS = {
         'status filter; concurrent runs only duplicate the cancel audit row (PG only, never SOFTECH)'),
     'return_window_reconcile': ('once_per_period_check', 'apps.batches.return_calendar.reconcile_returns', '_line_key(pl) not in used',
         'used-lines set read up front, no lock: two concurrent runs can apply the same doc 120 line twice (returned_qty double-counted); PG only'),
+    'near_expiry_outcomes': ('row_lock', 'apps.batches.near_expiry._evaluate_outcomes', "select_for_update().filter(status='open')",
+        'open NearExpiryAction rows locked in one transaction (evaluate_outcomes); a concurrent run waits, then sees them closed; ledger lines used once via ledger_refs; PG only, no sends, no SOFTECH'),
     'gl_drafting': ('unique_key', 'apps.finance.gl.drafting.start_run', 'except IntegrityError:',
         'partial UniqueConstraint on GLDraftRun status=running -> DraftBusy; SELECT-only on SOFTECH'),
     'gl_compare_refresh': ('advisory_lock', 'apps.finance.gl.compare.refresh', 'with refresh_lock() as got:',

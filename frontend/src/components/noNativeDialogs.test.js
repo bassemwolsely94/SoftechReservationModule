@@ -25,6 +25,37 @@ const CONVERTED = [
   'pages/DemandDetailPage.jsx',
   // batch 2
   'pages/InsuranceClaimDetailPage.jsx',
+  // batch 3
+  'pages/FollowUpsPage.jsx',
+  // batch 4
+  'pages/DiscountAlignmentPage.jsx',
+  'pages/CasesPage.jsx',
+  'pages/ForecastScenarioPage.jsx',
+  'pages/ImageEnrichmentPage.jsx',
+  'pages/InsurancePrintPage.jsx',
+  'pages/InsurancePrintProfilesPage.jsx',
+  // batch 5
+  'pages/SupplierCategoriesPage.jsx',
+  'pages/SettingsPage.jsx',
+  'pages/ProcurementDashboard.jsx',
+  'pages/FinanceSchemaPage.jsx',
+  'pages/DemandDashboardPage.jsx',
+  'components/TwoFactorSetup.jsx',
+  'components/ReceiptPrint.jsx',
+  'pages/mobile/MobileDeliveryDetailPage.jsx',
+  'pages/invoices/BundleWorkbench.jsx',
+  'pages/UsersPage.jsx',
+  'pages/ReservationsKanban.jsx',
+  'pages/ProductCatalogPage.jsx',
+  'pages/OmniAutomationsPage.jsx',
+  'pages/OffersPage.jsx',
+  'pages/DeliveryDashboard.jsx',
+  'pages/AuditPage.jsx',
+  'components/followups/CallListsPanel.jsx',
+  'components/PrescriptionOcrModal.jsx',
+  'components/InTransitTab.jsx',
+  'components/HRPrint.jsx',
+  'components/ui.jsx',
   'components/InlineConfirm.jsx',
 ]
 

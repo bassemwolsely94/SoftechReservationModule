@@ -47,23 +47,22 @@ def plan(batches, rates, target_stock, *, today, horizon, min_days, transit, hq_
     by_src = defaultdict(list)
     for b in batches:
         by_src[(b['item'], b['branch'])].append(b)
+    from .stock_expiry import fefo_at_risk_lots
     risks = []                                  # (expiry, item, branch, batch_no, at_risk_qty, d)
     too_late = defaultdict(float)
     for (item, br), rows in by_src.items():
-        rate, sold = rates.get((item, br), 0.0), 0.0
-        for b in sorted(rows, key=lambda r: (r['expiry'], r['batch_no'])):
-            d = (b['expiry'] - today).days
-            if d < 0:
-                continue                         # already expired — disposal, not rebalancing
-            sells = max(0.0, min(b['qty'], rate * d - sold))
-            sold += sells
-            at_risk = b['qty'] - sells
+        # the one FEFO rule (P-28 §2.1); expired lots are disposal, not rebalancing — skipped there.
+        # Lots past the horizon expire last, so skipping them changes no earlier lot's share.
+        lots = fefo_at_risk_lots([(b['expiry'], b['qty'], b['batch_no']) for b in rows],
+                                 rates.get((item, br), 0.0), today, within_days=horizon)
+        for lot in lots:
+            at_risk, d = lot['at_risk_qty'], lot['days_left']
             if at_risk < 0.5:
                 continue
             if d < min_days:
                 too_late[(item, br)] += at_risk
-            elif d <= horizon:
-                risks.append((b['expiry'], item, br, b['batch_no'], at_risk, d))
+            else:
+                risks.append((lot['expiry'], item, br, lot['ref'], at_risk, d))
 
     planned = defaultdict(list)                  # (item, target) → [(expiry, qty)] added by this run
     lines, no_target = [], defaultdict(float)

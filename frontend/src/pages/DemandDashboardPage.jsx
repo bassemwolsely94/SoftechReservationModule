@@ -11,6 +11,7 @@ import useAuthStore from '../store/authStore'
 import { tint } from '../theme/theme'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import { notify } from '../components/ui'
 
 const BRAND  = 'rgb(var(--c-brand-600))'
 const GREEN  = '#10b981'
@@ -126,8 +127,8 @@ export default function DemandDashboardPage() {
     setPushing(true)
     try {
       const { data } = await demandApi.pushPurchaseSuggestions({})
-      alert(`تم إرسال ${data.created} اقتراح شراء إلى لوحة المشتريات`)
-    } catch (e) { alert(e.response?.data?.detail || 'تعذّر الإرسال') }
+      notify.success(`تم إرسال ${data.created} اقتراح شراء إلى لوحة المشتريات`)
+    } catch (e) { notify.error(e.response?.data?.detail || 'تعذّر الإرسال') }
     finally { setPushing(false) }
   }
   function exportSuggestionsCsv() {
