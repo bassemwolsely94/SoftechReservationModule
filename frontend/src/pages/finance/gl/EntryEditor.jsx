@@ -41,6 +41,18 @@ function lineFrom(l) {
 // cents, so the live totals never show float noise (display only)
 const cents = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : 0 }
 
+// A line with an amount but no account is refused by the server, so the live totals never call
+// such an entry «متوازن» (UAT W5b P3). Display only — the server still decides.
+export const lacksAccount = (l) => !String(l.account_code || '').trim() && (cents(l.debit) !== 0 || cents(l.credit) !== 0)
+
+export function entryTotals(lines) {
+  const d = lines.reduce((s, l) => s + cents(l.debit), 0)
+  const c = lines.reduce((s, l) => s + cents(l.credit), 0)
+  const missingAccount = lines.filter(lacksAccount).length
+  return { debit: d / 100, credit: c / 100, diff: (d - c) / 100, missingAccount,
+           balanced: d === c && d > 0 && missingAccount === 0 }
+}
+
 // ── Account picker: code / name search over the active posting accounts ──────
 export function AccountPicker({ value, name, accounts, onPick, disabled }) {
   const [q, setQ] = useState(null)        // null = not typing → show the chosen account
@@ -134,11 +146,7 @@ export default function EntryEditor({ entryId, onClose, onChanged }) {
   const addLine = () => set({ lines: [...form.lines, blankLine()] })
   const removeLine = (key) => set({ lines: form.lines.filter(l => l.key !== key) })
 
-  const totals = useMemo(() => {
-    const d = form.lines.reduce((s, l) => s + cents(l.debit), 0)
-    const c = form.lines.reduce((s, l) => s + cents(l.credit), 0)
-    return { debit: d / 100, credit: c / 100, diff: (d - c) / 100 }
-  }, [form.lines])
+  const totals = useMemo(() => entryTotals(form.lines), [form.lines])
 
   const body = () => ({
     entry_date: form.entry_date, book: form.book, branch: form.branch || null,
@@ -262,6 +270,7 @@ export default function EntryEditor({ entryId, onClose, onChanged }) {
                       <td className={cell}>
                         <AccountPicker value={l.account_code} name={l.account_name || acc?.name || ''} accounts={accounts}
                                        onPick={a => setLine(l.key, { account_code: a.code, account_name: a.name })} />
+                        {lacksAccount(l) && <div className="text-[10px] text-amber-700">اختر الحساب</div>}
                       </td>
                       <td className={cell}>
                         <BranchSelect size="sm" branches={branches} value={l.branch_id} allLabel="—"
@@ -318,8 +327,13 @@ export default function EntryEditor({ entryId, onClose, onChanged }) {
             <span>إجمالي الدائن: <b className="font-mono tabular-nums" dir="ltr">{money(totals.credit)}</b></span>
             <span className={totals.diff === 0 ? 'text-green-700' : 'text-red-600'}>
               الفرق: <b className="font-mono tabular-nums" dir="ltr">{money(totals.diff)}</b>
-              {totals.diff === 0 && totals.debit > 0 ? ' ✓ متوازن' : ''}
+              {totals.balanced ? ' ✓ متوازن' : ''}
             </span>
+            {totals.missingAccount > 0 && (
+              <span className="text-amber-700">
+                {totals.missingAccount === 1 ? 'سطر بدون حساب' : `${totals.missingAccount} أسطر بدون حساب`}
+              </span>
+            )}
           </div>
 
           {editable && (

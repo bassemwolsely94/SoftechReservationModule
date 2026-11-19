@@ -26,6 +26,8 @@ import { useConfirm } from '../components/InlineConfirm'
 import { SortIcon } from '../components/DataTable'
 import useSortableRows from '../hooks/useSortableRows'
 import useClosedBranches from '../hooks/useClosedBranches'
+import useExportJob from '../hooks/useExportJob'
+import ExportJobStatus from '../components/ExportJobStatus'
 import SharedSortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
@@ -1645,50 +1647,35 @@ export default function PurchasingDashboard() {
     return () => document.removeEventListener('mousedown', handler)
   }, [exportOpen])
 
-  const handleExport = useCallback(async (format, viewOverride) => {
-    setExporting(true)
+  // Performance Stage 4: the file is built as a background job (start → progress → download);
+  // the buyer keeps working meanwhile. Same query, same file as the old direct download.
+  const exportJob = useExportJob({
+    storageKey: 'export-job:purchasing',
+    start: (params) => purchasingApi.startExport(params),
+    fileName: (params) => {
+      const slug = params.view === 'pivot' ? 'pivot' : (params.view === 'aggregated' ? 'network' : 'branch')
+      return `purchasing-${slug}-${new Date().toISOString().slice(0, 10)}.${params.format === 'csv' ? 'csv' : 'xlsx'}`
+    },
+  })
+
+  const handleExport = useCallback((format, viewOverride) => {
     setExportOpen(false)
-    try {
-      const view     = viewOverride || (viewTab === 'agg' ? 'aggregated' : 'metrics')
-      const viewSlug = viewOverride || (viewTab === 'agg' ? 'network'    : 'branch')
-
-      // Demand-fill horizon: applies to every export (flat + pivot) when the user
-      // set a coverage. Empty = engine's frozen 1-month order (revert). round_at
-      // (total|branch) only affects the pivot sheet; the backend ignores it for
-      // flat views. round_dir=nearest rounds order qtys to whole packs.
-      const demandExtra = String(pivotCoverage).trim() !== ''
-        ? { coverage_months: pivotCoverage, round_at: pivotRoundAt, round_dir: 'nearest' }
-        : {}
-
-      const res  = await purchasingApi.export({
-        format,
-        view,
-        branch:    exportBranch.length ? exportBranch.join(',') : undefined,
-        abc_class: exportAbc.length    ? exportAbc.join(',')    : undefined,
-        ...demandExtra,
-      })
-
-      const ext  = format === 'csv' ? 'csv' : 'xlsx'
-      const mime = format === 'csv'
-        ? 'text/csv;charset=utf-8-sig'
-        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-      const blob = new Blob([res.data], { type: mime })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `purchasing-${viewSlug}-${new Date().toISOString().slice(0, 10)}.${ext}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error('Export failed', err)
-      toast.error('فشل التصدير — تحقق من الاتصال وحاول مرة أخرى')
-    } finally {
-      setExporting(false)
-    }
-  }, [viewTab, exportBranch, exportAbc, pivotCoverage, pivotRoundAt, toast])
+    const view = viewOverride || (viewTab === 'agg' ? 'aggregated' : 'metrics')
+    // Demand-fill horizon: applies to every export (flat + pivot) when the user
+    // set a coverage. Empty = engine's frozen 1-month order (revert). round_at
+    // (total|branch) only affects the pivot sheet; the backend ignores it for
+    // flat views. round_dir=nearest rounds order qtys to whole packs.
+    const demandExtra = String(pivotCoverage).trim() !== ''
+      ? { coverage_months: pivotCoverage, round_at: pivotRoundAt, round_dir: 'nearest' }
+      : {}
+    exportJob.run({
+      format,
+      view,
+      branch:    exportBranch.length ? exportBranch.join(',') : undefined,
+      abc_class: exportAbc.length    ? exportAbc.join(',')    : undefined,
+      ...demandExtra,
+    })
+  }, [viewTab, exportBranch, exportAbc, pivotCoverage, pivotRoundAt, exportJob])
 
   // Experimental ADVANCED pathway — parallel current-vs-advanced comparison sheet.
   const handleAdvancedExport = useCallback(async () => {
@@ -2291,12 +2278,18 @@ export default function PurchasingDashboard() {
             <div className="relative" ref={exportRef}>
               <button data-tour="purchasing-engine-export"
                 onClick={() => setExportOpen(v => !v)}
-                disabled={exporting}
+                disabled={exporting || exportJob.busy}
                 className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700
                            hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
               >
-                {exporting ? '⏳ جارٍ التصدير...' : '⬇ تصدير'}
+                {exporting || exportJob.busy ? '⏳ جارٍ التصدير...' : '⬇ تصدير'}
               </button>
+              {!exportOpen && (exportJob.running || exportJob.error) && (
+                <div className="absolute left-0 top-full mt-1 z-40 w-72 rounded-lg border border-gray-200 bg-white p-2 shadow"
+                  data-tour="purchasing-engine-export-progress">
+                  <ExportJobStatus exp={exportJob} className="w-full" />
+                </div>
+              )}
 
               {exportOpen && (
                 <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3 w-72 max-h-[75vh] overflow-y-auto">

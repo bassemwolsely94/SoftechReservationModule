@@ -678,7 +678,7 @@ def _softech_live_search(like_q: str, branch_id) -> list:
     try:
         from config.sybase import get_sybase_connection
         from apps.sync.sybase_queries import QUERY_ITEM_SEARCH
-        conn = get_sybase_connection()
+        conn = get_sybase_connection(interactive=True)
         try:
             cursor = conn.cursor()
             cursor.execute(QUERY_ITEM_SEARCH, [like_q, like_q, like_q, like_q])

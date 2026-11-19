@@ -839,7 +839,7 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
         try:
             from config.sybase import get_sybase_connection
             from apps.sync.sybase_queries import QUERY_VALIDATE_STKTRANS
-            conn = get_sybase_connection()
+            conn = get_sybase_connection(interactive=True)
             cursor = conn.cursor()
             cursor.execute(QUERY_VALIDATE_STKTRANS, [doc_number, branch_code])
             row = cursor.fetchone()

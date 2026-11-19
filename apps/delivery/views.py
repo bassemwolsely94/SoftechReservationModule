@@ -871,9 +871,9 @@ def delivery_order_items(request, pk):
         # Choose connection: branch DB or HQ
         branch = order.branch
         if branch and branch.db_host and order.softech_crm_branch != '100':
-            conn = get_branch_connection(branch.db_host, branch.db_port, branch.db_name)
+            conn = get_branch_connection(branch.db_host, branch.db_port, branch.db_name, interactive=True)
         else:
-            conn = get_sybase_connection()
+            conn = get_sybase_connection(interactive=True)
 
         cursor = conn.cursor()
         cursor.execute('SET ROWCOUNT 0')
@@ -1850,7 +1850,7 @@ def customer_delivery_profile(request):
                 from apps.branches.models import Branch
                 from config.sybase import get_branch_connection
                 for branch in Branch.objects.filter(db_host__gt='').order_by('softech_branch_id')[:1]:
-                    conn = get_branch_connection(branch.db_host, branch.db_port, branch.db_name)
+                    conn = get_branch_connection(branch.db_host, branch.db_port, branch.db_name, interactive=True)
                     cursor = conn.cursor()
                     cursor.execute(
                         'SELECT latitude_x, longitude_y FROM dm_picsloc WHERE phcode = ?',

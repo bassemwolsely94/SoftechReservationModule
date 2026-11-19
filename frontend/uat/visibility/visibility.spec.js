@@ -40,33 +40,25 @@ import { test } from '@playwright/test'
 import { UAT_USERS, stateFile, safeKey, BRANCH_A, BRANCH_B, userByKey, PASSWORD } from '../lib/users.js'
 import { expectedFor, can, reference } from '../lib/expected.js'
 import { finding } from '../lib/findings.js'
+import { gotoSettled, LOADING, LANDING } from '../lib/page.js'
 import { KNOWN_GAPS } from '../../e2e/knownGaps.js'
 import { sweepRoutes, menuEntryFor, menuShown } from './routes.js'
 
-// Time-to-content, not time-to-idle (run 3): lib gotoSettled waits for networkidle, which polling
+// Time-to-content, not time-to-idle (run 3; now in lib gotoSettled): networkidle, which polling
 // screens (bell, freshness, queue status) reach late or never: 125 min for one user. A visibility
 // check only needs "rendered or refused", so openScreen() below waits for the FIRST of: content
 // (main or an h1 with text, no spinner, no loading text), a refusal (refusal text, URL
-// left the route, /login). CAP_MS bounds that wait; SETTLE_MS then collects late API errors.
+// left the route, /login). CAP_MS bounds that wait (lib/page.js gotoSettled).
 // ms = time to that first signal; > SLOW_MS is 'slow'; no signal within CAP_MS = 'slow' at CAP_MS.
 const CAP_MS = 20_000
 const SLOW_MS = 5_000
-const SETTLE_MS = 1_500
 // Backstop per visit: past it the visit is a 'hang' finding and the sweep moves on.
 const HANG_MS = 60_000
 // One user's whole sweep (~10-15 min with openScreen); the chunk runner kills at 45 min.
 const USER_TIMEOUT_MS = 40 * 60_000
-const SPINNERS = '[aria-busy="true"], .animate-spin, [data-loading="true"]'
-// Refusal wording from lib/page.js (gotoSettled), which this spec no longer calls.
-const REFUSED_TEXT = /غير مصرح|ليس لديك صلاحية|لا تملك صلاحية/
-// lib/page.js also counts a bare "403"/"Forbidden" anywhere on the page as a refusal, which a figure
-// or code on a data screen matches (run 4b: admin "refused" on /finance with data 200). Here they
-// count only on a near-empty screen (< 200 chars), like an unhandled 403 response.
-const REFUSED_CODE = /(^|[^0-9])403([^0-9]|$)|Forbidden/
 const OUT_DIR = path.resolve(__dirname, '..', '..', 'test-results-uat')
 const MATRIX = path.join(OUT_DIR, 'visibility-matrix.json')
 const SHOTS = path.join(OUT_DIR, 'visibility', 'shots')
-const LANDING = /^\/(dashboard|login|rider|m|m\/me)\/?$/
 
 const onlyUsers = (process.env.UAT_VIS_USERS || '').split(',').map(s => s.trim()).filter(Boolean)
 const onlyRoutes = (process.env.UAT_VIS_ROUTES || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -88,72 +80,10 @@ function writeMatrix(key, entry, skipped) {
   fs.writeFileSync(MATRIX, JSON.stringify(m, null, 1))
 }
 
-const LOADING = /جار[ٍِ]?\s*التحميل|Loading\.\.\./
+/** lib gotoSettled with this sweep's cap; the W2 time-to-content rules now live in lib/page.js. */
+const openScreen = (page, url) => gotoSettled(page, url, { capMs: CAP_MS, slowMs: SLOW_MS })
 
-/** Same return shape and status rules as lib gotoSettled, but timed to first content/refusal. */
-async function openScreen(page, url) {
-  const consoleErrors = []
-  const apiErrors = []
-  const onConsole = m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300)) }
-  const onPageError = e => consoleErrors.push(`pageerror: ${String(e).slice(0, 300)}`)
-  const onResponse = r => {
-    if (r.url().includes('/api/') && r.status() >= 400) apiErrors.push({ url: r.url().replace(/^https?:\/\/[^/]+/, ''), status: r.status() })
-  }
-  const wanted = url.split('?')[0]
-  page.on('console', onConsole); page.on('pageerror', onPageError); page.on('response', onResponse)
-  const t0 = Date.now()
-  let timedOut = false, ms, blocker, dataMs
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: CAP_MS })
-    await page.waitForFunction(({ wanted, spin, refused, loading }) => {
-      const p = location.pathname.replace(/\/$/, '') || '/'
-      if (p !== (wanted.replace(/\/$/, '') || '/')) return true                     // redirected (refusal / landing / login)
-      const root = document.querySelector('main') || document.querySelector('#root')
-      const text = root ? root.innerText : ''
-      if (new RegExp(refused).test(text)) return true                              // refusal text
-      // main first: an icon-only (collapsed) nav rail [data-tour=shell-rail] precedes it with no text,
-      // and querySelector('main, [data-tour], h1') returned that rail, so no screen ever "rendered"
-      // for those users (run 4: 20 s on every desktop screen, users over the 40-min cap).
-      const hasText = [document.querySelector('main'), ...document.querySelectorAll('h1')].some(e => e && e.innerText.trim().length > 0)
-      return hasText && !document.querySelector(spin) && !new RegExp(loading).test(text)
-    }, { wanted, spin: SPINNERS, refused: REFUSED_TEXT.source, loading: LOADING.source }, { timeout: CAP_MS, polling: 200 })
-      .catch(() => { timedOut = true })
-    ms = Date.now() - t0
-    if (timedOut) blocker = await page.evaluate(({ spin, loading }) => {
-      const sp = document.querySelector(spin)
-      const main = document.querySelector('main')
-      const m = (main?.innerText || '').match(new RegExp(loading))
-      return [sp ? `spinner ${sp.tagName.toLowerCase()}.${String(sp.className).slice(0, 60)} in ${sp.closest('main') ? 'main' : (sp.closest('header,nav,aside')?.tagName.toLowerCase() || 'page')}` : '',
-        m ? `loading text in main` : '', main ? `main text ${main.innerText.trim().length}` : 'no <main>',
-        ...[...document.querySelectorAll('[data-tour], h1')].slice(0, 3).map(e => `${e.tagName.toLowerCase()}${e.dataset.tour ? '[' + e.dataset.tour + ']' : ''} text ${e.innerText.trim().length}`),
-        `path ${location.pathname}`].filter(Boolean).join('; ')
-    }, { spin: SPINNERS, loading: LOADING.source }).catch(() => 'page did not answer')
-    await page.waitForTimeout(SETTLE_MS)
-    // A section still saying "loading" after first content is usually a slower panel, not an
-    // endless one (run 4b: 237 'stuck' rows, most with content in < 1 s). Give it up to CAP_MS to
-    // clear; only a loading text still there after that is 'stuck'. dataMs = time until it cleared.
-    if (!timedOut && LOADING.test(await page.locator('main').first().innerText({ timeout: 5_000 }).catch(() => ''))) {
-      await page.waitForFunction(loading => !new RegExp(loading).test(document.querySelector('main')?.innerText || ''),
-        LOADING.source, { timeout: CAP_MS, polling: 250 }).catch(() => {})
-      dataMs = Date.now() - t0
-    }
-  } finally {
-    page.off('console', onConsole); page.off('pageerror', onPageError); page.off('response', onResponse)
-  }
-  if (ms === undefined) ms = Date.now() - t0
-  const finalUrl = new URL(page.url()).pathname
-  const text = (await page.locator('main, #root').first().innerText({ timeout: 5_000 }).catch(() => '')).trim()
-  const crashed = consoleErrors.some(e => e.startsWith('pageerror')) || apiErrors.some(e => e.status >= 500 && e.status !== 503)
-  let status
-  if (crashed) status = 'crash'
-  else if (REFUSED_TEXT.test(text) || (REFUSED_CODE.test(text) || apiErrors.some(e => e.status === 403)) && text.length < 200 ||
-           // Anchored: unanchored, /finance → /finance/dashboard (its own index) counted as a refusal.
-           (finalUrl !== new URL(url, 'http://x').pathname && /^\/(dashboard|login|rider|m)\/?$/.test(finalUrl))) status = 'refused'
-  else if (timedOut) status = 'slow'
-  else if (text.length < 20) status = 'blank'
-  else status = ms > SLOW_MS ? 'slow' : 'ok'
-  return { ms, status, consoleErrors, apiErrors, finalUrl, blocker, dataMs }
-}// Calls any screen may make that say nothing about the screen's own data (pickers, badges, help).
+// Calls any screen may make that say nothing about the screen's own data (pickers, badges, help).
 const GENERIC_API = /^\/api\/(auth|config|access\/whoami|audit\/screen-view|help|users\/my-permissions|notifications|sync\/(status|freshness)|branches|counselling\/status|personal)(\/|$)/
 const apiKey = u => u.replace(/^https?:\/\/[^/]+/, '').split('?')[0].replace(/\/\d+(?=\/|$)/g, '/:n')
 

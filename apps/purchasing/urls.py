@@ -8,6 +8,7 @@ from . import rate_writer_views
 from . import isr_views
 from . import branch_request_views
 from . import cover_tiers_views   # C25 / P-34
+from . import export_jobs         # performance Stage 4 — exports as background jobs
 
 urlpatterns = [
     # ── Demand engine ─────────────────────────────────────────────────────────
@@ -20,6 +21,7 @@ urlpatterns = [
     path('seasonality/',         views.seasonality_status,  name='purchasing-seasonality'),
     path('seasonality/refresh/', views.seasonality_refresh, name='purchasing-seasonality-refresh'),
     path('export/',      views.export_purchasing,            name='purchasing-export'),
+    path('export/jobs/', export_jobs.purchasing_export_job,  name='purchasing-export-job'),   # Stage 4
     path('advanced-export/', views.advanced_export,          name='purchasing-advanced-export'),
     path('advanced-pivot-export/', views.advanced_pivot_export, name='purchasing-advanced-pivot-export'),
     path('trigger/',     views.trigger_run,                  name='purchasing-trigger'),
@@ -108,6 +110,7 @@ urlpatterns = [
     path('isr/pushes/<int:pk>/cancel/',  isr_views.isr_cancel,  name='isr-push-cancel'),
     path('isr/fulfilment/',        isr_views.isr_fulfilment,        name='isr-fulfilment'),
     path('isr/fulfilment/export/', isr_views.isr_fulfilment_export, name='isr-fulfilment-export'),
+    path('isr/fulfilment/export/jobs/', export_jobs.isr_fulfilment_export_job, name='isr-fulfilment-export-job'),
     path('isr/fulfilment/recent/', isr_views.isr_fulfilment_recent, name='isr-fulfilment-recent'),
     path('isr/fulfilment/proposals/', isr_views.isr_fulfilment_proposals, name='isr-fulfilment-proposals'),
     # «طلبات واتساب» — branch requests pasted from WhatsApp groups

@@ -1731,7 +1731,16 @@ def export_purchasing(request):
       abc_class=A|B|C|X[,…]
       needs_purchase=1
       search=<text>
+
+    The screen starts it as a background job instead (POST export/jobs/, performance Stage 4);
+    both run export_purchasing_response, so the file is the same.
     """
+    return export_purchasing_response(request)
+
+
+def export_purchasing_response(request):
+    """The purchasing export as an HttpResponse. `request` only needs GET and user, so the export
+    job can replay it (apps/purchasing/export_jobs.py)."""
     import traceback as _tb
     try:
         run = _latest_run()

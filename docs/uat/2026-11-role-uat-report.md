@@ -194,7 +194,7 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
 | P2 | The voucher OTP is in the reply to the staff screen (`whatsapp_url`, `qr_code`). | owner decision |
 | P3 | ISR push-review error showed raw JDBC text. | PR 163 |
 | P3 | Pricing approve is admin-only in code; voucher cancel hard-codes manager/admin (both stricter than the matrix). | open (stricter) |
-| P3 | GL form shows «متوازن» for a line with no account (server refuses). | open |
+| P3 | GL form shows «متوازن» for a line with no account (server refuses). | fixed, `claude/gl-form-missing-account`: «متوازن» only when every line with an amount has an account; the line and the totals say «اختر الحساب» / «سطر بدون حساب» |
 
 ### Found while fixing (owner)
 
@@ -247,4 +247,4 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
   the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons)~~ (fixed, `claude/uat-backend-role-lists`: all four ask the matrix; only procurement changes who may act — the purchasing role gains run / reclassify / override, a bare is_staff account loses them); the 103
   stricter-than-matrix checks (W3).
 - **Housekeeping:** ~~`makemigrations --check` on main wants a migration deleting `reservations.ActivityLog`~~ (the table is live — the reservation call log; fixed by loading the model in the app's `ready()`, `claude/reservations-activitylog-register`, no schema change)
-  (not from this round); harness fixes from W2 into the shared lib.
+  (not from this round); ~~harness fixes from W2 into the shared lib~~ (done, `claude/uat-lib-w2-lessons`: `lib/page.js` gotoSettled is time-to-content with the W2 rules; visibility uses it).

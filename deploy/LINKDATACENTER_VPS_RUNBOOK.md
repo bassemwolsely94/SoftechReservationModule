@@ -70,6 +70,7 @@
 | + OCR inside the web process (Tesseract per page, RapidOCR) | +0.3–0.6 GB while OCR runs |
 | Scheduler + JVM | 0.8–1 GB, spikes during sync |
 | PaddleOCR sidecar (own service, capped) | 1–1.5 GB, hard cap 2 GB |
+| Export jobs service (§13.8, optional, no JVM) | 0.15 GB idle, up to 1.5 GB cap while a big export runs |
 | Redis (main capped at 256 MB + limits instance ~10 MB), Nginx, OS | 0.5–0.8 GB |
 | Workbench while you develop (VS Code server, Claude Code, tests, Vite) | 0.5–1 GB |
 | **EasyOCR (torch) — only if selected; stays loaded in the web process** | **+1.5–2 GB** |
@@ -2365,6 +2366,33 @@ elrezeiky-web-extra@8002`. Only once a single web process is left may the two ca
 is still a reader, with a test staff account without 2FA: 20 users for 15 minutes, then 40. Keep the CSV and
 write p50/p95/p99 per route into `docs/full-project-audit/07_PERFORMANCE_AUDIT.md`. Stage B waits until the
 20-user run has p95 under 2 s on the polled routes and no failures.
+
+### 13.8 Export jobs service (performance Stage 4)
+
+Every big export (purchasing list / pivot, PIC analytics, …) is a background job: the button returns at once,
+the file is built elsewhere, the screen downloads it when ready. Until this service is installed the job runs
+on a thread inside the web process — it works, but a 2–3 minute export still competes with everyone's
+requests for that process. The service moves that work to its own small process (no JVM).
+
+**Install (owner step, after a release that contains `deploy/elrezeiky-jobs.service`):**
+```bash
+sudo cp /opt/elrezeiky/app/deploy/elrezeiky-jobs.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now elrezeiky-jobs
+sudo systemctl status elrezeiky-jobs --no-pager | grep Active      # active (running)
+```
+Then, and only then, tell the web processes to leave jobs for it: add `EXPORT_JOBS_RUNNER=service` to
+`/opt/elrezeiky/.env` and `sudo systemctl restart elrezeiky-web` (and every `elrezeiky-web-extra@*`).
+
+**Check:** press «⬇ تصدير» on /purchasing; `journalctl -u elrezeiky-jobs -n 20` shows no error and the file
+downloads. Memory: the service is capped at 1.5 GB (`MemoryMax`); `free -m` must stay above 1 GB with the
+scheduler mid-sync while an export runs. ISR fulfilment exports read SOFTECH live and always stay on the web
+process (design §10) — that is expected.
+
+**If something is wrong:** remove `EXPORT_JOBS_RUNNER=service` from `.env`, restart the web unit(s) — jobs go
+back to the in-process thread at once — then `sudo systemctl disable --now elrezeiky-jobs`. A job that was
+running when the service stopped shows «توقّف إنشاء الملف … حاول مرة أخرى»; the user presses export again.
+`release.sh` restarts the service after each release when it is running.
 
 ## 14. Troubleshooting
 

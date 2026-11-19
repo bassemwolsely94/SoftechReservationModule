@@ -544,21 +544,14 @@ def export(request):
 
 # ── Excel in the background (doc 33 §15) ─────────────────────────────────────────────────────────
 
-def _job_json(job):
-    return {'id': job.pk, 'status': job.status, 'status_label': job.get_status_display(),
-            'progress_pct': job.progress_pct, 'progress_msg': job.progress_msg, 'file_name': job.file_name,
-            'error': job.error, 'rows': job.rows, 'created_at': job.created_at,
-            'started_at': job.started_at, 'finished_at': job.finished_at}
-
-
 def _own_job(request, acc, pk):
-    """The requester's own job, or None (another user's id answers 404 like a missing one)."""
-    from . import jobs
-    from .models import PicExportJob
+    """The requester's own PIC job, or None (another user's id answers 404 like a missing one)."""
+    from apps.export_jobs.views import own_job
+
+    from .jobs import KIND_KEY
     if acc.profile is None:
         return None
-    job = PicExportJob.objects.defer('data').filter(pk=pk, requested_by=acc.profile).first()
-    return jobs.refresh_if_stale(job) if job else None
+    return own_job(request.user, pk, kind=KIND_KEY)
 
 
 def _not_found():
@@ -568,12 +561,9 @@ def _not_found():
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def export_jobs(request):
-    from django.db import IntegrityError
+    from apps.export_jobs import runner
 
-    from core.threads import start_thread
-
-    from . import jobs
-    from .models import PicExportJob
+    from .jobs import KIND_KEY
     acc = Access(request)
     if not acc.can_view or not acc.can_export or acc.profile is None:
         return _deny()
@@ -583,58 +573,30 @@ def export_jobs(request):
             Filters.from_request(request, acc, live=True)
     except ValueError as exc:
         return _bad(str(exc))
-    try:
-        jobs.cleanup()                      # opportunistic: stale -> failed, > 48 h -> deleted
-    except Exception:                       # noqa: BLE001 — housekeeping never blocks an export
-        import logging
-        logging.getLogger(__name__).exception('pic export cleanup failed')
-    running = PicExportJob.objects.filter(requested_by=acc.profile, status__in=PicExportJob.ACTIVE).first()
-    if running is None:
-        try:
-            with transaction.atomic():
-                job = PicExportJob.objects.create(requested_by=acc.profile,
-                                                  params=jobs.params_of(request.query_params))
-        except IntegrityError:              # two clicks at once: the constraint lets one through
-            running = PicExportJob.objects.filter(requested_by=acc.profile, status__in=PicExportJob.ACTIVE).first()
-            if running is None:
-                raise
-    if running is not None:
-        return Response({'detail': 'يوجد تصدير جارٍ بالفعل', 'id': running.pk, 'status': running.status},
-                        status=status.HTTP_409_CONFLICT)
-    start_thread(jobs.run_job, args=(job.pk,), name=f'pic-export-{job.pk}')
-    return Response({'id': job.pk, 'status': job.status}, status=status.HTTP_202_ACCEPTED)
+    return runner.start_response(*runner.start(KIND_KEY, acc.profile, runner.params_of(request.query_params)))
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def export_job(request, pk):
+    from apps.export_jobs.runner import job_json
     acc = Access(request)
     job = _own_job(request, acc, pk)
     if job is None:
         return _not_found()
-    return Response(_job_json(job))
+    return Response(job_json(job))
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def export_job_download(request, pk):
-    from django.http import HttpResponse
-
-    from .models import PicExportJob
+    from apps.export_jobs.views import file_response
     acc = Access(request)
     job = _own_job(request, acc, pk)
     if job is None:
         return _not_found()
     if not acc.can_view or not acc.can_export:  # access can be revoked after the job was started
         return _deny()
-    if job.status != PicExportJob.DONE:
-        return Response({'detail': 'الملف غير جاهز', 'status': job.status}, status=status.HTTP_409_CONFLICT)
-    data = PicExportJob.objects.filter(pk=job.pk).values_list('data', flat=True).first()
-    if not data:
-        return _not_found()
-    from apps.audit.models import AuditLog
-    AuditLog.log('pic_analytics_exported', user=acc.profile, request=request, note=job.file_name,
-                 extra={'filters': job.filters, 'rows': job.rows, 'job_id': job.pk})
-    resp = HttpResponse(bytes(data), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    resp['Content-Disposition'] = f'attachment; filename="{job.file_name}"'
-    return resp
+    # the shared download writes `pic_analytics_exported` (the kind's audit_action) with the filters,
+    # row counts and job id, exactly as before
+    return file_response(request, job, allowed=True)
