@@ -24,6 +24,8 @@ from .views import (
     export_disposal,
     return_window_calendar, return_window_request, return_window_answer,
     return_window_policies, return_window_export, return_window_reconcile,
+    near_expiry_worklist, near_expiry_choose, near_expiry_request_return, near_expiry_link_transfer,
+    near_expiry_outcomes, near_expiry_check_outcomes,
 )
 
 router = DefaultRouter()
@@ -70,4 +72,11 @@ urlpatterns = [
     path('return-window/policies/', return_window_policies, name='return-window-policies'),
     path('return-window/export/', return_window_export, name='return-window-export'),
     path('return-window/reconcile/', return_window_reconcile, name='return-window-reconcile'),
+    # Near-expiry action worklist (C04 / P-28)
+    path('near-expiry/', near_expiry_worklist, name='near-expiry'),
+    path('near-expiry/choose/', near_expiry_choose, name='near-expiry-choose'),
+    path('near-expiry/request-return/', near_expiry_request_return, name='near-expiry-request-return'),
+    path('near-expiry/link-transfer/', near_expiry_link_transfer, name='near-expiry-link-transfer'),
+    path('near-expiry/outcomes/', near_expiry_outcomes, name='near-expiry-outcomes'),
+    path('near-expiry/check-outcomes/', near_expiry_check_outcomes, name='near-expiry-check-outcomes'),
 ] + router.urls

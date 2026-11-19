@@ -352,18 +352,32 @@ def stock_expiry_summary(branch_codes=None, store_codes=None, include_quarantine
 
 # ── P-26: one at-risk definition (insights + forecasting read this) ──────────
 
-def fefo_at_risk(batches, daily_rate, today, within_days=180):
-    """Units that will expire before they sell. batches: [(expiry_date, qty)] for ONE item at ONE
-    location; sales consume the earliest expiry first (FEFO), at `daily_rate` units/day — the same
-    rule as rebalance.plan. Expired batches and those beyond `within_days` are not counted."""
-    sold, wasted = 0.0, 0.0
-    for expiry, qty in sorted(batches, key=lambda b: b[0]):
+def fefo_at_risk_lots(batches, daily_rate, today, within_days=180):
+    """The one FEFO at-risk rule, per lot (C04 / P-28 §2.1). batches: [(expiry_date, qty, ref)] for ONE
+    item at ONE location — `ref` names the lot and breaks expiry ties. Sales consume the earliest
+    expiry first at `daily_rate` units/day; a lot expiring in d days sells min(qty, rate·d − already
+    sold) and the rest is at risk. Expired lots and those beyond `within_days` are skipped.
+    Returns [{ref, expiry, qty, days_left, sells_qty, at_risk_qty}] in FEFO order (unrounded)."""
+    sold, out = 0.0, []
+    for expiry, qty, ref in sorted(batches, key=lambda b: (b[0], b[2])):
         d = (expiry - today).days
         if d < 0 or d > within_days:
             continue
         sells = max(0.0, min(float(qty), daily_rate * d - sold))
         sold += sells
-        wasted += float(qty) - sells
+        out.append({'ref': ref, 'expiry': expiry, 'qty': float(qty), 'days_left': d,
+                    'sells_qty': sells, 'at_risk_qty': float(qty) - sells})
+    return out
+
+
+def fefo_at_risk(batches, daily_rate, today, within_days=180):
+    """Units that will expire before they sell. batches: [(expiry_date, qty)] for ONE item at ONE
+    location — the sum of fefo_at_risk_lots (the same rule as rebalance.plan and the C04 worklist).
+    Expired batches and those beyond `within_days` are not counted."""
+    lots = fefo_at_risk_lots([(e, q, i) for i, (e, q) in enumerate(batches)], daily_rate, today, within_days)
+    wasted = 0.0
+    for lot in lots:
+        wasted += lot['at_risk_qty']
     return round(wasted, 3)
 
 

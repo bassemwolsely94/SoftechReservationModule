@@ -2932,6 +2932,13 @@ export const batchesApi = {
   returnWindowSavePolicy: (body)  => api.post('/batches/return-window/policies/', body),
   returnWindowExport:    (body)   => api.post('/batches/return-window/export/', body, { responseType: 'blob' }),
   returnWindowReconcile: ()       => api.post('/batches/return-window/reconcile/'),
+  // Near-expiry action worklist (C04 / P-28): lots are the server's line keys
+  nearExpiry:              (params) => api.get('/batches/near-expiry/', { params }),
+  nearExpiryChoose:        (body)   => api.post('/batches/near-expiry/choose/', body),
+  nearExpiryRequestReturn: (lots)   => api.post('/batches/near-expiry/request-return/', { lots }),
+  nearExpiryLinkTransfer:  (body)   => api.post('/batches/near-expiry/link-transfer/', body),
+  nearExpiryOutcomes:      (params) => api.get('/batches/near-expiry/outcomes/', { params }),
+  nearExpiryCheckOutcomes: ()       => api.post('/batches/near-expiry/check-outcomes/'),
 }
 
 // ── HR Workflow ───────────────────────────────────────────────────────────────
