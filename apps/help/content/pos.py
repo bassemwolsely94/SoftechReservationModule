@@ -521,6 +521,15 @@ SCREENS = [
             {'target': 'pos-order-tender-remove', 'label': T('✕ حذف طريقة السداد', '✕ Remove payment method'),
              'text': T('يشيل سطر السداد ده.', 'Removes this tender line.'),
              'open_hint': T('لما يكون فيه أكتر من طريقة سداد.', 'When there is more than one tender.')},
+            {'target': 'pos-platform-drafts', 'label': T('🛵 طلبات المنصات', '🛵 Platform orders'),
+             'text': T('طلبات المنصات المقبولة بانتظار الكاشير. تتسجل بيع آجل بالكامل على حساب المنصة — بلا نقدي ولا PIC. '
+                       '«معاينة» لا تكتب شيئًا، «إرسال» يكتب فعليًا.',
+                       'Accepted platform orders waiting for the cashier. Posted 100% credit on the platform account, no cash or PIC. '
+                       '"Preview" writes nothing; "Send" writes for real.'),
+             'when': T('يظهر بس لما يكون فيه طلبات منصات مقبولة في فرعك.', 'Only shown when your branch has accepted platform orders.'),
+             'warn': T('لو SOFTECH رفض صنف «غير مسموح صرفه لهذا التعاقد»، الصنف مقفول على حساب المنصة — كلّم المسؤول عن حسابات العملاء.',
+                       'If SOFTECH refuses an item as "not allowed for this contract", the item is closed on the platform account — call whoever manages customer accounts.'),
+             'open_hint': T('زر 🛵 في شريط الأدوات جنب 📥.', 'The 🛵 button in the toolbar next to 📥.')},
             {'target': 'pos-order-parked', 'label': T('📥 السلال المعلّقة', '📥 Parked baskets'),
              'text': T('قائمة السلال اللي علّقتها، ومنها تسترجع أو تمسح.', 'The baskets you parked; recall or delete them from here.'),
              'when': T('السلال المعلّقة محفوظة على الجهاز ده بس.', 'Parked baskets are kept on this device only.')},
@@ -555,8 +564,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('قائمة الفروع فيها فروعك بس، والمرتجع اتشال من نقطة البيع', 'The branch list holds your own branches only, and returns left the POS screen'),
+        'updated': '2026-11-19',
+        'change_note': T('زر 🛵 «طلبات المنصات»: إرسال طلبات المنصات المقبولة للكاشير كبيع آجل', 'New 🛵 "Platform orders" button: send accepted platform orders to the cashier as credit sales'),
     },
     {
         'key': 'pos.mobile',

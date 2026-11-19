@@ -257,6 +257,35 @@ def return_lookup(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([CanOperatePosOrders])
+def platform_drafts(request):
+    """«طلبات المنصات» on the cashier screen (doc 38): the branch's open marketplace drafts — accepted
+    platform orders waiting to be sent to the SOFTECH cashier. Lines are the platform order's own and are
+    not edited here; the server posts them 100% آجل on the platform account (platform_accounts.py).
+    `?branch=<id>` (required) must be one of the user's branches (POS branch lock, D2)."""
+    branch, err = _pos_branch(request, request.query_params.get('branch'))
+    if err:
+        return err
+    qs = (SoftechSalesOrder.objects
+          .filter(branch=branch, marketplace_order__isnull=False,
+                  status__in=[SoftechSalesOrder.STATUS_DRAFT, SoftechSalesOrder.STATUS_READY])
+          .select_related('marketplace_order__channel').prefetch_related('lines')
+          .order_by('created_at'))
+    rows = []
+    for o in qs[:100]:
+        mo = o.marketplace_order
+        lines = list(o.lines.all())
+        rows.append({
+            'id': o.pk, 'status': o.status, 'created_at': o.created_at,
+            'platform': mo.channel.name, 'platform_order': mo.external_id,
+            'account': o.cust_branch_code, 'doc_value': o.doc_value,
+            'lines': [{'itemcode': l.softech_itemcode, 'name': l.item_name, 'qty': l.qty,
+                       'price': l.item_sale_price} for l in lines],
+        })
+    return Response({'results': rows})
+
+
 @api_view(['POST'])
 @permission_classes([CanOperatePosOrders])
 def ready_order(request, pk):

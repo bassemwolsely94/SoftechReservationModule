@@ -88,3 +88,61 @@ class PlatformCreditTests(TestCase):
             validate_order(o)
         except ValidationError as e:
             self.assertNotIn('payments_detail', e.detail)
+
+
+class PlatformDraftsTests(TestCase):
+    """«طلبات المنصات» on the cashier screen: the branch's open marketplace drafts, branch-locked;
+    a platform sale needs no PIC and no patient data (native «عميل دائم» sales carry none)."""
+
+    def setUp(self):
+        from apps.marketplace.models import ChannelStore, ExternalOrder
+        from .factories import make_branch2, make_user
+        self.a = make_branch('فرع أ', 'B01')
+        self.b = make_branch2('فرع ب', 'B02')
+        _, _, self.seller = make_user('pd_seller', role='salesperson', branch=self.a)
+        ch = MarketplaceChannel.objects.create(code='tlb2', name='طلبات', softech_personcode='4292')
+        store = ChannelStore.objects.create(channel=ch, branch=self.a, external_store_id='S1', is_active=True)
+        self.draft = SoftechSalesOrder.objects.create(
+            branch=self.a, softech_branchcode='B01', store_code='B01', channel='permanent',
+            cust_branch_code='4292', status=SoftechSalesOrder.STATUS_DRAFT, customer_name='طلبات — T1')
+        SoftechSalesOrderLine.objects.create(order=self.draft, softech_itemcode='33677', item_name='PAD',
+                                             qty=1, item_sale_price=Decimal('5.5'), sale_tax_pct=0, cust_discp=0)
+        ExternalOrder.objects.create(channel=ch, store=store, branch=self.a, external_id='T1',
+                                     status=ExternalOrder.STATUS_ACCEPTED, pos_order=self.draft)
+        # an ordinary draft on the same branch is not a platform order
+        SoftechSalesOrder.objects.create(branch=self.a, softech_branchcode='B01', store_code='B01',
+                                         channel='cash', status=SoftechSalesOrder.STATUS_DRAFT)
+
+    def test_lists_only_platform_drafts_of_the_branch(self):
+        r = self.seller.get('/api/pos-orders/platform-drafts/', {'branch': self.a.pk})
+        self.assertEqual(r.status_code, 200)
+        rows = r.json()['results']
+        self.assertEqual([(x['id'], x['platform'], x['platform_order']) for x in rows], [(self.draft.pk, 'طلبات', 'T1')])
+        self.assertEqual(rows[0]['lines'][0]['itemcode'], '33677')
+
+    def test_sent_draft_drops_off_the_list(self):
+        SoftechSalesOrder.objects.filter(pk=self.draft.pk).update(status=SoftechSalesOrder.STATUS_PUSHED)
+        r = self.seller.get('/api/pos-orders/platform-drafts/', {'branch': self.a.pk})
+        self.assertEqual(r.json()['results'], [])
+
+    def test_other_branch_refused(self):
+        r = self.seller.get('/api/pos-orders/platform-drafts/', {'branch': self.b.pk})
+        self.assertEqual(r.status_code, 403)
+
+    def test_platform_sale_needs_no_pic_or_patient_data(self):
+        o = self.draft
+        writer.prepare_order(o)
+        o.refresh_from_db()
+        try:
+            validate_order(o, for_push=True)
+        except ValidationError as e:
+            self.assertNotIn('softech_pic', e.detail)
+            self.assertNotIn('claim', e.detail)
+
+    def test_ordinary_permanent_sale_still_needs_pic(self):
+        o = _order('4846')
+        o.softech_pic = ''
+        o.save()
+        with self.assertRaises(ValidationError) as cm:
+            validate_order(o)
+        self.assertIn('softech_pic', cm.exception.detail)

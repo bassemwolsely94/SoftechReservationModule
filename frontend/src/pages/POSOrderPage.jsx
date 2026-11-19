@@ -24,6 +24,7 @@ import usePosOrder, { CHANNELS, PAY_METHODS, money, RECEIPT, CONTRACT_EMP_FIELDS
 import useGuidedFlow, { STAGE_TAB } from '../hooks/useGuidedFlow'
 import { Badge, BatchBadge, Icon, WorkflowStep, ErrorState } from '../pos/design'
 import FefoGroupChip from '../pos/batch/FefoGroupChip'
+import PlatformDraftsButton from '../pos/platform/PlatformDraftsButton'
 
 /*
  * POSOrderPage — Indirect-POS (desktop). Mirrors the SOFTECH "In-Direct Point of Sale"
@@ -1077,6 +1078,7 @@ function FooterBar({ P, onParked, onReceipt }) {
       <div className="flex-1 min-w-2" />
       {/* finalize actions — always visible so the side panels can collapse away */}
       <button onClick={P.parkOrder} title="تعليق السلة" data-tour="pos-order-park" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">⏸</button>
+      <PlatformDraftsButton branch={P.branch} writerEnabled={!!P.ref?.writer_enabled} />
       <button data-tour="pos-order-parked" onClick={onParked} title="السلال المعلّقة" className="h-8 px-2 rounded border bg-white hover:bg-gray-50">📥{P.parked.length ? ` ${P.parked.length}` : ''}</button>
       <button data-tour="pos-order-receipt" onClick={onReceipt} disabled={!P.lines.length} title="معاينة الإيصال" className="h-8 px-2 rounded border bg-white hover:bg-gray-50 disabled:opacity-40">🧾</button>
       <button onClick={() => P.submit(false)} disabled={P.busy || !P.lines.length} title="معاينة الإرسال (تجريبى)" data-tour="pos-order-preview"
