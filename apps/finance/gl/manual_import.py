@@ -1,7 +1,8 @@
 """Importer for finance's 2026 manual-only journal entries (finance-gl Plan 3, Task 8).
 
 Finance's journal has one row per account side and no entry number, so rows are grouped by
-(date, book, branch, description). A group whose accounts are all manual becomes one draft; a group
+(date, book, branch, description); an entry finance keyed over two branches is put back together when its
+halves only balance as one (each line keeps its branch). A group whose accounts are all manual becomes one draft; a group
 SOFTECH feeds is skipped (the drafting engine replaces it); a group with both is parked in the
 exceptions inbox for an accountant, never guessed. Nothing here approves.
 
@@ -70,6 +71,7 @@ _NOTHING = _label('Nothing')
 _RETURN_ACCOUNTS = frozenset({'5101', '5102', '5105', '5106', '5121', '5122', '2341'})
 _SUPPLIERS = '2341'
 MERGED_BY_DATE_BRANCH = 'date_branch'
+MERGED_ACROSS_BRANCHES = 'across_branches'
 
 STATUSES = ('manual', 'softech', 'mixed', 'unbalanced', 'unknown_account', 'unknown_branch', 'before_opening',
             'changed_since_import', 'possible_duplicate', 'closed_period')
@@ -151,6 +153,8 @@ class JournalGroup:
     target_branch: Branch | None = None
     manual_set: bool = False        # its accounts are on finance's list: manual whatever the feeds say
     existing_entry: LedgerEntry | None = None   # changed_since_import, possible_duplicate: the live entry
+    # merged across branches: each row's own branch (row_no -> Branch); else every line is on target_branch
+    line_branches: dict = field(default_factory=dict)
 
     @property
     def debit(self) -> Decimal:
@@ -440,7 +444,7 @@ def _source_key(day, book, branch, rows, merged) -> str:
     lines = sorted(f'{r.account_code}:{r.side}:{r.amount}:{r.customer_code}:{r.supplier_code}:{r.employee_code}:'
                    f'{r.cheque_no}:{normalize_ar(r.description)}' for r in rows)
     head = [day.isoformat(), book, branch]
-    identity = MERGED_BY_DATE_BRANCH if merged else normalize_ar(rows[0].description)
+    identity = MERGED_BY_DATE_BRANCH if merged == MERGED_BY_DATE_BRANCH else normalize_ar(rows[0].description)
     return f"{SOURCE_TYPE}:{_sha('|'.join(head + lines), 20)}:{_sha('|'.join(head + [identity]), 12)}"
 
 
@@ -497,6 +501,26 @@ def _is_balanced(rows) -> bool:
     debit = sum((r.amount for r in rows if r.side == 'debit'), _ZERO)
     credit = sum((r.amount for r in rows if r.side == 'credit'), _ZERO)
     return debit == credit and debit > 0
+
+
+def _merge_across_branches(buckets, rejected):
+    """Finance keys a transfer between branches as one entry whose lines sit on each branch (2404 on
+    one, the cash box 1302 on the other: same date and description). Per (date, book, description),
+    the groups that do not balance alone become one when they sit on more than one branch and their
+    union balances. -> (the buckets left, [(rows, description, merged_by)])."""
+    by_text = defaultdict(list)
+    for key, rows in buckets.items():
+        if not _is_balanced(rows) and key not in rejected:
+            by_text[(key[0], key[1], key[3])].append(key)
+    left, merged = dict(buckets), []
+    for keys in by_text.values():
+        union = [r for k in keys for r in buckets[k]]
+        if len({k[2] for k in keys}) > 1 and _is_balanced(union):
+            for k in keys:
+                del left[k]
+            union.sort(key=lambda r: r.row_no)
+            merged.append((union, union[0].description, MERGED_ACROSS_BRANCHES))
+    return left, merged
 
 
 def _merge_returns(buckets, rejected) -> list:
@@ -590,16 +614,28 @@ def group_entries(rows, rejected=(), lookups=None) -> list:
     for r in rows:
         token = lookups.branch_token(r.branch_name, r.branch_code)
         buckets.setdefault((r.date, r.book, token, normalize_ar(r.description)), []).append(r)
+    buckets, across = _merge_across_branches(buckets, rejected)
     out = []
-    for group_rows, description, merged_by in _merge_returns(buckets, rejected):
+    for group_rows, description, merged_by in across + _merge_returns(buckets, rejected):
         first = group_rows[0]
-        token = lookups.branch_token(first.branch_name, first.branch_code)
+        target = resolve_branch(first.branch_name, first.branch_code, _index=lookups.branches)
+        line_branches = {}
+        if merged_by == MERGED_ACROSS_BRANCHES:
+            token = '+'.join(sorted({str(lookups.branch_token(r.branch_name, r.branch_code)) for r in group_rows}))
+            line_branches = {r.row_no: resolve_branch(r.branch_name, r.branch_code, _index=lookups.branches)
+                             for r in group_rows}
+            if None in line_branches.values():
+                target = None   # a line on a branch we do not know: unknown_branch, like a whole group
+        else:
+            token = lookups.branch_token(first.branch_name, first.branch_code)
         g = JournalGroup(
             key=_source_key(first.date, first.book, token, group_rows, merged_by), date=first.date, book=first.book,
             branch=token, description=description, rows=group_rows, merged_by=merged_by,
-            target_branch=resolve_branch(first.branch_name, first.branch_code, _index=lookups.branches))
-        g.balanced = _is_balanced(group_rows) and (first.date, first.book, token,
-                                                   normalize_ar(first.description)) not in rejected
+            target_branch=target, line_branches=line_branches)
+        # a merge across branches only ever takes groups no reported row was lost from
+        g.balanced = _is_balanced(group_rows) and (
+            merged_by == MERGED_ACROSS_BRANCHES
+            or (first.date, first.book, token, normalize_ar(first.description)) not in rejected)
         codes = {r.account_code for r in group_rows}
         usable = all(lookups.usable(c) for c in codes)
         g.feeds = {lookups.feed(c) for c in codes if c in lookups.accounts}
@@ -620,7 +656,7 @@ def _lines(group, lookups) -> list:
             'account_code': r.account_code,
             'debit': r.amount if r.side == 'debit' else _ZERO,
             'credit': r.amount if r.side == 'credit' else _ZERO,
-            'branch_id': group.target_branch.pk,
+            'branch_id': (group.line_branches.get(r.row_no) or group.target_branch).pk,
             'party_code': getattr(r, field_name) if field_name else '',
             'description': r.description[:500],
             'cheque_no': r.cheque_no,
