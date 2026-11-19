@@ -7,11 +7,15 @@ Why this can't duplicate a document:
   • push_order allocates the serial atomically AT WRITE TIME (native read+1) and is
     idempotent: an order that already has a softech_docnumber is never re-written.
 So each queued order gets exactly one fresh document number when it finally lands.
+
+Offer uses (D-12): a posted order consumes its offer uses here exactly like a live push
+(offer_uses.consume_after_post — idempotent per order, so a retry never consumes twice).
 """
 from django.core.management.base import BaseCommand
 
 from apps.pos_orders.models import SoftechSalesOrder
 from apps.pos_orders import writer
+from apps.pos_orders.offer_uses import consume_after_post, posted
 
 
 class Command(BaseCommand):
@@ -40,6 +44,8 @@ class Command(BaseCommand):
                 failed += 1
                 self.stderr.write(f'  order {order.pk}: FAILED {e}')
                 continue
+            if posted(res):                              # D-12: same offer-use commit as a live push
+                res.update(consume_after_post(order))
             if res.get('queued'):                        # still unreachable
                 queued += 1
             elif res.get('ok') or res.get('already_pushed'):

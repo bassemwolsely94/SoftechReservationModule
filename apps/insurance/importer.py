@@ -49,7 +49,6 @@ from .sybase_queries import (
     QUERY_PRESCRIPTION_HEADER_BY_DOCNO,
     QUERY_PRESCRIPTION_HEADER_BY_DOCNO_BRANCH,
     QUERY_CHECK_DOC_IN_MOTALBA_BRANCH,
-    QUERY_CHECK_DOC_IN_MOTALBA,
     QUERY_CUSTDISCOUNTS_BY_PERSONCODE,
 )
 
@@ -464,6 +463,7 @@ def _write_prescription_snapshot(
     local_disc: Decimal,
     imported_disc: Decimal,
     tarsia_disc: Decimal,
+    doccode: str = '',
 ) -> InsuranceClaimPrescription:
     """Create one frozen InsuranceClaimPrescription + its InsuranceClaimLine records."""
     rx = InsuranceClaimPrescription.objects.create(
@@ -471,6 +471,7 @@ def _write_prescription_snapshot(
         softech_docnumber  = docnumber,
         softech_docdate    = docdate,
         softech_branchcode = branchcode,
+        softech_doccode    = (doccode or '').strip(),
         softech_personcode = personcode,
         patient_name       = patient_name,
         softech_patient_name = patient_name,   # original — never touched by edits
@@ -632,7 +633,9 @@ def import_claim_by_motalbano_batch(
         claim_local = claim_imported = claim_tarsia = Decimal('0')
         claim_gross = claim_discount = claim_net   = Decimal('0')
         rx_count    = 0
-        seen_docnumbers: set[str] = set()
+        # A receipt is (docnumber, branch, doccode) — the same number at another branch or
+        # of another type is a different receipt (S-8 / D-10, owner-approved 2026-11-19).
+        seen_receipts: set[tuple] = set()
         # Track the actual receipt-date range (motalba.docdate = dispense date)
         # so the claim period mirrors SOFTECH instead of the manually-entered
         # motalbasdate/motalbafdate boundaries.
@@ -649,9 +652,10 @@ def import_claim_by_motalbano_batch(
                 receipt_min = docdate if receipt_min is None else min(receipt_min, docdate)
                 receipt_max = docdate if receipt_max is None else max(receipt_max, docdate)
 
-            if not docnumber or docnumber in seen_docnumbers:
+            rkey = _receipt_key(prx_row[3], branchcode_raw, prx_row[5])
+            if not docnumber or rkey in seen_receipts:
                 continue
-            seen_docnumbers.add(docnumber)
+            seen_receipts.add(rkey)
 
             # Apply sign: docvalue_grandtotal (gross) and docvaluerequired (net)
             # are stored as POSITIVE in SOFTECH for both sales and returns.
@@ -675,6 +679,7 @@ def import_claim_by_motalbano_batch(
                 patient_name=patient_name,
                 classified_lines=classified_lines, totals=totals,
                 local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc,
+                doccode=doccode,
             )
 
             claim_local    += totals['local_before']
@@ -741,7 +746,7 @@ def import_claim_from_softech(
 
     # Collect all motalba lines for all personcodes
     all_lines: list[tuple] = []
-    seen_docnumbers: set[str] = set()
+    seen_receipts: set[tuple] = set()   # (docnumber, branch, doccode) — S-8 / D-10
 
     for personcode in personcodes:
         try:
@@ -752,8 +757,9 @@ def import_claim_from_softech(
             rows = cursor.fetchall()
             for row in rows:
                 docnumber = str(_to_int(row[3])) if row[3] else ''
-                if docnumber and docnumber not in seen_docnumbers:
-                    seen_docnumbers.add(docnumber)
+                rkey = _receipt_key(row[3], row[2], row[5])
+                if docnumber and rkey not in seen_receipts:
+                    seen_receipts.add(rkey)
                     all_lines.append(row)
         except Exception as e:
             logger.warning('Failed motalba query for personcode=%s: %s', personcode, e)
@@ -846,6 +852,7 @@ def import_claim_from_softech(
                 patient_name=patient_name,
                 classified_lines=classified_lines, totals=totals,
                 local_disc=local_disc, imported_disc=imported_disc, tarsia_disc=tarsia_disc,
+                doccode=doccode,
             )
 
             claim_local    += totals['local_before']
@@ -1029,8 +1036,10 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     # SOFTECHDB9.dbo.motalba (273k rows, docnumber may be unindexed → very slow).
     try:
         from .models import MotalbaCache
+        # Keyed on the receipt's branch: the same docnumber at another branch is another
+        # client's receipt (S-8) and must not decide the parent-code guard.
         mc = (MotalbaCache.objects
-              .filter(docnumber=str(docnumber))
+              .filter(docnumber=str(docnumber), branchcode=branchcode)
               .order_by('-docdate')
               .values('motalbano', 'personcode', 'ppersoncode', 'branchcode')
               .first())
@@ -1043,7 +1052,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
     # Fall back to a live (timeout-bounded) lookup only if the cache misses
     if not tx_personcode:
         try:
-            cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA, [docnumber])
+            cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA_BRANCH, [docnumber, branchcode])
             motalba_row = cursor.fetchone()
             if motalba_row:
                 motalbano       = _safe(motalba_row[0])
@@ -1066,11 +1075,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
             # No shared code per cache — but cache may be STALE (codes were just
             # corrected in SOFTECH).  Re-verify LIVE before blocking.
             try:
-                live_branch = branchcode or target_branch
-                if live_branch:
-                    cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA_BRANCH, [docnumber, live_branch])
-                else:
-                    cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA, [docnumber])
+                cursor.execute(QUERY_CHECK_DOC_IN_MOTALBA_BRANCH, [docnumber, branchcode])
                 live_row = cursor.fetchone()
                 if live_row:
                     tx_personcode  = _safe(live_row[1]) or tx_personcode
@@ -1105,6 +1110,7 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
         'softech_docnumber':         docnumber,
         'softech_docdate':           docdate,
         'softech_branchcode':        branchcode,
+        'softech_doccode':           _safe(header[1]),
         'softech_personcode':        tx_personcode,
         'softech_ppersoncode':       tx_ppersoncode,
         'patient_name':              patient_name,
@@ -1114,6 +1120,22 @@ def fetch_single_rx_from_softech(docnumber: str, claim: InsuranceClaim,
         'lines':                     classified_lines,
         **totals,
     }
+
+
+def find_receipt_in_claim(claim: InsuranceClaim, docnumber, branchcode=None, doccode=None) -> bool:
+    """Is this receipt already in the claim?  A receipt is (branch, doccode, docnumber)
+    (S-8 / D-10, owner-approved 2026-11-19): the same number at another branch or of another
+    type is a different receipt.  A blank branch/doccode — on either side, e.g. a legacy row
+    whose doccode could not be resolved — matches any value, so the guard never loosens
+    for data it cannot tell apart."""
+    from django.db.models import Q
+    qs = claim.prescriptions.filter(softech_docnumber=str(docnumber).strip())
+    branchcode, doccode = (branchcode or '').strip(), (doccode or '').strip()
+    if branchcode:
+        qs = qs.filter(Q(softech_branchcode=branchcode) | Q(softech_branchcode=''))
+    if doccode:
+        qs = qs.filter(Q(softech_doccode=doccode) | Q(softech_doccode=''))
+    return qs.exists()
 
 
 def find_duplicate_receipt(claim: InsuranceClaim, docnumber: str,
@@ -1212,7 +1234,8 @@ def create_manual_prescription(claim: InsuranceClaim, rx_data: dict,
     from django.db.models import Max
 
     docnumber = str(rx_data['softech_docnumber'])
-    if claim.prescriptions.filter(softech_docnumber=docnumber).exists():
+    if find_receipt_in_claim(claim, docnumber, rx_data.get('softech_branchcode'),
+                             rx_data.get('softech_doccode')):
         raise InsuranceImportError(
             f'الفاتورة رقم {docnumber} مضافة بالفعل في هذه المطالبة.')
 
@@ -1244,6 +1267,7 @@ def create_manual_prescription(claim: InsuranceClaim, rx_data: dict,
             rx_data.get('patient_name', '') or '',
             rx_data.get('lines', []),
             totals, local_disc, imported_disc, tarsia_disc,
+            doccode=rx_data.get('softech_doccode', '') or '',
         )
         rx.is_manual         = True
         rx.manual_position   = position or ''
@@ -1367,8 +1391,10 @@ def enrich_prescriptions_from_cache(claim) -> int:
     Populate companiesitems metadata (roshetta_no, patient_no, dept_name, etc.)
     on the claim's prescriptions from the local CompaniesItemsCache.
 
-    Matches on (docnumber, branchcode).  Falls back to docnumber-only match if
-    the branch differs (some prescriptions span branch corrections).
+    Matches on (docnumber, branchcode).  Falls back to a docnumber-only match
+    (some prescriptions span branch corrections) ONLY when the cache holds that
+    number at a single branch — a docnumber repeats across branches (S-8), and
+    another branch's prescription belongs to another patient.
     Returns count of enriched prescriptions.
 
     This uses the fast local cache — no live Sybase round-trips.  Run the cache
@@ -1385,18 +1411,26 @@ def enrich_prescriptions_from_cache(claim) -> int:
         return 0
 
     # Build lookup: (docnumber, branchcode) -> cache row, and docnumber -> row
+    # A docnumber repeats across branches (S-8): match on (docnumber, branch). The bare
+    # docnumber fallback is used only when the number is cached at ONE branch.
     cache_rows = CompaniesItemsCache.objects.filter(docnumber__in=docnos)
     by_doc_branch: dict = {}
     by_doc: dict = {}
+    branches_of: dict = {}
     for c in cache_rows:
-        by_doc_branch[(c.docnumber, c.branchcode)] = c
-        by_doc.setdefault(c.docnumber, c)
+        d, b = str(c.docnumber).strip(), str(c.branchcode or '').strip()
+        by_doc_branch[(d, b)] = c
+        by_doc.setdefault(d, c)
+        branches_of.setdefault(d, set()).add(b)
 
     enriched = 0
     to_update = []
     for rx in rxs:
-        c = (by_doc_branch.get((rx.softech_docnumber, rx.softech_branchcode))
-             or by_doc.get(rx.softech_docnumber))
+        rx_doc = str(rx.softech_docnumber).strip()
+        rx_branch = str(rx.softech_branchcode or '').strip()
+        c = by_doc_branch.get((rx_doc, rx_branch))
+        if c is None and len(branches_of.get(rx_doc, ())) == 1:
+            c = by_doc.get(rx_doc)
         if not c:
             continue
         rx.roshetta_no     = c.roshettano or ''

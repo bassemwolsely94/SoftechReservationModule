@@ -536,6 +536,8 @@ SCREENS = [
               'All data here is limited to your own approved identity — nobody can see another person\'s data.'),
             T('لو ظهر «أحد السيرفرات غير متصل» فالحفظ في SOFTECH لم يكتمل في الفرع؛ أعد المحاولة لاحقاً.',
               'If "one of the servers is offline" appears, the SOFTECH save did not finish at the branch; try again later.'),
+            T('لوحة «📋 مهام فرعي اليوم» تعرض لفرعك فقط نفس قسم «اليوم» في رسالة الصباح: مرتجع للمورد يُرسل للرئيسي قبل موعده (أو «متأخر»)، راكد يُباع بفرع آخر للنقل، وما ينتهي خلال 60 يوماً — أعلى 3 من كل نوع بقيمتها. لا تحتاج هوية؛ تعمل حتى لو إرسال واتساب متوقف.',
+              'The "📋 My branch today" widget shows, for your own branch only, the same "Today" part as the morning message: supplier returns to send to HQ before their date (or "late"), slow stock that sells at another branch to move, and stock expiring within 60 days — the top 3 of each with their value. It needs no identity and works even while WhatsApp sending is off.'),
         ],
         'faq': [
             {'q': T('لماذا لوحتي فارغة؟', 'Why is my board empty?'),
@@ -693,9 +695,8 @@ SCREENS = [
              'when': T('لو الموبايل ده مش بتاعك أو مشترك في الفرع.', 'When this phone is not yours or is shared at the branch.'),
              'open_hint': T('في الشريط الأزرق فوق على الموبايل.', 'In the blue bar at the top on the phone.')},
         ],
-        'updated': '2026-11-01',
-
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('لوحة جديدة «📋 مهام فرعي اليوم»: قسم «اليوم» من رسالة الصباح لفرعك.', 'New widget "📋 My branch today": the "Today" part of the morning message for your branch.'),
     },
     {
         'key': 'general.security',

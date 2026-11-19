@@ -368,6 +368,20 @@ def _my_tasks(person_key, config, staff=None):
     }
 
 
+def _branch_today(person_key, config, staff=None):
+    """C02: the «اليوم» lines of the caller's OWN branch's morning brief (apps/insights/today.py) —
+    return-window lots to send to HQ, slow stock to move, near-expiry stock to rescue. The same
+    builder as the WhatsApp brief, so the list works in-app while sending stays off. Own branch only."""
+    if staff is None or not getattr(staff, 'branch_id', None):
+        return {'error': 'لا يوجد فرع مرتبط بحسابك'}
+    from django.utils import timezone
+    from apps.insights import today
+    acts = today.actions(staff.branch, timezone.localdate())
+    return {'branch': staff.branch.name_ar or staff.branch.name, 'max_lines': today.MAX_LINES,
+            'rescue_days': today.RESCUE_DAYS, **acts,
+            'totals': {k: round(sum(r['value'] for r in v), 2) for k, v in acts.items()}}
+
+
 # ── the catalog ───────────────────────────────────────────────────────────────
 
 WIDGET_REGISTRY: dict[str, dict] = {
@@ -412,6 +426,12 @@ WIDGET_REGISTRY: dict[str, dict] = {
         'label': 'تقاريري السردية',
         'desc':  'ملاحظات التحليل السردي الخاصة بك',
         'fetch': _my_narrative_reports,
+    },
+    'branch_today': {
+        'kind': 'self', 'source': 'mirror', 'icon': '📋',
+        'label': 'مهام فرعي اليوم',
+        'desc':  'مرتجع يُرسل للرئيسي، راكد يُنقل، وما ينتهي قريباً — نفس قسم «اليوم» في رسالة الصباح',
+        'fetch': _branch_today,
     },
     'my_tasks': {
         'kind': 'self', 'source': 'mirror', 'icon': '✅',

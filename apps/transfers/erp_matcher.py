@@ -19,6 +19,7 @@ logger = logging.getLogger('elrezeiky.transfers')
 
 # Quantity tolerance: erp_qty within ±TOLERANCE of requested_qty → full match
 _QTY_TOLERANCE = 0.20  # 20%
+TRANSFER_DOCCODE = '125'  # صرف تبادل بين الفروع
 
 
 class ERPMatcher:
@@ -54,6 +55,7 @@ class ERPMatcher:
         self.transfer = transfer
         self._shared_conn = conn
         self.shared_conn_failed = False
+        self.ambiguous_branches = []   # set by _fetch_sybase when a number is ambiguous
 
     def _open(self):
         """(connection, opened_here)."""
@@ -90,10 +92,16 @@ class ERPMatcher:
                 doc_number = discovered_doc  # use it for display / result
 
         if header is None:
+            if doc_number and self.ambiguous_branches:
+                return _not_found(
+                    f'المستند رقم {doc_number} غير موجود للفرع {branch_code}، وموجود كصرف تبادل '
+                    f'(125) في أكثر من فرع آخر ({"، ".join(self.ambiguous_branches)}) — '
+                    f'لا يمكن تحديد المستند الصحيح تلقائياً.'
+                )
             if doc_number:
                 return _not_found(
                     f'المستند رقم {doc_number} غير موجود في SOFTECH '
-                    f'(تم البحث للفرع {branch_code} وبدون تصفية فرع — '
+                    f'(تم البحث للفرع {branch_code} وبالفروع الأخرى حول تاريخ التحويل — '
                     f'نوع المستند المطلوب: 125 صرف تبادل بين الفروع)'
                 )
             else:
@@ -129,6 +137,10 @@ class ERPMatcher:
         user_name       = user_info.get('user_name', '') if user_info else ''
 
         matched_items, status = self._match_items(lines)
+        # A document found under another branch is never a full confirmation (S-8):
+        # the same number exists at every branch, so a person has to check it.
+        if not branch_matched and status == 'matched':
+            status = 'partial'
 
         # Note if the document was found under a different branch than expected
         branch_note = ''
@@ -311,7 +323,7 @@ class ERPMatcher:
 
                 cur2 = conn.cursor()
                 try:
-                    cur2.execute(QUERY_STKTRANS_LINES, [doc_num_param, hdr_branch])
+                    cur2.execute(QUERY_STKTRANS_LINES, [doc_num_param, hdr_branch, TRANSFER_DOCCODE])
                     lines = cur2.fetchall() or []
                 except Exception as se:
                     logger.warning(
@@ -385,16 +397,19 @@ class ERPMatcher:
 
     def _fetch_sybase(self, doc_number: str, branch_code: str):
         """
-        4-pass fallback strategy — finds the document even when stktransm
-        branchcode or doccode doesn't match expectations.
+        Look the document up by its full SOFTECH identity. Docnumbers run per
+        (branchcode, doccode) — the same number repeats across branches and document
+        types — so a bare docnumber is never enough (audit S-8 / D-10).
 
-        Pass 1: stktransm  docnumber + branchcode + doccode='125'
-        Pass 2: stktransm  docnumber + doccode='125'  (any branch)
-        Pass 3: stktransm  docnumber only             (any branch, any doccode)
-        Pass 4: stktrans   docnumber only             (header derived from line table)
+        Pass 1: stktransm  docnumber + supplying branch + doccode='125'
+        Pass 2: stktrans   docnumber + supplying branch + doccode='125'
+                (header derived from the line table — stktransm replication lag)
+        Pass 3: stktransm  docnumber + doccode='125' at ANOTHER branch, inside a docdate
+                window around the transfer. Used only when exactly one document comes
+                back; reported with branch_matched=False, which run() never shows as a
+                full match.
 
-        After finding the document, looks up the SOFTECH users table to resolve
-        usercode → userid (login name) and username (display name).
+        Lines are always read with the found header's own (docnumber, branch, doccode).
 
         Returns (header_row | None, lines_rows, branch_matched: bool, user_info: dict | None).
         user_info keys: 'user_id' (login), 'user_name' (full name).
@@ -402,14 +417,13 @@ class ERPMatcher:
         ABSOLUTE RULE: SELECT ONLY. Never INSERT/UPDATE/DELETE on Sybase.
         """
         from apps.sync.sybase_queries import (
-            QUERY_VALIDATE_STKTRANS,
-            QUERY_VALIDATE_STKTRANS_ANY,
-            QUERY_VALIDATE_STKTRANS_RAW,
             QUERY_STKTRANS_DIRECT_HEADER,
             QUERY_STKTRANS_LINES,
-            QUERY_STKTRANS_LINES_ANY,
+            QUERY_VALIDATE_STKTRANS,
+            QUERY_VALIDATE_STKTRANS_OTHER_BRANCH,
         )
         tr_num = self.transfer.request_number
+        self.ambiguous_branches = []
 
         # stktransm.docnumber is a DECIMAL column in Sybase ASE.
         # Passing a Python str causes "Implicit conversion from CHAR to DECIMAL".
@@ -429,65 +443,51 @@ class ERPMatcher:
             header = cur.fetchone()
             if header is not None:
                 logger.info(f'ERPMatcher [{tr_num}]: Pass 1 hit — doc={doc_number} branch={branch_code}')
-                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code])
+                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code, TRANSFER_DOCCODE])
                 lines = cur.fetchall() or []
                 user_info = self._lookup_user(cur, header[5], None, tr_num)
                 return header, lines, True, user_info
 
-            logger.info(f'ERPMatcher [{tr_num}]: Pass 1 miss — trying Pass 2 (any branch, doccode=125)')
-
-            # ── Pass 2: stktransm — any branch, doccode=125 ──────────────────
-            cur.execute(QUERY_VALIDATE_STKTRANS_ANY, [doc_num_param])
-            header = cur.fetchone()
+            # ── Pass 2: stktrans direct — same branch + doccode, no header yet ──
+            cur.execute("SET ROWCOUNT 1")
+            try:
+                cur.execute(QUERY_STKTRANS_DIRECT_HEADER, [doc_num_param, branch_code, TRANSFER_DOCCODE])
+                header = cur.fetchone()
+            finally:
+                cur.execute("SET ROWCOUNT 0")
             if header is not None:
+                logger.info(
+                    f'ERPMatcher [{tr_num}]: Pass 2 hit — doc={doc_number} branch={branch_code} '
+                    f'found in stktrans (no stktransm header yet)'
+                )
+                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, branch_code, TRANSFER_DOCCODE])
+                lines = cur.fetchall() or []
+                # No usercode in a line-derived header — skip user lookup
+                return header, lines, True, None
+
+            # ── Pass 3: another branch, same doccode, inside the date window ───
+            date_from, date_to = self._doc_window()
+            cur.execute(QUERY_VALIDATE_STKTRANS_OTHER_BRANCH, [doc_num_param, date_from, date_to])
+            rows = [r for r in (cur.fetchall() or []) if str(r[2] or '').strip() != branch_code]
+            if len(rows) > 1:
+                self.ambiguous_branches = sorted({str(r[2] or '').strip() for r in rows})
+                logger.warning(
+                    f'ERPMatcher [{tr_num}]: doc={doc_number} (125) exists at several other '
+                    f'branches {self.ambiguous_branches} — refusing to guess'
+                )
+                return None, [], False, None
+            if rows:
+                header = rows[0]
                 found_branch = str(header[2] or '').strip()
-                logger.info(f'ERPMatcher [{tr_num}]: Pass 2 hit — doc={doc_number} branch={found_branch}')
-                cur.execute(QUERY_STKTRANS_LINES_ANY, [doc_num_param])
+                logger.info(f'ERPMatcher [{tr_num}]: Pass 3 hit — doc={doc_number} branch={found_branch}')
+                cur.execute(QUERY_STKTRANS_LINES, [doc_num_param, found_branch, TRANSFER_DOCCODE])
                 lines = cur.fetchall() or []
                 user_info = self._lookup_user(cur, header[5], None, tr_num)
                 return header, lines, False, user_info
-
-            logger.info(f'ERPMatcher [{tr_num}]: Pass 2 miss — trying Pass 3 (stktransm, no filters)')
-
-            # ── Pass 3: stktransm — docnumber only, zero filters ─────────────
-            cur.execute(QUERY_VALIDATE_STKTRANS_RAW, [doc_num_param])
-            header = cur.fetchone()
-            if header is not None:
-                found_branch = str(header[2] or '').strip()
-                found_code   = str(header[1] or '').strip()
-                logger.info(
-                    f'ERPMatcher [{tr_num}]: Pass 3 hit — doc={doc_number} '
-                    f'branch={found_branch} doccode={found_code}'
-                )
-                cur.execute(QUERY_STKTRANS_LINES_ANY, [doc_num_param])
-                lines = cur.fetchall() or []
-                user_info = self._lookup_user(cur, header[5], None, tr_num)
-                return header, lines, False, user_info
-
-            logger.info(
-                f'ERPMatcher [{tr_num}]: Pass 3 miss — stktransm has nothing for doc={doc_number}. '
-                f'Trying Pass 4 (stktrans direct)'
-            )
-
-            # ── Pass 4: stktrans direct — header derived from line table ──────
-            # stktransm may lag behind stktrans replication, or the header may
-            # simply not exist for this document type.
-            cur.execute(QUERY_STKTRANS_DIRECT_HEADER, [doc_num_param])
-            header = cur.fetchone()
-            if header is not None:
-                found_branch = str(header[2] or '').strip()
-                logger.info(
-                    f'ERPMatcher [{tr_num}]: Pass 4 hit — doc={doc_number} found in stktrans '
-                    f'(no stktransm header). branch={found_branch}'
-                )
-                cur.execute(QUERY_STKTRANS_LINES_ANY, [doc_num_param])
-                lines = cur.fetchall() or []
-                # Pass 4 has no usercode in header (NULL) — skip user lookup
-                return header, lines, False, None
 
             logger.warning(
-                f'ERPMatcher [{tr_num}]: All 4 passes exhausted — doc={doc_number} '
-                f'not found in stktransm OR stktrans.'
+                f'ERPMatcher [{tr_num}]: doc={doc_number} not found as a 125 at branch '
+                f'{branch_code} or (uniquely) at another branch in {date_from}…{date_to}.'
             )
             return None, [], False, None
 
@@ -501,6 +501,11 @@ class ERPMatcher:
             return None, [], False, None
         finally:
             self._close(conn, own)
+
+    def _doc_window(self):
+        """(date_from, date_to) strings bounding the cross-branch lookup: 3 days before the
+        transfer was sent (or created) up to tomorrow."""
+        return doc_window(self.transfer.sent_to_erp_at or self.transfer.created_at, days_before=3)
 
     @staticmethod
     def _lookup_user(cur, usercode, _unused_query, tr_num) -> dict | None:
@@ -575,11 +580,11 @@ class ERPMatcher:
             matched_items: list of dicts
             status:        'matched' | 'partial' | 'not_found'
         """
-        # Build lookup: itemcode → {erp_qty, itemname}
-        # Sum qty across all rows for the same itemcode — this handles the case where
-        # QUERY_STKTRANS_LINES_ANY returns rows for both supplying AND requesting branch
-        # (SOFTECH records صرف at source and استلام at destination under the same docnumber).
-        # Row layout from QUERY_STKTRANS_LINES / QUERY_STKTRANS_LINES_ANY:
+        # Build lookup: itemcode → {erp_qty, price}
+        # The lines belong to ONE document (docnumber, branch, doccode) — so the rows of
+        # an item are its batches (one stktrans row per expiry) and are SUMMED. (The old
+        # max() guarded against lines merged from other branches' documents; S-8.)
+        # Row layout from QUERY_STKTRANS_LINES:
         # [0] itemcode, [1] transqty, [2] transprice_total, [3] storecode
         # (stktrans has no itemname column — name comes from local catalog via ti.item.name)
         stk_map: dict[str, dict] = {}
@@ -589,9 +594,7 @@ class ERPMatcher:
                 continue
             qty = _to_float(row[1]) or 0.0
             if itemcode in stk_map:
-                # Accumulate — take the max rather than sum, because صرف + استلام
-                # would double-count the same physical movement.
-                stk_map[itemcode]['erp_qty'] = max(stk_map[itemcode]['erp_qty'], qty)
+                stk_map[itemcode]['erp_qty'] += qty
             else:
                 stk_map[itemcode] = {
                     'erp_qty': qty,
@@ -731,3 +734,20 @@ ERP_MATCH_UPDATE_FIELDS = [
     'erp_match_user_name', 'erp_match_trans_time',
     'erp_match_store_code', 'erp_matched_items', 'updated_at',
 ]
+
+
+def doc_window(ref_dt, days_before: int):
+    """(date_from, date_to) 'YYYY-MM-DD' strings for a cross-branch SOFTECH lookup: from
+    `days_before` days before `ref_dt` (Cairo date) up to tomorrow. Bounds the stktransm
+    scan by docdate (a bare docnumber scan times out) and narrows which same-numbered
+    documents can come back."""
+    import datetime as _dt
+    from django.utils import timezone
+    if ref_dt is None:
+        ref_date = timezone.localdate()
+    elif isinstance(ref_dt, _dt.datetime):
+        ref_date = timezone.localtime(ref_dt).date() if timezone.is_aware(ref_dt) else ref_dt.date()
+    else:
+        ref_date = ref_dt
+    upper = max(timezone.localdate(), ref_date) + _dt.timedelta(days=1)
+    return str(ref_date - _dt.timedelta(days=days_before)), str(upper)

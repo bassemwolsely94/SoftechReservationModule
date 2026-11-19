@@ -1376,9 +1376,12 @@ export const incentivesApi = {
   createProgram:  (data)         => api.post('/incentives/programs/', data),
   updateProgram:  (id, data)     => api.patch(`/incentives/programs/${id}/`, data),
   deleteProgram:  (id)           => api.delete(`/incentives/programs/${id}/`),
+  // D-17: a program with transactions/settlements/logs can't be deleted (409) — archive it instead
+  archiveProgram: (id, data)     => api.post(`/incentives/programs/${id}/archive/`, data || {}),
 
   // Calculate — body: { period_start, period_end, user_ids?, force? }
-  // Returns 409 if period is finalized and force is not true
+  // Returns 409 if the period has finalized settlements and force is not true; with force only
+  // open (non-finalized) settlements are recalculated — finalized ones are never touched (D-16)
   calculate:      (id, data)     => api.post(`/incentives/programs/${id}/calculate/`, data),
 
   // Simulate (dry-run) — same body as calculate; never writes to DB
@@ -1425,6 +1428,8 @@ export const incentivesApi = {
   listSettlements: (params)      => api.get('/incentives/settlements/', { params }),
   getSettlement:   (id)          => api.get(`/incentives/settlements/${id}/`),
   receipt:         (id)          => api.get(`/incentives/settlements/${id}/receipt/`),
+  // D-16: admin only, written reason required; audited before/after
+  unlockSettlement: (id, reason) => api.post(`/incentives/settlements/${id}/unlock/`, { reason }),
 
   // Adjustment Entries — manual +/- corrections per user per period
   // params: { program, user, period_start, period_end }
@@ -3144,6 +3149,8 @@ export const reconciliationApi = {
   payments:       (params) => api.get('/finance/reconciliation/payments/', { params }),
   candidates:     (params) => api.get('/finance/reconciliation/candidates/', { params }),
   exceptions:     (params) => api.get('/finance/reconciliation/exceptions/', { params }),
+  // C15: bulk decision on exceptions — { ids, action: investigating|resolved|dismissed|open, note }
+  decideExceptions: (data) => api.post('/finance/reconciliation/exceptions/decide/', data),
   runs:           (params) => api.get('/finance/reconciliation/runs/', { params }),
   workbench:      (params) => api.get('/finance/reconciliation/workbench/', { params }),
   approve:        (id, data) => api.post(`/finance/reconciliation/candidates/${id}/approve/`, data || {}),
@@ -3268,6 +3275,8 @@ export const stockAuditApi = {
   finding:      (id)            => api.get(`/stock-audit/findings/${id}/`),
   review:       (id, data)      => api.post(`/stock-audit/findings/${id}/review/`, data),
   bulkReview:   (data)          => api.post('/stock-audit/findings/bulk-review/', data),
+  makeTask:     (id)            => api.post(`/stock-audit/findings/${id}/task/`),      // C13 task + targeted count
+  bulkTask:     (ids)           => api.post('/stock-audit/findings/bulk-task/', { ids }),
   exportFindings: (params = {}) => api.get('/stock-audit/findings/export/', { params, responseType: 'blob' }),
   byUser:       (params = {})   => api.get('/stock-audit/by-user/', { params }),
   rules:        ()              => api.get('/stock-audit/rules/'),

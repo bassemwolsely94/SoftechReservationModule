@@ -624,14 +624,14 @@ SCREENS = [
             {'key': 'dist', 'title': T('التوزيعة', 'Distribution'),
              'body': T('«⟳ بناء الخطة» يحسب خطة توزيعة واحدة ويحفظها: الأرصدة لحظية من سيرفر 100 ومعدل البيع من آخر تشغيل للمحرك. '
                        'الحركات بالترتيب: 1 من الرئيسي أولاً (أي صنف يملكه الرئيسي، والصنف التجريبي اللي الرئيسي يغطيه يتنقل منه بدل الفرع) · '
-                       '2 متكدس بفرع فوق حده ← فروع تبيعه ولها مساحة · 3 غير مُدرج — فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع (كود عمره أقل من 18 شهر، فرعين بحد أقصى، و75,000 ج بحد أقصى للخطة)؛ داخل كل موجة الأعلى قيمة أولاً. '
+                       '2 متكدس بفرع فوق حده ← فروع تبيعه ولها مساحة · 3 غير مُدرج — فقط من فرع فوق حده · 4 تجربة صنف جديد من فرع (كود عمره أقل من 18 شهر، فرعين بحد أقصى، و75,000 ج بحد أقصى للخطة) · 5 راكد هنا — يُباع بفرع آخر (من قائمة «🧊 مخزون راكد»، يظهر فقط لما الإعداد dead_stock_in_distribution مفعّل؛ لو الصنف رايح لنفس الفرع لسبب تاني يظهر مرة واحدة)؛ داخل كل موجة الأعلى قيمة أولاً. '
                        '«متعارض» = الصنف في طريقه للفرع بالفعل (طلباتنا الحية أو المرحّلة غير المصروفة، طلبات توريد سوفتك آخر 3 أيام، بضاعة بالطريق، طلبات تحويل حية). '
                        '«محجوز / مؤجل»: سطر من فرع أقل من 100 ج، أو طلب فرع للرئيسي أو جزء «بعد الاستلام» أقل من 1,000 ج (يتأجل للتشغيل الجاي؛ حركات الرئيسي بتفضل دايماً)، أو مسار عليه طلب معتمد. '
                        '«＋ توليد» يعمل طلب واحد من كل فرع للرئيسي، وطلب «جاهز الآن» من الرئيسي لكل فرع، وجزء «بعد الاستلام» لكل فرع مصدر — '
                        'الجزء ده (وأي طلب من الرئيسي لفرع بعد استلام من فرع تاني) مايترحّلش غير لما الرئيسي يستلم إذن صرف الفرع، وصلاحيته تبدأ من الاستلام. الخطة لازم تكون أحدث خطة وعمرها أقل من 12 ساعة. مفيش كتابة في SOFTECH من هنا.',
                        '"⟳ Build plan" computes and stores one distribution plan: stock live from server 100, sales rates from the last engine run. '
                        'Moves in order: 1 HQ first (anything HQ holds; a trial item HQ can cover moves from HQ instead of a branch) · '
-                       '2 a branch over its maximum → branches that sell it and have room · 3 never stocked — only from a branch over its maximum · 4 new-item trial from a branch (codes under 18 months old, at most 2 branches, at most 75,000 EGP per plan); highest value first within each wave. '
+                       '2 a branch over its maximum → branches that sell it and have room · 3 never stocked — only from a branch over its maximum · 4 new-item trial from a branch (codes under 18 months old, at most 2 branches, at most 75,000 EGP per plan) · 5 dead here — sells at another branch (from the "🧊 Dead stock" list, shown only when the dead_stock_in_distribution setting is on; an item already moving to the same branch for another reason appears once); highest value first within each wave. '
                        '"Conflict" = the item is already on its way to the branch (our live drafts or pushed ones not yet dispensed, SOFTECH supply requests of the last 3 days, goods in transit, live transfer requests). '
                        '"Held / deferred": a branch line under 100 EGP, a branch-to-HQ request or "after receipt" part under 1,000 EGP (waits for the next run; HQ moves always stay), or a route with an approved draft. '
                        '"＋ Generate" makes one request per branch to HQ, one "ready now" request from HQ per branch, and one "after receipt" part per source branch — '
@@ -1050,9 +1050,8 @@ SCREENS = [
              'text': T('يجهّز رسالة بالتفاصيل ويفتح واتساب — على رقم العميل لو معروف، وإلا تختار المحادثة.', "Builds a message with the details and opens WhatsApp — to the customer's number when known, else you pick the chat."),
              'when': T('الرسالة مش بتتبعت لوحدها: راجعها واضغط إرسال في واتساب.', 'Nothing is sent by itself: review it and press send in WhatsApp.')},
         ],
-        'updated': '2026-11-18',
-        'change_note': T('اللي اقترح طلب التوريد (ISR) مبيعتمدهوش — يعتمده زميل أو مدير النظام؛ صندوق الإتاحة: إضافة كذا صنف للسطر مرة واحدة (Ctrl+مسافة أو Ctrl+F1)',
-                         'Whoever proposed an ISR cannot approve it — a colleague or the admin approves it; availability inbox: add several items to a line at once (Ctrl+Space or Ctrl+F1)'),
+        'updated': '2026-11-19',
+        'change_note': T('«التوزيعة»: موجة 5 «راكد هنا — يُباع بفرع آخر» من قائمة المخزون الراكد (مقفولة لحد ما تتفعّل).', 'Distribution: wave 5 "dead here — sells at another branch" from the dead-stock list (off until switched on).'),
     },
     {
         'key': 'purchasing.overview',

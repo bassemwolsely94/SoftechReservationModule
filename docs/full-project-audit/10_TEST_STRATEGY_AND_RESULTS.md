@@ -13,7 +13,9 @@ test database.
 | Static | bandit (new findings vs baseline), pip-audit, npm audit (allow-list), ESLint, `makemigrations --check` | — | yes |
 | Frontend unit | Vitest + React Testing Library | 11 files, 131 tests (incl. 4 added here) | yes |
 | End-to-end | Playwright on `config.settings_e2e` (own DB, no SOFTECH, no sends) | 23 tests | yes |
-| Property-based / mutation / load / concurrency | — | **none** | no |
+| Property-based (Wave 4) | Hypothesis, `apps/tests/test_money_properties.py` — strip/pack Q, VAT, tender split, offers cap (SimpleTestCase, derandomized) | 20 tests (3 `expectedFailure` = bug found: negative last-line offer share) | yes |
+| Concurrency (Wave 4) | `apps/tests/test_writer_concurrency.py` — two threads + `TransactionTestCase` per writer guard: POS push, pos_cancel, ISR, A/P allocation, purchase invoice (SOFTECH mocked) | 6 tests | yes |
+| Mutation / load | — | **none** | no |
 
 ## 2. Results of this audit's runs
 
@@ -55,9 +57,9 @@ re-measured here (the local coverage run was stopped, see §2). Known thin areas
 
 | Gap | Risk it leaves | Proposal | Effort |
 |---|---|---|---|
-| **Concurrency** — no test runs two writers at once | Double posts / lost updates (S-1, S-2, BE-5/6/7 were found by reading, not by tests) | `TransactionTestCase` + two threads + a barrier, one test per idempotency guard (POS push, A/P, ISR, purchase, voucher verify, loyalty approve) | 2 days |
+| **Concurrency** — no test runs two writers at once (Wave 4: POS push, pos_cancel, ISR, A/P, purchase done; voucher verify + loyalty approve left) | Double posts / lost updates (S-1, S-2, BE-5/6/7 were found by reading, not by tests) | `TransactionTestCase` + two threads + a barrier, one test per idempotency guard (POS push, A/P, ISR, purchase, voucher verify, loyalty approve) | 2 days |
 | **Load** — no Locust/k6 | Capacity at 20 users unknown (PERF-3) | Locust plan in [07](07_PERFORMANCE_AUDIT.md) §capacity, run on the VPS in Stage A | 0.5 day |
-| **Property-based** | Edge cases in money/quantity math | Hypothesis on strip→pack `transqty` rounding, tender split, offers cap (≤ line gross), VAT inclusive/exclusive, insurance co-pay | 1.5 days |
+| **Property-based** (Wave 4: strip/pack, VAT inclusive, tender split, offers cap done; insurance co-pay + VAT exclusive left) | Edge cases in money/quantity math | Hypothesis on strip→pack `transqty` rounding, tender split, offers cap (≤ line gross), VAT inclusive/exclusive, insurance co-pay | 1.5 days |
 | **Mutation** | Tests that pass even when the rule changes | mutmut on `pos_orders/pricing`, `finance/recon_writer`, `insurance` pricing, `vouchers` eligibility — fix surviving mutants | 2 days |
 | **Resilience** | Behaviour when SOFTECH/PG/Redis drop mid-flow | Fault-injection tests around `get_branch_connection`, commit-reply loss (raise after commit), PG `OperationalError`, channel-layer down | 1.5 days |
 | **State-aware sweeps** | 77 `role_unproven` routes (round 2) | Builder that creates records in the state each route needs | 2 days |

@@ -1,7 +1,7 @@
 // S3 Task 5 — the old ItemSearchInput sites now use ItemSearchWidget. Only how the item is
 // found changes: every save call and its payload stay exactly as before.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -96,6 +96,12 @@ describe('insurance claim line re-code (single, name box)', () => {
     { id: 5, softech_itemcode: '111', item_name: 'OLD', quantity: 1, unit_price: 10, line_total: 10,
       discount_amt: 0, discount_pct: 0, net_amount: 10 },
   ] }
+  // «حفظ» asks in the inline confirm bar (D-25) instead of window.confirm
+  const saveAndConfirm = async () => {
+    fireEvent.click(screen.getByText('حفظ'))
+    const bar = await screen.findByRole('alertdialog')
+    await act(async () => { fireEvent.click(within(bar).getByText('تأكيد')) })
+  }
   const openEditor = () => {
     render(<table><tbody>
       <RxRow rx={rx} claimId={4} discPcts={{}} onRefresh={() => {}} />
@@ -105,7 +111,6 @@ describe('insurance claim line re-code (single, name box)', () => {
   }
 
   it('a pick fills the code and runs the same lookup as «بحث»; the save payload is unchanged', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     openEditor()
     expect(screen.queryByTestId('item-box')).toBeNull()      // closed until «بالاسم» on this line
     fireEvent.click(screen.getByText('بالاسم'))
@@ -116,18 +121,17 @@ describe('insurance claim line re-code (single, name box)', () => {
     expect(insuranceApi.itemOverrideLookup).toHaveBeenCalledWith('102')
     expect(screen.getByDisplayValue('102')).toBeTruthy()
     expect(screen.queryByTestId('item-box')).toBeNull()      // the box closes after the pick
-    fireEvent.click(screen.getByText('حفظ'))
+    await saveAndConfirm()
     await waitFor(() => expect(insuranceApi.editLine).toHaveBeenCalledTimes(1))
     expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: '102', unit_price: 12 })
   })
 
   it('typing a code by hand + «بحث» still works and saves the same shape', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     openEditor()
     fireEvent.change(screen.getByDisplayValue('111'), { target: { value: '102' } })
     await act(async () => { fireEvent.click(screen.getByText('بحث')) })
     expect(insuranceApi.itemOverrideLookup).toHaveBeenCalledWith('102')
-    fireEvent.click(screen.getByText('حفظ'))
+    await saveAndConfirm()
     await waitFor(() => expect(insuranceApi.editLine).toHaveBeenCalledTimes(1))
     expect(insuranceApi.editLine).toHaveBeenCalledWith(4, 9, 5, { item_code: '102', unit_price: 12 })
   })
@@ -140,12 +144,11 @@ describe('insurance claim line re-code (single, name box)', () => {
       await act(async () => { fireEvent.click(screen.getByText('بحث')) })
     }
     const save = async () => {
-      fireEvent.click(screen.getByText('حفظ'))
+      await saveAndConfirm()
       await waitFor(() => expect(insuranceApi.editLine).toHaveBeenCalledTimes(1))
     }
 
     it('A then B (no typing) saves the pack price of B', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(true)
       openEditor()
       await lookup('A'); await lookup('B')
       await save()
@@ -153,7 +156,6 @@ describe('insurance claim line re-code (single, name box)', () => {
     })
 
     it('A, typed price 15, then B keeps 15', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(true)
       openEditor()
       await lookup('A')
       fireEvent.change(screen.getByDisplayValue('20'), { target: { value: '15' } })
@@ -163,7 +165,6 @@ describe('insurance claim line re-code (single, name box)', () => {
     })
 
     it('A, typed 15, look up A again keeps 15', async () => {
-      vi.spyOn(window, 'confirm').mockReturnValue(true)
       openEditor()
       await lookup('A')
       fireEvent.change(screen.getByDisplayValue('20'), { target: { value: '15' } })

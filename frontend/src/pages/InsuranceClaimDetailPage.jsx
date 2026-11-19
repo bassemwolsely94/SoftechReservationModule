@@ -24,6 +24,10 @@ import useSortableRows from '../hooks/useSortableRows'
 import { nextSort, sortRows, ariaSortOf } from '../hooks/sortCompare'
 import SortTh from '../components/SortTh'
 import ItemSearchWidget from '../components/ItemSearchWidget'
+import { useToast } from '../components/ui'
+import { useConfirm } from '../components/InlineConfirm'
+
+const DANGER_DELETE = { tone: 'danger', confirmLabel: 'حذف نهائياً' }
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })
 const toLatinDigits = (s) => s ? String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
@@ -154,6 +158,8 @@ function PatientNameAutocomplete({ claimId, value, onChange, onCommit, className
 }
 
 export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggleSelect }) {
+  const toast = useToast()
+  const { confirm: confirmInline, ask, ui: confirmUi } = useConfirm()
   const [showAdjust, setShowAdjust] = useState(false)
   const [showLines, setShowLines]   = useState(false)
   const [lines, setLines]           = useState(rx.lines || null)
@@ -213,7 +219,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
     if (e.quantity !== undefined && e.quantity !== '') payload.quantity = e.quantity
     if (e.unit_price !== undefined && e.unit_price !== '') payload.unit_price = e.unit_price
     if (Object.keys(payload).length === 0) return
-    if (!window.confirm('⚠️ تعديل بند مصروف يدوياً (تغيير الصنف/الكمية/السعر) سيغيّر إجمالى المطالبة. متابعة؟')) return
+    if (!await confirmInline('⚠️ تعديل بند مصروف يدوياً (تغيير الصنف/الكمية/السعر) سيغيّر إجمالى المطالبة. متابعة؟')) return
     setSavingLine(lineId)
     try {
       await insuranceApi.editLine(claimId, rx.id, lineId, payload)
@@ -222,7 +228,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
     } finally { setSavingLine(null) }
   }
   const resetLine = async (lineId) => {
-    if (!window.confirm('استرجاع البند إلى قيمه الأصلية؟')) return
+    if (!await confirmInline('استرجاع البند إلى قيمه الأصلية؟')) return
     setSavingLine(lineId)
     try {
       await insuranceApi.resetLine(claimId, rx.id, lineId)
@@ -265,19 +271,20 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
       if (isExcluded) {
         await insuranceApi.includeRx(claimId, rx.id)
       } else {
-        const reason = window.prompt('سبب الاستثناء (اختياري):') ?? ''
+        const reason = await ask('سبب الاستثناء (اختياري):', { confirmLabel: 'استثناء' })
         if (reason === null) return  // user cancelled
         await insuranceApi.excludeRx(claimId, rx.id, { reason })
       }
       await onRefresh()
     } catch (e) {
-      alert('حدث خطأ: ' + (e?.response?.data?.error || e?.message || 'خطأ غير متوقع'))
+      toast.error('حدث خطأ: ' + (e?.response?.data?.error || e?.message || 'خطأ غير متوقع'))
     }
   }
 
   const mismatch = rx.softech_mismatch && !isExcluded
   return (
     <>
+      {confirmUi}
       <tr className={`border-b border-gray-100 text-sm ${isExcluded ? 'opacity-40 line-through' : ''} ${mismatch ? 'bg-amber-50' : ''} ${selected ? 'bg-blue-50/60' : ''}`}>
         <td className="px-2 py-2 text-center">
           {onToggleSelect && <input type="checkbox" checked={!!selected} onChange={onToggleSelect} />}
@@ -397,7 +404,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
             </Btn>
             {rx.is_manual && (
               <Btn data-tour="insurance-claim-rx-delete-manual" variant="danger" onClick={async () => {
-                if (!window.confirm('حذف هذه الروشتة المضافة يدوياً نهائياً؟')) return
+                if (!await confirmInline('حذف هذه الروشتة المضافة يدوياً نهائياً؟', DANGER_DELETE)) return
                 await insuranceApi.deleteManualPrescription(claimId, rx.id)
                 onRefresh()
               }}>حذف يدوي</Btn>
@@ -645,6 +652,7 @@ export function RxRow({ rx, claimId, discPcts, onRefresh, sug, selected, onToggl
 // Manual receipts are aggregate values (no itemised lines), so their actions are
 // confirmation-gated and clearly distinguished from real prescriptions.
 function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [showLines, setShowLines] = useState(false)
   const [showEdit, setShowEdit]   = useState(false)
   const [saving, setSaving]       = useState(false)
@@ -652,8 +660,8 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
 
   const excluded = mrx.is_excluded
 
-  const openEdit = () => {
-    if (!window.confirm('⚠️ هذه روشتة مُضافة يدوياً. تعديل قيمها يدوياً سيغيّر إجمالى المطالبة. هل تريد المتابعة؟')) return
+  const openEdit = async () => {
+    if (!await confirmInline('⚠️ هذه روشتة مُضافة يدوياً. تعديل قيمها يدوياً سيغيّر إجمالى المطالبة. هل تريد المتابعة؟')) return
     setForm({
       local_before:    Number(mrx.local_before).toFixed(2),
       imported_before: Number(mrx.imported_before).toFixed(2),
@@ -680,7 +688,7 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
     const msg = excluded
       ? 'إعادة إدراج هذه الروشتة اليدوية في المطالبة؟'
       : '⚠️ استثناء روشتة يدوية — ستُحذف قيمتها من إجمالى المطالبة (يمكن إعادة إدراجها). متابعة؟'
-    if (!window.confirm(msg)) return
+    if (!await confirmInline(msg)) return
     await insuranceApi.updateManualRx(claimId, mrx.id, { is_excluded: !excluded })
     onRefresh()
   }
@@ -692,6 +700,7 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
 
   return (
     <>
+      {confirmUi}
       <tr className={`border-b border-blue-100 text-sm bg-blue-50/60 ${excluded ? 'opacity-40 line-through' : ''}`}>
         <td className="px-2 py-2"></td>
         <td className="px-3 py-2 text-blue-400 text-xs">—</td>
@@ -788,14 +797,15 @@ function ManualRxRow({ mrx, claimId, onRefresh, onManage }) {
 // ── Supplement row (بنود / تعديل / استثناء, confirmation-gated) ─────────────────
 // Supplements are aggregate blocks (no itemised lines), like manual receipts.
 function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [showLines, setShowLines] = useState(false)
   const [showEdit, setShowEdit]   = useState(false)
   const [saving, setSaving]       = useState(false)
   const [form, setForm] = useState({ label: '', local_before: '', imported_before: '', tarsia_before: '' })
   const excluded = sup.is_excluded
 
-  const openEdit = () => {
-    if (!window.confirm('⚠️ هذا ملحق مُدخَل يدوياً. تعديل قيمه سيغيّر إجمالى المطالبة. هل تريد المتابعة؟')) return
+  const openEdit = async () => {
+    if (!await confirmInline('⚠️ هذا ملحق مُدخَل يدوياً. تعديل قيمه سيغيّر إجمالى المطالبة. هل تريد المتابعة؟')) return
     setForm({
       label: sup.label || '',
       local_before:    Number(sup.local_before).toFixed(2),
@@ -820,7 +830,7 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
     const msg = excluded
       ? 'إعادة إدراج هذا الملحق في المطالبة؟'
       : '⚠️ استثناء ملحق — ستُحذف قيمته من إجمالى المطالبة (يمكن إعادة إدراجه). متابعة؟'
-    if (!window.confirm(msg)) return
+    if (!await confirmInline(msg)) return
     await insuranceApi.updateSupplement(claimId, sup.id, { is_excluded: !excluded })
     onChanged()
   }
@@ -833,6 +843,7 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
 
   return (
     <div className={`bg-white border rounded-lg ${excluded ? 'border-gray-200 opacity-50' : 'border-blue-200'}`}>
+      {confirmUi}
       <div className="p-3 flex justify-between items-center">
         <div className={excluded ? 'line-through' : ''}>
           <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 rounded mr-2">
@@ -906,6 +917,7 @@ function SupplementRow({ sup, claimId, supTypeLabel, rates, onChanged, onDelete 
 
 // ── Supplements Tab ────────────────────────────────────────────────────────────
 function SupplementsTab({ claimId, claim, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [sups, setSups]     = useState([])
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm]     = useState({
@@ -958,7 +970,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
   }
 
   const delSup = async (id) => {
-    if (!window.confirm('حذف هذا الملحق نهائياً؟')) return
+    if (!await confirmInline('حذف هذا الملحق نهائياً؟', DANGER_DELETE)) return
     await insuranceApi.deleteSupplement(claimId, id)
     load()
     onRefresh()
@@ -973,6 +985,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
 
   return (
     <div className="p-4">
+      {confirmUi}
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-semibold text-gray-700">الملاحق ({sups.length})</h3>
         <Btn data-tour="insurance-claim-supplement-add" onClick={() => setShowAdd(!showAdd)} size="md">+ إضافة ملحق</Btn>
@@ -1040,6 +1053,7 @@ function SupplementsTab({ claimId, claim, onRefresh }) {
 
 // ── Manual Rx Tab ──────────────────────────────────────────────────────────────
 function ManualRxTab({ claimId, claim, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [manualRx, setManualRx] = useState([])
   const [docnumber, setDocnumber] = useState('')
   const [lookupResult, setLookupResult] = useState(null)
@@ -1101,7 +1115,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
   }
 
   const removeRx = async (id) => {
-    if (!window.confirm('حذف هذه الروشتة المضافة يدوياً نهائياً؟')) return
+    if (!await confirmInline('حذف هذه الروشتة المضافة يدوياً نهائياً؟', DANGER_DELETE)) return
     await insuranceApi.removeManualRx(claimId, id)
     load(); onRefresh()
   }
@@ -1110,6 +1124,7 @@ function ManualRxTab({ claimId, claim, onRefresh }) {
 
   return (
     <div className="p-4">
+      {confirmUi}
       <h3 className="font-semibold text-gray-700 mb-1">إضافة روشتة يدوياً من سوفتك</h3>
       <p className="text-xs text-gray-500 mb-4">
         أدخل رقم فاتورة تأمينية — حتى لو كانت تخص كود عميل آخر. تُوضع تلقائياً في يوم
@@ -1497,6 +1512,7 @@ const _bgIds = (keys) => ({
 })
 
 function BillingGroupsTab({ claim, claimId, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [board, setBoard]     = useState(null)
   const [busy, setBusy]       = useState(false)
   const [view, setView]       = useState('unassigned')   // 'unassigned' | 'all' | group id
@@ -1579,9 +1595,9 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
     await changed(data.assigned ? `«${g.name}»: خُصّص تلقائياً ${data.assigned} من غير المخصص` : `«${g.name}»: لا يوجد غير مخصص يطابق قواعد الفئة`)
     setView(g.id)
   }, 'تعذّر التخصيص التلقائى')
-  const delGroup = (g) => {
+  const delGroup = async (g) => {
     const n = (board?.rows || []).filter(r => r.group_id === g.id).length
-    if (!window.confirm(`حذف فئة الفوترة «${g.name}»؟${n ? `\n${n} روشتة ستعود «غير مخصص» ويمكن إضافتها لفئة أخرى.` : ''}`)) return
+    if (!await confirmInline(`حذف فئة الفوترة «${g.name}»؟${n ? `\n${n} روشتة ستعود «غير مخصص» ويمكن إضافتها لفئة أخرى.` : ''}`, DANGER_DELETE)) return
     run(async () => { const { data } = await insuranceApi.deleteBillingGroup(g.id); await changed(`حُذفت «${g.name}» — ${data?.freed ?? 0} عادت غير مخصصة`) }, 'تعذّر الحذف')
   }
   const saveForm = () => {
@@ -1614,6 +1630,7 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
 
   return (
     <div className="p-4 space-y-3" data-tour="insurance-claim-billing-board">
+      {confirmUi}
       <div className="flex justify-between items-start flex-wrap gap-2">
         <div>
           <h3 className="font-semibold text-gray-700">فئات الفوترة (تقسيم المطالبة)</h3>
@@ -1768,6 +1785,8 @@ function BillingGroupsTab({ claim, claimId, onRefresh }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function InsuranceClaimDetailPage() {
+  const toast = useToast()
+  const { confirm: confirmInline, ask, ui: confirmUi } = useConfirm()
   const { id }   = useParams()
   const navigate = useNavigate()
   const [claim, setClaim]   = useState(null)
@@ -1884,16 +1903,16 @@ export default function InsuranceClaimDetailPage() {
   const bulkExcludeSelected = async () => {
     const ids = [...selRx]
     if (!ids.length) return
-    const reason = window.prompt(`سبب استثناء ${ids.length} روشتة (اختيارى):`, '')
+    const reason = await ask(`سبب استثناء ${ids.length} روشتة (اختيارى):`, { confirmLabel: 'التالي' })
     if (reason === null) return
-    if (!window.confirm(`استثناء ${ids.length} روشتة من المطالبة؟ (يمكن إعادة إدراجها لاحقاً)`)) return
+    if (!await confirmInline(`استثناء ${ids.length} روشتة من المطالبة؟ (يمكن إعادة إدراجها لاحقاً)`)) return
     setBulkBusy(true)
     try {
       await insuranceApi.bulkExclude(id, ids, reason || 'استبعاد جماعى')
       setSelRx(new Set())
       await load()
     } catch (e) {
-      alert(e?.response?.data?.error || 'تعذّر الاستبعاد الجماعى')
+      toast.error(e?.response?.data?.error || 'تعذّر الاستبعاد الجماعى')
     } finally { setBulkBusy(false) }
   }
   const discPcts = {
@@ -1904,6 +1923,7 @@ export default function InsuranceClaimDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50" dir="rtl">
+      {confirmUi}
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3 mb-2">
@@ -2161,6 +2181,7 @@ export default function InsuranceClaimDetailPage() {
 // RE-SYNC MODAL — surgical import of SOFTECH delta (new / removed / changed)
 // ═══════════════════════════════════════════════════════════════════════════════
 function ResyncModal({ claimId, claim, onClose, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [pv, setPv]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr]     = useState(null)
@@ -2187,7 +2208,7 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
   }, [claimId])   // eslint-disable-line
 
   const revertRun = async (runId) => {
-    if (!window.confirm('التراجع عن هذه المزامنة؟ ستُحذف الروشتات المُضافة، ويُلغى استثناء المحذوفة، وتُستعاد الروشتات المُعاد تجميدها.')) return
+    if (!await confirmInline('التراجع عن هذه المزامنة؟ ستُحذف الروشتات المُضافة، ويُلغى استثناء المحذوفة، وتُستعاد الروشتات المُعاد تجميدها.')) return
     setBusy(true); setErr(null)
     try {
       await insuranceApi.resyncRevert(claimId, runId)
@@ -2200,7 +2221,7 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
   const toggle = (id) => setApproved(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const apply = async () => {
-    if (!window.confirm('تطبيق المزامنة؟ ستُضاف الروشتات الجديدة، وتُستثنى المحذوفة، وتُعاد الروشتات المتغيّرة المحددة فقط. التعديلات المحلية الأخرى لن تُمس.')) return
+    if (!await confirmInline('تطبيق المزامنة؟ ستُضاف الروشتات الجديدة، وتُستثنى المحذوفة، وتُعاد الروشتات المتغيّرة المحددة فقط. التعديلات المحلية الأخرى لن تُمس.')) return
     setBusy(true); setErr(null)
     try {
       const { data } = await insuranceApi.resyncApply(claimId, { confirm: true, approved_change_ids: [...approved], motalba_no: motalbaNo || undefined })
@@ -2213,6 +2234,7 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
   const c = pv?.counts
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      {confirmUi}
       <div className="bg-white rounded-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="font-bold text-gray-800">🔄 مزامنة تعديلات سوفتك {pv?.motalba_no ? `— مطالبة ${pv.motalba_no}` : ''}</h3>
@@ -2255,6 +2277,9 @@ function ResyncModal({ claimId, claim, onClose, onRefresh }) {
                 <span className="rounded px-2 py-1 bg-amber-100 text-amber-800">متغيّرة {c.changed}</span>
                 <span className="rounded px-2 py-1 bg-gray-100 text-gray-600">بدون تغيير {c.unchanged}</span>
                 <span className="rounded px-2 py-1 bg-blue-100 text-blue-700" title="إضافات يدوية من مطالبات أخرى — لن تُمس">محمية (يدوية) {c.protected_manual}</span>
+                {c.ambiguous_legacy > 0 && (
+                  <span className="rounded px-2 py-1 bg-gray-100 text-gray-700" title="روشتات قديمة بدون نوع مستند ورقمها موجود أكتر من مرة فى نفس الفرع — مش هتتمس، راجعها يدوياً">غير محسومة {c.ambiguous_legacy}</span>
+                )}
               </div>
               {c.new + c.removed + c.changed === 0 && (
                 <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded p-4 text-center">
@@ -2359,6 +2384,7 @@ function Section({ title, children }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function IssuanceWizard({ claim, onClose, onRefresh }) {
+  const toast = useToast()
   const claimId = claim.id
   const [step, setStep] = useState(1)
   const [readiness, setReadiness] = useState(null)
@@ -2397,7 +2423,7 @@ function IssuanceWizard({ claim, onClose, onRefresh }) {
       setDone(true)
       onRefresh && onRefresh()
     } catch (e) {
-      alert(e.response?.data?.error || 'تعذّر تقديم المطالبة')
+      toast.error(e.response?.data?.error || 'تعذّر تقديم المطالبة')
     } finally { setBusy(false) }
   }
 
@@ -2615,6 +2641,7 @@ const _rosterSortVal = (r, k) => {
 const _rosterKey = (r) => r.kind === 'manual' ? `m${r.manual_rx_id}` : `r${r.prescription_id}`
 
 function RosterCheckView({ claimId, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [data, setData]   = useState(null)
   const [loading, setLoad] = useState(true)
   const [cats, setCats]   = useState(new Set(['wrong', 'shared']))
@@ -2678,7 +2705,7 @@ function RosterCheckView({ claimId, onRefresh }) {
     const manualIds = rs.filter(r => r.kind === 'manual').map(r => r.manual_rx_id)
     const tops = [...new Set(rs.map(r => r.where[0]?.label).filter(Boolean))]
     const reason = tops.length === 1 ? `تخصيص خاطئ ← ${tops[0]}` : 'تخصيص خاطئ — يتبع جهة أخرى'
-    if (!window.confirm(`استبعاد ${rs.length} روشتة من هذه المطالبة لإعادة فوترتها على جهتها الصحيحة؟ يمكن التراجع بإعادة إدراجها.`)) return
+    if (!await confirmInline(`استبعاد ${rs.length} روشتة من هذه المطالبة لإعادة فوترتها على جهتها الصحيحة؟ يمكن التراجع بإعادة إدراجها.`)) return
     setBusy(true); setMsg(null)
     try {
       let excluded = ids.length ? (await insuranceApi.bulkExclude(claimId, ids, reason)).data : null
@@ -2696,6 +2723,7 @@ function RosterCheckView({ claimId, onRefresh }) {
 
   return (
     <div className="px-6 py-4">
+      {confirmUi}
       <div className="flex items-center gap-2 flex-wrap mb-2" data-tour="insurance-claim-roster-filters">
         <span className="text-sm font-semibold text-gray-700">{data.unit.client}{data.unit.subclient ? ` — ${data.unit.subclient}` : ''}</span>
         {Object.entries(_ROSTER_CAT).map(([k, v]) => (
@@ -2826,6 +2854,7 @@ function RosterCheckView({ claimId, onRefresh }) {
 const _sepMatchValue = (m, k) => (k === 'match_type' ? (m.match_type === 'full' ? 0 : 1)   // full first
   : k === 'reviewed' ? (m.reviewed ? 1 : 0) : m[k])
 function SeparationListsView({ claimId, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [data, setData]   = useState(null)
   const [listId, setListId] = useState('')
   const [loading, setLoad]  = useState(true)
@@ -2872,7 +2901,7 @@ function SeparationListsView({ claimId, onRefresh }) {
   const doExclude = async () => {
     const ids = [...sel]
     if (!ids.length) return
-    if (!window.confirm(`استبعاد ${ids.length} روشتة من هذه المطالبة (لفصلها إلى مطالبة أخرى)؟ يمكن التراجع بإعادة إدراجها.`)) return
+    if (!await confirmInline(`استبعاد ${ids.length} روشتة من هذه المطالبة (لفصلها إلى مطالبة أخرى)؟ يمكن التراجع بإعادة إدراجها.`)) return
     setBusy(true); setMsg(null)
     try {
       const { data: res } = await insuranceApi.bulkExclude(claimId, ids, 'فصل — قائمة الأسماء')
@@ -2890,6 +2919,7 @@ function SeparationListsView({ claimId, onRefresh }) {
 
   return (
     <div className="px-6 py-4">
+      {confirmUi}
       <div className="flex items-center gap-3 flex-wrap mb-3">
         <span className="text-sm font-semibold text-gray-700">فصل الأسماء</span>
         <select value={listId} onChange={e => setListId(e.target.value)}
@@ -3023,6 +3053,7 @@ const _nameSortVal = (r, k, sel) => {
 }
 
 function NameReviewTab({ claimId, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [rows, setRows]     = useState(null)
   const [loading, setLoading] = useState(true)
   const [sel, setSel]       = useState({})     // rx_id → chosen name
@@ -3075,7 +3106,7 @@ function NameReviewTab({ claimId, onRefresh }) {
     const choices = {}
     for (const [k, v] of Object.entries(sel)) if (v && v.trim()) choices[k] = v.trim()
     if (!Object.keys(choices).length) return
-    if (!window.confirm(`تطبيق ${Object.keys(choices).length} اسم؟ (الاسم حقل طباعة فقط — لا يؤثر على الإجماليات، وقابل للتراجع لكل روشتة).`)) return
+    if (!await confirmInline(`تطبيق ${Object.keys(choices).length} اسم؟ (الاسم حقل طباعة فقط — لا يؤثر على الإجماليات، وقابل للتراجع لكل روشتة).`)) return
     setBusy(true); setMsg(null)
     try {
       const { data } = await insuranceApi.applyNameSuggestions(claimId, choices)
@@ -3104,6 +3135,7 @@ function NameReviewTab({ claimId, onRefresh }) {
 
   return (
     <div className="px-6 py-4">
+      {confirmUi}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
           <h3 className="font-semibold text-gray-800">مراجعة أسماء المرضى</h3>
@@ -3846,6 +3878,7 @@ function RepricePlanReview({ claimId, claim, plan, setPlan, onBack, onChanged })
 }
 
 function SoftechRepriceTab({ claimId, claim }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [docno, setDocno]   = useState('')
   const [branch, setBranch] = useState('')
   const [recLines, setRecLines]   = useState(null)   // ① the receipt's SOFTECH lines
@@ -3937,7 +3970,7 @@ function SoftechRepriceTab({ claimId, claim }) {
       setMsg({ err: `هذا الحساب لا يحمل رصيداً تراكمياً دفترياً (فحص ${foot.ledger_checked} عملية) — إعادة الضبط محظورة لتجنّب إفساد قيمة غير دفترية.` })
       return
     }
-    if (!window.confirm(`إعادة ضبط الرصيد التراكمى لعميل التعاقد ${run.cust_branch_code} (رصيد ${foot?.edit_balance ?? '—'}): سيُزاح ${n} صف على HQ فقط (ترتيب الرصيد) بمقدار صافى Δ ${run.net_delta}. القيمة داخلية (رصيد ائتمان) ولا تظهر على الإيصال المطبوع. متابعة؟`)) return
+    if (!await confirmInline(`إعادة ضبط الرصيد التراكمى لعميل التعاقد ${run.cust_branch_code} (رصيد ${foot?.edit_balance ?? '—'}): سيُزاح ${n} صف على HQ فقط (ترتيب الرصيد) بمقدار صافى Δ ${run.net_delta}. القيمة داخلية (رصيد ائتمان) ولا تظهر على الإيصال المطبوع. متابعة؟`)) return
     setBusy(true); setMsg(null)
     try {
       const { data } = await insuranceApi.repriceRebalance(claimId, run.id, { confirm: true })
@@ -3948,7 +3981,7 @@ function SoftechRepriceTab({ claimId, claim }) {
   }
 
   const doRevert = async (run) => {
-    if (!window.confirm(`التراجع عن العملية #${run.id}؟`)) return
+    if (!await confirmInline(`التراجع عن العملية #${run.id}؟`)) return
     setBusy(true); setMsg(null)
     try { await insuranceApi.repriceRevert(claimId, run.id); setMsg({ ok: 'تم التراجع.' }); loadRuns() }
     catch (e) { setMsg({ err: e?.response?.data?.detail || 'تعذّر التراجع' }) }
@@ -3961,6 +3994,7 @@ function SoftechRepriceTab({ claimId, claim }) {
 
   return (
     <div className="space-y-4" dir="rtl">
+      {confirmUi}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
         تعديل سعر إيصال داخل سوفتك (stktrans + stktransm + branchesales) على HQ والفرع، ليتطابق الإيصال المطبوع مع المطالبة بعد إعادة التسعير.
         لا كتابة بدون معاينة: اختر ← عاين (قراءة فقط، مع فحص الأسعار) ← اكتب عدد الإيصالات للتأكيد ← تطبيق. كل إيصال قابل للتراجع.
@@ -4348,6 +4382,7 @@ function ItemCat({ category, label }) {
 }
 
 function ClaimItemsTab({ claimId, claim, onRefresh }) {
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [data, setData]     = useState(null)
   const [loading, setLoad]  = useState(true)
   const [q, setQ]           = useState('')
@@ -4368,7 +4403,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   const apply = async (code) => {
     const cat = sel[code]
     if (!cat) return
-    if (!window.confirm(`تعيين التصنيف "${{ local: 'محلى', imported: 'مستورد', tarsia: 'ترسية' }[cat]}" لكل بنود الصنف ${code} في هذه المطالبة؟`)) return
+    if (!await confirmInline(`تعيين التصنيف "${{ local: 'محلى', imported: 'مستورد', tarsia: 'ترسية' }[cat]}" لكل بنود الصنف ${code} في هذه المطالبة؟`)) return
     setBusy(code); setMsg(null)
     try {
       const { data: res } = await insuranceApi.applyReviewDecision(claimId, code, cat)
@@ -4411,6 +4446,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
 
   return (
     <div className="px-6 py-4">
+      {confirmUi}
       <div className="flex items-center gap-2 flex-wrap mb-3">
         <select value={matchMode} onChange={e => setMatchMode(e.target.value)}
           title="طريقة المطابقة" className="border border-gray-300 rounded px-2 py-2 text-sm">
@@ -4646,6 +4682,8 @@ function DualOriginTable({ items, reviewSel, setReviewSel, reviewBusy, applyRevi
 }
 
 function DiscrepancyTab({ claimId, claim, onRefresh }) {
+  const toast = useToast()
+  const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const [data, setData]       = useState(null)
   // write the catalog-applied prices into SOFTECH (one guarded plan, all receipts)
   const [syncPlan, setSyncPlan] = useState(null)
@@ -4694,7 +4732,7 @@ function DiscrepancyTab({ claimId, claim, onRefresh }) {
   }
 
   const applyOverrides = async () => {
-    if (!window.confirm('سيتم تطبيق تصويبات تصنيف الأصناف على هذه المطالبة (قابل للتراجع). متابعة؟')) return
+    if (!await confirmInline('سيتم تطبيق تصويبات تصنيف الأصناف على هذه المطالبة (قابل للتراجع). متابعة؟')) return
     setOvApplying(true); setOvMsg(null)
     try {
       const { data: res } = await insuranceApi.applyOverrides(claimId)
@@ -4730,13 +4768,13 @@ function DiscrepancyTab({ claimId, claim, onRefresh }) {
   const hasPriceApply = history.some(r => !r.reverted && r.apply_price)
 
   const revertRun = async (runId) => {
-    if (!window.confirm('سيتم استرجاع القيم الأصلية لهذه العملية. متابعة؟')) return
+    if (!await confirmInline('سيتم استرجاع القيم الأصلية لهذه العملية. متابعة؟')) return
     try {
       await insuranceApi.revertApplyRun(claimId, runId)
       await reload(); await loadHistory()
       onRefresh && onRefresh()
     } catch (e) {
-      alert(e.response?.data?.error || 'تعذّر التراجع')
+      toast.error(e.response?.data?.error || 'تعذّر التراجع')
     }
   }
 
@@ -4759,7 +4797,7 @@ function DiscrepancyTab({ claimId, claim, onRefresh }) {
     const ids = selLines.size ? [...selLines] : null
     const scope = ids ? `${ids.length} بند محدد` : 'كل البنود المتغيّرة'
     const what = [applyCategory && 'التصنيف', applyPrice && 'الأسعار'].filter(Boolean).join(' و')
-    if (!window.confirm(`سيتم تحديث ${scope} لتطابق ${what} الحالية في الكتالوج. هذا الإجراء يعدّل قيم المطالبة المجمّدة (قابل للتراجع). متابعة؟`)) return
+    if (!await confirmInline(`سيتم تحديث ${scope} لتطابق ${what} الحالية في الكتالوج. هذا الإجراء يعدّل قيم المطالبة المجمّدة (قابل للتراجع). متابعة؟`)) return
     setApplying(true); setApplyMsg(null)
     try {
       const { data: res } = await insuranceApi.applyCurrentMaster(claimId, {
@@ -4844,6 +4882,7 @@ function DiscrepancyTab({ claimId, claim, onRefresh }) {
 
   return (
     <div className="px-6 py-4">
+      {confirmUi}
       {/* Item-classification corrections (تصويبات) — apply active overrides */}
       {ovPreview && ovPreview.affected_lines > 0 && (
         <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3">
@@ -5159,6 +5198,7 @@ function DimPicker({ label, selected, available, onChange, accent = 'blue' }) {
 }
 
 function PivotTab({ claimId }) {
+  const { ask, ui: confirmUi } = useConfirm()
   const [source,  setSource]  = useState('prescriptions')
   const [config,  setConfig]  = useState({ dimensions: [], measures: [] })
   const [rowDims, setRowDims] = useState(['relative'])   // multiple row groupings
@@ -5195,7 +5235,7 @@ function PivotTab({ claimId }) {
     setMeasure(t.measure)
   }
   const saveTemplate = async () => {
-    const name = window.prompt('اسم القالب؟')
+    const name = await ask('اسم القالب؟', { confirmLabel: 'حفظ', input: { required: true } })
     if (!name) return
     await insuranceApi.savePivotTemplate({ name, source, row_dim: rowDims.join(','), col_dim: colDims.join(','), measure })
     loadTemplates()
@@ -5257,6 +5297,7 @@ function PivotTab({ claimId }) {
 
   return (
     <div className="px-6 py-4">
+      {confirmUi}
       <div className="flex flex-wrap gap-3 items-end mb-4 bg-white rounded-xl border border-gray-200 p-4">
         <div>
           <label className="block text-xs text-gray-500 mb-1">المصدر</label>

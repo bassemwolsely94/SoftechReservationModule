@@ -18,6 +18,8 @@ import { fa } from '../utils/flowArrow'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import RemovedFileNote from '../components/RemovedFileNote'
+import { useToast } from '../components/ui'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -363,10 +365,12 @@ function ActionButtons({ tr, onAction, loading }) {
 
       {/* Cancel */}
       {tr.can_cancel && (
-        <button data-tour="transfers-detail-cancel" onClick={() => { if (window.confirm('هل تريد إلغاء هذا الطلب؟')) onAction('cancel') }}
+        <ConfirmButton data-tour="transfers-detail-cancel" onConfirm={() => onAction('cancel')}
+          confirmLabel="تأكيد إلغاء الطلب؟"
+          armedClassName="btn-ghost text-sm font-bold bg-red-600 text-white rounded-lg"
           className="btn-ghost text-sm text-gray-400 hover:text-red-500">
           إلغاء الطلب
-        </button>
+        </ConfirmButton>
       )}
     </div>
     </>
@@ -414,6 +418,7 @@ const matchedValue = (it, k) => (
   k === 'name' ? (it.itemname || it.itemcode) : k === 'level' ? (MATCH_LEVEL_CFG[it.match_level] || MATCH_LEVEL_CFG.not_found).label : it[k])
 
 function ERPMatchPanel({ tr, onRefresh }) {
+  const toast = useToast()
   const [checking, setChecking] = useState(false)
   const [cooldown, setCooldown]  = useState(0)   // seconds remaining before button re-enables
   const cooldownRef              = useRef(null)
@@ -463,7 +468,7 @@ function ERPMatchPanel({ tr, onRefresh }) {
         const match = msg.match(/(\d+)/)
         startCooldown(match ? parseInt(match[1], 10) : 20)
       }
-      alert(msg)
+      toast.error(msg)
     } finally { setChecking(false) }
   }
 
@@ -1091,16 +1096,18 @@ function CommunicationTab({ tr, onRefresh, onDeleteMessage }) {
                   <span className="text-xs text-gray-300 mr-auto">{timeAgo(msg.created_at)}</span>
                   {/* Delete button */}
                   {msg.can_delete && onDeleteMessage && (
-                    <button data-tour="transfers-detail-delete-message"
-                      onClick={() => onDeleteMessage(msg.id)}
+                    <ConfirmButton data-tour="transfers-detail-delete-message"
+                      onConfirm={() => onDeleteMessage(msg.id)}
+                      confirmLabel="حذف؟"
                       className="text-gray-300 hover:text-red-400 transition-colors p-0.5 rounded"
+                      armedClassName="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded"
                       title="حذف الرسالة"
                     >
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                           d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                    </button>
+                    </ConfirmButton>
                   )}
                 </div>
 
@@ -1252,6 +1259,7 @@ function ActivityTab({ tr }) {
 
 export default function TransferDetailPage() {
   const { id } = useParams()
+  const toast = useToast()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [actionLoading, setActionLoading] = useState(false)
@@ -1265,13 +1273,13 @@ export default function TransferDetailPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['transfer', id] })
 
+  // the trash button is a two-step ConfirmButton; a «deleted» mark stays visible to everyone
   const handleDeleteMessage = async (messageId) => {
-    if (!window.confirm('هل تريد حذف هذه الرسالة؟ ستبقى علامة الحذف مرئية للجميع.')) return
     try {
       await transfersApi.deleteMessage(id, messageId)
       invalidate()
     } catch (e) {
-      alert(e.response?.data?.detail || 'تعذّر حذف الرسالة')
+      toast.error(e.response?.data?.detail || 'تعذّر حذف الرسالة')
     }
   }
 
@@ -1292,7 +1300,7 @@ export default function TransferDetailPage() {
       invalidate()
       qc.invalidateQueries({ queryKey: ['transfers'] })
     } catch (e) {
-      alert(e.response?.data?.detail || 'حدث خطأ')
+      toast.error(e.response?.data?.detail || 'حدث خطأ')
     } finally { setActionLoading(false) }
   }
 

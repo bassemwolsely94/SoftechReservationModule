@@ -15,6 +15,8 @@ import ItemSearchWidget from '../components/ItemSearchWidget'
 import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import { useToast } from '../components/ui'
+import { ConfirmButton, useConfirm } from '../components/InlineConfirm'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -316,10 +318,12 @@ function ActionBar({ demand, onAction, loading }) {
       {/* Cancel */}
       <CanDo module="demand" action="delete">
         {canCancel && (
-          <button onClick={() => { if (window.confirm('إلغاء الطلب؟')) onAction('cancel', {}) }} data-tour="demand-detail-cancel"
+          <ConfirmButton onConfirm={() => onAction('cancel', {})} data-tour="demand-detail-cancel"
+            confirmLabel="تأكيد إلغاء الطلب؟"
+            armedClassName="btn-ghost text-xs font-bold bg-red-600 text-white rounded-lg"
             className="btn-ghost text-xs text-gray-400 hover:text-red-500">
             إلغاء الطلب
-          </button>
+          </ConfirmButton>
         )}
       </CanDo>
     </div>
@@ -720,6 +724,7 @@ function ItemsTab({ demand, onRefresh }) {
 // ── Tab 3: Follow-ups ─────────────────────────────────────────────────────────
 
 function FollowUpsTab({ demand, onRefresh }) {
+  const { ask, ui: askUi } = useConfirm()
   const [showAdd, setShowAdd] = useState(false)
   const [fuType, setFuType]   = useState('call')
   const [fuDate, setFuDate]   = useState('')
@@ -741,7 +746,7 @@ function FollowUpsTab({ demand, onRefresh }) {
   }
 
   async function complete(fuId) {
-    const notes = prompt('ملاحظات إتمام المتابعة:')
+    const notes = await ask('ملاحظات إتمام المتابعة:', { confirmLabel: 'إتمام', input: { placeholder: 'اختياري — تُسجَّل «تم» لو تركتها فارغة' } })
     if (notes === null) return
     try {
       await demandApi.completeFollowup(demand.id, fuId, { note: notes || 'تم' })
@@ -754,6 +759,7 @@ function FollowUpsTab({ demand, onRefresh }) {
 
   return (
     <div>
+      {askUi}
       {followUps.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           <div className="text-3xl mb-2">🔔</div>
@@ -974,6 +980,7 @@ function LogsTab({ demand, onRefresh }) {
 
 export default function DemandDetailPage() {
   const { id }     = useParams()
+  const toast      = useToast()
   const navigate   = useNavigate()
   const qc         = useQueryClient()
   const { user }   = useAuthStore()
@@ -1011,7 +1018,7 @@ export default function DemandDetailPage() {
 await map[action]()
       invalidate()
     } catch (e) {
-      alert(e.response?.data?.detail || 'حدث خطأ')
+      toast.error(e.response?.data?.detail || 'حدث خطأ')
     } finally { setActionLoading(false) }
   }
 

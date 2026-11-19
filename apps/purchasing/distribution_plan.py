@@ -41,7 +41,11 @@ def _hq():
 
 
 WAVE_LABELS = {1: 'من الرئيسي أولاً', 2: 'متكدس بفرع ← فروع تبيعه', 3: 'غير مُدرج — من فرع فوق حده',
-               4: 'تجربة صنف جديد — من فرع'}
+               4: 'تجربة صنف جديد — من فرع', 5: 'راكد هنا — يُباع بفرع آخر'}
+# Wave 5 (P-27 part B / Top-10 C05, owner 2026-11-19 «inside التوزيعة»): the dead-stock «move» lane —
+# no local sale for months, sells at other branches. Only with SystemSetting dead_stock_in_distribution
+# (default False). Same wave 0, thresholds, routes and approve → push guards as every other wave.
+DEAD_CAT = 'locally_dead'
 SEED_CATS = ('never_stocked', 'new_no_rate', 'hq_dormant')
 SOFTECH_ISR_DAYS = 3          # SOFTECH's own daily HQ ISRs still waiting to be dispensed
 TRANSFER_MAX_DAYS = 14        # in-transit window (the shared in_transit rule)
@@ -222,7 +226,9 @@ def _moves_from(sugs, costs, hq_stock, ceilings):
         if src != _hq() and cat in ('never_stocked', 'new_no_rate') and hq_stock.get(code, 0) >= total:
             src = _hq()                                    # HQ holds enough → one leg from HQ, never a branch
             reasons.append('hq_covers')
-        if src == _hq():
+        if cat == DEAD_CAT:
+            wave = 5                                       # dead-stock lane — always from the branch itself
+        elif src == _hq():
             wave = 1
         elif cat == 'over_piled':
             wave = 2
@@ -409,9 +415,67 @@ def _totals(moves):
     return {'waves': {str(k): v for k, v in waves.items()}, 'by_status': dict(by_status), 'moves': len(moves)}
 
 
+def _merge_dead(moves):
+    """An item moving to the same destination for another reason appears once (doc 30 §2.1: the
+    dead-stock reason is kept as a tag on that move), and a source the plan already draws the item
+    from is not drawn twice — the dead-stock move is dropped in both cases."""
+    others = [m for m in moves if m['category'] != DEAD_CAT]
+    by_to = {(m['itemcode'], m['to_code']): m for m in others}
+    from_src = {(m['itemcode'], m['from_code']) for m in others if m['status'] == 'planned'}
+    kept = []
+    for m in moves:
+        if m['category'] != DEAD_CAT:
+            kept.append(m)
+            continue
+        same = by_to.get((m['itemcode'], m['to_code']))
+        if same is not None:
+            if DEAD_CAT not in same['reasons']:
+                same['reasons'].append(DEAD_CAT)
+            continue
+        if (m['itemcode'], m['from_code']) in from_src:
+            continue
+        kept.append(m)
+    moves[:] = kept
+
+
+def dead_stock_on() -> bool:
+    from apps.config.models import SystemSetting
+    try:
+        v = SystemSetting.get('dead_stock_in_distribution', False)
+    except Exception:
+        return False
+    if isinstance(v, str):                  # a row saved as plain text: only an explicit yes switches it on
+        return v.strip().lower() in ('true', '1', 'yes')
+    return v is True or v == 1
+
+
+def dead_stock_suggestions(run):
+    """The dead-stock snapshot's «move» lines for `run` as plan suggestions (P-27 part A decides
+    dead / lane / targets; nothing is re-computed here). Fridge lines, lines under the dead-stock
+    move threshold, lines with no target and HQ-sourced lines are left out."""
+    from apps.purchasing.models import DeadStockSnapshot
+    snap = DeadStockSnapshot.objects.filter(run=run).first()
+    if snap is None:
+        return []
+    out = []
+    for l in snap.lines.filter(lane='move').select_related('item').order_by('rank'):
+        flags = l.flags or {}
+        if (not l.targets or flags.get('fridge') or flags.get('below_threshold')
+                or str(l.branch_code) == _hq()):
+            continue
+        out.append({'itemcode': l.item.softech_id, 'item_name': l.item.name, 'category': DEAD_CAT,
+                    'from_branch': str(l.branch_code), 'signals': ['no_local_sale'],
+                    'reason': f'لا بيع محلي منذ {l.last_sale_date or "أكثر من 6 أشهر"} — يُباع بفرع آخر',
+                    'qty_each': 0, 'age_days': None,
+                    'to_branches': [{'code': str(t['branch']), 'qty': int(t['qty'])} for t in l.targets
+                                    if int(t.get('qty') or 0) > 0]})
+    return [s for s in out if s['to_branches']]
+
+
 def plan_moves(sugs, *, costs, hq_stock, ceilings, flows, th, holder=_route_holder):
     """The pure part of build(): suggestions → (moves, documents). Testable without SOFTECH."""
     moves = _moves_from(sugs, costs, hq_stock, ceilings)
+    _merge_dead(moves)
     _apply_committed(moves, flows)
     _apply_line_threshold(moves, th['min_line'])
     _apply_trial_cap(moves, th.get('trial_cap', DEFAULT_TRIAL_CAP))
@@ -442,6 +506,12 @@ def build(*, user=None, categories=None, live=True, run=None):
     ceilings = distribution._branch_ceilings(set(ops)) if live else {}
     sugs = distribution.analyze(run=run, categories=categories, ceilings=ceilings, live_stock=stock,
                                 use_age=live)
+    dead_lane = dead_stock_on()
+    if dead_lane:
+        dead = dead_stock_suggestions(run)
+        if not dead:
+            notes.append('مسار المخزون الراكد مفعّل لكن لا توجد قائمة راكد لهذا التشغيل — شغّل «🧊 مخزون راكد» أولاً.')
+        sugs = list(sugs) + dead
     codes = {s['itemcode'] for s in sugs}
     dests = {str(t['code']) for s in sugs for t in s['to_branches']}
     flows, fnotes = committed_flows(codes, dests)
@@ -457,6 +527,7 @@ def build(*, user=None, categories=None, live=True, run=None):
             inputs={'thresholds': th, 'categories': categories or 'all', 'live_stock': bool(stock),
                     'stock_as_of': as_of, 'run_id': run.pk, 'ceilings_read': sorted(ceilings),
                     'softech_isr_days': SOFTECH_ISR_DAYS, 'transfer_days': TRANSFER_MAX_DAYS,
+                    'dead_stock_lane': dead_lane,
                     'notes': notes, 'suggestions': len(sugs)})
         PlannedMove.objects.bulk_create([PlannedMove(
             plan=plan, itemcode=m['itemcode'], item_name=(m['item_name'] or '')[:255], from_code=m['from_code'],
