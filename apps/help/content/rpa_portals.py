@@ -161,6 +161,12 @@ SCREENS = [
                        '«ربط مع كتابة الأسطر» يفتح جدولاً تحت الزر: كل صنف وكميته في الطلب كما في سجل الطلبات بالموقع (عبوات كاملة؛ صفر = لم يُطلب ويرجع للباقي)، '
                        'مملوءاً مما قرأه الروبوت أو من الكمية المُسلَّمة — استعمله حين لا يقرأ الروبوت الأسطر أو يجد أسطراً لا تخص السلة. '
                        'لو وجد سجل الطلبات طلباً قد يكون لهذه السلة فلا تُعاد المحاولة بتأكيد «لم يُرسل» إلا مع كتابة السبب. '
+                       'السبب «history_unclear» يعني أن قراءة سجل الطلبات لم تستطع التأكد: طلب في المدة لا يخص سلة أخرى ولا يشارك هذه السلة أي كود '
+                       '(other_orders)، أو لم يثبت الروبوت أنه قرأ كل الصفحات (not_complete — وهذا دائماً حتى نتأكد من أزرار الصفحات على الموقع)، '
+                       'أو وصلت القراءة للحد الأقصى من الطلبات (truncated). السلة تبقى «تحتاج موظف» ولا تُعاد المحاولة: افتح سجل الطلبات في الموقع، '
+                       'ثم اربطها بطلبها، أو أكّد «لم يُرسل» مع كتابة السبب. '
+                       'لو ظهر Submit متأخراً لسلة أُلغيت دون حجز أصنافها، تُحجز أصنافها الآن (تخرج من المورد وتظهر «ربما طُلبت» في «الباقي») '
+                       'وترجع السلة «تحتاج موظف». '
                        'سلة طُلبت أو ربما طُلبت لا تُلغى إلا بتأكيد وسبب، وبعد إلغائها لا تُطلب أصنافها مرة ثانية من تلقاء نفسها: تظهر في «الباقي» '
                        'بعلامة «ربما طُلبت» حتى يختار لها شخص مورداً من جديد. '
                        'سلة «مسجلة» عليها تنبيه (مثل رقم طلب ثانٍ ظهر بعد التسجيل): راجعها ثم «تمت المراجعة — أزل التنبيه» مع كتابة ما راجعته. '
@@ -174,7 +180,14 @@ SCREENS = [
                        'number, or "Cancel". "Link and type the lines" opens a grid under the button: each item and its quantity in the order as Order History '
                        'on the site shows it (whole packs; zero = not ordered, it goes back to the remainders), prefilled from what the robot read or from the '
                        'handed-over quantity — use it when the robot could not read the lines or found lines that are not this basket\'s. If Order History '
-                       'found an order that may be this basket\'s, a retry with "not sent" needs a written reason. A basket that was or may have been '
+                       'found an order that may be this basket\'s, a retry with "not sent" needs a written reason. '
+                       'The reason "history_unclear" means the Order History read could not be sure: an order in the window that is on no other basket '
+                       'and shares no code with this one (other_orders), or the robot could not prove it read every page (not_complete — always so '
+                       'until the site\'s page buttons are confirmed), or the read reached the most orders it carries (truncated). The basket stays under '
+                       '"Needs a person" and is not retried: open Order History on the site, then link it to its order, or confirm "not sent" with a '
+                       'written reason. If Submit is seen late for a basket that was cancelled without holding its items, its items are held now (off '
+                       'the supplier, "may have been ordered" under "Remainders") and the basket goes back to "Needs a person". '
+                       'A basket that was or may have been '
                        'ordered is cancelled only with a confirmation and a reason, and its items are then never ordered again by themselves: they show under '
                        '"Remainders" marked "may have been ordered" until a person picks a supplier for them again. A "recorded" basket with a warning (such '
                        'as a second order number seen after it was recorded): check it, then "Checked — clear the warning" with what you checked. '
@@ -275,6 +288,6 @@ SCREENS = [
              'warn': T('في «الفعلي» تراجع وتضغط Submit بنفسك؛ كل تغيير مُسجَّل.', 'In "live" you review and press Submit yourself; every change is logged.'),
              'open_hint': T('افتح تبويب «الحسابات» (للمدير).', 'Open the "Accounts" tab (admin).')},
         ],
-        'updated': '2026-11-18',
+        'updated': '2026-11-19',
     },
 ]
