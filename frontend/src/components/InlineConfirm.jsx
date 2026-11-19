@@ -71,6 +71,7 @@ function ConfirmBar({ req, onDone }) {
   const ok = () => { if (!blocked) onDone(req.input ? text : true) }
   const cancel = () => onDone(req.input ? null : false)
   const onKeyDown = (e) => {
+    e.stopPropagation()   // a portal still bubbles React events: keep Esc/Enter away from a host modal
     if (e.key === 'Escape') { e.preventDefault(); cancel() }
     else if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); ok() }
   }
@@ -80,6 +81,9 @@ function ConfirmBar({ req, onDone }) {
     <div
       role="alertdialog" aria-modal="false" aria-label={req.title || 'تأكيد'} dir="rtl"
       onKeyDown={onKeyDown}
+      // …and clicks: a host modal's backdrop onClick={onClose} must not fire through the bar
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
       className="fixed bottom-4 inset-x-0 mx-auto z-[1000] w-[min(36rem,calc(100%-2rem))]
                  rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900
                  shadow-lg p-3 text-sm"
