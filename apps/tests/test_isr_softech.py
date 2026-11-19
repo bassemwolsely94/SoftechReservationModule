@@ -117,6 +117,10 @@ class ProposeApiTests(TestCase):
         make_hq('100', self)   # HQ is read through hq_code()
         from apps.branches.models import Branch
         from apps.catalog.models import Item
+        from django.core.cache import cache
+        # isr_filter_options caches for 30 min under one key: a test that hit the endpoint
+        # earlier in the same process (before these items existed) must not leak its options
+        cache.delete('isr_filter_options')
         Branch.objects.create(softech_branch_id='160', name='Bab ElHadid')
         for code, mt in (('A', '10'), ('B', '10'), ('Z', '50')):
             Item.objects.create(softech_id=code, name=f'ITEM {code}', pack_price=20, cost_price=10,
