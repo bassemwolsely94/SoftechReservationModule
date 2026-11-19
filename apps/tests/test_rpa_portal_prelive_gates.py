@@ -10,6 +10,7 @@ R20  a read that hit the cap (the robot says truncated, or cap-many orders came)
 R21  a read without a positive "complete" proof (paging not confirmed on the site) is unclear.
 """
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.audit.models import AuditLog
 from apps.branches.models import Branch
@@ -22,8 +23,7 @@ from .test_rpa_portal_queue import IDENTITY, ON, _World
 ACC = {'identity_text': IDENTITY}
 
 
-@override_settings(**ON)
-class PreLiveGateTests(_World, TestCase):
+class _GateWorld(_World):
 
     def setUp(self):
         self.build_world('PLG')
@@ -79,6 +79,10 @@ class PreLiveGateTests(_World, TestCase):
         log = AuditLog.objects.filter(action='rpa_portal_needs_person').latest('pk')
         self.assertEqual(log.new_data['run_id'], hrun.pk)
         self.assertEqual(log.new_data['needs_person_reason'], b.needs_person_reason)
+
+
+@override_settings(**ON)
+class PreLiveGateTests(_GateWorld, TestCase):
 
     # ── a sure "none" still clears ───────────────────────────────────────────────────────────
 
@@ -230,3 +234,173 @@ class PreLiveGateTests(_World, TestCase):
                      {'outcome': 'submit_seen', 'order_ref': 'PO778', 'account': ACC})
         line.refresh_from_db()
         self.assertEqual(line.tried, tried)
+
+
+@override_settings(**ON)
+class PreLiveGateReviewTests(_GateWorld, TestCase):
+    """Review follow-ups: R19 reaches newer baskets of the same lines, unreadable order rows, a read
+    that comes back after a person acted, doubts kept on found reads."""
+
+    def _cancelled_plain(self):
+        """A live basket stuck at Submit, cleared by a sure read and cancelled without a hold."""
+        b, hrun, ln, run = self._stuck_live()
+        self._read(hrun, outcome='history_none', complete=True)
+        b = queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='cancel')
+        line = BuyListLine.objects.get(pk=PortalLine.objects.get(pk=ln.pk).buyline_id)
+        self.assertEqual((b.status, line.chosen_supplier), ('cancelled', '565'))
+        return b, ln, run, line
+
+    def _new_job_on(self, line, statuses):
+        """A newer approved job at the same portal that took `line` again."""
+        job = PortalJob.objects.create(portal=self.portal, account=self.account, buylist=line.buylist,
+                                       status='approved', dry_run=False, created_by=self.buyer,
+                                       approved_by=self.buyer, approved_at=timezone.now())
+        out = []
+        for n, st in enumerate(statuses, start=1):
+            nb = PortalBasket.objects.create(job=job, seq=n, status=st)
+            PortalLine.objects.create(basket=nb, buyline=line, item=line.item, wanted_qty=4,
+                                      supplier_key='52871', supplier_key_padded='52871'.zfill(18))
+            out.append(nb)
+        return out
+
+    # ── 1. R19 reaches newer baskets of the same lines ───────────────────────────────────────
+
+    def test_r19_late_sighting_pulls_newer_baskets_of_the_same_lines(self):
+        a, ln, run, line = self._cancelled_plain()
+        b_ready, c_pending = self._new_job_on(line, ('ready', 'pending'))
+        fill = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])      # b_ready claimed
+        self.assertEqual((fill.kind, fill.basket_id), ('fill', b_ready.pk))
+        queue.report(PortalRun.objects.get(pk=run.pk), self.dev,
+                     {'outcome': 'submit_seen', 'order_ref': 'PO900', 'account': ACC})
+        for other in (b_ready, c_pending):
+            other = PortalBasket.objects.get(pk=other.pk)
+            self.assertEqual((other.status, other.needs_person_reason),
+                             ('needs_person', f'submit_seen_other:{a.pk}'))
+            self.assertIsNone(other.claimed_by_id)
+            self.assertEqual(queue.suggested_order_ref(other), '')       # a basket id, not an order
+        fill.refresh_from_db()
+        self.assertEqual(fill.outcome, 'resolved')
+        with self.assertRaises(queue.RunConflict):                       # the claimed fill stops
+            queue.heartbeat(fill, self.dev)
+        log = AuditLog.objects.filter(action='rpa_portal_needs_person',
+                                      new_data__has_key='late_sighting_basket').latest('pk')
+        self.assertEqual(log.new_data['late_sighting_basket'], a.pk)
+        self.assertEqual(sorted(log.new_data['baskets']), sorted([b_ready.pk, c_pending.pk]))
+
+    def test_r19_late_sighting_pulls_an_awaiting_submit_basket(self):
+        a, ln, run, line = self._cancelled_plain()
+        (b,) = self._new_job_on(line, ('ready',))
+        fill = PortalRun.objects.get(pk=queue.claim_next(self.dev)['run_id'])
+        nl = PortalBasket.objects.get(pk=b.pk).lines.get()
+        queue.report(fill, self.dev, {'outcome': 'handover', 'steps': [{'label': 'add_line'}], 'account': ACC,
+                                      'lines': [{'line_id': nl.pk, 'accepted_qty': 4, 'status': 'ok'}]})
+        queue.report(PortalRun.objects.get(pk=run.pk), self.dev,
+                     {'outcome': 'submit_seen', 'order_ref': 'PO901', 'account': ACC})
+        b = PortalBasket.objects.get(pk=b.pk)
+        self.assertEqual(b.status, 'needs_person')
+        self.assertIn(f'submit_seen_other:{a.pk}', b.needs_person_reason)
+        with self.assertRaises(queue.QueueError):                        # it reached Submit itself
+            queue.resolve(b, staff=self.boss, action='retry')
+
+    def test_r19_second_late_sighting_is_idempotent(self):
+        a, ln, run, line = self._cancelled_plain()
+        payload = {'outcome': 'submit_seen', 'order_ref': 'PO902', 'account': ACC}
+        queue.report(PortalRun.objects.get(pk=run.pk), self.dev, dict(payload))
+        line.refresh_from_db()
+        tried, audits = list(line.tried), AuditLog.objects.count()
+        (b,) = self._new_job_on(line, ('ready',))
+        a2 = queue.report(PortalRun.objects.get(pk=run.pk), self.dev, dict(payload))
+        line.refresh_from_db()
+        self.assertEqual(line.tried, tried)
+        self.assertEqual(a2.needs_person_reason, 'submit_seen:PO902')
+        self.assertEqual(PortalBasket.objects.get(pk=b.pk).status, 'ready')      # nothing new seen
+        self.assertEqual(AuditLog.objects.count(), audits + 1)          # only the sighting itself
+
+    # ── 2. order rows whose number cannot be read ────────────────────────────────────────────
+
+    def test_unreadable_order_rows_make_the_read_unclear(self):
+        for outcome, orders in (('history_none', [{}]), ('history_found', [{}]),
+                                ('history_found', [{'order_ref': ''}]), ('history_none', ['x'])):
+            b, hrun, ln, _ = self._stuck_live()
+            hrun, b = self._read(hrun, outcome=outcome, orders=orders, complete=True, truncated=False)
+            self.assertEqual(hrun.outcome, 'history_unclear', (outcome, orders))
+            self.assertIn('unreadable_orders', b.needs_person_reason)
+
+    def test_complete_as_int_one_is_unclear(self):
+        b, hrun, ln, _ = self._stuck_live()
+        hrun, b = self._read(hrun, outcome='history_none', complete=1, truncated=False)
+        self._assert_unclear(hrun, b, 'not_complete')
+
+    # ── 3. a read that comes back after a person acted ───────────────────────────────────────
+
+    def test_retry_refused_while_a_robot_reads_order_history(self):
+        b, hrun, ln, _ = self._stuck_live()                 # the read is claimed by the robot
+        with self.assertRaises(queue.QueueError):
+            queue.resolve(b, staff=self.boss, action='retry', confirm_none=True, reason='checked')
+        self.assertIsNone(PortalRun.objects.get(pk=hrun.pk).finished_at)
+        hrun, b = self._read(hrun, outcome='history_found', complete=True,
+                             orders=[{'order_ref': 'PO-B', 'lines': [{'sku': ln.supplier_key, 'qty': 4}]}])
+        self.assertEqual((b.status, b.needs_person_reason), ('needs_person', 'history_found:PO-B'))
+
+    def test_queued_unclaimed_read_does_not_block_a_retry(self):
+        job, b, run, ln = self._awaiting()
+        PortalBasket.objects.filter(pk=b.pk).update(lease_until=run.started_at)
+        queue.expire_leases()                                # a read is queued, nobody holds it
+        b = queue.resolve(PortalBasket.objects.get(pk=b.pk), staff=self.boss, action='retry',
+                          confirm_none=True, reason='checked the site')
+        self.assertEqual(b.status, 'ready')
+
+    def test_found_result_pulls_back_a_basket_that_moved_on(self):
+        b, hrun, ln, _ = self._stuck_live()
+        PortalBasket.objects.filter(pk=b.pk).update(status='ready', needs_person_reason='')
+        hrun, b = self._read(hrun, outcome='history_found', complete=True,
+                             orders=[{'order_ref': 'PO-B', 'lines': [{'sku': ln.supplier_key, 'qty': 4}]}])
+        self.assertEqual((hrun.outcome, b.status, b.needs_person_reason),
+                         ('history_found', 'needs_person', 'history_found:PO-B'))
+
+    def test_unclear_result_pulls_back_a_claimed_basket_and_stops_its_fill(self):
+        b, hrun, ln, _ = self._stuck_live()
+        PortalBasket.objects.filter(pk=b.pk).update(status='in_progress', claimed_by=self.dev)
+        fill = PortalRun.objects.create(basket=b, kind='fill', device=self.dev, mode='live',
+                                        started_at=hrun.started_at)
+        hrun, b = self._read(hrun, outcome='history_none')
+        self.assertEqual((hrun.outcome, b.status), ('history_unclear', 'needs_person'))
+        self.assertTrue(b.needs_person_reason.startswith('history_unclear'))
+        self.assertIsNone(b.claimed_by_id)
+        self.assertEqual(PortalRun.objects.get(pk=fill.pk).outcome, 'resolved')
+
+    def test_found_after_a_cancel_closed_the_read_is_still_taken(self):
+        b, hrun, ln, _ = self._stuck_live()
+        b = queue.resolve(b, staff=self.boss, action='cancel', confirm_placed_order_cancel=True, reason='x')
+        self.assertEqual(PortalRun.objects.get(pk=hrun.pk).outcome, 'resolved')
+        hrun, b = self._read(PortalRun.objects.get(pk=hrun.pk), outcome='history_found', complete=True,
+                             orders=[{'order_ref': 'PO-C', 'lines': [{'sku': ln.supplier_key, 'qty': 4}]}])
+        self.assertEqual((hrun.outcome, b.status, b.needs_person_reason),
+                         ('history_found', 'needs_person', 'history_found:PO-C'))
+
+    def test_none_after_a_cancel_changes_nothing(self):
+        b, hrun, ln, _ = self._stuck_live()
+        queue.resolve(b, staff=self.boss, action='cancel', confirm_placed_order_cancel=True, reason='x')
+        hrun, b = self._read(PortalRun.objects.get(pk=hrun.pk), outcome='history_none', complete=True)
+        self.assertEqual((hrun.outcome, b.status), ('resolved', 'cancelled'))
+        self.assertEqual(hrun.steps[-1]['label'], 'order_history')     # kept for the record
+
+    def test_other_closed_reads_still_conflict(self):
+        b, hrun, ln, _ = self._stuck_live()
+        self._read(hrun, outcome='history_none', complete=True)
+        with self.assertRaises(queue.RunConflict):
+            queue.report(PortalRun.objects.get(pk=hrun.pk), self.dev,
+                         {'outcome': 'history_found', 'account': ACC,
+                          'orders': [{'order_ref': 'PO-D', 'lines': []}]})
+
+    # ── 4. doubts kept on found reads ────────────────────────────────────────────────────────
+
+    def test_found_read_keeps_its_doubts(self):
+        b, hrun, ln, _ = self._stuck_live()
+        hrun, b = self._read(hrun, outcome='history_found', truncated=True,
+                             orders=[{'order_ref': 'PO-B', 'lines': [{'sku': ln.supplier_key, 'qty': 4}]}])
+        self.assertEqual(hrun.outcome, 'history_found')
+        self.assertIn('truncated', hrun.steps[-1]['doubts'])
+        self.assertIn('not_complete', hrun.steps[-1]['doubts'])
+        log = AuditLog.objects.filter(action='rpa_portal_needs_person').latest('pk')
+        self.assertIn('truncated', log.new_data['doubts'])
