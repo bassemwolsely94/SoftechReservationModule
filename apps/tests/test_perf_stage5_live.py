@@ -46,13 +46,13 @@ class CountsPushTests(TestCase):
         return [c.args for c in send.call_args_list]
 
     def test_push_waits_for_commit_and_carries_no_data(self):
-        with mock.patch.object(live, '_group_send') as send, \
-                self.captureOnCommitCallbacks(execute=False) as callbacks:
-            live.request_counts_push(self.prof.pk)
-            send.assert_not_called()              # nothing before commit
-        for cb in callbacks:
-            cb()
-        send.assert_called_once_with(self.group, {'type': 'notification.counts'})
+        with mock.patch.object(live, '_group_send') as send:
+            with self.captureOnCommitCallbacks(execute=False) as callbacks:
+                live.request_counts_push(self.prof.pk)
+                send.assert_not_called()              # nothing before commit
+            for cb in callbacks:
+                cb()
+            send.assert_called_once_with(self.group, {'type': 'notification.counts'})
 
     def test_no_profile_no_push(self):
         with mock.patch.object(live, '_group_send') as send, self.captureOnCommitCallbacks(execute=True):
@@ -161,7 +161,7 @@ class LiveSocketTests(TransactionTestCase):
     def setUp(self):
         _, self.prof, _ = make_pharmacist('s5_sock', branch=make_branch())
 
-    def _run(self, body):
+    def _run(self, body, debounce=0):
         from apps.notifications import consumers
         from apps.notifications.consumers import NotificationConsumer
 
@@ -184,7 +184,7 @@ class LiveSocketTests(TransactionTestCase):
         with mock.patch('apps.access.ws.ZoneGuardMixin.zone_admit', admit), \
                 mock.patch('apps.access.ws.ZoneGuardMixin.zone_start', noop), \
                 mock.patch('apps.access.ws.ZoneGuardMixin.zone_stop', noop), \
-                mock.patch.object(consumers, 'COUNTS_DEBOUNCE_SECONDS', 0):
+                mock.patch.object(consumers, 'COUNTS_DEBOUNCE_SECONDS', debounce):
             return async_to_sync(go)()
 
     def test_counts_event_sends_integer_counts(self):
@@ -212,9 +212,10 @@ class LiveSocketTests(TransactionTestCase):
             for _ in range(5):
                 await layer.group_send(f'notifications_user_{self.prof.pk}', {'type': 'notification.counts'})
             first = json.loads(await comm.receive_from(timeout=3))
-            quiet = await comm.receive_nothing(timeout=0.3)
+            quiet = await comm.receive_nothing(timeout=0.5)
             return first, quiet
-        first, quiet = self._run(body)
+        # the 5 events land inside one debounce window → one frame
+        first, quiet = self._run(body, debounce=0.3)
         self.assertEqual(first['event'], 'category_counts')
         self.assertTrue(quiet)
 
