@@ -201,6 +201,8 @@ SCHEDULER_JOB_GUARDS = {
         'C15: one in-app A/P review digest per recipient per ISO week (dedup_key ap_review_<year>_<week>, check-then-create, racy); read-only on the recon mirror, no sends, no SOFTECH'),
     'return_window_digest': ('once_per_period_check', 'apps.batches.return_calendar.monthly_digest', 'dedup_once=True',
         'snapshot get_or_create (unique) + per-month dedup_once digest, check-then-create (racy); web push'),
+    'hq_exception_digest': ('once_per_period_check', 'apps.insights.hq_exceptions.send_weekly', "dedup_key=f'hq_exception_digest_{week.isoformat()}', dedup_once=True",
+        'reads stored engine output only; per-week (Sunday start) dedup_once digest, check-then-create (racy); in-app + web push'),
     'receipt_check_daily': ('once_per_period_check', 'apps.procurement.receipt_check.send_digest', "dedup_key=f'receipt_check_{today.isoformat()}', dedup_once=True",
         'run_check is an in-transaction upsert; digest is per-day dedup_once, check-then-create (racy); web push'),
     'markdown_revert_reminders': ('none', 'apps.batches.expiry_audit.remind_markdown_reversals', 'Notification.objects.create(',

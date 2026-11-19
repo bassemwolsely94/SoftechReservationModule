@@ -637,6 +637,7 @@ export const insightsApi = {
   backfill: (data = {})   => api.post('/insights/reports/backfill/', data),
   rules:    ()            => api.get('/insights/rules/'),
   updateRule: (id, data)  => api.patch(`/insights/rules/${id}/`, data),
+  exceptions: (params = {}) => api.get('/insights/exceptions/', { params }),   // C32 weekly HQ list
 }
 
 // Phone alerts (WhatsApp) admin API — admin + supervisor only (enforced server-side)

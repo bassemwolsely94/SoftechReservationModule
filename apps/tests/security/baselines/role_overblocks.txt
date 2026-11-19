@@ -795,6 +795,13 @@ viewer GET /api/qa/inspections/
 viewer GET /api/qa/inspections/987654321/
 viewer GET /api/qa/templates/
 
+# reason: C32 — the weekly HQ exception digest (/api/insights/exceptions/) ranks money from every
+#   branch (returns, dead stock, stock audit, A/P exceptions, receipt check): company-level data, so on
+#   top of the analytics grant only an all-branch user may read it (core.branch_scope.sees_everything).
+#   Branch-bound pharmacist / viewer keep their own-branch screens.
+pharmacist GET /api/insights/exceptions/
+viewer GET /api/insights/exceptions/
+
 # reason: C04 / P-28 — linking a draft transfer to a near-expiry lot is the move step; it needs
 #   CanCreateTransfer as well as catalog edit (the transfers app does not let purchasing create transfers).
 purchasing POST /api/batches/near-expiry/link-transfer/

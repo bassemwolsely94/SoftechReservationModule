@@ -2665,6 +2665,16 @@ def _run_return_window_digest():
         logger.error('[APScheduler] return-window digest failed: %s', exc)
 
 
+def _run_hq_exception_digest():
+    """C32: Sunday — the top 10 open items by EGP across the engines to HQ management (in-app, once per
+    ISO week). Reads stored engine output only (apps/insights/hq_exceptions.py)."""
+    try:
+        from apps.insights.hq_exceptions import send_weekly
+        logger.info('[APScheduler] HQ exception digest sent=%s', send_weekly())
+    except Exception as exc:
+        logger.error('[APScheduler] HQ exception digest failed: %s', exc)
+
+
 def _run_receipt_check_daily():
     """P-31: re-check received purchase lines against the sent need sheets (local DB only) and send the
     daily «استلام بدون طلب» digest to purchasing. The refresh also runs the check after every pull."""
@@ -4251,6 +4261,10 @@ def start_scheduler():
     )
     # ── Narrative insight reports (doc 18) — bilingual, WhatsApp-delivered ─────
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
+    _scheduler.add_job(   # C32: weekly HQ exception digest (Sunday, after the overnight engines)
+        _run_hq_exception_digest, 'cron', day_of_week='sun', hour=9, minute=10, id='hq_exception_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
     _scheduler.add_job(   # in-app help: weekly training digest to supervisors (Sunday, start of week)
         _help_training_digest, 'cron', day_of_week='sun', hour=8, minute=40, id='help_training_digest',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
