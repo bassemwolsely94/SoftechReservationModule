@@ -1624,6 +1624,40 @@ sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py seed_trusted_networks
 ```
 The site labels appear within a minute (the trusted-network list is cached per process for 60 s, and the seed command runs in its own process). In N1 nothing is refused because of the network (log only); blocking starts in batch N3.
 
+#### D-04 — enforce the Content-Security-Policy on the live server
+
+The policy and its one switch (`enforce` / `report-only`) now live in `deploy/nginx-csp.conf`,
+installed as `/etc/nginx/elrezeiky-csp.conf`. Reports keep arriving at `/api/csp-report/` in both
+modes (logged as `elrezeiky.csp`, never stored).
+
+**1. Review what the report-only policy collected** (the log keeps 7 days; the journal may keep more):
+```bash
+cd /opt/elrezeiky/app
+sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py csp_report_summary --markdown
+sudo journalctl -u elrezeiky-web --since -30d | sudo -u elrezeiky /opt/elrezeiky/venv/bin/python manage.py csp_report_summary --markdown -
+curl -sI https://elrezeikyapp.dawalvry.com/ | grep -i content-security   # was the report-only header live at all?
+```
+Rows marked `ignore — extension / browser` are browser add-ons. Any `review` row from our own
+pages must be fixed (or added to `deploy/nginx-csp.conf` in a PR) **before** step 2.
+
+**2. Install and switch** (the live site file is hand-edited — edit it in place, do not re-copy):
+```bash
+sudo cp /opt/elrezeiky/app/deploy/nginx-csp.conf /etc/nginx/elrezeiky-csp.conf
+sudo nano /etc/nginx/sites-available/elrezeiky
+#  - above the first `server {`, add the two `map $elr_csp_mode …` blocks from deploy/nginx.conf
+#  - in `location / { }` replace the `add_header Content-Security-Policy-Report-Only "…" always;` line
+#    with the `include /etc/nginx/elrezeiky-csp.conf;` line and the two `add_header … $elr_csp_…` lines
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI https://elrezeikyapp.dawalvry.com/ | grep -i content-security   # → Content-Security-Policy: default-src 'self'; …
+```
+**3. Watch** for a day: open POS, a reservation print, a voucher print, the call-centre inbox, then
+re-run step 1 — `enforce` rows from our own pages are real breakage.
+
+**Roll back** (one word, no app restart):
+```bash
+sudo sed -i 's/"enforce"/"report-only"/' /etc/nginx/elrezeiky-csp.conf && sudo nginx -t && sudo systemctl reload nginx
+```
+
 ### 9.3 TLS certificate (DNS must resolve first — section 3)
 
 The config references certificates that don't exist yet, so Nginx won't start. Get them

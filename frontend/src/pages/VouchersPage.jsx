@@ -1082,9 +1082,11 @@ function RedemptionFlow({ voucher, onClose }) {
   <tr><td>طُبع بواسطة</td><td>${d.printed_by}</td></tr>
 </table>
 <div class="footer">طُبع في: ${new Date().toLocaleString('en-US')}</div>
-<script>window.onload=function(){window.print()}</script>
 </body></html>`)
                       win.document.close()
+                      // D-04: print from the opener — the popup inherits the enforced CSP (script-src 'self'),
+                      // so an inline <script> inside the written page would be blocked.
+                      win.onload = () => setTimeout(() => { win.focus(); win.print() }, 300)
                     } catch { alert('خطأ في جلب بيانات الوثيقة') }
                   }}>
                   🖨️ طباعة
