@@ -6,8 +6,6 @@ market-shortage PR, which owns that code.
 import datetime
 from decimal import Decimal
 
-from unittest import expectedFailure
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -53,11 +51,13 @@ class ReportBudgets(TestCase):
         assert_budget(self, 'batches/stock-expiry/summary', self.client_, '/api/batches/stock-expiry/summary/',
                       grow=self._expiry, min_rows=0)
 
-    @expectedFailure   # N+1 found in Stage 1 (12 → 52 queries for 10 targets) — fix in Stage 3
     def test_incentives_targets(self):
         self._targets(2)
-        assert_budget(self, 'incentives/targets', self.client_, '/api/incentives/targets/',
-                      grow=self._targets, min_rows=10, rows_of=_count_list)
+        # N+1 found in Stage 1 (12 → 52 queries for 10 targets). Pin exactly that failure so a 403, a
+        # missing row or any other breakage still fails; Stage 3 removes this wrapper with its fix.
+        with self.assertRaisesRegex(AssertionError, 'queries grow with rows'):
+            assert_budget(self, 'incentives/targets', self.client_, '/api/incentives/targets/',
+                          grow=self._targets, min_rows=10, rows_of=_count_list)
 
 
 class TrackBudgets(TestCase):

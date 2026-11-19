@@ -51,9 +51,12 @@ class ListBudgets(TestCase):
     def _reservations(self, n=25):
         for _ in range(n):
             i = self.c.next()
+            # customer + assigned_to set: the list select_related()s them, so a dropped join shows up
+            cust = Customer.objects.create(name=f'عميل حجز {i}', phone=f'012{i:08d}', softech_pic=f'RS{i:06d}',
+                                           preferred_branch=self.branch)
             r = Reservation.objects.create(item=self.item, branch=self.branch, quantity_requested=1,
                                            contact_name=f'عميل {i}', contact_phone=f'010{i:08d}',
-                                           created_by=self.admin)
+                                           created_by=self.admin, customer=cust, assigned_to=self.admin)
             for _ in range(2):
                 ReservationLine.objects.create(reservation=r, item=self.item, quantity_requested=1)
 
@@ -113,14 +116,23 @@ class ListBudgets(TestCase):
                       grow=self._items, min_rows=25, rows_of=_count_list)
 
     def test_universal_search(self):
-        self._items(2)
-        self._customers(2, name='باراسيتامول')
+        term = 'باراسيتامول'
 
-        def grow():
-            self._items(10)
-            self._customers(10, name='باراسيتامول')
-        assert_budget(self, 'search/universal', self.admin_client, '/api/search/universal?q=باراسيتامول',
-                      grow=grow, min_rows=0)
+        def seed(n):
+            self._items(n)
+            self._customers(n, name=term)
+            for _ in range(n):   # matching reservations (contact_name) and POS orders (customer_name)
+                i = self.c.next()
+                Reservation.objects.create(item=self.item, branch=self.branch, quantity_requested=1,
+                                           contact_name=f'{term} {i}', contact_phone=f'013{i:08d}',
+                                           created_by=self.admin)
+                SoftechSalesOrder.objects.create(branch=self.branch, softech_branchcode=self.branch.softech_branch_id,
+                                                 store_code=self.branch.softech_branch_id, channel='cash',
+                                                 customer_name=f'{term} {i}')
+        seed(2)
+        # limit=25 (the max) so every group can carry the grown rows; `count` = all groups together
+        assert_budget(self, 'search/universal', self.admin_client, f'/api/search/universal?q={term}&limit=25',
+                      grow=lambda: seed(12), min_rows=40, rows_of=lambda r: r.data['count'])
 
     def test_supply_cases(self):
         self._supply_cases(2)

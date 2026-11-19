@@ -4,8 +4,11 @@ docs/superpowers/specs/2026-11-19-performance-boost-design.md §4 "polled"): the
 data freshness and the dashboard summary. Each call must run the same number of queries with few
 or many rows, and no more than its ceiling in apps/tests/perf/budgets.py.
 """
+from decimal import Decimal
+
 from django.test import TestCase
 
+from apps.catalog.models import ItemStock
 from apps.notifications.models import Notification
 from apps.reservations.models import Reservation
 from apps.sync.models import SyncLog, SyncRun
@@ -17,7 +20,7 @@ from .budget import assert_budget
 class HarnessSelfTest(TestCase):
     def test_refuses_a_403(self):
         _, _, client = make_salesperson('perf_403')
-        with self.assertRaises(AssertionError):
+        with self.assertRaisesRegex(AssertionError, 'returned 403'):
             assert_budget(self, 'sync/freshness', client, '/api/sync/slow-requests/',
                           grow=lambda: None, min_rows=0)
 
@@ -57,11 +60,23 @@ class PolledRouteBudgets(TestCase):
                                        contact_name=f'عميل {self._n}', contact_phone=f'010{self._n:08d}',
                                        created_by=self.profile, status=statuses[i % len(statuses)])
 
-    def _sync_runs(self, n=10):
+    def _sync_runs(self, n=10, status='success'):
         for _ in range(n):
-            run = SyncRun.objects.create(status='completed')
+            run = SyncRun.objects.create(status=status)
             for table in ('items', 'stock', 'customers', 'sales'):
                 SyncLog.objects.create(sync_run=run, table_name=table, records_processed=5)
+
+    def _logs_on_latest(self, n=30):
+        run = SyncRun.objects.first()
+        for i in range(n):
+            SyncLog.objects.create(sync_run=run, table_name=f'table_{i}', records_processed=1)
+
+    def _low_stock(self, n=14):
+        # dashboard stock_alerts = ItemStock with 0 < qty < 5, item + branch read per row (capped at 12)
+        for _ in range(n):
+            self._n += 1
+            item = make_item(f'منخفض {self._n}', f'L{self._n:05d}')
+            ItemStock.objects.create(item=item, branch=self.branch, quantity_on_hand=Decimal('2'))
 
     def test_notifications_list(self):
         self._notifications(3, global_only=True)
@@ -71,19 +86,28 @@ class PolledRouteBudgets(TestCase):
     def test_category_counts(self):
         self._notifications(3)
         assert_budget(self, 'notifications/category-counts', self.client,
-                      '/api/notifications/category-counts/', grow=self._notifications, min_rows=0)
+                      '/api/notifications/category-counts/', grow=self._notifications, min_rows=30,
+                      rows_of=lambda r: r.data['global'] + r.data['demand'] + r.data['followups'])
 
     def test_sync_status(self):
-        self._sync_runs(1)
+        self._sync_runs(1)                 # latest run with 4 logs; grow adds 30 logs to it
         assert_budget(self, 'sync/status', self.client, '/api/sync/status/',
-                      grow=self._sync_runs, min_rows=0)
+                      grow=self._logs_on_latest, min_rows=30, rows_of=lambda r: len(r.data['logs']))
 
     def test_sync_freshness(self):
-        self._sync_runs(1)
+        self._sync_runs(1, status='failed')   # no successful sync yet; grow adds successful ones
+
+        def succeeded(r):
+            return sum(1 for d in r.data['domains'].values() if d.get('last_success_at'))
         assert_budget(self, 'sync/freshness', self.client, '/api/sync/freshness/',
-                      grow=self._sync_runs, min_rows=0)
+                      grow=self._sync_runs, min_rows=1, rows_of=succeeded)
 
     def test_dashboard_summary(self):
         self._reservations(3)
+        self._low_stock(1)
+
+        def grow():
+            self._reservations()
+            self._low_stock()
         assert_budget(self, 'dashboard/summary', self.client, '/api/dashboard/summary/',
-                      grow=self._reservations, min_rows=0)
+                      grow=grow, min_rows=12, rows_of=lambda r: len(r.data['stock_alerts']))
