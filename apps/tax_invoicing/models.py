@@ -974,6 +974,10 @@ class TaxEgsSheetVersion(models.Model):
                                  related_name='+')
     built_at = models.DateTimeField(auto_now_add=True)
     note = models.CharField(max_length=300, blank=True, default='', db_default='')
+    # True = every part of the owner's workbook is in this file (a seed, a fetched copy, or a build that edited
+    # cells in place). Builds before 2026-11-18 re-saved the workbook through openpyxl and lost its other parts:
+    # those versions are never downloaded in full nor written to the seal PC.
+    whole_workbook = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         verbose_name = 'نسخة ملف أكواد المحصّل'

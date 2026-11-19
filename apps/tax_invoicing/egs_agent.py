@@ -202,6 +202,8 @@ def request_write(actor=None, *, override=False, note=''):
         version = egs_sheet.latest()
         if version is None:
             raise EgsAgentError(egs_sheet.NO_HELD)
+        if not version.whole_workbook:
+            raise EgsAgentError(egs_sheet.NOT_WHOLE)
         job = _open(TaxAgentFileJob.KIND_WRITE)
         if job is not None:
             return job
@@ -291,6 +293,9 @@ def download_bytes(job):
               after={'version': job.version.number, 'mode': job.mode})
         _fail(job, SWITCH_OFF_AT_SERVE)
         raise EgsAgentError(SWITCH_OFF_AT_SERVE)
+    if not job.version.whole_workbook:
+        _fail(job, egs_sheet.NOT_WHOLE)
+        raise EgsAgentError(egs_sheet.NOT_WHOLE)
     try:
         data = egs_sheet.open_version(job.version)
     except egs_sheet.SheetError as exc:
@@ -505,7 +510,8 @@ def import_fetched(actor, job, *, allow_removals=False):
             if _open(TaxAgentFileJob.KIND_WRITE) is not None:
                 raise EgsAgentError(WRITE_OPEN)
             version = egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_FETCH, built_by=actor,
-                                      note=f'الملف الحالي من جهاز الختم (قراءة #{job.pk})', **counts)
+                                      note=f'الملف الحالي من جهاز الختم (قراءة #{job.pk})', whole_workbook=True,
+                                      **counts)
             audit('egs_sheet_imported', actor=actor, entity='egs_sheet', entity_id=version.number,
                   after={'number': version.number, 'fetch_job': job.pk, 'sha256': sha,
                          'from': latest.number if latest else None, 'coded_rows': version.coded_rows,

@@ -50,7 +50,8 @@ def _version_row(v):
     return {'number': v.number, 'built_at': v.built_at, 'source': v.source, 'built_by': _who(v.built_by),
             'note': v.note, 'coded_rows': v.coded_rows, 'total_rows': v.total_rows, 'added': len(v.added),
             'coded': len(v.coded), 'skipped': v.skipped, 'size': v.size,
-            'has_file': (egs_sheet._dir() / v.file_name).is_file()}
+            'has_file': (egs_sheet._dir() / v.file_name).is_file(), 'whole_workbook': v.whole_workbook,
+            'not_whole': '' if v.whole_workbook else egs_sheet.NOT_WHOLE}
 
 
 @api_view(['GET'])
@@ -96,6 +97,8 @@ def sheet_download(request, number):
     if kind not in ('full', 'new'):
         return Response({'detail': 'نوع التنزيل: full أو new'}, status=status.HTTP_400_BAD_REQUEST)
     version = get_object_or_404(TaxEgsSheetVersion, number=number)
+    if kind == 'full' and not version.whole_workbook:
+        return Response({'detail': egs_sheet.NOT_WHOLE}, status=status.HTTP_409_CONFLICT)
     try:
         if kind == 'full':
             data, name = egs_sheet.open_version(version), egs_sheet.DOWNLOAD_NAME
