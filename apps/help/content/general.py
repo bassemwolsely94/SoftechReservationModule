@@ -289,6 +289,8 @@ SCREENS = [
         'tips': [
             T('لو ظهر شريط أحمر «تعذّر تحميل بعض بيانات هذه الصفحة» فالأرقام قد تكون ناقصة، مش صفر فعلاً — اضغط «إعادة المحاولة».',
               'A red strip «some data on this page failed to load» means figures may be missing, not truly zero — press "Retry".'),
+            T('لو الجلسة انتهت وانت شغّال تظهر نافذة «انتهت الجلسة» فوق الصفحة: اكتب كلمة المرور (ورمز التحقق لو مطلوب) وكمّل — اللي كتبته في الصفحة باقي، والحفظ اللي كنت بتعمله بيتنفّذ بعد الدخول. «الدخول بحساب آخر» يفتح صفحة الدخول وبعدها ترجع لنفس الشاشة.',
+              'If your session ends while you work, a «Session ended» window opens over the page: type your password (and the code if asked) and carry on — what you typed stays, and the save you were doing goes through after you sign in. «Sign in with another account» opens the login page, which brings you back to the same screen.'),
             T('الأرقام هنا للمتابعة السريعة؛ اضغط على أي رقم أو قسم لتنتقل للشاشة التفصيلية.',
               'The numbers here are for quick monitoring; click any number or section to go to the detailed screen.'),
             T('لو حالة المزامنة «فشلت» أو آخر تحديث قديم، فالأرصدة قد لا تكون حديثة — بلّغ مسؤول النظام.',
@@ -496,8 +498,8 @@ SCREENS = [
              'when': T('بتأثر عليك إنت بس، مش على باقي الموظفين.', 'It affects only you, not other staff.'),
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
-        'updated': '2026-11-18',
-        'change_note': T('شريط أحمر لما بيانات الصفحة ما تتحمّلش، بدل ما تظهر كأنها فاضية.', 'A red strip when data on a page fails to load, instead of looking empty.'),
+        'updated': '2026-11-19',
+        'change_note': T('انتهاء الجلسة لا يضيّع الصفحة: ادخل تاني فوقها وكمّل، أو ارجع لنفس الشاشة بعد صفحة الدخول.', 'An ended session no longer loses the page: sign in again over it and carry on, or come back to the same screen after the login page.'),
     },
     {
         'key': 'general.me',

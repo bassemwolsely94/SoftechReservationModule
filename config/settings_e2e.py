@@ -92,6 +92,12 @@ WHISPER_ENABLED = False
 REDIS_URL = ''
 CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 
+# The browser tests sign in once per role and then again where a spec is about signing in
+# (FE-12 session expiry) — all from one IP, well past the real 10/min. Same lift as settings_uat;
+# the throttle itself is covered by the backend tests, which use config.settings.
+REST_FRAMEWORK = {**_base.REST_FRAMEWORK,
+                  'DEFAULT_THROTTLE_RATES': {**_base.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'], 'login': '1000/min'}}
+
 # ── 5. the e2e users (test-only credentials, one per role) ────────────────────
 # Read by `seed_e2e_users` and by frontend/e2e (through E2E_USERS_JSON, which the
 # Playwright config builds from frontend/e2e/users.js — the same values).

@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios from 'axios'
 import api, { authApi, migrateLegacyTokens, refreshSession, reservationsApi } from './client'
+import { setReloginHandler } from './sessionExpiry'
 
 // Every request goes through a fake adapter: nothing leaves the test process.
 const calls = []
@@ -95,6 +96,33 @@ describe('401 → refresh → retry once', () => {
     reply = () => ({ status: 401 })
     await expect(api.get('/reservations/')).rejects.toMatchObject({ response: { status: 401 } })
     expect(window.location.pathname).toBe('/login')
+  })
+
+  // FE-12: with the re-login overlay mounted, an expired session waits for the user and retries.
+  it('a failed refresh waits for the re-login, then retries the request once', async () => {
+    let signedIn = false
+    let release
+    const off = setReloginHandler(() => new Promise((res) => { release = () => { signedIn = true; res() } }))
+    try {
+      reply = (cfg) => (signedIn && !cfg.url.includes('refresh') ? { status: 200, data: { ok: 1 } } : { status: 401 })
+      const pending = api.post('/transfers/', { a: 1 })
+      await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+      expect(calls.map(c => c.url)).toEqual(['/transfers/', '/api/auth/refresh/'])
+      release()
+      const res = await pending
+      expect(res.data.ok).toBe(1)
+      expect(calls.map(c => c.url)).toEqual(['/transfers/', '/api/auth/refresh/', '/transfers/'])
+      expect(window.location.pathname).toBe('/reservations')         // never left the page
+    } finally { off() }
+  })
+
+  it('a cancelled re-login rejects with the original 401 and does not retry', async () => {
+    const off = setReloginHandler(() => Promise.reject(new Error('cancelled')))
+    try {
+      reply = () => ({ status: 401 })
+      await expect(api.get('/reservations/')).rejects.toMatchObject({ response: { status: 401 } })
+      expect(calls.map(c => c.url)).toEqual(['/reservations/', '/api/auth/refresh/'])
+    } finally { off() }
   })
 
   it('a non-401 error passes straight through', async () => {

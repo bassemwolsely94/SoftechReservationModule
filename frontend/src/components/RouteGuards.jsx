@@ -1,4 +1,5 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
+import { loginUrlFor } from '../api/sessionExpiry'
 import useAuthStore from '../store/authStore'
 import usePermissionStore from '../store/permissionStore'
 
@@ -7,6 +8,7 @@ import usePermissionStore from '../store/permissionStore'
 
 export function RequireAuth({ children }) {
   const { isAuthenticated, isLoading } = useAuthStore()
+  const location = useLocation()
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-brand-50">
       <div className="text-brand-600 text-xl font-cairo font-semibold animate-pulse">
@@ -14,7 +16,8 @@ export function RequireAuth({ children }) {
       </div>
     </div>
   )
-  return isAuthenticated ? children : <Navigate to="/login" replace />
+  // FE-12: the login page brings the user back to this page afterwards.
+  return isAuthenticated ? children : <Navigate to={loginUrlFor(location)} replace />
 }
 
 // `module` (optional, with `action`, default 'view') also asks the role matrix — the same
