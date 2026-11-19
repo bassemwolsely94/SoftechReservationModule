@@ -14,6 +14,7 @@ import openpyxl
 from django.db import transaction
 from django.db.models import Q
 
+from apps.catalog.wildcard import wq
 from .models import TaxGpcBrick, TaxItemProfile
 
 BRICK = re.compile(r'^\d{8}$')
@@ -239,7 +240,8 @@ def search(q, limit=SEARCH_LIMIT):
     q = (q or '').strip()
     qs = TaxGpcBrick.objects.all()
     if q:
-        qs = qs.filter(Q(code__startswith=q) | Q(name_en__icontains=q) | Q(name_ar__icontains=q))
+        # exact part: a GPC brick code is searched by its prefix (code__startswith), as typed
+        qs = qs.filter(Q(code__startswith=q) | wq(q, 'name_en', 'name_ar'))
     used = Counter(TaxItemProfile.objects.filter(coding_status=TaxItemProfile.CODE_APPROVED)
                    .exclude(gpc_code__in=['', '0']).values_list('gpc_code', flat=True))
     rows = list(qs[:500])

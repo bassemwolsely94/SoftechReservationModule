@@ -104,12 +104,7 @@ class ConversationListView(generics.ListAPIView):
 
         q = p.get('q', '').strip()
         if q:
-            qs = qs.filter(
-                Q(contact_phone__icontains=q) |
-                wq(q, 'customer__name') |
-                Q(customer__phone__icontains=q) |
-                Q(subject__icontains=q)
-            )
+            qs = qs.filter(wq(q, 'contact_phone', 'customer__name', 'customer__phone', 'subject'))
         return qs.order_by('-last_activity_at')
 
 

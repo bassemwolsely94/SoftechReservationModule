@@ -1,5 +1,6 @@
 /** Shared bits of the /crews tabs (crews piece 2a). Display only — the server decides every rule. */
 import { useMemo, useState } from 'react'
+import { wildcardMatch } from '../../utils/wildcard'
 
 const pad = n => String(n).padStart(2, '0')
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -67,7 +68,7 @@ export function ChipPicker({ label, options, value, onChange, disabled = false, 
   const rest = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const taken = new Set(value)
-    return options.filter(o => !taken.has(o.value) && (!needle || String(o.label).toLowerCase().includes(needle)))
+    return options.filter(o => !taken.has(o.value) && (!needle || wildcardMatch(o.label, needle)))
   }, [options, value, q])
   const toggle = v => onChange(picked.has(v) ? value.filter(x => x !== v) : [...value, v])
   return (

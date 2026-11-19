@@ -358,7 +358,7 @@ function BatchReview({ batchId }) {
       : (groupRank.has(r.group_id) ? groupRank.get(r.group_id) + 0.5 : 1e9) + i / 1e6)
     const s = search.trim().toLowerCase()
     const matches = r => (filter === 'all' || filter === r.state || r.flags.includes(filter))
-      && (!s || wildcardMatch([r.raw_text, r.item_name], s) || (r.item_softech_id || '').includes(s))
+      && (!s || wildcardMatch([r.raw_text, r.item_name, r.item_softech_id], s))
     // a row in view stays in view until the next re-sort, even if un-matching / confirming it
     // moves it out of the current filter (it would otherwise vanish under your cursor)
     const memberKey = `${stamp}|${filter}|${s}`

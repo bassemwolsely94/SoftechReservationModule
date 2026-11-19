@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { notificationsApi } from '../api/client'
+import { wildcardMatch } from '../utils/wildcard'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -254,10 +255,7 @@ export default function NotificationPanel({
     visible = visible.filter(n => !n.is_read)
   }
   if (search.trim()) {
-    const q = search.trim().toLowerCase()
-    visible = visible.filter(
-      n => n.title?.toLowerCase().includes(q) || n.body?.toLowerCase().includes(q)
-    )
+    visible = visible.filter(n => wildcardMatch([n.title, n.body], search))
   }
 
   const groups = groupByDay(visible)

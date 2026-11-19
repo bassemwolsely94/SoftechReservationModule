@@ -336,8 +336,7 @@ function MiniSelect({ value, onChange, options, title }) {
 // case/space-insensitive match on itemcode + item_name
 function matchesText(l, q) {
   if (!q) return true
-  const t = q.trim().toLowerCase()
-  return String(l.itemcode || '').toLowerCase().includes(t) || wildcardMatch(l.item_name, t)
+  return wildcardMatch([l.itemcode, l.item_name], q)
 }
 
 function PushDetail({ push, gated, canWrite, onApprove, onExecute, approving, executing, actionError }) {

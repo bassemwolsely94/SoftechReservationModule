@@ -23,6 +23,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.branches.models import Branch
 from core.export_safety import neutralise_formulas
 from core.permissions import matrix_permission
@@ -82,8 +83,9 @@ def _documents(request):
             qs = qs.filter(**{key: p[key].lower()})
     q = (p.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(uuid__icontains=q) | Q(internal_id__icontains=q) | Q(receiver_name__icontains=q)
-                       | Q(issuer_name__icontains=q) | Q(receiver_id=q) | Q(issuer_rin=q))
+        # exact ids: the receiver's tax id and the issuer's RIN are typed whole
+        qs = qs.filter(wq(q, 'uuid', 'internal_id', 'receiver_name', 'issuer_name')
+                       | Q(receiver_id=q) | Q(issuer_rin=q))
     return qs
 
 
@@ -96,7 +98,7 @@ def _receipts(request):
         qs = qs.filter(pos_serial=p['device'])
     q = (p.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(receipt_number__icontains=q) | Q(uuid__icontains=q))
+        qs = qs.filter(wq(q, 'receipt_number', 'uuid'))
     return qs
 
 
@@ -350,7 +352,8 @@ def _recon_lines(request):
         qs = qs.filter(day=parse_date(p['day']))
     q = (p.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(docnumber=q) | Q(eta_uuid__icontains=q))
+        # exact id: a SOFTECH document number is typed whole
+        qs = qs.filter(Q(docnumber=q) | wq(q, 'eta_uuid'))
     return qs
 
 

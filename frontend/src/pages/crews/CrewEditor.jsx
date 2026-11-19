@@ -17,6 +17,7 @@ import {
   BTN, BTN_PRIMARY, ChipPicker, INPUT, OffPayrollBadge, StatusChip, TD, TH,
   errText, fmtDate, isFaded, monthStartIso, todayIso,
 } from './util'
+import { wildcardMatch } from '../../utils/wildcard'
 
 const EMPTY_RULE = { job_titles: [], branch_ids: [], departments: [], sections: [], note: '' }
 const hasCriteria = r => r.job_titles.length + r.branch_ids.length + r.departments.length + r.sections.length > 0
@@ -279,8 +280,7 @@ function ManualForm({ crew, options, on, onDone }) {
   const matches = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!needle) return []
-    return (options?.employees || []).filter(e => [e.name, e.hr_number, e.softech_usercode]
-      .some(v => String(v || '').toLowerCase().includes(needle))).slice(0, 8)
+    return (options?.employees || []).filter(e => wildcardMatch([e.name, e.hr_number, e.softech_usercode], needle)).slice(0, 8)
   }, [q, options])
   const save = useMutation({
     mutationFn: () => crewsApi.addManual(crew.id, offPayroll

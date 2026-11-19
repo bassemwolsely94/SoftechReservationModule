@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
 from rest_framework import filters, generics, status
-from apps.catalog.wildcard import WildcardSearchFilter
+from apps.catalog.wildcard import WildcardSearchFilter, wq
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
@@ -70,7 +70,7 @@ def _expense_filters(qs, p, sub_category=True):
         if subs:
             cond = Q()
             for s in subs:
-                cond |= Q(sub_category__icontains=s)
+                cond |= wq(s, 'sub_category')
             qs = qs.filter(cond)
     if p.get('branch_id'):
         qs = filter_in(qs, 'branch_id', multi_ids(p, 'branch_id') or [0])

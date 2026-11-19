@@ -54,12 +54,7 @@ export default function BranchSelect({
   const filtered = branches.filter(b => {
     if (b.kind === 'closed' && !showClosed && String(b.id) !== String(value)) return false
     if (!query) return true
-    const q = query.toLowerCase()
-    return (
-      b.softech_branch_id?.toLowerCase().includes(q) ||
-      b.code?.toLowerCase().includes(q) ||
-      wildcardMatch([b.name, b.name_ar], query)
-    )
+    return wildcardMatch([b.softech_branch_id, b.code, b.name, b.name_ar], query)
   })
 
   function openDropdown() {

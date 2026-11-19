@@ -29,7 +29,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -38,6 +38,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.catalog.wildcard import wq
 from apps.insurance.models import InsuranceClaim, InsuranceClient
 from config.writers import writer_allowed
 from core.branch_scope import allows_code, branch_codes, scope_code
@@ -147,7 +148,7 @@ def claims(request):
     qs = InsuranceClaim.objects.filter(status__in=services.FINALIZED_CLAIM_STATUSES).select_related('subclient__client')
     q = (request.query_params.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(claim_number__icontains=q) | Q(softech_motalba_no__icontains=q) | Q(subclient__client__name__icontains=q))
+        qs = qs.filter(wq(q, 'claim_number', 'softech_motalba_no', 'subclient__client__name'))
     qs = list(qs.order_by('-period_to', '-id')[:MAX_LIST])
     invoices = {d.claim_id: d for d in TaxDocument.objects.filter(doc_type='i', claim__in=qs)}
     return Response([{'id': c.id, 'claim_number': c.claim_number, 'softech_motalba_no': c.softech_motalba_no,
@@ -196,7 +197,7 @@ def documents(request):
         qs = qs.filter(doc_type=request.query_params['type'])
     q = (request.query_params.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(internal_id__icontains=q) | Q(claim__claim_number__icontains=q) | Q(eta_uuid__icontains=q))
+        qs = qs.filter(wq(q, 'internal_id', 'claim__claim_number', 'eta_uuid'))
     return Response([doc_row(d) for d in qs[:MAX_LIST]])
 
 
@@ -494,7 +495,7 @@ def items(request):
             qs = qs.filter(**{field: request.query_params[param]})
     q = (request.query_params.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(eta_code__icontains=q))
+        qs = qs.filter(wq(q, 'softech_itemcode', 'item_name', 'eta_code'))
     return Response([item_row(p) for p in qs[:MAX_LIST]])
 
 
@@ -1102,8 +1103,7 @@ def codes(request):
         qs = qs.filter(environment=request.query_params['environment'])
     q = (request.query_params.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(item_code__icontains=q) | Q(code_name__icontains=q) | Q(code_name_ar__icontains=q)
-                       | Q(profile__softech_itemcode__icontains=q))
+        qs = qs.filter(wq(q, 'item_code', 'code_name', 'code_name_ar', 'profile__softech_itemcode'))
     return Response({'summary': coding.summary(), 'rows': [code_row(r) for r in qs[:MAX_LIST]]})
 
 
@@ -1122,7 +1122,7 @@ def code_candidates(request):
     else:
         qs = coding.mirror_candidates(limit=100000) if kind == 'mirror' else coding.candidates(limit=100000)
         if q:
-            qs = qs.filter(Q(softech_itemcode__icontains=q) | Q(item_name__icontains=q) | Q(item_name_ar__icontains=q))
+            qs = qs.filter(wq(q, 'softech_itemcode', 'item_name', 'item_name_ar'))
         rows = list(TaxItemProfile.objects.filter(pk__in=[p.pk for p in qs[:MAX_LIST]])
                     .select_related('item__category').order_by('softech_itemcode'))
     suggested = gpc.suggest(rows) if kind == '' else {}

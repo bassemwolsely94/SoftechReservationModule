@@ -1,4 +1,5 @@
 from rest_framework import serializers as drf_serializers, status, viewsets, filters
+from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes, action, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
@@ -547,7 +548,7 @@ class StaffProfileViewSet(StableOrderingMixin, viewsets.ModelViewSet):
     """
     queryset = StaffProfile.objects.select_related('user', 'branch', 'erp_user').order_by('user__username')
     pagination_class = StandardPagination
-    filter_backends  = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends  = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields    = ['user__username', 'user__first_name', 'user__last_name', 'softech_username']
 
     # Header sorting (UserManagementPage / UsersPage). Only columns the viewer can already see may order the
@@ -683,7 +684,7 @@ class ERPUserViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ERPUserSerializer
     permission_classes = [IsAuthenticated, MatrixPermission]
     rbac_module = 'users'                          # SOFTECH user list — user management (Z-4)
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [WildcardSearchFilter]
     search_fields   = ['username', 'full_name', 'user_id']
     pagination_class = StandardPagination
 
