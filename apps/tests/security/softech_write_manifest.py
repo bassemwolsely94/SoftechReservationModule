@@ -201,7 +201,10 @@ WRITE_SITES = {
         idempotency='view: select_for_update + 120 s duplicate window (P-4); function itself additive',
         audit='SoftechPointsLog (view); vf1/vf2 in SOFTECH',
         trigger='POST /api/loyalty/customers/<id>/adjust/ (LOYALTY_ADJUST_ROLES); cmd test_pic_points '
-                '(also SOFTECH_PROBES_ENABLED)'),
+                '(also SOFTECH_PROBES_ENABLED); D-11 missed-points re-credit: POST /api/pos-orders/'
+                'live-check-gaps/<id>/credit-points/ (pos/edit, confirm=true) + cmd credit_pos_missing_points '
+                '--commit, also POS_POINTS_RECOVERY_ENABLED — guarded by a PG claim (open→crediting) and a '
+                'picpoints vf1 tag check «POS<order>-D11» before the INSERT'),
     # ── offers ──────────────────────────────────────────────────────────────────
     'apps/offers/channel_a.py::_write_posdiscp': WriteSite(
         tables=('items',), flag='POS_OFFERS_POSDISCP_WRITE_ENABLED', dry_run_default=True,

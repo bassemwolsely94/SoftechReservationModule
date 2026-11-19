@@ -621,6 +621,10 @@ POS_WRITER_ENABLED = config('POS_WRITER_ENABLED', default=False, cast=bool)
 # OFF = a NEW return order is refused and the screen does not offer «مرتجع»; returns already created
 # keep their posting path. Not a SOFTECH writer switch.
 POS_RETURNS_ENABLED = config('POS_RETURNS_ENABLED', default=False, cast=bool)
+# D-11 (owner 2026-11-19): re-credit the loyalty points a sale missed when the branch points-rate read
+# failed (supervisor action on the Exception Center / cmd credit_pos_missing_points). Default OFF. The
+# write itself goes through the registered loyalty writer, so LOYALTY_SOFTECH_WRITE_ENABLED must be ON too.
+POS_POINTS_RECOVERY_ENABLED = config('POS_POINTS_RECOVERY_ENABLED', default=False, cast=bool)
 # D1 (UAT 2026-11-17): hours another branch's customer stays openable by id after a full-phone find.
 CUSTOMER_FOUND_HOURS = config('CUSTOMER_FOUND_HOURS', default=12, cast=int)
 # Maker-checker on ISR / GL / price-change approvals (core/maker_checker.py, UAT W5b 2026-11-17): the
