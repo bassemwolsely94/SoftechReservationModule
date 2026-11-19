@@ -43,6 +43,10 @@ BUDGETS: dict[str, Budget] = {
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '
                                                '(one KpiResolver + one grouped query per metric and period)'),
+    # ── export jobs (Stage 4): the start answers ≤ 1 s, the status is polled every 1.5 s ─────
+    'export-jobs/<id>': Budget('poll', 8, 'Stage 4, 2026-11-19: own job + stale check (+ auth)'),
+    'purchasing/export/jobs': Budget('list', 16, 'Stage 4, 2026-11-19: validate + housekeeping + one insert, '
+                                                 'no export query (+ auth)'),
     # ── tracking ─────────────────────────────────────────────────────────────────
     'audit/screen-view': Budget('track', 5, 'measured 3 on 2026-11-19'),
 }

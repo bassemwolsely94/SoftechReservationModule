@@ -49,6 +49,8 @@ systemctl restart elrezeiky-scheduler
 $U git diff --quiet $OLD $NEW -- ocr_sidecar || systemctl restart elrezeiky-ocr
 # the AMI bridge runs only after cutover (runbook §11); when it runs it is a Django process too
 if systemctl is-active --quiet elrezeiky-ami-bridge; then systemctl restart elrezeiky-ami-bridge; fi
+# the export jobs service (performance Stage 4, runbook §13.8), only where it was installed
+if systemctl is-active --quiet elrezeiky-jobs; then systemctl restart elrezeiky-jobs; fi
 echo "== health"
 for i in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:8000/api/public/health/ >/dev/null 2>&1; then ok=1; break; fi

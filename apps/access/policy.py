@@ -98,13 +98,19 @@ EXPORT_FORMATS = ('xlsx', 'xls', 'csv', 'excel')
 EXPORT_SEGMENTS = ('export', 'excel', 'print', 'cover-letter')
 # POST routes where the body picks the export: path -> (key, value)
 BODY_EXPORTS = {'/api/reservations/bulk/': ('action', 'export')}
+# Background export jobs (performance Stage 4): starting one (…/export/jobs/) and downloading its
+# file (…/<id>/download/) are exports; reading its progress (…/<id>/, polled every 1.5 s) carries
+# no data out, so it is not one — else every poll wrote an export_taken row.
+JOB_STATUS = re.compile(r'^/api/(?:export-jobs|[^?]+/export/jobs)/\d+/$')
 
 
 def is_export(path, method=None, query=None, body=None):
     """A download request: a path segment in EXPORT_SEGMENTS (export, excel, print, cover-letter),
     `export-*` or `*-export`; a `?format=` of xlsx / xls / csv / excel; or a body-selected export
-    (BODY_EXPORTS)."""
+    (BODY_EXPORTS). An export job's progress read (JOB_STATUS) is not one."""
     path = path or ''
+    if JOB_STATUS.match(path):
+        return False
     for seg in path.split('/'):
         if seg in EXPORT_SEGMENTS or seg.startswith('export-') or seg.endswith('-export'):
             return True

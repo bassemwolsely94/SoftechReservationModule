@@ -255,6 +255,7 @@ INSTALLED_APPS = [
     'apps.tax_invoicing',  # Tax invoices to ETA (doc 36) — drafts, review, gated submission
     'apps.stock_audit',    # Stock Transactions Audit (doc 32) — read-only stktrans mirror + checks
     'apps.pic_analytics',  # PIC Analytics (doc 33) — customer dashboard + report, read-only
+    'apps.export_jobs',    # Performance Stage 4 — shared background export job + elrezeiky-jobs runner
     'apps.marketplace',    # Marketplace / delivery-platform channels (doc 38) — never writes SOFTECH, flags below
     'apps.usage_print',    # Usage-instructions receipt slip (Project 5) — read-only vs SOFTECH, flag below
     'apps.access',         # Trusted networks + request network label (security N1, log only)
@@ -1219,6 +1220,11 @@ SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
 # the long work has moved out of web requests (Stages 3-4).
 WEB_STATEMENT_TIMEOUT_ENABLED = config('WEB_STATEMENT_TIMEOUT_ENABLED', default=False, cast=bool)
 WEB_STATEMENT_TIMEOUT_MS = config('WEB_STATEMENT_TIMEOUT_MS', default=30000, cast=int)
+# Performance Stage 4: who builds export files. 'service' = the elrezeiky-jobs unit
+# (manage.py run_export_jobs) claims them; set it for the web processes ONLY once that unit is
+# installed and running. Anything else (dev, office) = a thread in the web process, as before.
+# Exports that read SOFTECH live always use the thread (design §10).
+EXPORT_JOBS_RUNNER = config('EXPORT_JOBS_RUNNER', default='thread')
 # N5: Excel / Word exports up to this size get the who/when/where stamp (larger: audit only)
 EXPORT_STAMP_MAX_BYTES = 20 * 1024 * 1024
 # P-58: capture GS1 DataMatrix pack codes on receive / sale (apps/trace). OFF until EDA

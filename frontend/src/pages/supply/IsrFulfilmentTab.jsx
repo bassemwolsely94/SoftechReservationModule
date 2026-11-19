@@ -12,9 +12,11 @@ import { Fragment, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supplyApi } from '../../api/client'
-import { Chip, q, money, downloadBlob, inputCls, btnPrimary, btnGhost, SortTh, useSort, txt } from './supplyUi'
+import { Chip, q, money, inputCls, btnPrimary, btnGhost, SortTh, useSort, txt } from './supplyUi'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import ProgressBar from '../../components/ProgressBar'
+import ExportJobStatus from '../../components/ExportJobStatus'
+import useExportJob from '../../hooks/useExportJob'
 import { fa } from '../../utils/flowArrow'
 
 const RETURN_TONE = { proposed: 'amber', approved: 'blue', pushed: 'emerald', failed: 'rose', cancelled: 'gray' }
@@ -29,14 +31,6 @@ const FILTERS = [
   ['all', 'الكل'], ['short', 'به نقص'], ['by_branches', 'مغطى من الفروع'],
   ['full', 'مغطى بالكامل'], ['over', 'يتجاوز الحد الأقصى'],
 ]
-
-async function blobErr(err) {
-  const d = err?.response?.data
-  if (d instanceof Blob) {
-    try { return JSON.parse(await d.text()).detail } catch { /* not JSON */ }
-  }
-  return d?.detail || 'تعذّر تنفيذ العملية'
-}
 
 // The three deterministic plan factors (apps/purchasing/isr_fulfillment.plan_settings):
 //   coverage — months each DONOR keeps (its ceiling); fill — months the REQUESTING branch is
@@ -93,7 +87,6 @@ export default function IsrFulfilmentTab() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [plan, setPlan] = useState(null)
   const [error, setError] = useState('')
-  const [exportErr, setExportErr] = useState('')
 
   const body = (extra = {}) => ({
     isrs: isrText, ...settingsBody(settings),
@@ -106,15 +99,10 @@ export default function IsrFulfilmentTab() {
     onSuccess: (d) => setPlan(d),
     onError: (e) => setError(e?.response?.data?.detail || 'تعذّر قراءة الطلبات'),
   })
-  const exportM = useMutation({
-    mutationFn: () => supplyApi.isrFulfilmentExport(body()),
-    onMutate: () => setExportErr(''),
-    onSuccess: (res) => {
-      const cd = res.headers?.['content-disposition'] || ''
-      const m = cd.match(/filename="?([^"]+)"?/)
-      downloadBlob(res.data, m ? m[1] : 'isr_fulfillment.xlsx')
-    },
-    onError: async (e) => setExportErr(await blobErr(e)),
+  // Performance Stage 4: the workbook is built as a background job (start → progress → download)
+  const exportJob = useExportJob({
+    storageKey: 'export-job:isr-fulfilment',
+    start: () => supplyApi.isrFulfilmentExportJob(body()),
   })
 
   const busy = planM.isPending
@@ -145,9 +133,9 @@ export default function IsrFulfilmentTab() {
               className={btnGhost} title="إعادة قراءة الأرصدة الحالية من SOFTECH">
               تحديث من SOFTECH
             </button>
-            <button data-tour="purchasing-supply-isrfill-export" type="button" disabled={exportM.isPending || busy} onClick={() => exportM.mutate()}
+            <button data-tour="purchasing-supply-isrfill-export" type="button" disabled={exportJob.busy || busy} onClick={() => exportJob.run()}
               className={btnGhost}>
-              {exportM.isPending ? 'جاري التصدير…' : 'تصدير Excel'}
+              {exportJob.busy ? 'جاري التصدير…' : 'تصدير Excel'}
             </button>
           </>
         )}
@@ -155,10 +143,9 @@ export default function IsrFulfilmentTab() {
 
       {busy && <ProgressBar since={planM.submittedAt} label="قراءة الأرصدة من سيرفرات الفروع"
         message="سيرفر بطيء أو متوقف يُستبدل بنسخة الرئيسي تلقائياً — قد يستغرق دقيقة" />}
-      {exportM.isPending && <ProgressBar since={exportM.submittedAt} label="تجهيز ملف Excel" />}
+      <ExportJobStatus exp={exportJob} className="w-full max-w-md" />
 
       {error && <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">{error}</div>}
-      {exportErr && <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">{exportErr}</div>}
 
       {!plan && !busy && !error && (
         <p className="text-sm text-content/60 leading-6">

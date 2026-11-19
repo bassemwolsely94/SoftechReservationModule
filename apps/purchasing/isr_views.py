@@ -575,12 +575,19 @@ def isr_fulfilment_proposals(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, PURCHASING])
 def isr_fulfilment_export(request):
-    """Same body → the formula-driven Excel workbook (same snapshot as the screen)."""
+    """Same body → the formula-driven Excel workbook (same snapshot as the screen). The screen
+    starts it as a background job instead (export/jobs/, performance Stage 4); both run
+    isr_fulfilment_export_response."""
+    if not _can_view_fulfilment(request):
+        return Response({'detail': 'غير مصرح لك.'}, status=http.HTTP_403_FORBIDDEN)
+    return isr_fulfilment_export_response(request)
+
+
+def isr_fulfilment_export_response(request):
+    """The workbook as an HttpResponse. `request` only needs data and user (the job replays it)."""
     import io
     from django.http import HttpResponse
     from apps.purchasing import isr_fulfillment as F
-    if not _can_view_fulfilment(request):
-        return Response({'detail': 'غير مصرح لك.'}, status=http.HTTP_403_FORBIDDEN)
     try:
         numbers, cov = _fulfil_inputs(request)
         _, snap = _fulfil_snapshot(request, numbers)
