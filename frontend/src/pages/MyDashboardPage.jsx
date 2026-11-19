@@ -345,6 +345,7 @@ function WidgetBody({ type, payload, wide, widgetId, canEdit, onSaved, branches 
     case 'my_analytics':          return <MyAnalyticsBody payload={payload} />
     case 'my_narrative_reports':  return <NarrativeBody payload={payload} />
     case 'my_tasks':              return <TasksBody payload={payload} />
+    case 'branch_today':          return <BranchTodayBody payload={payload} />
     default:                      return <pre className="text-[13px] overflow-auto">{JSON.stringify(payload, null, 1)}</pre>
   }
 }
@@ -796,6 +797,39 @@ function NarrativeBody({ payload }) {
           <span className="text-gray-600 leading-snug">{x.message_ar}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+// C02: the «اليوم» part of the branch morning brief — the server builds every line (apps/insights/today.py).
+const money0 = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+function TodayPart({ title, rows, max, line, testid }) {
+  if (!rows?.length) return null
+  const total = rows.reduce((a, r) => a + (r.value || 0), 0)
+  return (
+    <div data-testid={testid}>
+      <div className="text-xs font-semibold text-gray-700">{title} — {rows.length} ({money0(total)} ج.م)</div>
+      <ul className="mt-0.5 space-y-0.5 text-[13px] text-gray-600">
+        {rows.slice(0, max).map((r, i) => <li key={i}>• {line(r)}</li>)}
+        {rows.length > max && <li className="text-gray-400">+{rows.length - max} أخرى</li>}
+      </ul>
+    </div>
+  )
+}
+function BranchTodayBody({ payload }) {
+  if (payload.error) return <p className="text-xs text-gray-400 text-center py-4">{payload.error}</p>
+  const max = payload.max_lines || 3
+  const empty = !payload.returns?.length && !payload.moves?.length && !payload.rescue?.length
+  if (empty) return <p className="text-xs text-gray-400 text-center py-4">لا شيء مطلوب اليوم لفرع {payload.branch} ✅</p>
+  const qty = q => Number(q || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+  return (
+    <div className="space-y-2 max-h-72 overflow-auto">
+      <TodayPart testid="today-returns" title="📆 مرتجع للمورد — أرسل للرئيسي" rows={payload.returns} max={max}
+                 line={r => `${r.item} — كمية ${qty(r.qty)} — ${r.late ? `متأخر (كان قبل ${r.send_by}) أرسل الآن` : `قبل ${r.send_by}`} (${r.supplier})`} />
+      <TodayPart testid="today-moves" title="🔁 راكد يُباع بفرع آخر — انقل" rows={payload.moves} max={max}
+                 line={r => `${r.item} → ${r.targets.map(t => `${t.branch} ${t.qty}`).join('، ')} (${money0(r.value)} ج.م)`} />
+      <TodayPart testid="today-rescue" title={`⏳ ينتهي خلال ${payload.rescue_days || 60} يوم — بِع أو انقل`} rows={payload.rescue} max={max}
+                 line={r => `${r.item} — كمية ${qty(r.qty)} — ينتهي ${r.expiry} (${money0(r.value)} ج.م)`} />
     </div>
   )
 }

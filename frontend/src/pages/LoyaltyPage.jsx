@@ -40,6 +40,7 @@ const fmtDt = (dt) => dt ? new Date(dt).toLocaleDateString('ar-EG', {
 
 // ── Account Card ──────────────────────────────────────────────────────────────
 function AccountCard({ customerId, onAdjust }) {
+  const [showDeduct, setShowDeduct] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ['loyalty-account', customerId],
     queryFn: () => loyaltyApi.account(customerId).then(r => r.data),
@@ -79,8 +80,19 @@ function AccountCard({ customerId, onAdjust }) {
       {data.points_balance > 0 && (
         <div className="bg-blue-600 px-5 py-3 text-white flex items-center justify-between text-sm">
           <span className="text-blue-200">نقاط إضافية (إحالات / حملات)</span>
-          <span className="font-bold">+{data.points_balance.toLocaleString()}</span>
+          <span className="flex items-center gap-2">
+            <span className="font-bold">+{data.points_balance.toLocaleString()}</span>
+            <button data-tour="loyalty-program-referral-deduct"
+              onClick={() => setShowDeduct(v => !v)}
+              className="text-xs bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded transition-colors">
+              − خصم
+            </button>
+          </span>
         </div>
+      )}
+      {showDeduct && data.points_balance > 0 && (
+        <ReferralDeductForm customerId={customerId} balance={data.points_balance}
+          onDone={() => setShowDeduct(false)} />
       )}
 
       {/* Actions */}
@@ -95,6 +107,64 @@ function AccountCard({ customerId, onAdjust }) {
           تعديل نقاط SOFTECH
         </button>
       </div>
+    </div>
+  )
+}
+
+
+// ── Referral-points deduction (owner decision D-14) ───────────────────────────
+// The server enforces the rule (reason required, ≤ 500 per deduction unless admin, never
+// below zero) and records who/why/before/after in the transaction log; this form only asks.
+const REFERRAL_DEDUCT_HINT = 'حتى 500 نقطة في المرة — الأكثر لمدير النظام فقط'
+
+function ReferralDeductForm({ customerId, balance, onDone }) {
+  const [points, setPoints] = useState('')
+  const [reason, setReason] = useState('')
+  const qc = useQueryClient()
+  const n = Math.abs(parseInt(points, 10) || 0)
+
+  const mut = useMutation({
+    mutationFn: () => loyaltyApi.adjust(customerId, {
+      points: -n, reason: reason.trim(), adjust_type: 'referral',
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loyalty-account', customerId] })
+      qc.invalidateQueries({ queryKey: ['loyalty-transactions', customerId] })
+      onDone()
+    },
+  })
+
+  return (
+    <div className="bg-blue-50 border-t border-blue-100 px-5 py-3 space-y-2 text-sm" dir="rtl">
+      <p className="text-xs text-blue-700">خصم نقاط إحالة · {REFERRAL_DEDUCT_HINT}</p>
+      <div className="flex gap-2">
+        <input data-tour="loyalty-program-referral-deduct-points"
+          type="number" min="1" max={balance}
+          value={points}
+          onChange={e => setPoints(e.target.value)}
+          placeholder="عدد النقاط"
+          className="w-28 border border-blue-200 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-400"
+        />
+        <input
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="السبب (إلزامي)"
+          className="flex-1 border border-blue-200 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-blue-400"
+        />
+      </div>
+      <div className="flex gap-2 items-center">
+        <button data-tour="loyalty-program-referral-deduct-apply"
+          onClick={() => mut.mutate()}
+          disabled={n === 0 || !reason.trim() || mut.isPending}
+          className="bg-blue-600 text-white rounded px-3 py-1.5 text-xs font-medium disabled:opacity-50 hover:bg-blue-700"
+        >
+          {mut.isPending ? 'جاري الخصم...' : n ? `خصم ${n.toLocaleString()} نقطة` : 'خصم'}
+        </button>
+        <button onClick={onDone} className="text-xs text-gray-500 px-2">إلغاء</button>
+      </div>
+      {mut.isError && (
+        <p className="text-red-600 text-xs">{mut.error?.response?.data?.detail || 'تعذّر الخصم'}</p>
+      )}
     </div>
   )
 }
@@ -122,7 +192,9 @@ function TransactionLedger({ customerId }) {
           <div key={tx.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
             <div className="min-w-0 flex-1">
               <p className="text-gray-700 truncate">{tx.reason}</p>
-              <p className="text-xs text-gray-400">{fmtDt(tx.created_at)} · {tx.source_type}</p>
+              <p className="text-xs text-gray-400">
+                {fmtDt(tx.created_at)} · {tx.source_type}{tx.created_by_name ? ` · ${tx.created_by_name}` : ''}
+              </p>
             </div>
             <div className="text-right shrink-0 mr-3">
               <p className={`font-bold ${TX_COLOR[tx.transaction_type] || 'text-gray-700'}`}>

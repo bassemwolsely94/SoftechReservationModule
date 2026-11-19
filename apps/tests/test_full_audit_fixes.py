@@ -96,12 +96,18 @@ class LoyaltyRedemptionAndReferralTests(TestCase):
         self.assertEqual(req.status, 'pending')
         self.assertEqual(self.account.points_balance, 10)
 
-    def test_negative_referral_adjustment_is_refused(self):
-        r = self.client.post(f'/api/loyalty/customers/{self.customer.pk}/adjust/',
-                             {'points': -50, 'reason': 'x', 'adjust_type': 'referral'}, format='json')
+    def test_negative_referral_adjustment_never_adds_points(self):
+        # D-14 (owner 2026-11-19) opened a deduction lane: with no reason it is refused, and with a
+        # reason it DEDUCTS. Either way a negative delta never adds points (the BE-8 bug).
+        url = f'/api/loyalty/customers/{self.customer.pk}/adjust/'
+        r = self.client.post(url, {'points': -50, 'reason': '', 'adjust_type': 'referral'}, format='json')
         self.assertEqual(r.status_code, 400)
         self.account.refresh_from_db()
         self.assertEqual(self.account.points_balance, 100)
+        r = self.client.post(url, {'points': -50, 'reason': 'x', 'adjust_type': 'referral'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.points_balance, 50)
 
 
 class ChatterPostBranchScopeTests(TestCase):
