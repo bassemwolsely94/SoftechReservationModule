@@ -1591,7 +1591,7 @@ SCREENS = [
              'when': T('ابدأ بالحرج.', 'Start with critical.'),
              'open_hint': T('تبويب «الاستثناءات».', 'The "Exceptions" tab.')},
             {'target': 'finance-reconciliation-exception-status',
-             'label': T('مفتوح · قيد التحقيق · ليس خطأ · تم الحل', 'Open · Investigating · Not an error · Resolved'),
+             'label': T('مفتوح · قيد التحقيق · ليس خطأ · تم الحل', 'Review state filter'),
              'text': T('يعرض الاستثناءات حسب حالة المراجعة، ومعها ملاحظة القرار.', 'Shows exceptions by review state, with the decision note.'),
              'open_hint': T('تبويب «الاستثناءات».', 'The "Exceptions" tab.')},
             {'target': 'finance-reconciliation-exception-decide',

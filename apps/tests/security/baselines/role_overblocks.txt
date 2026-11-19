@@ -223,6 +223,10 @@ purchasing POST /api/finance/reconciliation/allocations/987654321/undo/
 purchasing POST /api/finance/reconciliation/allocations/987654321/write-softech/
 purchasing POST /api/finance/reconciliation/allocations/bulk-write-softech/
 purchasing POST /api/finance/reconciliation/allocations/manual/
+
+# reason: C15 (owner 2026-11-19) — A/P exception decisions are admin / pharmacist with finance approve,
+#   plus the accountant (apps.users.roles AP_REVIEW_ROLES); purchasing reads finance but does not decide.
+purchasing POST /api/finance/reconciliation/exceptions/decide/
 purchasing POST /api/finance/reconciliation/candidates/987654321/approve/
 purchasing POST /api/finance/reconciliation/candidates/987654321/reject/
 purchasing POST /api/finance/reconciliation/candidates/bulk-approve/

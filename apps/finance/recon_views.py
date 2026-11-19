@@ -403,7 +403,8 @@ def _can_review_exceptions(user) -> bool:
     profile = getattr(user, 'staff_profile', None)
     if _is_admin_or_pharmacist(user):
         return profile is None or matrix_allows(profile, 'finance', 'approve')
-    return getattr(profile, 'role', None) == 'accountant'
+    from apps.users.roles import AP_REVIEW_ROLES
+    return getattr(profile, 'role', None) in AP_REVIEW_ROLES
 
 
 @api_view(['POST'])

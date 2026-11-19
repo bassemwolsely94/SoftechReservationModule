@@ -152,11 +152,12 @@ def digest_recipients():
         ids = None
     if isinstance(ids, list) and ids:
         return list(StaffProfile.objects.filter(pk__in=ids, is_active=True))
-    for role in ('accountant', 'admin'):
-        qs = list(StaffProfile.objects.filter(role=role, is_active=True))
-        if qs:
-            return qs
-    return []
+    from apps.users.roles import AP_REVIEW_ROLES
+    qs = list(StaffProfile.objects.filter(role__in=AP_REVIEW_ROLES, is_active=True))
+    if qs:
+        return qs
+    # nobody in an A/P-review role yet → the superusers (the owner's accounts)
+    return list(StaffProfile.objects.filter(user__is_superuser=True, is_active=True))
 
 
 def weekly_digest(today=None) -> dict:
