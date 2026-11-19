@@ -278,6 +278,8 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
     # barcodes__barcode searches the ItemBarcode table (multiple barcodes per item,
     # including EAN-13 / GS1 barcodes scanned with physical barcode readers).
     search_fields = ['name', 'name_scientific', 'barcode', 'softech_id', 'barcodes__barcode']
+    # barcodes are exact codes and distinct() already de-duplicates: keep the pre-S4 join path
+    wildcard_to_many_subquery = False
     ordering_fields = [
         'name', 'softech_id', 'pack_price', 'unit_price', 'is_fast_moving',
         'name_scientific', 'category__name', 'total_stock',

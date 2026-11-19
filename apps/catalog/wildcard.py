@@ -265,18 +265,20 @@ def _to_many_rank(qs, q: str, fields) -> Case:
                 default=Value(2), output_field=IntegerField())
 
 
-def filter_and_rank(qs, q: str, fields, *, extra_q: Q | None = None):
+def filter_and_rank(qs, q: str, fields, *, extra_q: Q | None = None, to_many_subquery: bool = True):
     """Filter a queryset with the shared rules and order it literal → ordered → any-order
     (then the queryset's own ordering).
 
     When a search field crosses a to-many relation the match and the rank run as `pk IN
     (subquery)`, so a parent whose lines match at different tiers comes back ONCE with its best
     tier (a join would give one row per matching line and inflate GROUP BY counts). Single-valued
-    fields keep the plain filter + CASE, unchanged."""
+    fields keep the plain filter + CASE, unchanged. to_many_subquery=False keeps the plain join
+    for a caller that de-duplicates itself (WildcardSearchFilter's distinct()) and whose to-many
+    field never ranks differently per line (an exact code — ItemViewSet's barcodes)."""
     if not parse(q)['segments']:
         return qs
     order = list(qs.query.order_by) or list(qs.model._meta.ordering or [])
-    if any(crosses_to_many(qs.model, f) for f in fields):
+    if to_many_subquery and any(crosses_to_many(qs.model, f) for f in fields):
         cond = Q(pk__in=qs.model._base_manager.filter(wq(q, *fields)).values('pk'))
         if extra_q is not None:
             cond |= extra_q
@@ -289,14 +291,18 @@ def filter_and_rank(qs, q: str, fields, *, extra_q: Q | None = None):
 
 class WildcardSearchFilter(SearchFilter):
     """DRF SearchFilter with the system's search rules (wildcards, order, ranking). DRF's
-    field prefixes (^ = @ $) are ignored — every field is a 'contains' field."""
+    field prefixes (^ = @ $) are ignored — every field is a 'contains' field.
+
+    A view may set `wildcard_to_many_subquery = False` to keep the plain join for to-many search
+    fields (see filter_and_rank); the default is the one-row-per-parent subquery path."""
 
     def filter_queryset(self, request, queryset, view):
         fields = [f.lstrip('^=@$') for f in (self.get_search_fields(view, request) or [])]
         q = request.query_params.get(self.search_param, '')
         if not fields or not parse(q)['segments']:
             return queryset
-        return filter_and_rank(queryset, q, fields).distinct()
+        to_many = getattr(view, 'wildcard_to_many_subquery', True)
+        return filter_and_rank(queryset, q, fields, to_many_subquery=to_many).distinct()
 
 
 # ── item pickers / Ctrl+K: the full tiered search ──────────────────────────────

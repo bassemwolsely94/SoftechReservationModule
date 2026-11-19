@@ -16,6 +16,7 @@ import { insuranceApi } from '../api/client'
 import DataTable from '../components/DataTable'
 import ClaimFiscalStatus from '../components/ClaimFiscalStatus'
 import { wildcardMatch } from '../utils/wildcard'
+import { filterClaimItems } from '../utils/claimItemsSearch'
 import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
@@ -4393,22 +4394,7 @@ function ClaimItemsTab({ claimId, claim, onRefresh }) {
   if (!data)   return null
 
   let items = data.items
-  if (q.trim()) {
-    const s = q.trim().toLowerCase()
-    const contains = (v) => {
-      v = (v || '').toString().toLowerCase()
-      if (matchMode === 'begins') return v.startsWith(s)
-      if (matchMode === 'ends')   return v.endsWith(s)
-      return wildcardMatch(v, q)   // 'contains' / 'notcontains': the search rules (* and % wildcards, word order)
-    }
-    // any in-scope field matches (code and/or name)
-    const anyMatch = (it) =>
-      (searchIn !== 'name' && contains(it.item_code)) ||
-      (searchIn !== 'code' && contains(it.item_name))
-    items = matchMode === 'notcontains'
-      ? items.filter(it => !anyMatch(it))   // keep rows that do NOT contain the term
-      : items.filter(anyMatch)
-  }
+  items = filterClaimItems(items, q, matchMode, searchIn)   // search rules; «*» alone = no filter
   if (catFilter === 'mixed') items = items.filter(it => it.is_mixed)
   else if (catFilter)        items = items.filter(it => it.category === catFilter)
   const ITEM_DEFAULT_SORT = { key: 'gross', dir: 'desc', type: 'number' }

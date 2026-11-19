@@ -181,12 +181,28 @@ class ToManySearchFieldTests(TestCase):
         rows = _rows(ERPTransactionViewSet.as_view({'get': 'list'})(request))
         self.assertEqual([r['transaction_id'] for r in rows], ['s4-tm-1'])
 
-    def test_single_valued_fields_keep_the_plain_join_free_path(self):
+    def test_item_list_keeps_the_pre_s4_join_path(self):
+        # ItemViewSet's barcodes__barcode crosses a to-many relation, but the view opts out:
+        # the hottest search keeps one filter join (+ distinct), no pk IN (subquery) tiers.
         from apps.catalog.models import Item
-        from apps.catalog.wildcard import crosses_to_many
-        self.assertFalse(any(crosses_to_many(Item, f) for f in ('name', 'name_scientific', 'category__name')))
+        from apps.catalog.views import ItemViewSet
+        from apps.catalog.wildcard import WildcardSearchFilter, crosses_to_many
+        self.assertTrue(any(crosses_to_many(Item, f) for f in ItemViewSet.search_fields))
+        self.assertIs(ItemViewSet.wildcard_to_many_subquery, False)
+        request = APIRequestFactory().get('/', {'search': 'panadol extra'})
+        request.query_params = request.GET
+        sql = str(WildcardSearchFilter().filter_queryset(
+            request, Item.objects.filter(is_active=True), ItemViewSet()).query)
+        self.assertNotIn('IN (SELECT', sql)
         self.assertTrue(crosses_to_many(TransferRequest, 'items__item__name'))
         self.assertTrue(crosses_to_many(ERPTransaction, 'lines__item_code'))
+
+    def test_outer_queryset_filters_still_apply(self):
+        # the subqueries read _base_manager; the outer queryset's own filters still decide
+        # which parents come back
+        hidden = self._transfer('TR-S4-5', 'PANADOL EXTRA')
+        shown = self._transfer('TR-S4-6', 'PANADOL COLD EXTRA')
         from apps.catalog.wildcard import filter_and_rank
-        sql = str(filter_and_rank(Item.objects.all(), 'panadol extra', ['name']).query)
-        self.assertNotIn(' IN (SELECT', sql)
+        qs = filter_and_rank(TransferRequest.objects.exclude(pk=hidden.pk), 'panadol extra',
+                             ['request_number', 'items__item__name'])
+        self.assertEqual([t.id for t in qs], [shown.id])
