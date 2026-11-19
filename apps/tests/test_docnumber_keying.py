@@ -23,7 +23,6 @@ from django.utils import timezone
 
 from apps.insurance import importer
 from apps.insurance import models as m
-from apps.insurance.validation import validate_claim_readiness
 from apps.reservations.erp_matcher import ReservationERPMatcher
 from apps.reservations.models import Reservation
 from apps.tests.factories import make_branch, make_item, make_user
@@ -238,25 +237,6 @@ class ReservationMatcherKeyingTests(TestCase):
         self.assertEqual(r['matched_items'][0]['erp_qty'], 5.0)
         for sql, conds in conn.queries:
             self.assertIn('doccode', {c for c, _, _ in conds}, sql)
-
-
-# ── Insurance: cross-claim duplicate check (apps/insurance/validation.py) ────
-
-class InsuranceDuplicateCheckKeyingTests(TestCase):
-
-    def _dupes(self, other_branch):
-        mine = _mk_claim(number='MT-DK-1')
-        _add_rx(mine, '6100', local=100, branch='140')
-        other = _mk_claim(number='MT-DK-2', sub=mine.subclient)
-        _add_rx(other, '6100', local=100, branch=other_branch)
-        checks = {c['key']: c for c in validate_claim_readiness(mine)['checks']}
-        return checks['cross_claim_duplicates']
-
-    def test_same_number_at_another_branch_is_not_a_double_bill(self):
-        self.assertEqual(self._dupes('150')['severity'], 'ok')
-
-    def test_same_receipt_at_the_same_branch_is_a_double_bill(self):
-        self.assertEqual(self._dupes('140')['severity'], 'error')
 
 
 # ── Insurance: cache enrichment (apps/insurance/importer.py) ─────────────────

@@ -251,26 +251,14 @@ def validate_claim_readiness(claim: InsuranceClaim) -> dict:
         logger.warning('[readiness] net-vs-SOFTECH check failed', exc_info=True)
 
     # 7) Cross-claim duplicate docnumbers (double-billing) ─────────────────────
-    # A receipt is (branch, docnumber) — the same number at another branch is a different
-    # receipt, not a double bill (S-8). A row with no branch on either side still counts.
-    keys = {(str(rx.softech_branchcode or '').strip(), str(rx.softech_docnumber).strip())
-            for rx in active_rx if rx.softech_docnumber}
-    docnos = {k[1] for k in keys}
+    docnos = [rx.softech_docnumber for rx in active_rx if rx.softech_docnumber]
     if docnos:
-        rows = (InsuranceClaimPrescription.objects
-                .filter(softech_docnumber__in=docnos)
-                .exclude(claim=claim)
-                .exclude(claim__status=InsuranceClaim.STATUS_CANCELLED)
-                .values_list('softech_branchcode', 'softech_docnumber', 'claim__claim_number'))
-        ours_by_doc = {}
-        for br, d in keys:
-            ours_by_doc.setdefault(d, set()).add(br)
-        dupes = []
-        for br, d, cno in rows:
-            br, d = str(br or '').strip(), str(d).strip()
-            mine = ours_by_doc.get(d, set())
-            if br in mine or not br or '' in mine:
-                dupes.append((d, cno))
+        dupes = (InsuranceClaimPrescription.objects
+                 .filter(softech_docnumber__in=docnos)
+                 .exclude(claim=claim)
+                 .exclude(claim__status=InsuranceClaim.STATUS_CANCELLED)
+                 .values_list('softech_docnumber', 'claim__claim_number'))
+        dupes = list(dupes)
         if dupes:
             checks.append(_check(
                 'cross_claim_duplicates', 'فواتير مكرّرة في مطالبات أخرى', 'error', len(dupes),
