@@ -246,5 +246,5 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
   ~~`/market-shortage` loading~~ (fixed, PR 188); ~~backend role lists still looser than
   the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons)~~ (fixed, `claude/uat-backend-role-lists`: all four ask the matrix; only procurement changes who may act — the purchasing role gains run / reclassify / override, a bare is_staff account loses them); the 103
   stricter-than-matrix checks (W3).
-- **Housekeeping:** `makemigrations --check` on main wants a migration deleting `reservations.ActivityLog`
+- **Housekeeping:** ~~`makemigrations --check` on main wants a migration deleting `reservations.ActivityLog`~~ (the table is live — the reservation call log; fixed by loading the model in the app's `ready()`, `claude/reservations-activitylog-register`, no schema change)
   (not from this round); ~~harness fixes from W2 into the shared lib~~ (done, `claude/uat-lib-w2-lessons`: `lib/page.js` gotoSettled is time-to-content with the W2 rules; visibility uses it).
