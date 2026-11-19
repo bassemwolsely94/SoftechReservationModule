@@ -411,7 +411,7 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
+        'change_note': T('تبويب كوبونات الهدايا لمن له صلاحية القسائم (عرض + تصدير أو تعديل)', 'The gift-coupons tab needs vouchers view plus export or edit'),
     },
     {
         'key': 'vouchers.mobile',

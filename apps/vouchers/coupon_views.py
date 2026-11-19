@@ -16,7 +16,6 @@ every generate / stock action is written to the AuditLog.
 import datetime as dt
 import logging
 
-from django.conf import settings
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -37,18 +36,22 @@ def _profile(request):
     return p if (p and p.is_active) else None
 
 
-def view_roles():
-    return set(getattr(settings, 'COUPON_VIEW_ROLES',
-                       ('admin', 'supervisor', 'purchasing', 'quality_manager')))
-
-
 def manage_roles():
     from apps.invoices.views import SupplierInvoiceViewSet
     return set(SupplierInvoiceViewSet._PUSH_ROLES)
 
 
 def can_view(p):
-    return bool(p and (p.role in view_roles() or p.role in manage_roles()))
+    # The coupon control screen (serial history, flagged customers) is more than the voucher
+    # list: `vouchers` view plus export or edit — admin, supervisor, purchasing, quality manager
+    # with today's matrix. Was a settings role list (UAT W3, owner 2026-11-19). Managing still
+    # follows the SOFTECH push roles: it stocks coupons through the audited invoice writer.
+    from core.permissions import matrix_allows
+    if not p:
+        return False
+    if p.role in manage_roles():
+        return True
+    return matrix_allows(p, 'vouchers', 'view') and matrix_allows(p, 'vouchers', 'export', 'edit')
 
 
 def can_manage(p):

@@ -13,7 +13,6 @@ from .engine import InsightEngine
 from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky')
-ANALYST_ROLES = {'admin', 'supervisor', 'purchasing', 'quality_manager'}
 
 from core.permissions import matrix_permission                     # noqa: E402
 from core.permissions import RouteModulePermission  # round 2, owner answers 2026-11-05
@@ -190,8 +189,12 @@ class InsightRunViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
     def _guard(self):
+        # Generating a report only computes: analytics create, edit or export, the rule for compute
+        # POSTs (Z-11a). Was a role list; same roles today (admin, supervisor, purchasing, quality
+        # manager), now the matrix decides (UAT W3, owner 2026-11-19).
+        from core.permissions import matrix_allows
         sp = getattr(self.request.user, 'staff_profile', None)
-        if not (sp and sp.role in ANALYST_ROLES):
+        if not matrix_allows(sp, 'analytics', 'create', 'edit', 'export'):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('غير مصرح')
 

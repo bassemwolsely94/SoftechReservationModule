@@ -16,7 +16,7 @@ from django.db.models import (
 )
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 
 from apps.purchasing.access import PURCHASING   # procurement = the purchasing module (Z-7a)
 from rest_framework.response import Response
@@ -43,6 +43,13 @@ from .serializers import (
 )
 from core.threads import start_thread
 from core.multi_filter import filter_in, multi_values
+from core.permissions import matrix_permission
+
+# Engine runs and supplier classification follow the matrix (UAT W3, owner 2026-11-19): `purchasing`
+# create to run / reclassify, edit to override a category. Was Django is_staff (IsAdminUser), which
+# ignored the app role. SOFTECH supply-group members hold the purchasing grants too (Z-2).
+PROCUREMENT_RUN = matrix_permission('purchasing', post=('create',))
+PROCUREMENT_EDIT = matrix_permission('purchasing')
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -605,11 +612,11 @@ class EngineRunListView(generics.ListAPIView):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, PROCUREMENT_RUN])
 def trigger_engine(request):
     """
     Trigger a new procurement engine run in a background thread.
-    Only admin users.
+    Needs `purchasing` create (the matrix: admin, purchasing; supply-group members).
     """
     from .engine import run_procurement_engine
 
@@ -1155,7 +1162,7 @@ def supplier_segmentation_summary(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, PROCUREMENT_EDIT])
 def update_supplier_segmentation(request, pk):
     """
     Manually override a supplier's category.
@@ -1633,7 +1640,7 @@ def softech_person_codes(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, PROCUREMENT_RUN])
 def reclassify_suppliers(request):
     """
     Re-run supplier classification (Stage 2.5 only) against the current rules —
