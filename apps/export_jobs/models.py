@@ -5,6 +5,18 @@ Generalised from PicExportJob (doc 33 §15): a file that takes longer than a web
 built by a job, the screen polls it and downloads it once. The bytes live in `data` (never under
 /media); only the requester may read or download them. Jobs are deleted after 48 h; a job with no
 progress for 15 min is reported failed (the process that ran it restarted). See runner.py.
+
+Security definition of done (CLAUDE.md):
+  • Access: /api/export-jobs/ is in module_access EXEMPT_PREFIXES with its own gate — a job is
+    visible only to its requester (another id = 404) and the kind's permission is re-checked at
+    download. Starting a job sits under the exporting module's URL and asks what its direct export asks.
+  • Branches: a job is per user, not branch data. Branch scope is applied by each kind's builder,
+    which is the old export code run as the requester (the same scope as the direct download).
+  • Exports: builders are the existing writers (core/export_safety formula guard, branch labels,
+    masking unchanged); the download is an attachment, so ExportAuditMiddleware audits and stamps it.
+  • New values: none — a job delivers the same file as the export it replaces, already registered
+    in apps/tests/new_value_registry.py where it applies.
+  • Speed: start + status budgets in apps/tests/perf/budgets.py (test_budget_exports.py).
 """
 from django.db import models
 

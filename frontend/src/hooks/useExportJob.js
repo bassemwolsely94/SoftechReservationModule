@@ -63,9 +63,11 @@ export default function useExportJob({ storageKey, start, fileName, status = exp
 
   useEffect(() => {
     if (!id) return
-    if (q.isError) {                         // gone (older than 48 h) or not ours: forget it quietly
+    if (q.isError) {                         // gone (older than 48 h, or dropped by an update): say so
       drop()
-      if (q.error?.response?.status !== 404) setError(errText(q.error, 'تعذّر متابعة التصدير'))
+      setError(q.error?.response?.status === 404
+        ? 'انتهت صلاحية الملف — صدّر مرة أخرى'
+        : errText(q.error, 'تعذّر متابعة التصدير'))
       return
     }
     if (job?.status === 'failed') { drop(); setError(job.error || 'تعذّر إنشاء الملف — حاول مرة أخرى'); return }
