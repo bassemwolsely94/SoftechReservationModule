@@ -322,7 +322,7 @@ class InsuranceClaimPrescription(models.Model):
     # SOFTECH numbers each document type separately per branch, so a receipt is
     # (branch, doccode, docnumber) — 115 sale / 30 return. Blank = a legacy row whose
     # doccode could not be resolved; guards treat blank as "any doccode".
-    softech_doccode    = models.CharField(max_length=3, blank=True, default='', verbose_name='كود المستند')
+    softech_doccode    = models.CharField(max_length=3, blank=True, default='', db_default='', verbose_name='كود المستند')
     softech_personcode = models.CharField(max_length=20, blank=True, verbose_name='كود العميل')
 
     # Patient info (from Softech — frozen at import)

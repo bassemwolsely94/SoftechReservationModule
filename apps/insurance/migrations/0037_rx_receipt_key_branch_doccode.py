@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='insuranceclaimprescription',
             name='softech_doccode',
-            field=models.CharField(blank=True, default='', max_length=3, verbose_name='كود المستند'),
+            field=models.CharField(blank=True, db_default='', default='', max_length=3, verbose_name='كود المستند'),
         ),
         migrations.RunSQL(_BACKFILL.format(cache='insurance_motalbacache'), migrations.RunSQL.noop),
         migrations.RunSQL(_BACKFILL.format(cache='insurance_companiesitemscache'), migrations.RunSQL.noop),
