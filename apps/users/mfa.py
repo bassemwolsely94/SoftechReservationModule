@@ -29,7 +29,7 @@ import qrcode
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import User
 from django.core import signing
-from django.core.cache import cache
+from core.limits import limits_cache   # fail-closed security counters (performance Stage 2)
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -153,11 +153,11 @@ def verify_login_code(profile, code: str) -> bool:
     if step is None:
         return False
     last_key = f'mfa-last-step:{profile.pk}'
-    if step <= (cache.get(last_key) or -1):
+    if step <= (limits_cache.get(last_key) or -1):
         return False
-    if not cache.add(f'mfa-step:{profile.pk}:{step}', 1, 120):    # two requests, same code
+    if not limits_cache.add(f'mfa-step:{profile.pk}:{step}', 1, 120):    # two requests, same code
         return False
-    cache.set(last_key, step, 120)
+    limits_cache.set(last_key, step, 120)
     return True
 
 
@@ -312,8 +312,8 @@ def verify_2fa_view(request):
     user, login_id = _read_preauth(request.data.get('mfa_token', ''), 'login')
     tries_key, done_key = f'mfa-tries:{login_id}', f'mfa-done:{login_id}'
     # A-2: a login token opens ONE session and takes at most MAX_CODE_TRIES wrong codes.
-    if (not user or not login_id or cache.get(done_key)
-            or (cache.get(tries_key) or 0) >= MAX_CODE_TRIES):
+    if (not user or not login_id or limits_cache.get(done_key)
+            or (limits_cache.get(tries_key) or 0) >= MAX_CODE_TRIES):
         return Response({'error': 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً'},
                         status=status.HTTP_401_UNAUTHORIZED)
     profile = getattr(user, 'staff_profile', None)
@@ -336,8 +336,8 @@ def verify_2fa_view(request):
         return refused
 
     if not (verify_login_code(profile, code) or consume_backup_code(profile, code)):
-        cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
-        tries = cache.incr(tries_key)
+        limits_cache.add(tries_key, 0, _PREAUTH_MAX_AGE)
+        tries = limits_cache.incr(tries_key)
         _log('mfa_failed', profile, request, note=f'try {tries}/{MAX_CODE_TRIES}')
         if lockout.locked_until(profile):
             from core.client_ip import client_ip
@@ -347,7 +347,7 @@ def verify_2fa_view(request):
                             status=status.HTTP_401_UNAUTHORIZED)
         return Response({'error': 'رمز التحقق غير صحيح'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    cache.set(done_key, 1, _PREAUTH_MAX_AGE)
+    limits_cache.set(done_key, 1, _PREAUTH_MAX_AGE)
     device, device_secret = enroll_login(request, user)
     _log('mfa_verified', profile, request, device=device)
     resp = build_login_response(user, request, device=device, zone=zone, mfa=True)

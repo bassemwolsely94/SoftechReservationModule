@@ -27,6 +27,7 @@ PyJWT>=2.15.1
 pywebpush>=2.0.0
 python-dateutil>=2.8.2     # apps/cheques/engine.py (module-level import)
 JPype1>=1.5.0              # SOFTECH JDBC bridge (config/sybase.py) — needs a Java runtime only to CONNECT
+redis>=5.0.1               # core/cache_backends.py (shared Django caches, performance Stage 2)
 
 # ── Security floors for transitive packages (pip-audit, Batch 6 — 2026-10-31) ──
 # Not imported directly; listed so the resolver can't pick a version with a known advisory.

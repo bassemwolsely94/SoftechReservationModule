@@ -10,12 +10,14 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.throttling import AnonRateThrottle
+from core.limits import limits_cache
 from rest_framework.response import Response
 
 
 class PublicDemandThrottle(AnonRateThrottle):
     """Abuse guard for the unauthenticated self-service endpoints."""
     scope = 'public_demand'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
     def get_rate(self):
         return '40/hour'
 from django_filters.rest_framework import DjangoFilterBackend

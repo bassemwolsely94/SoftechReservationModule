@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from core.limits import limits_cache
 
 from core.public_guard import FORMS, issue_challenge
 
@@ -11,6 +12,7 @@ from core.public_guard import FORMS, issue_challenge
 class ChallengeThrottle(AnonRateThrottle):
     """Per client IP: a person filling a form needs one or two challenges."""
     scope = 'public_challenge'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
 
     def get_rate(self):
         return '60/hour'
@@ -34,6 +36,7 @@ def challenge(request):
 class HealthThrottle(AnonRateThrottle):
     """Per client IP: an uptime monitor pings every minute or five."""
     scope = 'public_health'
+    cache = limits_cache   # fail-closed security counters (core/limits.py)
 
     def get_rate(self):
         return '300/hour'

@@ -17,6 +17,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 
 from core.export_stamp import ExportMark, stamp_ooxml
+from core.limits import RETRY_AFTER_SECONDS, LimitsUnavailable, refusal_body
 
 from . import bulk_read, policy
 from .audit import write_access_audit
@@ -68,6 +69,11 @@ class ExportAuditMiddleware:
         response = self.get_response(request)
         try:
             self._after(request, response, state or {})
+        except LimitsUnavailable:
+            # N5 enforce: the bulk-read counter could not be written (Redis down) -> refuse
+            # rather than hand out data without its limit (performance Stage 2, owner §9)
+            return JsonResponse(refusal_body(), status=503,
+                                headers={'Retry-After': str(RETRY_AFTER_SECONDS)})
         except Exception:
             log.error('export audit failed (%s)', getattr(request, 'path', '?'), exc_info=True)
         return response
@@ -114,6 +120,8 @@ class ExportAuditMiddleware:
             return
         try:
             self._count_bulk(request, response, user, export)
+        except LimitsUnavailable:
+            raise
         except Exception:
             log.error('bulk read count failed (%s)', request.path, exc_info=True)
         if not export:

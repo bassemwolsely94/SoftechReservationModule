@@ -70,7 +70,7 @@
 | + OCR inside the web process (Tesseract per page, RapidOCR) | +0.3–0.6 GB while OCR runs |
 | Scheduler + JVM | 0.8–1 GB, spikes during sync |
 | PaddleOCR sidecar (own service, capped) | 1–1.5 GB, hard cap 2 GB |
-| Redis, Nginx, OS | 0.5 GB |
+| Redis (main capped at 256 MB + limits instance ~10 MB), Nginx, OS | 0.5–0.8 GB |
 | Workbench while you develop (VS Code server, Claude Code, tests, Vite) | 0.5–1 GB |
 | **EasyOCR (torch) — only if selected; stays loaded in the web process** | **+1.5–2 GB** |
 
@@ -720,6 +720,10 @@ Redis: keep it local-only (default on Ubuntu: `bind 127.0.0.1 ::1`). Verify:
 ```bash
 sudo systemctl enable --now redis-server && redis-cli ping     # PONG
 ```
+Redis also carries the shared Django caches once the extra web processes come (performance
+Stage 2): DB 0 = Channels, DB 1 = plain cache (port 6379), and a **second, small Redis instance on
+port 6380 for the security counters** with `noeviction`. Its setup and the install order are in
+§13.6 — do them there, not here.
 
 Node.js **24 LTS** (Node 20 reached end-of-life in April 2026; 24 also matches the office PC) —
 to build the React frontend and for Vite + Claude Code in the workbench. Signed apt repo, no
@@ -805,6 +809,27 @@ Check later, as the app user: `python manage.py perf_top_queries --limit 5` prin
 queries (it says "not enabled" if the library or the extension is missing). Office PC steps:
 `docs/deploy/2026-11-office-pg-query-stats.md`.
 
+**Connections (performance Stage 2).** `max_connections = 100` must hold every web process, the
+scheduler, the AMI bridge and the workbench. Under Daphne each in-flight HTTP request runs on its
+own thread with its own connection, so a web process uses about as many connections as it has
+requests in flight (plus WebSocket DB calls on Daphne's `ASGI_THREADS` pool and background export
+threads). Keep `DB_CONN_MAX_AGE=0` on Daphne: a persistent connection is never reused by the next
+request (a new thread) and only lingers until that thread is collected. Count them under the §13.7
+load test:
+```bash
+sudo -u postgres psql -Atc "SELECT usename, state, count(*) FROM pg_stat_activity WHERE datname='elrezeiky_db' GROUP BY 1,2 ORDER BY 3 DESC"
+sudo -u postgres psql -Atc "SELECT count(*) FROM pg_stat_activity"       # total vs max_connections
+```
+If the total passes ~80 at 40 users, or the logs show `too many clients already`, **pgbouncer
+(transaction mode) becomes an owner install step** — ask for its plan first; do not just raise
+`max_connections` (each connection costs `work_mem` per sort and RAM we do not have).
+
+**Statement timeout (web only).** The app sets it itself on web request threads when
+`WEB_STATEMENT_TIMEOUT_ENABLED=True` (`WEB_STATEMENT_TIMEOUT_MS`, default 30000). It ships
+**False** and is switched on only after performance Stages 3–4 move long work out of web
+requests. Never put `statement_timeout` in `postgresql.conf` or on the role: the scheduler,
+management commands, backups and background threads must keep no limit.
+
 ---
 
 ## 8. Application code + production `.env`
@@ -872,6 +897,14 @@ MEDIA_ACCEL_REDIRECT=True
 # same as office today; 'enforce' once the rbac log is quiet
 RBAC_ENFORCEMENT=log
 REDIS_URL=redis://127.0.0.1:6379/0
+# shared Django caches (performance Stage 2) — set both together in §13.6 step 2,
+# BEFORE any extra web process is enabled. Empty = per-process memory (one web process only).
+CACHE_REDIS_URL=
+LIMITS_REDIS_URL=
+# keep 0 on Daphne (§7.3 Connections)
+DB_CONN_MAX_AGE=0
+# stays False until performance Stages 3-4 (§7.3)
+WEB_STATEMENT_TIMEOUT_ENABLED=False
 
 PG_NAME=elrezeiky_db
 PG_USER=elrezeiky
@@ -2090,6 +2123,8 @@ PG_PASSWORD=<workbench password from 7.1>
 PG_HOST=localhost
 # empty → in-memory; never touch production's Redis
 REDIS_URL=
+CACHE_REDIS_URL=
+LIMITS_REDIS_URL=
 # NEVER change this in the workbench
 SOFTECH_READ_ONLY=True
 SYBASE_HOST=192.168.1.8
@@ -2234,11 +2269,78 @@ schema, pricing/discount logic, checkout/payment, or any writer.
 
 ---
 
-### 13.6 More web processes (full audit PERF-3)
+### 13.6 More web processes (full audit PERF-3, performance Stage 2)
 
 One Daphne process uses one of the 4 cores, and a 70–165 s export holds up every other request in it.
-Two extra processes on ports 8001 and 8002 (same code, same `.env`; WebSocket groups go through Redis):
+Two extra processes on ports 8001 and 8002 (same code, same `.env`; WebSocket groups go through Redis).
+**Order matters:** the shared Redis caches (steps 1–3) must be live **before** step 4. Otherwise every
+process keeps its own rate counters and the login, 2FA, N3–N6 per-phone and proof-of-work limits are
+each multiplied by the number of processes.
 
+**Step 0 — the release.** Deploy the release that contains performance Stage 2 (`release.sh`, §13.5).
+Nothing changes yet: with the two URLs empty the app keeps its per-process memory cache.
+
+**Step 1 — Redis for the counters (its own instance, `noeviction`).** `maxmemory-policy` is per Redis
+*instance*, not per database, so the counters get a second small instance on port 6380 that never
+evicts a key (a full limits store refuses requests with 503; it never drops a limit). The main instance
+(6379: DB 0 Channels, DB 1 plain cache) gets a memory cap and evicts only keys that expire anyway:
+```bash
+# main instance: cap it and let plain cache entries go first
+sudo tee -a /etc/redis/redis.conf >/dev/null <<'EOF'
+maxmemory 256mb
+maxmemory-policy volatile-lru
+EOF
+sudo systemctl restart redis-server && redis-cli config get maxmemory-policy   # volatile-lru
+
+# limits instance (Ubuntu ships the redis-server@.service template: /etc/redis/redis-<name>.conf)
+sudo tee /etc/redis/redis-limits.conf >/dev/null <<'EOF'
+bind 127.0.0.1 ::1
+protected-mode yes
+port 6380
+daemonize yes
+supervised systemd
+pidfile /run/redis-limits/redis-server.pid
+logfile /var/log/redis/redis-server-limits.log
+dir /var/lib/redis-limits
+maxmemory 64mb
+maxmemory-policy noeviction
+save ""
+appendonly no
+EOF
+sudo install -d -o redis -g redis -m 0750 /var/lib/redis-limits
+sudo chown redis:redis /etc/redis/redis-limits.conf && sudo chmod 0640 /etc/redis/redis-limits.conf
+sudo systemctl enable --now redis-server@limits
+redis-cli -p 6380 ping                                   # PONG
+redis-cli -p 6380 config get maxmemory-policy           # noeviction
+```
+(If `systemctl cat redis-server@limits` says the template is missing, stop and ask — do not run a
+second Redis by hand.) Counters are not saved to disk on purpose: a Redis restart forgets the counts,
+exactly as a web restart does today. Memory: ~10 MB for the limits instance, at most 256 MB for the
+main one.
+
+**Step 2 — `.env`** (`/opt/elrezeiky/.env`, the same file for web + scheduler):
+```
+CACHE_REDIS_URL=redis://127.0.0.1:6379/1
+LIMITS_REDIS_URL=redis://127.0.0.1:6380/0
+DB_CONN_MAX_AGE=0
+WEB_STATEMENT_TIMEOUT_ENABLED=False
+```
+Both URLs go in together and must differ (the app refuses to start otherwise). Restart the web
+process only: `sudo systemctl restart elrezeiky-web`. The scheduler picks the new cache up at its next
+planned restart (each scheduler restart delays the slow sync jobs — batch it with the next release).
+
+**Step 3 — check.** Sign in once, then:
+```bash
+redis-cli -p 6380 --scan | head          # throttle / counter keys appear here
+redis-cli -n 1 dbsize                    # plain cache keys
+journalctl -u elrezeiky-web --since -10min | grep -i "redis .* unreachable"   # nothing
+```
+Failure drill (optional, one minute, outside working hours): `sudo systemctl stop redis-server@limits`
+→ the login screen answers «الخدمة غير متاحة مؤقتاً — حاول مرة أخرى بعد قليل» (503) while screens that
+only read keep working; `sudo systemctl start redis-server@limits` → sign-in works again. Stopping the
+main Redis instead only makes screens compute without the cache (and live notifications pause).
+
+**Step 4 — the extra processes:**
 ```bash
 sudo cp /opt/elrezeiky/app/deploy/elrezeiky-web-extra@.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -2249,8 +2351,13 @@ curl -s http://127.0.0.1:8001/api/public/health/ ; curl -s http://127.0.0.1:8002
 Then uncomment the two `server 127.0.0.1:800x;` lines in the `upstream django_backend` block of
 `/etc/nginx/sites-available/elrezeiky` and run `sudo nginx -t && sudo systemctl reload nginx`. `release.sh`
 restarts every enabled `elrezeiky-web-extra@*` unit after a release (re-install `release.sh` once, as its header
-says). Memory: each process is about 250–400 MB; check `free -m` stays above 1 GB with the scheduler running.
-To undo: comment the lines back, reload nginx, `sudo systemctl disable --now elrezeiky-web-extra@8001 elrezeiky-web-extra@8002`.
+says). Memory: each process is about 250–400 MB; check `free -m` stays above 1 GB with the scheduler running
+(if not, run one extra process instead of two — design §10). Then count connections (§7.3) during the §13.7
+load test.
+
+To undo: comment the nginx lines back, reload nginx, `sudo systemctl disable --now elrezeiky-web-extra@8001
+elrezeiky-web-extra@8002`. Only once a single web process is left may the two cache URLs be emptied again
+(then restart `elrezeiky-web`, and `sudo systemctl disable --now redis-server@limits`).
 
 ### 13.7 Load test before Stage B (full audit D-22)
 

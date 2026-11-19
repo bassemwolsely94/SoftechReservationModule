@@ -7,8 +7,10 @@ plain customer detail `/api/customers/<id>/` as one row; other dict bodies (Cust
 stats) count nothing. The POS sale lookups (POS_FLOW_SEGMENTS) are never counted and never
 blocked: refusing customer recognition in the middle of a sale is a POS-flow change. The first crossing of a limit in an hour writes one `bulk_read_alert` AuditLog
 row and one admin digest; in `enforce` a non-admin is also blocked from those endpoints and from
-exports for BULK_READ_BLOCK_MINUTES. Counters live in the cache (a lost cache only forgets a
-count). Nothing here raises out to the caller's request.
+exports for BULK_READ_BLOCK_MINUTES. Counters live in the fail-closed `limits` cache (core/limits.py;
+in enforce, a counter that cannot be written refuses the response with 503 — performance Stage 2;
+in log it is only logged). Apart from that refusal, nothing here raises out to the caller's
+request.
 """
 import json
 import re
@@ -16,7 +18,7 @@ from datetime import timedelta
 import logging
 
 from django.conf import settings
-from django.core.cache import cache
+from core.limits import LimitsUnavailable, limits_cache   # fail-closed security counters (performance Stage 2)
 from django.utils import timezone
 
 from .audit import write_access_audit
@@ -111,11 +113,11 @@ def _limit(kind):
 def _add(user, kind, amount):
     """(before, after) of this hour's counter."""
     key = _key(user, kind)
-    cache.add(key, 0, COUNTER_TTL)
+    limits_cache.add(key, 0, COUNTER_TTL)
     try:
-        after = cache.incr(key, amount)
+        after = limits_cache.incr(key, amount)
     except ValueError:
-        cache.set(key, amount, COUNTER_TTL)
+        limits_cache.set(key, amount, COUNTER_TTL)
         after = amount
     return after - amount, after
 
@@ -133,6 +135,10 @@ def record_counted(user, *, rows=0, export=False):
             before, after = _add(user, 'exports', 1)
             if before < _limit('exports') <= after and crossed is None:
                 crossed, count = 'exports', after
+    except LimitsUnavailable:
+        if mode() == 'enforce':
+            raise                   # fail closed: the middleware answers 503
+        log.warning('bulk read counter unavailable (log mode, not counted)')
     except Exception:
         log.warning('bulk read counter failed', exc_info=True)
     return crossed, count
@@ -194,14 +200,14 @@ def alert(user, kind, request, count=None):
                     else 'Inside the network' if network is not None else '')
         role = _role(user)
         if count is None:
-            count = cache.get(_key(user, kind)) or 0
+            count = limits_cache.get(_key(user, kind)) or 0
         limit = _limit(kind)
         current = mode()
         username = user.get_username()
         extra = {'kind': kind, 'count': count, 'limit': limit, 'role': role, 'username': username,
                  'path': getattr(request, 'path', None), 'mode': current,
-                 'rows': cache.get(_key(user, 'rows')) or 0,
-                 'exports': cache.get(_key(user, 'exports')) or 0}
+                 'rows': limits_cache.get(_key(user, 'rows')) or 0,
+                 'exports': limits_cache.get(_key(user, 'exports')) or 0}
         write_access_audit(AUDIT_ACTION, user.pk, f'{kind} {count}/{limit}'[:255], extra,
                            label='bulk read')
         what_ar, what_en = (('صفوف مقروءة', 'rows read') if kind == 'rows'
