@@ -3148,7 +3148,7 @@ def _auto_expire_reservations():
                 notification_type='reservation_status',
                 title=f'⏰ انتهت صلاحية {len(stale_ids)} حجز تلقائياً',
                 body=f'تم إنهاء {len(stale_ids)} حجز لم يُكتمل خلال {days} يوماً.',
-                dedup_key=f'auto_expire_{timezone.now().date()}',
+                dedup_key=f'auto_expire_{timezone.localdate()}',
             )
         except Exception:
             pass

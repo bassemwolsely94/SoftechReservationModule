@@ -284,8 +284,7 @@ def compute_supplier_metrics(run: ProcurementEngineRun) -> int:
     """
     logger.info('[ProcurementEngine] Stage 3: computing supplier metrics')
 
-    from django.utils.timezone import now
-    today = now().date()
+    today = timezone.localdate()   # the Cairo business day (BE-15)
     d30  = today - _dt.timedelta(days=30)
     d90  = today - _dt.timedelta(days=90)
     d365 = today - _dt.timedelta(days=365)

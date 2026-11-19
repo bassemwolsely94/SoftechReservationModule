@@ -213,7 +213,7 @@ class BatchService:
         Flag expired batches and create NearExpiryAlert rows for approaching
         thresholds.  Returns summary dict for management command output.
         """
-        today      = timezone.now().date()
+        today      = timezone.localdate()
         thresholds = [30, 60, 90, 180]
         summary    = {'expired': 0, 'alerts_created': 0}
 
@@ -259,7 +259,7 @@ class BatchService:
         Used by apps/batches/views.py NearExpiryView.
         """
         from django.db.models import Sum, Count, F
-        today      = timezone.now().date()
+        today      = timezone.localdate()
         cutoff     = today + timedelta(days=days)
 
         qs = StockBatch.objects.filter(
@@ -307,7 +307,7 @@ class BatchService:
         Return batches eligible for supplier claim (near-expiry or expired,
         belonging to a specific vendor).  Used by claim PDF generator.
         """
-        today  = timezone.now().date()
+        today  = timezone.localdate()
         cutoff = today + timedelta(days=90)
         qs = StockBatch.objects.filter(
             vendor_id=vendor_id,

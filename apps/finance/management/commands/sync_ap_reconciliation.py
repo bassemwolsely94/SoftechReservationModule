@@ -50,7 +50,7 @@ class Command(BaseCommand):
         from apps.finance.models import ReconciliationRun
 
         # ── resolve window ────────────────────────────────────────────────────
-        today = timezone.now().date()
+        today = timezone.localdate()
         date_to = o['date_to'] or today.isoformat()
         if o['date_from']:
             date_from = o['date_from']
