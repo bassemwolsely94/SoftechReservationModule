@@ -2,7 +2,7 @@
 
 Full audit, 2026-11-15, branch `claude/full-project-audit` (from `main` `56870174`). Merged with Wave 0 in
 PR 147 (`851d34d9`); Wave 1 merged 2026-11-16 (PRs 150–154); Wave 2 technical clean-ups 2026-11-17 → 19
-(PRs 157, 158, 166, 174, 183, 189 + FE-10 / FE-19), see below.
+(PRs 157, 158, 166, 174, 183, 189, 191, 192), see below.
 
 Only **verified, low-risk** defects were fixed: each one restores the behaviour the code already intended,
 changes no business calculation, writes nothing new to SOFTECH, and has a regression test in
@@ -85,8 +85,8 @@ them. Each has its own regression tests (backend, vitest and/or Playwright) and 
 | FE-7 | A failed read shows an error strip (global) or an in-place error with «إعادة المحاولة», not an empty "no data" page | 174 (`a8c6e253`) | merged |
 | FE-11 | A transfer request is saved and sent in one transaction (`?submit=1`); a refused send saves nothing, so a retry cannot duplicate it; «حفظ وتقديم» is the default; the quantity is focused after the item | 183 (`ef6d99b7`) | merged |
 | FE-12 | An expired session signs the same user in again over the page (state kept, the failed request retried once — it had a 401, so nothing ran); otherwise `/login?next=` brings them back; `next` is same-site only | 189 | open, CI |
-| FE-10 | Approvals inbox: tick rows (Space / Ctrl+A), Enter opens the decision, bulk approve / reject (reject needs a reason). Each request still goes through the per-request decide endpoint, so the server checks the approver for every one | branch `claude/wave2-fe10-approvals-keyboard` | local, waiting for a test slot |
-| FE-19 | The Ctrl+K palette, Customer-360 and drug-assistant drawers load on first open (the first Ctrl+K / open event is replayed); the phone and rider shells load only on their routes. Entry chunk 726.7 → 675.9 kB (212.5 → 197.9 kB gzip) | this docs PR | open |
+| FE-10 | Approvals inbox: tick rows (Space / Ctrl+A), Enter opens the decision, bulk approve / reject (reject needs a reason). Each request still goes through the per-request decide endpoint, so the server checks the approver for every one | 192 | open, CI |
+| FE-19 | The Ctrl+K palette, Customer-360 and drug-assistant drawers load on first open (the first Ctrl+K / open event is replayed); the phone and rider shells load only on their routes. Entry chunk 726.7 → 675.9 kB (212.5 → 197.9 kB gzip) | 191 (this docs PR) | open, CI |
 
 **Wave 2 left open (not built, reason):**
 

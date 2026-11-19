@@ -45,9 +45,9 @@ Alongside, low-cost technical clean-ups that remove daily friction:
 | ✅ PR 174 | Error states on the 82 screens that show 403/500 as "no data" (shared component) | FE-7 | 1 day |
 | ✅ PR 166 / PR 183 | Reservation extra-line save errors surfaced; transfer "save and send" in one call | FE-2, FE-11 | 4 h |
 | ✅ PR 166 | N+1 fixes on reservations / customers / supply lists | PERF-4 | 4 h |
-| ◐ built, PR to come | Approvals inbox keyboard + bulk approve (reuse `useGridKeyboard`) | FE-10 | 6 h |
+| ◐ PR 192 (open) | Approvals inbox keyboard + bulk approve (reuse `useGridKeyboard`) | FE-10 | 6 h |
 | ◐ PR 189 (open) | Session expiry keeps the page and returns after login | FE-12 | 4 h |
-| ◐ this docs PR (`api/client.js` split and lazy help left open) | Lazy-load drawers/help/command palette (entry chunk 715 kB) | FE-19 | 4 h |
+| ◐ PR 191 (open; `api/client.js` split and lazy help left open) | Lazy-load drawers/help/command palette (entry chunk 715 kB) | FE-19 | 4 h |
 
 Of the Top 10, C01 (network stock in the call centre) is ✅ PR 158; the rest wait for the owner's answers.
 Details: [11](11_BUG_FIX_REGISTER.md) §Wave 2.

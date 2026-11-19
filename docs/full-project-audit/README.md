@@ -26,7 +26,7 @@ and every finding fixed here was re-verified in the code first.
 
 **Checkpoint for a later session (updated 2026-11-19):** the audit fixes and Wave 0 are merged (PR 147);
 Wave 1 is merged (PRs 150–154, `main` `91108713`) and the office runs it, migrated. Wave 2's technical
-clean-ups are merged as PRs 157, 158, 166, 174 and 183; FE-12 (PR 189), FE-10 and FE-19 are in review or
-waiting for a test slot — [11](11_BUG_FIX_REGISTER.md) §Wave 2 has each one's state. Nothing is deployed to the
+clean-ups are merged as PRs 157, 158, 166, 174 and 183; FE-12 (PR 189), FE-10 (PR 192) and FE-19 (PR 191) are in
+review — [11](11_BUG_FIX_REGISTER.md) §Wave 2 has each one's state. Nothing is deployed to the
 VPS. What Waves 1 and 2 left open, and the owner steps, are in [11](11_BUG_FIX_REGISTER.md) and
 [13](13_IMPLEMENTATION_ROADMAP.md); open decisions are in [14](14_DECISION_REGISTER.md).
