@@ -317,15 +317,14 @@ quality_manager GET /api/customers/merge-candidates/
 salesperson GET /api/customers/merge-candidates/
 viewer GET /api/customers/merge-candidates/
 
-# reason: Z-11c — global system jobs (product bulk-initialize, the procurement engine / reclassify /
-#   segmentation) and content editing are Django-staff / content-manager only.
+# reason: Z-11c — global system jobs (product bulk-initialize; the procurement engine / reclassify /
+#   segmentation follow purchasing create / edit since UAT W3, 2026-11-19) and content editing are
+#   Django-staff / content-manager only.
 pharmacist POST /api/batches/purchase-expiry/request-markdown/
 pharmacist POST /api/products/bulk-initialize/
 pharmacist POST /api/products/x/media/upload/
 pharmacist POST /api/products/x/related/add/
 purchasing POST /api/batches/purchase-expiry/request-markdown/
-purchasing POST /api/procurement/reclassify/
-purchasing POST /api/procurement/trigger/
 purchasing POST /api/products/bulk-initialize/
 
 # reason: Z-11c — replacement grants and rule versions are for replacement managers.
@@ -440,7 +439,6 @@ purchasing PATCH /api/finance/schema/987654321/
 purchasing PATCH /api/offers/margin-config/
 purchasing PATCH /api/procurement/categories/987654321/
 purchasing PATCH /api/procurement/classification-rules/987654321/
-purchasing PATCH /api/procurement/segments/987654321/update/
 purchasing PATCH /api/purchasing/config/
 purchasing PUT /api/finance/schema/987654321/
 purchasing PUT /api/procurement/categories/987654321/

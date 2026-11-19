@@ -1106,7 +1106,7 @@ SCREENS = [
              'open_hint': T('بيظهر لما يكون فيه فلتر شغال.', 'Shows when a filter is on.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
+        'change_note': T('تشغيل المحرك وزر التحديث لمن له صلاحية المشتريات (إنشاء)، مش حسابات النظام الخاصة بس', 'Running the engine and the refresh button need purchasing create, not just a system staff account'),
     },
     {
         'key': 'purchasing.history',
@@ -1245,7 +1245,7 @@ SCREENS = [
              'open_hint': T('بيظهر بعد ما تضغط كارت فئة.', 'Shows after you press a category card.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
+        'change_note': T('تعديل فئة المورد يدوياً لمن له صلاحية المشتريات (تعديل)', 'Overriding a supplier category needs purchasing edit'),
     },
     {
         'key': 'purchasing.categories',
@@ -1313,7 +1313,7 @@ SCREENS = [
              'open_hint': T('جنب كل قاعدة.', 'Beside each rule.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
+        'change_note': T('«إعادة تصنيف الموردين» لمن له صلاحية المشتريات (إنشاء)', '"Reclassify suppliers" needs purchasing create'),
     },
     {
         'key': 'purchasing.foc',

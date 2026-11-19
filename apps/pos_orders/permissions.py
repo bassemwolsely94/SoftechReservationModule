@@ -45,6 +45,8 @@ class CanPushPosOrders(BasePermission):
 
     Authoritative source is the RBAC matrix (`pos`/create); the PUSH_ROLES
     allow-list is only a fallback for a DB where the `pos` rows aren't seeded yet.
+    Once seeded, a matrix denial is final (UAT W3, owner 2026-11-19 — the allow-list used to
+    let a role back in after an admin took `pos`/create away, and a failed lookup allowed).
     """
     def has_permission(self, request, view):
         p = _profile(request)
@@ -52,12 +54,11 @@ class CanPushPosOrders(BasePermission):
             return False
         if p.role == 'admin':
             return True
-        try:
-            if p.can_do('pos', 'create'):
-                return True
-        except Exception:
-            pass
-        return p.role in PUSH_ROLES
+        from core.middleware import module_access
+        if 'pos' not in module_access.seeded_modules():
+            return p.role in PUSH_ROLES                  # no `pos` rows seeded yet (as CanOperatePosOrders)
+        from core.permissions import matrix_allows
+        return matrix_allows(p, 'pos', 'create')
 
 
 class CanViewPos(BasePermission):
