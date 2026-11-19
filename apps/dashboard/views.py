@@ -48,41 +48,26 @@ def dashboard_summary(request):
 
     res_qs = _scope_reservations(Reservation.objects.all(), request.user, branch_id)
 
-    # ── Reservation KPIs ──────────────────────────────────────────────────────
+    # ── Reservation KPIs + status funnel: one grouped read (perf Stage 3; was 15 COUNTs) ─────────
     active_statuses = ['pending', 'available', 'contacted', 'confirmed']
-    reservations = {
-        'pending':             res_qs.filter(status='pending').count(),
-        'available':           res_qs.filter(status='available').count(),
-        'contacted':           res_qs.filter(status='contacted').count(),
-        'confirmed':           res_qs.filter(status='confirmed').count(),
-        'active_total':        res_qs.filter(status__in=active_statuses).count(),
-        'follow_ups_today':    res_qs.filter(
-            follow_up_date=today,
-            status__in=active_statuses
-        ).count(),
-        'fulfilled_this_week': res_qs.filter(
-            status='fulfilled',
-            updated_at__date__gte=week_start
-        ).count(),
-        'urgent_active':       res_qs.filter(
-            priority='urgent',
-            status__in=active_statuses
-        ).count(),
-        'chronic_active':      res_qs.filter(
-            priority='chronic',
-            status__in=active_statuses
-        ).count(),
-        'stale_7d':            res_qs.filter(
-            status='pending',
-            updated_at__lt=timezone.now() - timedelta(days=7)
-        ).count(),
-    }
+    active = Q(status__in=active_statuses)
+    funnel_statuses = ['pending', 'available', 'contacted', 'confirmed', 'fulfilled']
+    agg = res_qs.aggregate(
+        **{s: Count('id', filter=Q(status=s)) for s in funnel_statuses},
+        active_total=Count('id', filter=active),
+        follow_ups_today=Count('id', filter=active & Q(follow_up_date=today)),
+        fulfilled_this_week=Count('id', filter=Q(status='fulfilled', updated_at__date__gte=week_start)),
+        urgent_active=Count('id', filter=active & Q(priority='urgent')),
+        chronic_active=Count('id', filter=active & Q(priority='chronic')),
+        stale_7d=Count('id', filter=Q(status='pending',
+                                      updated_at__lt=timezone.now() - timedelta(days=7))),
+    )
+    reservations = {k: agg[k] for k in (
+        'pending', 'available', 'contacted', 'confirmed', 'active_total', 'follow_ups_today',
+        'fulfilled_this_week', 'urgent_active', 'chronic_active', 'stale_7d')}
 
     # ── Status funnel (for mini-funnel widget) ────────────────────────────────
-    status_funnel = [
-        {'status': s, 'count': res_qs.filter(status=s).count()}
-        for s in ['pending', 'available', 'contacted', 'confirmed', 'fulfilled']
-    ]
+    status_funnel = [{'status': s, 'count': agg[s]} for s in funnel_statuses]
 
     # ── By-branch active breakdown (admin/CC only) ────────────────────────────
     by_branch = []
@@ -104,29 +89,24 @@ def dashboard_summary(request):
     # ?branch only narrows — it never widens past the user's branches (Batch 5)
     sales_qs = _scope_reservations(sales_qs, request.user, branch_id)
 
+    sales_agg = sales_qs.aggregate(n=Count('id'), t=Sum('total_amount'))
     sales = {
-        'invoices_7d': sales_qs.count(),
-        'revenue_7d':  float(sales_qs.aggregate(t=Sum('total_amount'))['t'] or 0),
+        'invoices_7d': sales_agg['n'],
+        'revenue_7d':  float(sales_agg['t'] or 0),
     }
 
     # ── Customer stats + churn intelligence ──────────────────────────────────
-    customers = {
-        'total': Customer.objects.filter(is_account_placeholder=False).count(),
-        'new_this_month': Customer.objects.filter(
-            is_account_placeholder=False,
-            created_at__year=today.year,
-            created_at__month=today.month
-        ).count(),
-    }
-    # Churn intelligence (computed by segment_customers — non-blocking)
-    try:
-        customers['churn_high']     = Customer.objects.filter(churn_segment='high').count()
-        customers['churn_critical'] = Customer.objects.filter(churn_segment='critical').count()
-        customers['churn_any']      = Customer.objects.filter(
-            churn_segment__in=('high', 'critical')
-        ).count()
-    except Exception:
-        pass
+    # One pass over the customer table (perf Stage 3; was five COUNTs). Churn segments are computed
+    # by segment_customers.
+    real = Q(is_account_placeholder=False)
+    customers = Customer.objects.aggregate(
+        total=Count('id', filter=real),
+        new_this_month=Count('id', filter=real & Q(created_at__year=today.year,
+                                                    created_at__month=today.month)),
+        churn_high=Count('id', filter=Q(churn_segment='high')),
+        churn_critical=Count('id', filter=Q(churn_segment='critical')),
+        churn_any=Count('id', filter=Q(churn_segment__in=('high', 'critical'))),
+    )
 
     # ── Chronic follow-up stats ────────────────────────────────────────────────
     chronic_followup = {}
@@ -134,16 +114,12 @@ def dashboard_summary(request):
         from apps.followups.models import FollowUpTask
         from datetime import date as _date
         _today = _date.today()
-        chronic_followup = {
-            'pending':    FollowUpTask.objects.filter(status='pending').count(),
-            'due_today':  FollowUpTask.objects.filter(
-                status='pending', due_date=_today
-            ).count(),
-            'overdue':    FollowUpTask.objects.filter(
-                status__in=('pending', 'called'), due_date__lt=_today
-            ).count(),
-            'missed':     FollowUpTask.objects.filter(status='missed').count(),
-        }
+        chronic_followup = FollowUpTask.objects.aggregate(
+            pending=Count('id', filter=Q(status='pending')),
+            due_today=Count('id', filter=Q(status='pending', due_date=_today)),
+            overdue=Count('id', filter=Q(status__in=('pending', 'called'), due_date__lt=_today)),
+            missed=Count('id', filter=Q(status='missed')),
+        )
     except Exception:
         pass
 
@@ -170,17 +146,16 @@ def dashboard_summary(request):
     try:
         from django.apps import apps as _a
         TR = _a.get_model('transfers', 'TransferRequest')
-        transfers['pending']   = TR.objects.filter(status='pending').count()
-        transfers['in_erp']    = TR.objects.filter(status='sent_to_erp').count()
-        transfers['this_week'] = TR.objects.filter(
-            created_at__date__gte=week_start
-        ).count()
+        counts = {
+            'pending':   Count('id', filter=Q(status='pending')),
+            'in_erp':    Count('id', filter=Q(status='sent_to_erp')),
+            'this_week': Count('id', filter=Q(created_at__date__gte=week_start)),
+        }
         # Branch-scoped incoming transfers for branch staff
         if profile and profile.branch and profile.role not in ('admin', 'call_center', 'purchasing'):
-            transfers['incoming_to_my_branch'] = TR.objects.filter(
-                supplying_branch=profile.branch,
-                status__in=['approved', 'sent_to_erp'],
-            ).count()
+            counts['incoming_to_my_branch'] = Count('id', filter=Q(
+                supplying_branch=profile.branch, status__in=['approved', 'sent_to_erp']))
+        transfers.update(TR.objects.aggregate(**counts))
     except Exception:
         pass
 

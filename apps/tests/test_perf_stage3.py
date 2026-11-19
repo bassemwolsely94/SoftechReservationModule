@@ -109,3 +109,92 @@ class FreshnessSameAnswerTests(TestCase):
         self._seed(3)
         self.assertEqual(_count_queries(get_freshness), small)
         self.assertLessEqual(small, 8)
+
+
+# ── 2. GET /api/dashboard/summary/ ─────────────────────────────────────────────────────────────
+
+class DashboardSummarySameAnswerTests(TestCase):
+    """New dashboard_summary == the pre-change view on the same data, for a chain-wide admin and a
+    branch pharmacist, in a query count that does not grow with the data."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from apps.tests.factories import make_admin, make_branch, make_branch2, make_pharmacist
+        cls.b1, cls.b2 = make_branch(), make_branch2()
+        cls.admin = make_admin('perf_dash_admin')
+        cls.pharm = make_pharmacist('perf_dash_pharm', branch=cls.b1)
+
+    def _seed(self, n=1):
+        from apps.customers.models import Customer, PurchaseHistory
+        from apps.followups.models import FollowUpTask
+        from apps.reservations.models import Reservation
+        from apps.transfers.models import TransferRequest
+        from apps.tests.factories import make_item
+        today = datetime.date.today()
+        staff = self.admin[1]
+        base = Reservation.objects.count()
+        item = make_item(softech_id=f'PD{base:04d}')
+        k = 0
+        for _ in range(n):
+            for branch in (self.b1, self.b2):
+                for status in ('pending', 'available', 'contacted', 'confirmed', 'fulfilled', 'cancelled'):
+                    for priority in ('normal', 'urgent', 'chronic'):
+                        k += 1
+                        r = Reservation.objects.create(
+                            item=item, branch=branch, quantity_requested=1, contact_name='عميل',
+                            contact_phone='01033333333', created_by=staff, status=status, priority=priority,
+                            follow_up_date=today if k % 2 else today + datetime.timedelta(days=3))
+                        if k % 3 == 0:
+                            Reservation.objects.filter(pk=r.pk).update(
+                                updated_at=timezone.now() - datetime.timedelta(days=10))
+            cust = Customer.objects.create(name=f'عميل {base}-{k}', phone=f'0101{base:03d}{k:04d}',
+                                           churn_segment='high')
+            Customer.objects.create(name=f'عميل ح {base}-{k}', phone=f'0102{base:03d}{k:04d}',
+                                    churn_segment='critical')
+            Customer.objects.create(name=f'حساب {base}-{k}', phone=f'0103{base:03d}{k:04d}',
+                                    is_account_placeholder=True)
+            for i, (doc, branch, days) in enumerate((('115', self.b1, 1), ('115', self.b2, 2),
+                                                      ('30', self.b1, 1), ('115', self.b1, 30))):
+                PurchaseHistory.objects.create(
+                    customer=cust, branch=branch, softech_invoice_id=f'pd{base}-{k}-{i}', doc_code=doc,
+                    total_amount=Decimal('100.25') * (i + 1),
+                    invoice_date=timezone.now() - datetime.timedelta(days=days))
+            for status, due in (('pending', today), ('pending', today - datetime.timedelta(days=2)),
+                                ('called', today - datetime.timedelta(days=1)), ('missed', today)):
+                FollowUpTask.objects.create(customer=cust, due_date=due, status=status)
+            for status, supplier in (('pending', self.b2), ('sent_to_erp', self.b1), ('approved', self.b1)):
+                TransferRequest.objects.create(requesting_branch=self.b2 if supplier == self.b1 else self.b1,
+                                               supplying_branch=supplier, created_by=staff, status=status)
+
+    def _call(self, view, user, query=''):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        req = APIRequestFactory().get('/api/dashboard/summary/' + query)
+        force_authenticate(req, user=user)
+        data = view(req).data
+        data.pop('generated_at')
+        return data
+
+    def _assert_same(self):
+        from apps.dashboard.views import dashboard_summary
+        from apps.tests.perf_reference.dashboard_before import dashboard_summary as before
+        for user, query in ((self.admin[0], ''), (self.admin[0], f'?branch={self.b2.id}'),
+                            (self.pharm[0], ''), (self.pharm[0], f'?branch={self.b2.id}')):
+            new, old = self._call(dashboard_summary, user, query), self._call(before, user, query)
+            self.assertEqual(new, old, (user.username, query))
+        return new
+
+    def test_same_answer_with_data(self):
+        self._seed()
+        last = self._assert_same()
+        self.assertGreater(last['reservations']['active_total'], 0)
+
+    def test_same_answer_empty(self):
+        self._assert_same()
+
+    def test_query_count_is_small_and_flat(self):
+        from apps.dashboard.views import dashboard_summary
+        self._seed(1)
+        small = _count_queries(self._call, dashboard_summary, self.admin[0])
+        self._seed(3)
+        self.assertEqual(_count_queries(self._call, dashboard_summary, self.admin[0]), small)
+        self.assertLessEqual(small, 12)
