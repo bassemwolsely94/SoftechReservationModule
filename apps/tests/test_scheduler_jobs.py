@@ -72,3 +72,44 @@ class SchedulerRegistrationTests(SimpleTestCase):
         for real, jid, wrapped in self._jobs():
             with self.subTest(job=jid):
                 self.assertIs(wrapped.__wrapped__, real)
+
+
+class SlowLaneFirstRunTests(SimpleTestCase):
+    """A restart must not push the hourly slow lane another full hour away (2026-11-19:
+    13 restarts in 10 h, so it never fired)."""
+
+    def setUp(self):
+        import datetime as d
+        from django.utils import timezone
+        self.d = d
+        self.now = timezone.now()
+
+    def _first(self, last=None, exc=None):
+        side = exc if exc else (lambda: last)
+        with mock.patch.object(tasks, '_last_slow_run_start', side_effect=side):
+            return tasks._slow_lane_first_run(60, now=self.now)
+
+    def test_overdue_runs_shortly_after_start(self):
+        first = self._first(last=self.now - self.d.timedelta(hours=10))
+        self.assertEqual(first, self.now + self.d.timedelta(minutes=tasks.SLOW_LANE_START_DELAY_MIN))
+
+    def test_recent_run_keeps_its_hourly_rhythm(self):
+        last = self.now - self.d.timedelta(minutes=20)
+        self.assertEqual(self._first(last=last), last + self.d.timedelta(minutes=60))
+
+    def test_never_run_starts_shortly(self):
+        self.assertEqual(self._first(last=None),
+                         self.now + self.d.timedelta(minutes=tasks.SLOW_LANE_START_DELAY_MIN))
+
+    def test_database_error_falls_back_to_one_interval(self):
+        self.assertEqual(self._first(exc=RuntimeError('db down')), self.now + self.d.timedelta(minutes=60))
+
+    def test_registered_with_a_first_run_time(self):
+        with mock.patch.object(tasks, 'BackgroundScheduler', _FakeScheduler), \
+             mock.patch.object(tasks, '_patch_apscheduler_for_python312', lambda: None), \
+             mock.patch.object(tasks, '_scheduler', None), \
+             mock.patch.object(tasks, '_last_slow_run_start', return_value=None):
+            tasks.start_scheduler()
+            kw = tasks._scheduler.cfg['softech_sync_slow'][1]
+        self.assertIn('next_run_time', kw)
+        self.assertGreater(kw['next_run_time'], self.now)

@@ -375,6 +375,36 @@ def _scheduled_fast_sync():
     return run_fast_sync()
 
 
+# A plain 60-min interval job first fires 60 min AFTER the scheduler starts, so a scheduler
+# restarted more often than that (deploys after merges, sleep/wake) never runs the slow lane:
+# on 2026-11-19 it was restarted 13 times between 02:30 and 12:07 and items/customers stayed
+# 10 h old. The first run is therefore anchored on the last slow run, not on the restart.
+SLOW_LANE_START_DELAY_MIN = 2
+
+
+def _last_slow_run_start():
+    """Start time of the latest scheduled-or-manual slow/full run, or None."""
+    return (SyncRun.objects.filter(lane__in=['slow', 'full'])
+            .order_by('-started_at').values_list('started_at', flat=True).first())
+
+
+def _slow_lane_first_run(slow_min, now=None):
+    """First fire time for the slow lane: one interval after the last slow run, but never
+    sooner than a short delay after start-up (lets the web process and the fast lane settle)."""
+    import datetime as _d
+    now = now or timezone.now()
+    earliest = now + _d.timedelta(minutes=SLOW_LANE_START_DELAY_MIN)
+    try:
+        last = _last_slow_run_start()
+    except Exception as exc:   # DB not ready at start-up: keep the old behaviour
+        logger.warning('[scheduler] slow lane: last run unknown (%s) — first run in %s min',
+                       exc, slow_min)
+        return now + _d.timedelta(minutes=slow_min)
+    if last is None:
+        return earliest
+    return max(earliest, last + _d.timedelta(minutes=slow_min))
+
+
 def _scheduled_slow_sync():
     if _manual_run_in_flight('slow'):
         logger.info('[sync] slow lane tick skipped — a manual run is in flight')
@@ -3653,6 +3683,7 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=300,
+        next_run_time=_slow_lane_first_run(_slow_min),
     )
     # NETWORK HEALTH — probe HQ + all operational branches (6 nodes) in parallel,
     # fail-fast, every fast interval. Isolated from the sync lanes so a down node
