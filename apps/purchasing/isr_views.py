@@ -429,7 +429,7 @@ def isr_push_review(request, pk):
     conn = None
     try:
         conn = get_branch_connection(branch.effective_db_host, branch.effective_db_port,
-                                     branch.db_name or 'SOFTECHDB9')
+                                     branch.db_name or 'SOFTECHDB9', interactive=True)
         return Response(isr_guards.review_push(p, conn))
     except Exception as exc:
         from core.errors import public_error

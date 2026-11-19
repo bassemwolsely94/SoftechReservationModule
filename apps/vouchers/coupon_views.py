@@ -168,7 +168,7 @@ def batches(request):
                         status=status.HTTP_400_BAD_REQUEST)
     from config.sybase import get_sybase_connection
     try:      # fail-closed: never pick expiry dates without checking SOFTECH's live rows
-        conn = get_sybase_connection()
+        conn = get_sybase_connection(interactive=True)
         try:
             blocked = coupons.read_blocked_expiries(conn)
         finally:
