@@ -425,11 +425,13 @@ SCREENS = [
         'summary': T('كل الطلبات التي تنتظر قرارك من كل مسارات الموافقة (طلبات الموظفين، عزل الدفعات، وغيرها)، وسجل القرارات.', 'Every request waiting for your decision across all approval flows (employee requests, batch quarantine and more), and the decision history.'),
         'audience': T('المعتمدون: المدير، المشرف، الصيادلة المسؤولون، الجودة، المشتريات.', 'Approvers: admins, supervisors, responsible pharmacists, quality, purchasing.'),
         'tabs': [
-            {'key': 'pending', 'title': T('بانتظار القرار', 'Waiting for decision'), 'body': T('افتح الطلب ← «اتخاذ قرار» ← موافقة أو رفض مع ملاحظة.', 'Open the request → "Decide" → approve or reject with a note.')},
+            {'key': 'pending', 'title': T('بانتظار القرار', 'Waiting for decision'), 'body': T('افتح الطلب ← «اتخاذ قرار» ← موافقة أو رفض مع ملاحظة. أو علّم أكثر من طلب وقرّر لهم مرة واحدة من شريط «موافقة على المحدد».', 'Open the request → "Decide" → approve or reject with a note. Or tick several requests and decide them at once from the "Approve selected" bar.')},
             {'key': 'history', 'title': T('السجل', 'History'), 'body': T('القرارات السابقة.', 'Past decisions.')},
         ],
         'tips': [T('السيرفر يتحقق أنك المعتمد المختص بهذه الخطوة؛ ظهور الطلب لا يعني دائماً أنك صاحب القرار.', 'The server checks that you are the right approver for this step; seeing a request does not always mean the decision is yours.'),
-                 T('لا يمكن اعتماد طلب قدّمته بنفسك (فصل المهام)، مهما كان دورك.', 'You cannot approve a request you submitted yourself (separation of duties), whatever your role.')],
+                 T('لا يمكن اعتماد طلب قدّمته بنفسك (فصل المهام)، مهما كان دورك.', 'You cannot approve a request you submitted yourself (separation of duties), whatever your role.'),
+                 T('الكيبورد في الجدول: ↑↓ تنقّل، مسافة تعلّم الطلب، Ctrl+A تعلّم الكل، Enter يفتح نافذة القرار وEnter تاني يؤكد «موافقة»، وEsc يقفلها.', 'Keyboard in the table: ↑↓ move, Space ticks a request, Ctrl+A ticks all, Enter opens the decision window and Enter again confirms "Approve", Esc closes it.'),
+                 T('القرار الجماعي بيبعت كل طلب لوحده، فالسيرفر بيتحقق من كل واحد. الطلب اللي اترفض قراره بيفضل معلّم ومعاه السبب.', 'A bulk decision sends each request on its own, so the server checks every one. A request whose decision was refused stays ticked with the reason.')],
         'related': ['hr.mobile_approvals', 'pricing.approvals'],
         'tour': [
             {'target': 'hr-approvals-header', 'label': T('صندوق الموافقات', 'Approvals inbox'),
@@ -459,6 +461,12 @@ SCREENS = [
                        'For each request: title, type (approval flow name), requester, status and date.\n'
                        'The table shows when there are requests; if empty you see "No requests awaiting decision".'),
          },
+            {'target': 'hr-approvals-bulk', 'label': T('موافقة على المحدد · رفض المحدد', 'Approve selected · Reject selected'),
+             'text': T('علّم الطلبات (المربع أو مسافة أو Ctrl+A) وقرّر لها مرة واحدة. الرفض محتاج سبب في الملاحظة.',
+                       'Tick requests (the box, Space or Ctrl+A) and decide them at once. Rejecting needs a reason in the note.'),
+             'when': T('لما عندك طلبات كتير متشابهة، زي إجازات يوم واحد.', 'When you have many similar requests, like one-day leaves.'),
+             'warn': T('القرار نهائي لكل طلب في خطوته — راجع المعلّم قبل الضغط.', 'Final for each request at its step — check what is ticked before pressing.'),
+             'open_hint': T('في تبويب «بانتظار القرار» فوق الجدول.', 'In the "Waiting for decision" tab, above the table.')},
             {'target': 'hr-approvals-decide', 'label': T('اتخاذ قرار', 'Decide'),
              'text': T('يفتح نافذة القرار للطلب.', 'Opens the decision window for the request.'),
              'when': T('اقرا العنوان والنوع ومقدم الطلب الأول.', 'Read the title, type and requester first.'),
@@ -485,9 +493,8 @@ SCREENS = [
                        'Final for the step. The server refuses if you are not the right approver or the request is yours.'),
              'open_hint': _DECIDE},
         ],
-        'updated': '2026-10-30',
-    
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-19',
+        'change_note': T('علّم أكثر من طلب ووافق أو ارفض مرة واحدة، والكيبورد في الجدول (↑↓ مسافة Ctrl+A Enter Esc).', 'Tick several requests and approve or reject them at once, plus the keyboard in the table (↑↓ Space Ctrl+A Enter Esc).'),
     },
     {
         'key': 'hr.mobile_approvals',
