@@ -41,8 +41,9 @@ test.describe('transfer request', () => {
     await page.getByText('E2E PARACETAMOL 500MG 20 TAB').first().click()
     await page.getByPlaceholder('الكمية').fill('2')
 
-    const created = page.waitForResponse(r => /\/api\/transfers\/$/.test(r.url()) && r.request().method() === 'POST')
-    await page.getByRole('button', { name: /حفظ كمسودة|إرسال/ }).last().click()
+    // «حفظ وتقديم» is the default since FE-11 and posts to /transfers/?submit=1 (save + submit in one call)
+    const created = page.waitForResponse(r => /\/api\/transfers\/(\?submit=1)?$/.test(r.url()) && r.request().method() === 'POST')
+    await page.getByRole('button', { name: /حفظ وتقديم|حفظ كمسودة|إرسال/ }).last().click()
     const res = await created
     expect(res.status(), await res.text()).toBe(201)
     const body = await res.json()
