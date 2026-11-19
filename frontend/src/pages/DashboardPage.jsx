@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
+import { FALLBACK_POLL_MS, MAIN_SYNC_DOMAINS, useOnFreshnessChange } from '../store/liveStore'
 import { usePermission } from '../hooks/usePermission'
 import GamificationCard from '../components/GamificationCard'
 import DataFreshnessBar from '../components/DataFreshnessBar'
@@ -670,14 +671,18 @@ export default function DashboardPage() {
   const { user }  = useAuthStore()
   const supplyView = usePermission('purchasing', 'view')   // GET /dashboard/supply/ asks purchasing view
 
-  const { data, isLoading } = useQuery({
+  // perf Stage 5: the summary refetches when a main sync lane finishes (freshness_changed over the
+  // socket), when the tab regains focus, and every 5 min as a safety net (was every 90 s). The
+  // header shows «آخر تحديث HH:MM» so its age is always visible (owner decision §9a).
+  const { data, isLoading, dataUpdatedAt, refetch } = useQuery({
     queryKey: ['dashboardSummary'],
     queryFn:  () => dashboardApi.summary().then(r => r.data),
-    refetchInterval: 90_000,
+    refetchInterval: FALLBACK_POLL_MS,
   })
+  useOnFreshnessChange(() => { refetch() }, MAIN_SYNC_DOMAINS)
 
-  // The sync widget reads the summary's own `sync` block; Layout already polls sync/status every
-  // 60 s, so a second 30 s poll here was duplicate load (perf Stage 3, audit PERF-10).
+  // The sync widget reads the summary's own `sync` block; Layout follows sync/status, so a second
+  // 30 s poll here was duplicate load (perf Stage 3, audit PERF-10).
 
   const isAdminOrCC = ['admin', 'call_center', 'purchasing'].includes(user?.role)
 
@@ -706,6 +711,11 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400 mt-0.5">
               {toLatinDigits(format(now, 'EEEE، d MMMM yyyy', { locale: ar }))}
               {user?.branch_name && <span className="mr-2">· {user.branch_name}</span>}
+              {dataUpdatedAt > 0 && (
+                <span className="mr-2" data-testid="dashboard-as-of" title="تتحدّث الأرقام تلقائياً بعد كل مزامنة">
+                  · آخر تحديث {toLatinDigits(format(new Date(dataUpdatedAt), 'HH:mm'))}
+                </span>
+              )}
             </p>
           </div>
           <div data-tour="general-dashboard-quick-actions" className="flex gap-2 flex-wrap">

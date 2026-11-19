@@ -33,6 +33,11 @@ class SyncConfig(AppConfig):
 
         log = logging.getLogger("elrezeiky.sync")
 
+        # perf Stage 5: "freshness changed" when a run finishes — in EVERY process (the scheduler and
+        # management commands finish runs too), so before the early returns below.
+        from apps.sync.live import connect_signals
+        connect_signals()
+
         cmd = sys.argv[1] if len(sys.argv) > 1 else ""
 
         # The dedicated `run_scheduler` process starts the scheduler itself in

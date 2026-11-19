@@ -1,6 +1,7 @@
 import { lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QUERY_DEFAULTS } from './api/queryDefaults'
 import useAuthStore from './store/authStore'
 import useLangStore from './store/langStore'
 import usePermissionStore from './store/permissionStore'
@@ -223,8 +224,9 @@ const PortalLoyaltyPage = lazy(() => import('./pages/portal/PortalLoyaltyPage'))
 const PortalRefillsPage = lazy(() => import('./pages/portal/PortalRefillsPage'))
 import './index.css'
 
+// perf Stage 5 defaults (api/queryDefaults.js): no interval refetch while the tab is hidden.
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } }
+  defaultOptions: { queries: QUERY_DEFAULTS }
 })
 
 // Bottom-tab navigation for the standalone mobile surfaces (/m). One tab per

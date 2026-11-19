@@ -8,7 +8,9 @@
  *   - Handles new_notification + pending_notification events
  *   - Sends ping every 25s to keep connection alive
  *   - Auto-reconnects with exponential back-off (max 32s)
- *   - Falls back to 30s REST polling when WS is unavailable
+ *   - Applies the server-pushed `category_counts` (unread counts) and `freshness_changed` events
+ *     (perf Stage 5) — no periodic reconcile while the socket is up
+ *   - Falls back to a 120 s REST poll only while WS is unavailable (paused in hidden tabs)
  *   - Exposes:  unreadCount, notifications, isConnected, markRead, markAllRead
  *
  * Usage:
@@ -19,6 +21,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { notificationsApi, refreshSession } from '../api/client'
 import useAuthStore from '../store/authStore'
 import useNotificationStore from '../store/notificationStore'
+import useLiveStore, { FRESHNESS_JITTER_MS } from '../store/liveStore'
 
 // Categories kept OUT of the main bell — routed to their own quiet feeds:
 //   demand / followups → in-module bell + sidebar hint
@@ -105,8 +108,10 @@ function playAlarm(tier) {
 const WS_RECONNECT_BASE = 2000   // 2s
 const WS_RECONNECT_MAX  = 32000  // 32s
 const PING_INTERVAL     = 25000  // 25s
-const POLL_INTERVAL     = 8000   // 8s fallback — near-real-time feel without WS
-const REFRESH_INTERVAL  = 30000  // 30s periodic reconciliation even when WS is live
+// perf Stage 5: while the socket is up the server PUSHES every count change (category_counts) and
+// every new notification, so there is no periodic reconcile any more. This slow REST poll runs only
+// while the socket is down (it used to be 8 s, plus a 30 s reconcile even with the socket up).
+export const FALLBACK_POLL_INTERVAL = 120_000
 const MAX_NOTIFICATIONS = 100    // cap the in-memory list
 
 // ── Helper: build WebSocket URL ───────────────────────────────────────────────
@@ -130,9 +135,11 @@ export function useNotificationSocket() {
   const reconnectRef  = useRef(null)
   const pingRef       = useRef(null)
   const pollRef       = useRef(null)
-  const refreshRef    = useRef(null)   // 30s periodic reconciliation
   const retryDelay    = useRef(WS_RECONNECT_BASE)
   const mountedRef    = useRef(true)
+  const everOpenRef   = useRef(false)  // a later onopen is a RE-connect → one REST reconcile
+  const unreadRef     = useRef(0)      // current bell count, read by the counts event handler
+  useEffect(() => { unreadRef.current = unreadCount }, [unreadCount])
 
   // ── REST fallback helpers ─────────────────────────────────────────────────
 
@@ -149,7 +156,8 @@ export function useNotificationSocket() {
       if (!mountedRef.current) return
       const list = Array.isArray(data) ? data : []
       setNotifications(list)
-      setUnreadCount(list.filter(n => !n.is_read).length)
+      // A capped (full) list cannot count beyond its cap — then the pushed/REST `bell` count rules.
+      if (list.length < MAX_NOTIFICATIONS) setUnreadCount(list.filter(n => !n.is_read).length)
     } catch { /* silent */ }
   }, [])
 
@@ -169,8 +177,16 @@ export function useNotificationSocket() {
     ws.onopen = () => {
       if (!mountedRef.current) { ws.close(); return }
       setIsConnected(true)
+      useLiveStore.getState().setSocketUp(true)
       retryDelay.current = WS_RECONNECT_BASE
       _stopPolling()
+      // After a drop, catch up once (reads / deletes elsewhere while we were away); unread arrivals
+      // come in the server's pending_notifications frame. The first open needs nothing: mount loaded.
+      if (everOpenRef.current) {
+        fetchNotifications()
+        useNotificationStore.getState().refresh()
+      }
+      everOpenRef.current = true
 
       // Keepalive ping every 25s
       pingRef.current = setInterval(() => {
@@ -196,6 +212,7 @@ export function useNotificationSocket() {
       if (!mountedRef.current) return
 
       setIsConnected(false)
+      useLiveStore.getState().setSocketUp(false)
 
       // Don't reconnect on 4001 (auth failure) or 4403 (not allowed from this place, N5)
       if (ev.code === 4001 || ev.code === 4403) {
@@ -208,6 +225,9 @@ export function useNotificationSocket() {
       // 4002: the access token ran out (N5) — rotate the cookie, reconnect at the minimum delay
       const expired = ev.code === 4002
       if (expired) retryDelay.current = WS_RECONNECT_BASE
+      // Slow REST fallback until a reconnect succeeds (onopen stops it). Without it a socket that
+      // keeps failing would leave the bell frozen now that there is no 30 s reconcile.
+      _startPolling()
       const reconnect = () => { if (mountedRef.current) connect() }
 
       // Exponential back-off reconnect
@@ -224,6 +244,25 @@ export function useNotificationSocket() {
   function _handleMessage(msg) {
     const { event } = msg
     if (event === 'pong') return
+
+    // Unread counts changed (a new notification, a read / snooze / delete on any tab). Integers only.
+    if (event === 'category_counts') {
+      useNotificationStore.getState().applyCounts(msg)
+      const bell = Number(msg.bell) || 0
+      // The list in memory no longer matches (read or removed on another tab) → reload it once.
+      if (bell !== unreadRef.current) fetchNotifications()
+      setUnreadCount(bell)
+      return
+    }
+
+    // A sync run / lane finished (domain keys + time only): screens showing those domains refetch.
+    // A random delay spreads every open tab's refetch over a few seconds.
+    if (event === 'freshness_changed') {
+      const domains = Array.isArray(msg.domains) ? msg.domains : []
+      setTimeout(() => useLiveStore.getState().freshnessChanged(domains),
+        Math.random() * FRESHNESS_JITTER_MS)
+      return
+    }
 
     if (event === 'new_notification') {
       // Per-role notifier visibility: if this category is hidden for the user's
@@ -305,13 +344,18 @@ export function useNotificationSocket() {
 
   // ── REST polling (WS fallback) ────────────────────────────────────────────
 
+  // One fallback tick: the list + the per-category counts. Skipped while the tab is hidden.
+  function _pollOnce() {
+    if (typeof document !== 'undefined' && document.hidden) return
+    fetchNotifications()
+    useNotificationStore.getState().refresh()
+  }
+
   function _startPolling() {
     if (pollRef.current) return
-    // Fetch full list immediately so the panel is populated right away,
-    // then keep refreshing every POLL_INTERVAL (8s) for near-real-time feel.
-    // fetchNotifications() updates both `notifications` and `unreadCount` in one call.
-    fetchNotifications()
-    pollRef.current = setInterval(fetchNotifications, POLL_INTERVAL)
+    // Socket down: refresh now, then every FALLBACK_POLL_INTERVAL until it reconnects.
+    _pollOnce()
+    pollRef.current = setInterval(_pollOnce, FALLBACK_POLL_INTERVAL)
   }
 
   function _stopPolling() {
@@ -333,21 +377,15 @@ export function useNotificationSocket() {
     // Initial notification load (global bell) + per-module counts
     fetchNotifications()
     useNotificationStore.getState().refresh()
-    // Try to connect via WebSocket; falls back to polling if unavailable
+    // Try to connect via WebSocket; falls back to the slow poll if unavailable. While it is up, the
+    // server pushes new notifications and every count change — no periodic reconcile (perf Stage 5).
     connect()
-    // Periodic reconciliation — syncs list from server every 30s regardless
-    // of WebSocket state. Catches any notifications missed by WS delivery.
-    refreshRef.current = setInterval(() => {
-      fetchNotifications()
-      useNotificationStore.getState().refresh()
-    }, REFRESH_INTERVAL)
 
     return () => {
       mountedRef.current = false
+      useLiveStore.getState().setSocketUp(false)
       clearTimeout(reconnectRef.current)
       clearInterval(pingRef.current)
-      clearInterval(refreshRef.current)
-      refreshRef.current = null
       _stopPolling()
       if (wsRef.current) {
         wsRef.current.onclose = null // prevent reconnect on intentional close

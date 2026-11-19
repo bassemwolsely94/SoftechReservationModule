@@ -34,6 +34,7 @@ from .models import (
     Notification, NotificationLog, ChatterMessage, RoleNotificationAccess,
     PersonalReminder, Announcement, AnnouncementRead, PushSubscription,
 )
+from .live import request_counts_push
 from .serializers import (
     NotificationSerializer,
     ChatterMessageSerializer,
@@ -256,6 +257,13 @@ def category_counts(request):
     profile = _get_profile(request)
     if not profile:
         return Response({'global': 0, 'demand': 0, 'followups': 0})
+    return Response(unread_category_counts(profile))
+
+
+def unread_category_counts(profile):
+    """The category-counts payload for one profile — shared by the REST route and the live push
+    over the notification socket (perf Stage 5), so both always agree. Integers + the visible
+    category keys only."""
     from django.db.models import Count
     rows = (
         Notification.objects.filter(recipient=profile, is_read=False)
@@ -268,7 +276,7 @@ def category_counts(request):
     # so a hidden feed never reveals a count.
     def _scoped(cat):
         return counts.get(cat, 0) if cat in visible else 0
-    return Response({
+    return {
         'global':       _scoped(Notification.CATEGORY_GLOBAL),
         'demand':       _scoped(Notification.CATEGORY_DEMAND),
         'followups':    _scoped(Notification.CATEGORY_FOLLOWUPS),
@@ -286,7 +294,7 @@ def category_counts(request):
         ),
         # Which notifiers this role may see — drives front-end feed hiding + WS drop.
         'visible': sorted(visible),
-    })
+    }
 
 
 @api_view(['POST'])
@@ -307,6 +315,7 @@ def mark_read(request, pk):
     NotificationLog.objects.filter(
         notification_id=pk, recipient=profile, read_at__isnull=True
     ).update(read_at=timezone.now())
+    request_counts_push(profile.pk)
     return Response({'detail': 'تم التعليم كمقروء'})
 
 
@@ -326,6 +335,8 @@ def bulk_action(request):
     if not isinstance(ids, list) or not ids:
         return Response({'detail': 'حدد عناصر أولاً'}, status=status.HTTP_400_BAD_REQUEST)
     qs = Notification.objects.filter(pk__in=ids, recipient=profile)
+    if action in ('read', 'delete', 'snooze'):
+        request_counts_push(profile.pk)   # sent after commit; the counts change with each
 
     if action == 'read':
         n = qs.update(is_read=True)
@@ -474,6 +485,8 @@ def mark_all_read(request):
     NotificationLog.objects.filter(
         recipient=profile, read_at__isnull=True
     ).update(read_at=now)
+    if count:
+        request_counts_push(profile.pk)
     return Response({'marked': count})
 
 
@@ -499,6 +512,8 @@ def delete_notification(request, pk):
     if not profile:
         return Response(status=status.HTTP_403_FORBIDDEN)
     deleted, _ = Notification.objects.filter(pk=pk, recipient=profile).delete()
+    if deleted:
+        request_counts_push(profile.pk)
     if not deleted:
         return Response(
             {'detail': 'لم يتم العثور على الإشعار'},
@@ -515,6 +530,8 @@ def clear_all(request):
     if not profile:
         return Response(status=status.HTTP_403_FORBIDDEN)
     deleted, _ = Notification.objects.filter(recipient=profile).delete()
+    if deleted:
+        request_counts_push(profile.pk)
     return Response({'deleted': deleted})
 
 

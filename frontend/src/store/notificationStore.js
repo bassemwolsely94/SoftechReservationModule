@@ -20,7 +20,7 @@ const MODULE_CATEGORIES = ['demand', 'followups', 'monitoring', 'settings', 'rep
 const ALL_CATEGORIES = ['global', 'demand', 'followups', 'delivery', 'transfers',
   'reservations', 'monitoring', 'settings', 'reports', 'mentions']
 
-const useNotificationStore = create((set) => ({
+const useNotificationStore = create((set, get) => ({
   // Unread counts for the quiet categories (kept out of the main bell).
   moduleCounts: { demand: 0, followups: 0, monitoring: 0, settings: 0, reports: 0, mentions: 0 },
   // Notifier categories this user's role may see (per-role visibility). Default:
@@ -42,14 +42,21 @@ const useNotificationStore = create((set) => ({
       }
     }),
 
+  // Apply a category-counts payload — the REST reply below, or the `category_counts` event the
+  // server pushes over the socket whenever this user's unread counts change (perf Stage 5).
+  applyCounts: (data) => {
+    if (!data || typeof data !== 'object') return
+    set({
+      moduleCounts: Object.fromEntries(MODULE_CATEGORIES.map(c => [c, data[c] ?? 0])),
+      visible: new Set(Array.isArray(data.visible) ? data.visible : ALL_CATEGORIES),
+    })
+  },
+
   // Authoritative reconcile from the server (single call, all categories).
   refresh: async () => {
     try {
       const { data } = await notificationsApi.categoryCounts()
-      set({
-        moduleCounts: Object.fromEntries(MODULE_CATEGORIES.map(c => [c, data[c] ?? 0])),
-        visible: new Set(Array.isArray(data.visible) ? data.visible : ALL_CATEGORIES),
-      })
+      get().applyCounts(data)
     } catch { /* silent */ }
   },
 }))
