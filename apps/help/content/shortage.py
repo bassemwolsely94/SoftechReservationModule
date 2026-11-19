@@ -490,8 +490,8 @@ SCREENS = [
              'when': T('الواتساب بيفتح المحادثة بس — إنت اللي بتضغط إرسال هناك.', 'WhatsApp only opens the chat — you press send there yourself.'),
              'open_hint': T('موجود في كل التبويبات ما عدا «📈 الاتجاهات».', 'Present on every tab except "📈 Trends".'),
              'more': T(
-                 'الفلتر والبحث بيطبقوا على التبويب المفتوح. التصنيف يقبل أكثر من اختيار (لا شىء معلّم = الكل)، والإكسل والواتساب بياخدوا نفس التصنيفات.\n• «📥 Excel» يطلع ملف بالأصناف المعروضة.\n• «📱 واتساب» يجهّز رسالة: تنسخها أو تكتب رقم المورد وتفتح واتساب بيها.',
-                 'The filter and search apply to the open tab. The class filter takes several choices (nothing ticked = all), and Excel and WhatsApp use the same classes.\n• "📥 Excel" downloads a file with the shown items.\n• "📱 WhatsApp" prepares a message: copy it, or enter the supplier\'s number and open WhatsApp with it.')},
+                 'الفلتر والبحث بيطبقوا على التبويب المفتوح. التصنيف يقبل أكثر من اختيار (لا شىء معلّم = الكل)، والإكسل والواتساب بياخدوا نفس التصنيفات.\n• «📥 Excel» يطلع ملف بالأصناف المعروضة — بيتجهّز في الخلفية بشريط تقدّم وبينزل لوحده، وتقدر تكمّل شغلك.\n• «📱 واتساب» يجهّز رسالة: تنسخها أو تكتب رقم المورد وتفتح واتساب بيها.',
+                 'The filter and search apply to the open tab. The class filter takes several choices (nothing ticked = all), and Excel and WhatsApp use the same classes.\n• "📥 Excel" downloads a file with the shown items — built in the background with a progress bar; keep working meanwhile.\n• "📱 WhatsApp" prepares a message: copy it, or enter the supplier\'s number and open WhatsApp with it.')},
             {'target': 'shortage-market-confirm', 'label': T('تأكيد', 'Confirm'),
              'text': T('يأكد إن الصنف ناقص في السوق وينقله لـ«المؤكدة».', 'Confirms the item is short in the market and moves it to "Confirmed".'),
              'warn': T('لو الكتابة في SOFTECH مفعّلة: بيعلّم «صنف نواقص» ويكتب تحذير على كارت الصنف لكل الفروع فوراً.',

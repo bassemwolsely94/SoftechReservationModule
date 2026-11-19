@@ -60,6 +60,28 @@ def file_response(request, job, *, allowed=None, audit_extra=None):
     return resp
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def start_view_export(request, rest):
+    """POST /api/<an export's own path>jobs/ — start that export as a job (view_kinds.VIEW_EXPORTS).
+    The URL keeps the export's own prefix, so the module gate (module_access) applies as for the
+    direct download; the view's own permission classes are checked here."""
+    from . import view_kinds
+    orig = f'/api/{rest}'                    # rest ends with '/'
+    key = view_kinds.key_for_path(orig)
+    if key is None:
+        return not_found()
+    kind = get_kind(key)
+    profile = getattr(request.user, 'staff_profile', None)
+    if profile is None or not kind.allowed(request.user):
+        return Response({'detail': 'غير مصرح لك.'}, status=status.HTTP_403_FORBIDDEN)
+    from core.client_ip import client_ip
+    params = {'path': orig, 'query': runner.params_of(request.query_params), 'client_ip': client_ip(request)}
+    if kind.body:
+        params['body'] = dict(request.data)
+    return runner.start_response(*runner.start(key, profile, params))
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def job_status(request, pk):

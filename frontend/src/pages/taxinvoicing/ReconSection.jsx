@@ -4,7 +4,9 @@
  */
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { taxInvoicingApi } from '../../api/client'
+import { exportJobsApi, taxInvoicingApi } from '../../api/client'
+import useExportJob from '../../hooks/useExportJob'
+import ExportJobStatus from '../../components/ExportJobStatus'
 import SortTh from '../../components/SortTh'
 import useBranchLabels from '../../hooks/useBranchLabels'
 import useServerSort from '../../hooks/useServerSort'
@@ -31,14 +33,6 @@ const channelText = r => (r.channel ? (r.channel_label ? `${r.channel} · ${r.ch
 const ORDER = ['matched', 'amount_differs', 'missing_at_eta', 'eta_only', 'not_valid', 'duplicate', 'by_invoice']
 const TH = 'px-2 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap'
 
-function save(blob, name) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 function Lines({ system, pick }) {
   const [page, setPage] = useState(1)
@@ -46,6 +40,11 @@ function Lines({ system, pick }) {
   const act = useAction()
   const [reason, setReason] = useState('')
   const params = { system, branch: pick.branch, month: pick.month, outcome: pick.outcome, reason: reason || undefined, page }
+  const exp = useExportJob({   // Stage 4: background job, same file name as before
+    storageKey: 'export-job:eta-recon-lines',
+    start: () => exportJobsApi.start('/tax-invoicing/history/recon/export/', { ...params, page: undefined }),
+    fileName: () => `eta-recon-${pick.branch}-${pick.month}-${pick.outcome}.xlsx`,
+  })
   const q = useQuery({ queryKey: ['tax-invoicing', 'recon-lines', params], queryFn: () => taxInvoicingApi.reconLines(params).then(r => r.data),
     placeholderData: keepPreviousData })
   if (q.isLoading) return <Loading />
@@ -64,11 +63,10 @@ function Lines({ system, pick }) {
             <option value="none">سبب غير معروف</option>
           </select>
         )}
-        <Btn disabled={act.pending || !d.count}
-          onClick={() => act.run(() => taxInvoicingApi.reconExport({ system, branch: pick.branch, month: pick.month, outcome: pick.outcome, reason: reason || undefined }),
-            r => { save(r instanceof Blob ? r : new Blob([r]), `eta-recon-${pick.branch}-${pick.month}-${pick.outcome}.xlsx`); return 'تم التصدير' })}>
-          تصدير Excel
+        <Btn disabled={exp.busy || !d.count} onClick={() => exp.run()}>
+          {exp.busy ? '… جارٍ تجهيز الملف' : 'تصدير Excel'}
         </Btn>
+        <ExportJobStatus exp={exp} className="w-56" />
       </div>
       <table className="w-full text-sm">
         <thead><tr>{['اليوم', 'النوع', 'رقم SOFTECH', 'القناة', 'إجمالي SOFTECH', 'إجمالي المصلحة', 'حالة المصلحة', 'مرات الإرسال', 'السبب', 'بلا كود'].map(h => <th key={h} className={TH}>{h}</th>)}</tr></thead>
@@ -123,6 +121,11 @@ function Gaps({ system, branches, channels }) {
   const [f, setF] = useState({ branch: '', channel: '' })
   const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: GAP_SORT, defaultOrdering: '-softech_total' })
   const params = { system, outcome: 'missing_at_eta', reason: 'none', page, ordering, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)) }
+  const exp = useExportJob({   // Stage 4: background job, same file name as before
+    storageKey: 'export-job:eta-recon-gaps',
+    start: () => exportJobsApi.start('/tax-invoicing/history/recon/export/', { ...params, page: undefined }),
+    fileName: () => `eta-recon-gaps-${system}.xlsx`,
+  })
   const q = useQuery({ enabled: open, queryKey: ['tax-invoicing', 'recon-gaps', params],
     queryFn: () => taxInvoicingApi.reconLines(params).then(r => r.data), placeholderData: keepPreviousData })
   const set = (k, v) => { setF(x => ({ ...x, [k]: v })); setPage(1) }
@@ -142,11 +145,10 @@ function Gaps({ system, branches, channels }) {
               {channels.map(c => <option key={c.code} value={c.code}>{c.label ? `${c.code} · ${c.label}` : c.code}</option>)}
             </select>
             {q.data && <span className="text-gray-500 text-xs">{fmtInt(q.data.count)} مستند · {fmt(q.data.total)} ج</span>}
-            <Btn disabled={act.pending || !q.data?.count}
-              onClick={() => act.run(() => taxInvoicingApi.reconExport({ ...params, page: undefined }),
-                r => { save(r instanceof Blob ? r : new Blob([r]), `eta-recon-gaps-${system}.xlsx`); return 'تم التصدير' })}>
-              تصدير Excel
+            <Btn disabled={exp.busy || !q.data?.count} onClick={() => exp.run()}>
+              {exp.busy ? '… جارٍ تجهيز الملف' : 'تصدير Excel'}
             </Btn>
+            <ExportJobStatus exp={exp} className="w-56" />
           </div>
           {q.isLoading ? <Loading /> : q.error ? <Failed error={q.error} /> : q.data && (
             <>
@@ -194,6 +196,10 @@ function Uncoded({ system, branches }) {
   const [f, setF] = useState({ branch: '', open: '1', q: '' })
   const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) }, { allowed: UNCODED_SORT, defaultOrdering: '-value' })
   const params = { system, page, ordering, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)) }
+  const exp = useExportJob({   // Stage 4: background job (the server names it eta-uncoded-items-<system>.xlsx)
+    storageKey: 'export-job:eta-recon-uncoded',
+    start: () => exportJobsApi.start('/tax-invoicing/history/recon/uncoded/export/', { ...params, page: undefined }),
+  })
   const q = useQuery({ enabled: open, queryKey: ['tax-invoicing', 'recon-uncoded', params],
     queryFn: () => taxInvoicingApi.reconUncoded(params).then(r => r.data), placeholderData: keepPreviousData })
   const set = (k, v) => { setF(x => ({ ...x, [k]: v })); setPage(1) }
@@ -215,11 +221,10 @@ function Uncoded({ system, branches }) {
               ما زالت بلا كود اليوم فقط
             </label>
             {q.data && <span className="text-gray-500 text-xs">{fmtInt(q.data.count)} صنف · {fmt(q.data.total_value)} ج</span>}
-            <Btn disabled={act.pending || !q.data?.count}
-              onClick={() => act.run(() => taxInvoicingApi.reconUncodedExport({ ...params, page: undefined }),
-                r => { save(r instanceof Blob ? r : new Blob([r]), `eta-uncoded-items-${system}.xlsx`); return 'تم التصدير' })}>
-              تصدير Excel
+            <Btn disabled={exp.busy || !q.data?.count} onClick={() => exp.run()}>
+              {exp.busy ? '… جارٍ تجهيز الملف' : 'تصدير Excel'}
             </Btn>
+            <ExportJobStatus exp={exp} className="w-56" />
           </div>
           {q.isLoading ? <Loading /> : q.error ? <Failed error={q.error} /> : q.data && (
             <>

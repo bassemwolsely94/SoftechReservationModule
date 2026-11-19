@@ -3338,6 +3338,8 @@ export const hrAttendanceApi = {
 // PIC Analytics (doc 33) — every read takes the filter bar as query params (from, to, branch, …).
 // Performance Stage 4 — follow / download one's own background export (any screen; useExportJob)
 export const exportJobsApi = {
+  // start a whitelisted export as a job: its own path (e.g. '/stock-audit/findings/export/') + jobs/
+  start:  (path, params, body) => api.post(`${path}jobs/`, body ?? null, { params }),
   status: (id) => api.get(`/export-jobs/${id}/`),
   file:   (id) => api.get(`/export-jobs/${id}/download/`, { responseType: 'blob' }),
 }

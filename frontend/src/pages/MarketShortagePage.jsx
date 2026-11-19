@@ -9,7 +9,9 @@
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { purchasingApi } from '../api/client'
+import { exportJobsApi, purchasingApi } from '../api/client'
+import useExportJob from '../hooks/useExportJob'
+import ExportJobStatus from '../components/ExportJobStatus'
 import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -99,13 +101,6 @@ const matchFilter = (r, med, q) => {
     if (!wildcardMatch([r.name, r.code], q)) return false
   }
   return true
-}
-
-function downloadArrayBuffer(data, filename) {
-  const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename })
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
 }
 
 function TierBadge({ tier }) {
@@ -255,9 +250,11 @@ function Toolbar({ med, setMed, q, setQ, view }) {
   const [wa, setWa] = useState(false)
   const { data: mt } = useQuery({ queryKey: ['shortage-medtypes'],
     queryFn: () => purchasingApi.shortageMedTypes().then(r => r.data) })
-  const exp = useMutation({
-    mutationFn: () => purchasingApi.shortageExport({ view, ...(med.length ? { med: med.join(',') } : {}), ...(q ? { q } : {}) }),
-    onSuccess: (r) => downloadArrayBuffer(r.data, `market-shortage-${view}.xlsx`),
+  // Stage 4: the file is built as a background job (start → progress → download)
+  const exp = useExportJob({
+    storageKey: 'export-job:shortage',
+    start: () => exportJobsApi.start('/purchasing/shortage/export/',
+      { view, ...(med.length ? { med: med.join(',') } : {}), ...(q ? { q } : {}) }),
   })
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4" data-tour="shortage-market-toolbar">
@@ -266,9 +263,9 @@ function Toolbar({ med, setMed, q, setQ, view }) {
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالكود/الاسم…"
         className="border rounded-lg px-3 py-1.5 text-sm w-44" />
       <div className="mr-auto flex gap-2">
-        <button onClick={() => exp.mutate()} disabled={exp.isPending}
+        <button onClick={() => exp.run()} disabled={exp.busy} data-tour="shortage-market-export"
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-          {exp.isPending ? '…' : '📥 Excel'}
+          {exp.busy ? '…' : '📥 Excel'}
         </button>
         <button onClick={() => setWa(true)}
           className="px-3 py-1.5 text-sm border border-emerald-300 text-emerald-700 rounded-lg hover:bg-emerald-50">
@@ -276,6 +273,7 @@ function Toolbar({ med, setMed, q, setQ, view }) {
         </button>
       </div>
       {wa && <WhatsAppModal params={{ view, ...(med.length ? { med: med.join(',') } : {}), ...(q ? { q } : {}) }} onClose={() => setWa(false)} />}
+      <div className="basis-full flex justify-end"><ExportJobStatus exp={exp} /></div>
     </div>
   )
 }

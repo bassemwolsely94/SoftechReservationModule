@@ -272,12 +272,14 @@ def required(path, method):
     prefix = parts[2]
     if prefix in EXEMPT_PREFIXES or path in OPEN_WRITE_EXACT:
         return None
-    # Performance Stage 4: starting an export job (POST …/export/jobs/) asks exactly what the direct
-    # export asks — with ITS method (GET for most, POST for a body export such as ISR fulfilment):
-    # it builds the same file, and the view keeps the export's own checks.
-    if method.upper() == 'POST' and path.endswith('/export/jobs/'):
+    # Performance Stage 4: starting an export job (POST <an export's path>jobs/) asks exactly what the
+    # direct export asks — with ITS method (GET for most, POST for a body export such as ISR
+    # fulfilment): it builds the same file, and the view keeps the export's own checks.
+    if method.upper() == 'POST' and path.endswith('/jobs/'):
+        from apps.access.policy import is_export
         export_path = path[:-len('jobs/')]
-        return required(export_path, _export_method(export_path))
+        if is_export(export_path):
+            return required(export_path, _export_method(export_path))
     # Small daily counts (Project 2) have their own gate, like /api/stock-audit/: every salesperson
     # counts their OWN blind list (the matrix gives salespeople read-only stockcount), and review is
     # for named branch managers + stock_audit management (apps/stockcount/daily/views.py)
