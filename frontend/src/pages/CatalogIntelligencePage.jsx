@@ -16,6 +16,7 @@ import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
 import { newBundleItems } from '../utils/bundleItems'
+import { confirmBar } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
@@ -142,7 +143,7 @@ function VariantGroupsTab() {
               </div>
               <button
                 data-tour="catalog-intelligence-variant-delete"
-                onClick={() => { if (window.confirm('حذف هذه المجموعة؟')) deleteMutation.mutate(selectedGroup.id) }}
+                onClick={async () => { if (await confirmBar('حذف هذه المجموعة؟', { tone: 'danger', confirmLabel: 'حذف' })) deleteMutation.mutate(selectedGroup.id) }}
                 className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded hover:bg-red-50"
               >
                 🗑 حذف

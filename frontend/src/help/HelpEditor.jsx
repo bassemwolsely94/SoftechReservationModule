@@ -10,6 +10,7 @@ import { helpApi } from '../api/client'
 import { pick, itemText } from './text'
 import NoteHints, { useNoteHints } from './NoteHints'
 import GlossaryApply from './GlossaryApply'
+import { confirmBar } from '../components/ui'
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null))
 const emptyT = () => ({ ar: '', en: '' })
@@ -147,7 +148,7 @@ export default function HelpEditor({ data, onDone, focusTourStep = null }) {
   }
 
   const revert = async () => {
-    if (!window.confirm('الرجوع للشرح الأصلي وحذف تعديلات المدربين لهذه الشاشة؟')) return
+    if (!await confirmBar('الرجوع للشرح الأصلي وحذف تعديلات المدربين لهذه الشاشة؟', { tone: 'danger', confirmLabel: 'حذف' })) return
     setBusy(true); setError(null)
     try {
       const { data: payload } = await helpApi.revert(data.key, note)

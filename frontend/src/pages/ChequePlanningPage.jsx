@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chequesApi, branchesApi } from '../api/client'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import { confirmBar } from '../components/ui'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const PLAN_STATUS = {
@@ -604,7 +605,7 @@ function PlanDetail({ planId, onClose }) {
             {['draft', 'active'].includes(plan.status) && (
               <button
                 data-tour="finance-cheques-cancel-plan"
-                onClick={() => { if (window.confirm('هل تريد إلغاء هذه الخطة؟')) cancelMutation.mutate() }}
+                onClick={async () => { if (await confirmBar('هل تريد إلغاء هذه الخطة؟', { tone: 'danger', confirmLabel: 'تأكيد' })) cancelMutation.mutate() }}
                 className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-sm rounded-lg hover:bg-red-100"
               >
                 إلغاء

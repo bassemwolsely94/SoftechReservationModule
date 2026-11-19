@@ -31,6 +31,7 @@ import useSortableRows from '../hooks/useSortableRows'
 import useServerSort from '../hooks/useServerSort'
 import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
+import { confirmBar } from '../components/ui'
 
 const toLatin = s =>
   s == null ? '' : String(s).replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660))
@@ -219,12 +220,12 @@ function ZoneRow({ zone, canEdit, showToast }) {
     onError: (e) => showToast(`❌ ${errMsg(e, 'خطأ في الحذف')}`),
   })
 
-  function confirmDelete() {
+  async function confirmDelete() {
     const parts = []
     if (zone.rule_count)     parts.push(`${zone.rule_count} قاعدة`)
     if (zone.override_count) parts.push(`${zone.override_count} تخصيص صنف`)
     const extra = parts.length ? `\nسيُحذف معها: ${parts.join(' و ')}.` : ''
-    if (window.confirm(`حذف منطقة "${zone.name}"؟${extra}`)) remove.mutate()
+    if (await confirmBar(`حذف منطقة "${zone.name}"؟${extra}`, { tone: 'danger', confirmLabel: 'حذف' })) remove.mutate()
   }
 
   return (
@@ -495,7 +496,7 @@ function RuleRow({ rule, idx, total, zones, canEdit, onMove, showToast }) {
               حفظ
             </button>
           )}
-          <button data-tour="transfers-pick-zones-delete-rule" onClick={() => window.confirm('حذف القاعدة؟') && remove.mutate()}
+          <button data-tour="transfers-pick-zones-delete-rule" onClick={async () => (await confirmBar('حذف القاعدة؟', { tone: 'danger', confirmLabel: 'حذف' })) && remove.mutate()}
             className="text-xs text-red-500 hover:text-red-700 px-2 py-1">🗑️</button>
         </td>
       )}
@@ -792,7 +793,7 @@ function OverrideRow({ ov, zones, canEdit, showToast }) {
       <td className="px-3 py-2 text-xs text-gray-400">{ov.created_by_name}</td>
       {canEdit && (
         <td className="px-3 py-2 text-left w-16">
-          <button data-tour="transfers-pick-zones-delete-override" onClick={() => window.confirm(`إلغاء تخصيص "${ov.item_name}"؟`) && remove.mutate()}
+          <button data-tour="transfers-pick-zones-delete-override" onClick={async () => (await confirmBar(`إلغاء تخصيص "${ov.item_name}"؟`, { tone: 'danger', confirmLabel: 'تأكيد' })) && remove.mutate()}
             className="text-xs text-red-500 hover:text-red-700 px-2 py-1">🗑️</button>
         </td>
       )}

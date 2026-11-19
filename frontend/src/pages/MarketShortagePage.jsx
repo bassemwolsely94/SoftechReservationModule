@@ -14,6 +14,7 @@ import { wildcardMatch } from '../utils/wildcard'
 import useHelpTab from '../help/useHelpTab'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
+import { notify } from '../components/ui'
 
 const daysBehind = (d) => { if (!d) return null; const ms = Date.now() - new Date(d).getTime(); return Math.max(0, Math.floor(ms / 86400000)) }
 
@@ -89,7 +90,7 @@ const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 }
 const invalidate = (qc) => ['shortage-candidates', 'shortage-confirmed', 'shortage-dismissed',
   'shortage-deltas', 'shortage-medtypes'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
 // Surface a failed action instead of failing silently (buttons used to give no feedback).
-const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء — حاول مجددًا.')
+const onErr = (e) => notify.error(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء — حاول مجددًا.')
 
 // Client-side filter shared by every tab (instant, no refetch).
 const matchFilter = (r, med, q) => {
