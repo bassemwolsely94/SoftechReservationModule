@@ -39,15 +39,18 @@ worklist (24 h), refill-due list (20 + 6 h), weekly HQ exception digest (20 h), 
 
 Alongside, low-cost technical clean-ups that remove daily friction:
 
-| What | Findings | Effort |
-|---|---|---|
-| TanStack v5 migration leftovers: `invalidateQueries({queryKey})` (140 sites), `placeholderData: keepPreviousData` (21) | FE-4, FE-5 | 4 h (codemod + review) |
-| Error states on the 82 screens that show 403/500 as "no data" (shared component) | FE-7 | 1 day |
-| Reservation extra-line save errors surfaced; transfer "save and send" in one call | FE-2, FE-11 | 4 h |
-| N+1 fixes on reservations / customers / supply lists | PERF-4 | 4 h |
-| Approvals inbox keyboard + bulk approve (reuse `useGridKeyboard`) | FE-10 | 6 h |
-| Session expiry keeps the page and returns after login | FE-12 | 4 h |
-| Lazy-load drawers/help/command palette (entry chunk 715 kB) | FE-19 | 4 h |
+| Status | What | Findings | Effort |
+|---|---|---|---|
+| ✅ PR 157 | TanStack v5 migration leftovers: `invalidateQueries({queryKey})` (140 sites), `placeholderData: keepPreviousData` (21) | FE-4, FE-5 | 4 h (codemod + review) |
+| ✅ PR 174 | Error states on the 82 screens that show 403/500 as "no data" (shared component) | FE-7 | 1 day |
+| ✅ PR 166 / PR 183 | Reservation extra-line save errors surfaced; transfer "save and send" in one call | FE-2, FE-11 | 4 h |
+| ✅ PR 166 | N+1 fixes on reservations / customers / supply lists | PERF-4 | 4 h |
+| ◐ built, PR to come | Approvals inbox keyboard + bulk approve (reuse `useGridKeyboard`) | FE-10 | 6 h |
+| ◐ PR 189 (open) | Session expiry keeps the page and returns after login | FE-12 | 4 h |
+| ◐ this docs PR (`api/client.js` split and lazy help left open) | Lazy-load drawers/help/command palette (entry chunk 715 kB) | FE-19 | 4 h |
+
+Of the Top 10, C01 (network stock in the call centre) is ✅ PR 158; the rest wait for the owner's answers.
+Details: [11](11_BUG_FIX_REGISTER.md) §Wave 2.
 
 ## Wave 3 — medium term (Category C)
 

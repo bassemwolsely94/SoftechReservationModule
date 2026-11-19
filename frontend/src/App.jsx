@@ -84,9 +84,11 @@ const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard'))
 const DeliveryAnalyticsPage = lazy(() => import('./pages/DeliveryAnalyticsPage'))
 const DriverDeliveryApp = lazy(() => import('./pages/DriverDeliveryApp'))
 const DispatchBoard = lazy(() => import('./pages/DispatchBoard'))
-import RiderLayout from './components/RiderLayout'
 import useNumberInputGuards from './hooks/useNumberInputGuards'
-import MobileLayout from './components/MobileLayout'
+// FE-19: the phone (/m) and rider (/rider) shells load only when one of their routes opens;
+// they render inside <PageSuspense>, like the pages.
+const RiderLayout = lazy(() => import('./components/RiderLayout'))
+const MobileLayout = lazy(() => import('./components/MobileLayout'))
 import PageSuspense from './components/PageSuspense'
 import ItemSearchHotkeyProvider from './components/ItemSearchHotkeyProvider'
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'))
