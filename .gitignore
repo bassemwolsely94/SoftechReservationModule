@@ -69,3 +69,10 @@ agent_state/
 
 # Private server files (e.g. TAX_EGS_SHEET_DIR, the Invoicer item-code workbook versions)
 private/
+
+# Role-by-role UAT (docs/superpowers/specs/2026-11-16-role-uat-design.md): credentials + real reference data stay local
+frontend/uat/.uat-*.json
+frontend/uat/.auth/
+frontend/test-results-uat/
+frontend/uat-findings/
+logs/uat.log

@@ -22,7 +22,7 @@ export default function ClaimFiscalStatus({ claimId }) {
       {data.documents.map(d => {
         const text = `${d.doc_type_label} ${d.internal_id} · ${d.status_label}`
         return canOpen
-          ? <Link key={d.id} to={`/tax-invoicing?tab=documents&doc=${d.id}`} className="px-2 py-0.5 rounded-full border border-gray-200 bg-white text-primary hover:underline">{text}</Link>
+          ? <Link key={d.id} to={`/tax-invoicing?tab=documents&doc=${d.id}`} data-perm="tax_invoicing:view" className="px-2 py-0.5 rounded-full border border-gray-200 bg-white text-primary hover:underline">{text}</Link>
           : <span key={d.id} className="px-2 py-0.5 rounded-full border border-gray-200 bg-white">{text}</span>
       })}
     </div>

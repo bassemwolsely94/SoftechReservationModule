@@ -256,24 +256,33 @@ The panel polls `GET codes/sheet/` only while a build runs. Nothing new to write
 **Newly coded item** = no keep-out decision, VAT treatment confirmed (taxable 14 or exempt; another confirmed rate is
 skipped «نسبة الضريبة المعتمدة ليست 14٪ ولا معفاة»), and a code ETA production holds (profile approved with
 `coding_env='production'`, or an approved/active production `EtaCodeUsage` matched to the item). Each one either codes
-its existing uncoded row or gets a new row after the last item row (style of the row above, inside the table and
-autofilter). Skipped items are listed with their reason (unconfirmed VAT, no brick, no tax id, ...).
+its existing uncoded row or gets a new row after the last item row (a copy of that row: styles and formulas, inside
+the table and autofilter when they reached it). Skipped items are listed with their reason (unconfirmed VAT, no brick,
+no tax id, ...).
 
-**Coded rows are never rewritten.** A..K stay as they are. Only L, N, O, P change form: every row's formula is written
-as the value it computes (the Invoicer may read without Excel recalculating). A value the owner typed instead of a
-formula is kept on an untouched row even when it differs from the formula (item 114109: N typed 1). Text written from
-SOFTECH / ETA that starts with '=' is saved as text, never as a formula.
+**The owner's workbook is edited in place, never re-saved** (`egs_xlsx.patch`, 2026-11-18). The build changes only
+the DataEntry cells of the rows it codes or appends, inside the sheet's XML; every other part of the file (other
+sheets, defined names, styles, shared strings, Power Query connections, the data model, custom XML, the calculation
+chain) keeps its bytes, and the build refuses a result where any other part changed. On a row it codes it sets A, G
+(with the date style of a coded row) and K (the confirmed rate), and fills B..F and I only where they are empty (a 0
+brick counts as empty): a typed name or brick is never replaced. L, N, O, P keep their formulas and get the results
+Excel would compute, so a reader that does not recalculate reads the right values. Rows it does not write keep their
+exact XML, typed values included (item 114109: N typed 1). Text is written as inline strings, never as a formula.
+
+**Versions built before this** (2026-11-18, version 2 on the office) re-saved the workbook through openpyxl: they lost
+the owner's other parts, turned L–P into values and replaced typed names. They carry `whole_workbook = False`: their
+full download answers 409, the seal PC never gets them, and the next build starts from the latest whole version (a
+seed, a fetched copy or an in-place build).
 
 **Checks** (any failure → no version, Arabic reasons shown in the panel): same sheet names and DataEntry header; no
 duplicate J (100 and '100' are the same) and no duplicate coded B; every coded row has A in {EGS, GS1}, B, I ≠ 0, K in
-{0, 0.14}; L–P equal their formulas' values (or the kept typed values); no keep-out item newly coded; coded-row count ≥
-the held version's; the saved file re-opens with the same counts. A held sheet that already has a duplicate itemcode is
+{0, 0.14}; on the rows written, L–P equal their formulas' values; no keep-out item newly coded; coded-row count ≥
+the held version's; no zip part other than DataEntry (and its tables) changed; the saved file re-opens with the same
+counts. A held sheet that already has a duplicate itemcode is
 refused this way until the owner fixes it.
 
 **Versions** (`TaxEgsSheetVersion`): files under `TAX_EGS_SHEET_DIR` (default `private/egs_sheets`, outside media and
 git); the newest 10 files are kept, every row stays. The receipts reconciliation reads `latest().coded_itemcodes`.
-Saving with openpyxl keeps defined names (e.g. `CodeTypes`) and the other sheets, but formulas on the other sheets
-lose their cached values until Excel recalculates them.
 
 **Downloads** (`GET codes/sheet/<n>/download/?kind=full|new`, approve, audited `egs_sheet_download`): `full` = the
 stored workbook as `ElRezeiky_Bulk_EGS_Items.xlsx`; `new` = the header and only the rows that version added or coded.

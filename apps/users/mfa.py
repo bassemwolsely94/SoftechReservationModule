@@ -57,7 +57,14 @@ def mfa_enforced() -> bool:
     try:
         from apps.config.models import SystemSetting
         s = SystemSetting.objects.filter(key='security.mfa_enforced').first()
-        return bool(s.typed_value) if s else False
+        if not s:
+            return False
+        # UAT finding B-01: this used to test the bound method (always true), so a row set to
+        # false still enforced 2FA. A string-typed row is read as text, never as "non-empty".
+        value = s.typed_value()
+        if isinstance(value, str):
+            return value.strip().lower() in ('true', '1', 'yes', 'on')
+        return bool(value)
     except Exception:
         return False
 

@@ -53,7 +53,8 @@ class _Base(_TempDirMixin, TestCase):
 
     def add_version(self, rows):
         data = make_sheet(rows)
-        return egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_BUILD, **egs_sheet.read_counts(data))
+        return egs_sheet.store(data, source=TaxEgsSheetVersion.SOURCE_BUILD, whole_workbook=True,
+                               **egs_sheet.read_counts(data))
 
     def fetch(self, data, then_write=False, status='done'):
         """A fetch job taken by the agent and answered with `data` as the live file."""
@@ -198,6 +199,26 @@ class WriteTests(_Base):
         self.add_version(HAND_EDITED)
         with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_agent.NO_FETCH):
             egs_agent.request_write(self.actor)
+
+    def test_an_old_build_that_lost_workbook_parts_is_never_written(self):
+        self.fetch(self.data)
+        old = egs_sheet.store(make_sheet(HAND_EDITED), source=TaxEgsSheetVersion.SOURCE_BUILD,
+                              **egs_sheet.read_counts(make_sheet(HAND_EDITED)))
+        self.assertFalse(old.whole_workbook)
+        with self.assertRaisesMessage(egs_agent.EgsAgentError, egs_sheet.NOT_WHOLE):
+            egs_agent.request_write(self.actor)
+        self.assertFalse(TaxAgentFileJob.objects.filter(kind=TaxAgentFileJob.KIND_WRITE).exists())
+
+    def test_a_job_on_a_version_marked_not_whole_is_not_served(self):
+        self.fetch(self.data)
+        v2 = self.add_version(HAND_EDITED)
+        egs_agent.request_write(self.actor)
+        job, body = self.claim()
+        TaxEgsSheetVersion.objects.filter(pk=v2.pk).update(whole_workbook=False)
+        r = client().get(body['download_url'])
+        self.assertNotEqual(r.status_code, 200)
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.error), (TaxAgentFileJob.FAILED, egs_sheet.NOT_WHOLE))
 
     def test_nothing_to_write_when_the_live_file_is_the_latest_version(self):
         self.fetch(self.data)

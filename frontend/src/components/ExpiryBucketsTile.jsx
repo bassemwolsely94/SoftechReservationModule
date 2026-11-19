@@ -24,7 +24,7 @@ export default function ExpiryBucketsTile() {
   if (!canView || !data?.buckets) return null
   const b = data.buckets
   return (
-    <div data-tour="general-dashboard-expiry" onClick={() => navigate('/batches')}
+    <div data-tour="general-dashboard-expiry" data-perm="catalog:view" onClick={() => navigate('/batches')}
          className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm cursor-pointer hover:border-gray-300">
       <b className="text-gray-800">⏳ الصلاحية</b>
       <span>على الرف: <b className="text-red-700">{fmt(b.live?.expired?.value)} ج</b> منتهية ·

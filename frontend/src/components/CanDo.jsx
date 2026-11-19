@@ -22,5 +22,8 @@ import { usePermission } from '../hooks/usePermission'
 
 export default function CanDo({ module, action, fallback = null, children }) {
   const allowed = usePermission(module, action)
-  return allowed ? children : fallback
+  if (!allowed) return fallback
+  // data-perm lets the role UAT check each visible gated control against the backend matrix;
+  // display: contents keeps the wrapper out of layout (no extra box).
+  return <span data-perm={`${module}:${action}`} style={{ display: 'contents' }}>{children}</span>
 }

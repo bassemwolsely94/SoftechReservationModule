@@ -813,7 +813,7 @@ describe('production coding queue', () => {
 
 describe('Invoicer codes file panel', () => {
   const version = (extra = {}) => ({ number: 2, built_at: '2026-11-17T10:00:00Z', source: 'build', built_by: 'محاسب', note: '',
-    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, ...extra })
+    coded_rows: 36010, total_rows: 36500, added: 3, coded: 2, skipped: [{ itemcode: '7', why: 'x' }, { itemcode: '8', why: 'y' }], size: 15000000, has_file: true, whole_workbook: true, not_whole: '', ...extra })
   const sheet = (extra = {}) => ({ data: { versions: [version(), version({ number: 1, source: 'seed', added: 0, coded: 0 })],
     build: { state: 'idle' }, pending: { ready: 4, skipped: [{ itemcode: '500', why: 'لا توجد فئة GPC للصنف' }] }, can_build: true, ...extra } })
 
@@ -824,7 +824,8 @@ describe('Invoicer codes file panel', () => {
     expect(screen.getByText('36,010')).toBeTruthy()
     expect(screen.getByText(REMINDER)).toBeTruthy()
     expect(REMINDER).toBe('بعد استبدال الملف في D:\\invoicer_mini أغلق Excel — الملف المفتوح يوقف رفع الإيصالات')
-    expect(screen.getByText('القيم في الأعمدة L–P مكتوبة كأرقام وليست معادلات.')).toBeTruthy()
+    expect(screen.getByText('لا يتغير في الملف إلا خلايا الصفوف التي تُكوَّد؛ معادلات L–P باقية ونتيجتها محفوظة.')).toBeTruthy()
+    expect(screen.queryByTestId('egs-sheet-not-whole')).toBeNull()
     expect(screen.queryByText(/لا توجد فئة GPC للصنف/)).toBeNull()
     expect(screen.getByText('تُرك في هذه النسخة').querySelector('b').textContent).toBe('2')
     expect(screen.getByRole('button', { name: /متروك الآن/ }).textContent).toContain('1')
@@ -845,6 +846,17 @@ describe('Invoicer codes file panel', () => {
     await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'full'))
     fireEvent.click(screen.getByRole('button', { name: 'الصفوف الجديدة فقط' }))
     await waitFor(() => expect(api.egsSheetDownload).toHaveBeenCalledWith(2, 'new'))
+  })
+
+  it('an old version that lost workbook parts says so and cannot be downloaded in full', async () => {
+    const why = 'هذه النسخة بُنيت قبل 18 نوفمبر 2026 بطريقة أسقطت أجزاءً من ملف المالك'
+    api.egsSheet.mockResolvedValue(sheet({ versions: [version({ whole_workbook: false, not_whole: why })] }))
+    show(<EgsSheetPanel />)
+    expect((await screen.findByTestId('egs-sheet-not-whole')).textContent).toBe(why)
+    const full = screen.getByRole('button', { name: 'تنزيل الملف كاملاً' })
+    expect(full.disabled).toBe(true)
+    expect(full.title).toBe(why)
+    expect(screen.getByRole('button', { name: 'الصفوف الجديدة فقط' }).disabled).toBe(false)
   })
 
   it('shows a refused build with its reasons, such as a duplicate itemcode in the held sheet', async () => {
