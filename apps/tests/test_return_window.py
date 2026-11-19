@@ -341,7 +341,10 @@ class ApiTests(Base):
         self.assertTrue(AuditLog.objects.filter(action='return_policy_changed').exists())
         self.assertEqual(self.buyer.post(self.URL + 'policies/', dict(body, open_offset=5),
                                          format='json').status_code, 400)
-        self.assertEqual(len(self.ph130.get(self.URL + 'policies/').data['policies']), 3)
+        listed = self.ph130.get(self.URL + 'policies/').data['policies']
+        # every policy row is listed (the seeds grow over time — procurement 0011 / 0015), including the edited one
+        self.assertEqual(len(listed), SupplierReturnPolicy.objects.count())
+        self.assertIn('30', {x['supplier_code'] for x in listed})
 
     def test_supplier_export(self):
         with self._today():
