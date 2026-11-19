@@ -21,10 +21,14 @@ no longer silent:
            between the INSERT and our save);
         5. write through the existing writer apps/loyalty/pic_bridge.adjust_softech_points, then mark
            credited + AuditLog `pos_points_recovered` (who, points, order).
-     The amount is the existing points rule (points.order_points): Σ per line floor(net × rate / 100),
-     discounted lines 0, read live from the same schedule the writer uses.
+     The amount (owner 2026-11-19: per batch slice) is exactly what the live writer would have put in
+     vf4: the SETTLED invoice's own stktrans lines (doccode 115 — one line per FEFO batch / reservation
+     slice) are re-read, and each slice earns floor(transqty × transprice × rate / 100) — the formula
+     of writer._execute_write._slice_points — with rate = custdiscounts[channel rep, items.itemcode_alt3]
+     and 0 on a discounted line (custdiscp > 0). Any read failure aborts; it is never taken as 0.
 """
 import logging
+import math
 from datetime import timedelta
 from decimal import Decimal
 
@@ -140,11 +144,54 @@ def _tag_in_softech(pic, tag) -> bool:
             pass
 
 
+def slice_points(qty, unit_net, rate) -> int:
+    """One slice's points — the same float formula as writer._execute_write._slice_points (vf4)."""
+    if not rate:
+        return 0
+    return int(math.floor(float(qty) * float(unit_net) * float(rate) / 100.0))
+
+
+def points_from_slices(slices, rate_of) -> int:
+    """Σ per batch slice of the settled invoice. `slices`: stktrans line dicts (itemcode, transqty,
+    transprice, custdiscp); `rate_of(itemcode)` → points %. A discounted slice earns 0 (native rule:
+    points ⊻ discount)."""
+    total = 0
+    for d in slices:
+        if float(d.get('custdiscp') or 0) > 0:
+            continue
+        total += slice_points(d.get('transqty') or 0, d.get('transprice') or 0,
+                              rate_of(str(d.get('itemcode') or '').strip()))
+    return total
+
+
 def missing_points(order) -> int:
-    """The points the sale should have earned, read live now (strict: raises when the read fails)."""
-    from . import points as _points
-    pts, _ = _points.order_points(order, strict=True)
-    return int(pts or 0)
+    """The points the settled sale should have earned, per batch slice (owner 2026-11-19): re-reads the
+    final invoice's lines and the points schedule from the branch. Raises on any read failure."""
+    if not order.softech_final_docnumber:
+        raise CreditRefused('رقم الفاتورة النهائية غير معروف بعد — انتظر مطابقة الكاشير.')
+    from . import writer as _writer
+    _, slices, _ = _writer.read_finalized_sale(order.branch, order.softech_branchcode,
+                                               order.softech_final_docnumber)
+    from .discount_authority import DiscountAuthorityReader
+    rdr = DiscountAuthorityReader(order.branch.effective_db_host, order.branch.effective_db_port,
+                                  order.branch.db_name or 'SOFTECHDB9')
+    try:
+        rep = rdr.customer_personcode(order.channel)
+        rates = {}
+
+        def rate_of(code):
+            if code not in rates:
+                rate = 0.0
+                alt3 = rdr.item_alt3(code) if rep else None
+                if alt3:
+                    c = rdr.contracted(rep, alt3)
+                    if c is not None:
+                        rate = float(c[0])
+                rates[code] = rate
+            return rates[code]
+        return points_from_slices(slices, rate_of)
+    finally:
+        rdr.close()
 
 
 def _check_creditable(gap):
@@ -169,8 +216,10 @@ def preview_credit(gap) -> dict:
         return {'dry_run': True, 'already_credited': True, 'points': gap.points_credited or 0}
     try:
         pts = missing_points(order)
+    except CreditRefused:
+        raise
     except Exception:
-        raise CreditRefused('تعذّر قراءة جدول النقاط من الفرع — حاول لاحقاً.')
+        raise CreditRefused('تعذّر قراءة الفاتورة أو جدول النقاط من الفرع — حاول لاحقاً.')
     return {'dry_run': True, 'points': pts, 'pic': order.softech_pic, 'tag': credit_tag(order.pk)}
 
 

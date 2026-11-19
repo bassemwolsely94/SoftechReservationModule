@@ -8,11 +8,14 @@ D-12: an order posted from the offline queue consumes its offer uses like a live
 
 No SOFTECH connection anywhere: every branch read / writer is mocked.
 """
+import threading
+import time
 from decimal import Decimal
 from unittest import mock
 
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from apps.offers.models import Offer, OfferApplication
 from apps.offers.usage import committed_uses
@@ -295,3 +298,98 @@ class QueuedOrderOfferUseTests(TestCase):
         self.assertEqual(consume_after_post(self.order), {'offer_uses_consumed': 1})
         self.assertEqual(consume_after_post(self.order), {})
         self.assertEqual(committed_uses(self.offer)[0], 1)
+
+
+# ── D-11: the credit amount is per batch slice, exactly as the live writer (owner 2026-11-19) ──
+
+class SliceRoundingTests(TestCase):
+    def test_floor_per_slice_not_per_line(self):
+        # one order line split over two FEFO batches: 1 + 1 at 15 EGP, rate 10 % →
+        # per slice floor(1.5) + floor(1.5) = 2 (a per-line floor(3.0) would credit 3)
+        slices = [{'itemcode': 'X', 'transqty': 1, 'transprice': 15, 'custdiscp': 0},
+                  {'itemcode': 'X', 'transqty': 1, 'transprice': 15, 'custdiscp': 0}]
+        self.assertEqual(live_checks.points_from_slices(slices, lambda c: 10.0), 2)
+
+    def test_discounted_slice_earns_nothing(self):
+        slices = [{'itemcode': 'X', 'transqty': 2, 'transprice': 50, 'custdiscp': 5},
+                  {'itemcode': 'Y', 'transqty': 1, 'transprice': 50, 'custdiscp': 0}]
+        self.assertEqual(live_checks.points_from_slices(slices, lambda c: 10.0), 5)
+
+    def test_missing_points_reads_the_settled_invoice(self):
+        br = make_branch()
+        o = _order(br, status=S.STATUS_SETTLED, softech_docnumber=7001, softech_final_docnumber=88001)
+        slices = [{'itemcode': 'X', 'transqty': 0.5, 'transprice': 33, 'custdiscp': 0},
+                  {'itemcode': 'X', 'transqty': 1.5, 'transprice': 33, 'custdiscp': 0},
+                  {'itemcode': 'Z', 'transqty': 1, 'transprice': 99, 'custdiscp': 0}]
+        rdr = mock.MagicMock()
+        rdr.customer_personcode.return_value = 'CASHREP'
+        rdr.item_alt3.side_effect = lambda code: {'X': 'A1', 'Z': None}[code]
+        rdr.contracted.return_value = (10, 1)
+        with mock.patch('apps.pos_orders.writer.read_finalized_sale',
+                        return_value=('2026-11-19', slices, [])) as rf, \
+             mock.patch('apps.pos_orders.discount_authority.DiscountAuthorityReader', return_value=rdr):
+            pts = live_checks.missing_points(o)
+        rf.assert_called_once_with(o.branch, o.softech_branchcode, o.softech_final_docnumber)
+        self.assertEqual(pts, 1 + 4)                      # floor(1.65) + floor(4.95); Z has no class → 0
+        rdr.close.assert_called_once()
+
+    def test_missing_points_needs_the_final_invoice(self):
+        o = _order(make_branch(), status=S.STATUS_SETTLED, softech_docnumber=7002)
+        with self.assertRaises(live_checks.CreditRefused):
+            live_checks.missing_points(o)
+
+    def test_read_failure_is_never_zero(self):
+        o = _order(make_branch(), status=S.STATUS_SETTLED, softech_docnumber=7003,
+                   softech_final_docnumber=88003)
+        with mock.patch('apps.pos_orders.writer.read_finalized_sale', side_effect=OSError('down')):
+            with self.assertRaises(OSError):
+                live_checks.missing_points(o)
+
+
+# ── D-11: two runs at the same moment credit once ──────────────────────────────────────────────
+
+class PointsRecreditConcurrencyTests(TransactionTestCase):
+    reset_sequences = False
+
+    @override_settings(POS_POINTS_RECOVERY_ENABLED=True)
+    def test_double_run_credits_once(self):
+        br = make_branch()
+        order = _order(br, status=S.STATUS_SETTLED, softech_docnumber=7101, softech_final_docnumber=88101)
+        gap = live_checks.record_gap(order, Gap.KIND_POINTS)
+        results, calls = {}, []
+        gate = threading.Barrier(2)
+
+        def slow_write(pic, delta, **kw):
+            calls.append(delta)
+            time.sleep(0.3)                               # hold the claim while the other run tries
+            return 100 + delta
+
+        def worker(key):
+            try:
+                gate.wait()
+                g = Gap.objects.get(pk=gap.pk)
+                res = live_checks.credit_missing_points(g, actor=None, commit=True)
+                results[key] = 'wrote' if res.get('wrote_to_softech') else 'noop'
+            except live_checks.CreditRefused:
+                results[key] = 'refused'
+            finally:
+                connection.close()
+
+        with mock.patch('config.writers.writer_allowed', return_value=True), \
+             mock.patch('apps.pos_orders.points.is_enrolled', return_value=True), \
+             mock.patch('apps.pos_orders.live_checks.missing_points', return_value=12), \
+             mock.patch('apps.pos_orders.live_checks._tag_in_softech', return_value=False), \
+             mock.patch('apps.loyalty.pic_bridge.adjust_softech_points', side_effect=slow_write):
+            threads = [threading.Thread(target=worker, args=(k,)) for k in ('a', 'b')]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        self.assertEqual(calls, [12])                     # exactly one INSERT
+        # the loser is refused while the claim is held, or (if it came later) finds it credited
+        self.assertEqual(list(results.values()).count('wrote'), 1)
+        self.assertEqual(len(results), 2)
+        gap.refresh_from_db()
+        self.assertEqual(gap.status, Gap.STATUS_CREDITED)
+        self.assertEqual(gap.points_credited, 12)

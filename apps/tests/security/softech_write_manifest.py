@@ -21,7 +21,9 @@ is a real write, a rehearsal (rolled back), a write-then-restore, an SQL builder
 at all (SQL held as text). idempotency=None / audit=None mean "nothing" — known gaps.
 
 Callers that delegate to a registered site (pos_cancel_writer → pos_orders.writer._exec_insert,
-coupon_push → invoices.writer, replacement.legs → POS/invoice writers) are not SQL sites and
+coupon_push → invoices.writer, replacement.legs → POS/invoice writers, pos_orders.live_checks
+.credit_missing_points → loyalty.pic_bridge.adjust_softech_points [D-11 missed-points re-credit, new
+picpoints write path behind POS_POINTS_RECOVERY_ENABLED=OFF]) are not SQL sites and
 are reviewed with the site they call.
 """
 from dataclasses import dataclass

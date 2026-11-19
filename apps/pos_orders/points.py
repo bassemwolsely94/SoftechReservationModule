@@ -55,12 +55,10 @@ def compute_points(reader, channel, line_values, *, sign=1):
     return total, breakdown
 
 
-def order_points(order, *, strict=False):
+def order_points(order):
     """personnewbal for an order, via a live branch read of the channel-rep schedule (current,
     exactly what SOFTECH's POS uses). Returns (points:int, breakdown:list). Graceful (0, []) on
-    non-eligible channel or branch unreachable. Uses each line's net (trans_price_total).
-    strict=True (D-11 re-credit): a failed branch read RAISES instead of returning 0 — a re-credit
-    must never mistake "could not read" for "no points"."""
+    non-eligible channel or branch unreachable. Uses each line's net (trans_price_total)."""
     if not channel_earns_points(order.channel):
         return 0, []
     # A RETURN reverses the SALE's ACTUAL awarded points — recorded in each mirrored line's source_raw
@@ -86,8 +84,6 @@ def order_points(order, *, strict=False):
         finally:
             reader.close()
     except Exception:
-        if strict:
-            raise
         return 0, []
 
 
