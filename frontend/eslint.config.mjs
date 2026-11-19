@@ -10,7 +10,7 @@ import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 
 export default [
-  { ignores: ['public/**', 'dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', 'test-results-uat/**', 'e2e/.auth/**', 'uat/.auth/**'] },
+  { ignores: ['public/**', 'dist/**', 'node_modules/**', '.vite-cache/**', 'playwright-report/**', 'test-results/**', 'test-results-uat/**', 'e2e/.auth/**', 'uat/.auth/**'] },
 
   js.configs.recommended,
   react.configs.flat.recommended,
