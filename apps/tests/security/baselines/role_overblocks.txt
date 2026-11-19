@@ -788,3 +788,7 @@ salesperson POST /api/qa/inspections/987654321/submit/
 viewer GET /api/qa/inspections/
 viewer GET /api/qa/inspections/987654321/
 viewer GET /api/qa/templates/
+
+# reason: C04 / P-28 — linking a draft transfer to a near-expiry lot is the move step; it needs
+#   CanCreateTransfer as well as catalog edit (the transfers app does not let purchasing create transfers).
+purchasing POST /api/batches/near-expiry/link-transfer/
