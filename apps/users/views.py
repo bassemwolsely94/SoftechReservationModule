@@ -854,4 +854,14 @@ def effective_permissions(user):
     perms = {}
     for row in rows:
         perms.setdefault(row['module'], {})[row['action']] = row['is_allowed']
+    # A SOFTECH supply-group member works the purchasing screens with the purchasing role's
+    # purchasing grants whatever their app role — the server already allows it (module_access
+    # supply_member, Z-2). Say so here too, so the menu and route guards match the server
+    # (UAT W2 unhandled-403 fix, 2026-11-19).
+    from core.middleware import module_access
+    if profile is not None and module_access.supply_member(profile):
+        supply = module_access._grants()[0].get('purchasing', set())   # by_role['purchasing']
+        for module, action in supply:
+            if module == 'purchasing':
+                perms.setdefault('purchasing', {})[action] = True
     return role, perms

@@ -442,9 +442,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-18',
-        'change_note': T('بعد «إنشاء» القائمة الجديدة بتتفتح على طول وبتظهر في القائمة من غير تحديث الصفحة؛ تصحيح الصنف في مراجعة الاستيراد بقى بنفس خانة البحث (Ctrl+F1 للبحث المتقدم)',
-                         'After "Create" the new list opens straight away and shows in the list without reloading the page; correcting an item in the import review uses the shared search box (Ctrl+F1 for advanced search)'),
+        'updated': '2026-11-19',
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
     {
         'key': 'shortage.market',
@@ -739,6 +738,6 @@ SCREENS = [
              'open_hint': T('اضغط «📋 لصق قائمة» في قائمة مفتوحة.', 'Tap "📋 Paste a list" in an open list.')},
         ],
         'updated': '2026-11-19',
-        'change_note': T('التبويب يظهر الآن لكل من له صلاحية النواقص في مصفوفة الصلاحيات', 'The tab now shows for everyone the permission matrix gives shortage access'),
+        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
     },
 ]
