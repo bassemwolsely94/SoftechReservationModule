@@ -384,6 +384,13 @@ jobs:
         working-directory: frontend
         run: npx playwright test
 
+      # D-04: the built bundle under the enforced CSP (deploy/nginx-csp.conf) — every menu screen,
+      # no violation allowed. Runs even when the main run failed, so both results are seen.
+      - name: Playwright — CSP enforce check
+        if: success() || failure()
+        working-directory: frontend
+        run: npx playwright test -c playwright.csp.config.js
+
       - name: Upload the Playwright report
         if: always()
         uses: actions/upload-artifact@v4
@@ -392,4 +399,6 @@ jobs:
           path: |
             frontend/playwright-report
             frontend/test-results
+            frontend/playwright-report-csp
+            frontend/test-results-csp
           retention-days: 14

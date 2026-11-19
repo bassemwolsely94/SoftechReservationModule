@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -5,6 +6,18 @@ import react from '@vitejs/plugin-react'
 // The Django server behind /api, /media and /ws. The browser tests (e2e/) point it at their own
 // e2e server (config.settings_e2e) so they never touch the dev backend.
 const API = process.env.VITE_API_TARGET || 'http://localhost:8000'
+
+// D-04: `vite preview` (the built bundle — CI's CSP browser check, the VPS workbench) sends the same
+// Content-Security-Policy as nginx, read from the one file that defines it. `vite dev` does not:
+// its HMR client needs inline scripts that the production policy rightly refuses.
+export function cspFromNginx() {
+  const conf = readFileSync(fileURLToPath(new URL('../deploy/nginx-csp.conf', import.meta.url)), 'utf-8')
+  const mode = conf.match(/^set \$elr_csp_mode "([^"]+)";/m)?.[1]
+  const policy = conf.match(/^set \$elr_csp_policy "([^"]+)";/m)?.[1]
+  if (!mode || !policy) throw new Error('vite.config.js: cannot read the CSP from deploy/nginx-csp.conf')
+  return { header: mode === 'enforce' ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', policy }
+}
+const CSP = cspFromNginx()
 
 export default defineConfig({
   plugins: [react()],
@@ -34,6 +47,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     }
+  },
+  preview: {
+    headers: { [CSP.header]: CSP.policy },
   },
   build: {
     outDir: '../staticfiles/frontend',

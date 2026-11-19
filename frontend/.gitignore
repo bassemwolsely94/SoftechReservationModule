@@ -3,3 +3,5 @@
 /e2e/.auth/
 /test-results/
 /playwright-report/
+/test-results-csp/
+/playwright-report-csp/
