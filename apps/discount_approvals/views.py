@@ -152,11 +152,19 @@ def approve_request(request, pk):
     ser = ReviewSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
 
-    obj.status       = ItemPriceChangeRequest.STATUS_APPROVED
-    obj.reviewed_by  = request.user
-    obj.reviewed_at  = timezone.now()
-    obj.review_notes = ser.validated_data.get('notes', '')
-    obj.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_notes'])
+    # Claim the request with ONE conditional UPDATE (audit BE-14): of two approvals racing, only
+    # the one that moves it out of pending/failed reaches SOFTECH; the other gets 409.
+    claimed = ItemPriceChangeRequest.objects.filter(
+        pk=obj.pk,
+        status__in=(ItemPriceChangeRequest.STATUS_PENDING, ItemPriceChangeRequest.STATUS_FAILED),
+    ).update(
+        status=ItemPriceChangeRequest.STATUS_APPROVED, reviewed_by=request.user,
+        reviewed_at=timezone.now(), review_notes=ser.validated_data.get('notes', ''),
+    )
+    if not claimed:
+        return Response({'detail': 'الطلب قيد التنفيذ أو نُفّذ بالفعل',
+                         'error_code': 'already_claimed'}, status=409)
+    obj.refresh_from_db()
 
     success = execute_price_change(obj, erp_usercode=erp_usercode, erp_username=erp_username)
     obj.refresh_from_db()
@@ -164,6 +172,9 @@ def approve_request(request, pk):
     if success:
         from .notify import notify_requester_decision
         notify_requester_decision(obj, 'executed')
+    elif obj.status == ItemPriceChangeRequest.STATUS_SOFTECH_CHANGED:
+        from .notify import notify_requester_decision
+        notify_requester_decision(obj, 'softech_changed')     # D-09: changed in SOFTECH, review
 
     return Response(
         ItemPriceChangeRequestSerializer(obj).data,
@@ -179,7 +190,9 @@ def reject_request(request, pk):
     except ItemPriceChangeRequest.DoesNotExist:
         return Response({'detail': 'غير موجود'}, status=404)
 
-    if obj.status != ItemPriceChangeRequest.STATUS_PENDING:
+    # A request SOFTECH changed under (D-09) can be closed here too: nothing was written for it.
+    if obj.status not in (ItemPriceChangeRequest.STATUS_PENDING,
+                          ItemPriceChangeRequest.STATUS_SOFTECH_CHANGED):
         return Response(
             {'detail': f'لا يمكن رفض طلب بحالة: {obj.get_status_display()}'},
             status=400
