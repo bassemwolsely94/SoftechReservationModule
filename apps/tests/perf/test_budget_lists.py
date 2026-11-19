@@ -1,0 +1,168 @@
+"""
+Query budgets for lists and search (performance stage 1, design §4 "list" ≤ 800 ms p95): the routes
+the load test (deploy/loadtest/locustfile.py) hits. Each call runs the same number of queries with few
+or many rows and stays under its ceiling in apps/tests/perf/budgets.py.
+"""
+import datetime
+from decimal import Decimal
+
+from django.test import TestCase
+
+from apps.branches.models import Branch
+from apps.customers.models import Customer
+from apps.insurance import models as ins
+from apps.pos_orders.models import SoftechSalesOrder, SoftechSalesOrderLine
+from apps.purchasing.models import DemandCalculationRun, ItemDemandMetrics
+from apps.reservations.models import Reservation, ReservationLine
+from apps.supply.models import SupplyCase
+
+from ..factories import make_admin, make_branch, make_item, make_pharmacist, make_user
+from .budget import assert_budget
+
+
+class _Counter:
+    n = 0
+
+    def next(self):
+        _Counter.n += 1
+        return _Counter.n
+
+
+def _count_list(resp):
+    """Rows for both paginated (results) and plain list payloads, or a dict with a known list key."""
+    data = resp.data
+    if isinstance(data, dict):
+        for key in ('results', 'items', 'rows', 'customers'):
+            if isinstance(data.get(key), list):
+                return len(data[key])
+        return 0
+    return len(data)
+
+
+class ListBudgets(TestCase):
+    def setUp(self):
+        self.c = _Counter()
+        self.branch = make_branch()
+        _, self.admin, self.admin_client = make_admin('perf_l_admin')
+        _, self.pharma, self.pharma_client = make_pharmacist('perf_l_pharma', branch=self.branch)
+        self.item = make_item()
+
+    # ── grow helpers ──────────────────────────────────────────────────────────
+    def _reservations(self, n=25):
+        for _ in range(n):
+            i = self.c.next()
+            r = Reservation.objects.create(item=self.item, branch=self.branch, quantity_requested=1,
+                                           contact_name=f'عميل {i}', contact_phone=f'010{i:08d}',
+                                           created_by=self.admin)
+            for _ in range(2):
+                ReservationLine.objects.create(reservation=r, item=self.item, quantity_requested=1)
+
+    def _customers(self, n=25, name='أحمد'):
+        for _ in range(n):
+            i = self.c.next()
+            Customer.objects.create(name=f'{name} عميل {i}', phone=f'011{i:08d}',
+                                    softech_pic=f'PERF{i:06d}', preferred_branch=self.branch)
+
+    def _items(self, n=25, name='باراسيتامول'):
+        for _ in range(n):
+            i = self.c.next()
+            make_item(f'{name} {i}', f'F{i:05d}')
+
+    def _supply_cases(self, n=20):
+        for _ in range(n):
+            i = self.c.next()
+            SupplyCase.objects.create(item=make_item(f'صنف توريد {i}', f'S{i:05d}'), branch=self.branch,
+                                      status=SupplyCase.STATUS_DETECTED)
+
+    def _pos_orders(self, n=20):
+        for _ in range(n):
+            o = SoftechSalesOrder.objects.create(branch=self.branch,
+                                                 softech_branchcode=self.branch.softech_branch_id,
+                                                 store_code=self.branch.softech_branch_id, channel='cash')
+            for _ in range(2):
+                SoftechSalesOrderLine.objects.create(order=o, softech_itemcode='100', qty=Decimal('1'))
+
+    def _claims(self, n=15):
+        client = ins.InsuranceClient.objects.create(name=f'جهة {self.c.next()}')
+        sub = ins.InsuranceSubClient.objects.create(client=client, name='فئة')
+        for _ in range(n):
+            i = self.c.next()
+            ins.InsuranceClaim.objects.create(claim_number=f'MT-P-{i:05d}', subclient=sub,
+                                              period_from=datetime.date(2026, 8, 1),
+                                              period_to=datetime.date(2026, 8, 31))
+
+    # ── tests ─────────────────────────────────────────────────────────────────
+    def test_reservations(self):
+        self._reservations(2)
+        assert_budget(self, 'reservations', self.admin_client, '/api/reservations/',
+                      grow=self._reservations, min_rows=25, rows_of=_count_list)
+
+    def test_customers_branch_scoped(self):
+        self._customers(2)
+        assert_budget(self, 'customers', self.pharma_client, '/api/customers/',
+                      grow=self._customers, min_rows=25, rows_of=_count_list)
+
+    def test_customers_search(self):
+        self._customers(2)
+        assert_budget(self, 'customers?search', self.pharma_client, '/api/customers/?search=أحمد',
+                      grow=self._customers, min_rows=25, rows_of=_count_list)
+
+    def test_items_search(self):
+        self._items(2)
+        assert_budget(self, 'items?search', self.admin_client, '/api/items/?search=باراسيتامول',
+                      grow=self._items, min_rows=25, rows_of=_count_list)
+
+    def test_universal_search(self):
+        self._items(2)
+        self._customers(2, name='باراسيتامول')
+
+        def grow():
+            self._items(10)
+            self._customers(10, name='باراسيتامول')
+        assert_budget(self, 'search/universal', self.admin_client, '/api/search/universal?q=باراسيتامول',
+                      grow=grow, min_rows=0)
+
+    def test_supply_cases(self):
+        self._supply_cases(2)
+        assert_budget(self, 'supply/cases', self.admin_client, '/api/supply/cases/',
+                      grow=self._supply_cases, min_rows=20, rows_of=_count_list)
+
+    def test_pos_orders(self):
+        self._pos_orders(2)
+        assert_budget(self, 'pos-orders', self.admin_client, '/api/pos-orders/',
+                      grow=self._pos_orders, min_rows=20, rows_of=_count_list)
+
+    def test_insurance_claims(self):
+        self._claims(2)
+        assert_budget(self, 'insurance/claims', self.admin_client, '/api/insurance/claims/',
+                      grow=self._claims, min_rows=15, rows_of=_count_list)
+
+
+class PurchasingListBudgets(TestCase):
+    TODAY = datetime.date(2026, 11, 3)
+
+    def setUp(self):
+        self.run = DemandCalculationRun.objects.create(status='success')
+        self.b1 = Branch.objects.create(softech_branch_id='101', name='B1', name_ar='ب', is_active=True)
+        _, _, self.client_ = make_user('perf_purch', role='purchasing', branch=self.b1, access_all=True)
+        self.n = 0
+
+    def _metrics(self, n=30):
+        for _ in range(n):
+            self.n += 1
+            it = make_item(f'دواء {self.n}', f'M{self.n:05d}')
+            it.effect_code = f'E{self.n % 5}'
+            it.effect_name = f'Effect {self.n % 5}'
+            it.save()
+            ItemDemandMetrics.objects.create(run=self.run, item=it, branch=self.b1, calc_date=self.TODAY,
+                                             monthly_avg=1)
+
+    def test_metrics(self):
+        self._metrics(2)
+        assert_budget(self, 'purchasing/metrics', self.client_, '/api/purchasing/metrics/',
+                      grow=self._metrics, min_rows=30, rows_of=_count_list)
+
+    def test_filter_options(self):
+        self._metrics(2)
+        assert_budget(self, 'purchasing/filter-options', self.client_, '/api/purchasing/filter-options/',
+                      grow=self._metrics, min_rows=0)
