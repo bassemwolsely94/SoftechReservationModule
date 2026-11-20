@@ -1,0 +1,14 @@
+# Owner: Batch 7. Requests that answered 500 or raised, for some role, with SOFTECH and the internet offline — log mode (test_role_sweep_log.py). Split from role_crashes.txt on 2026-11-20; role_crashes_enforce.txt holds the enforce-mode sweep.
+# R7 (2026-11-05): empty — replication scan answers 503, voucher mark-used fixed (V-1).
+# Round-2 close-out (2026-11-12): the 93 lines R3 found on real records were triaged; 90 fixed
+#   (test_round2_crash_fixes.py): demand actions from the wrong status → 400, insurance client /
+#   sub-client in use → 409, replication check with SOFTECH down → 503, reservation image row without
+#   a file, non-numeric transit doc number.
+
+# reason: planter artefact — the canary writes a scenario straight to the database with year 1, so
+#   «generate» computes year 0 and the view answers its own handled 500 «فشل احتساب التنبؤ». The API now
+#   refuses such a scenario (ForecastScenarioSerializer.validate_year / validate_month), so a real one
+#   cannot get there. No permission question: admin gets the same answer.
+admin POST /api/forecasting/scenarios/987654321/generate/
+purchasing POST /api/forecasting/scenarios/987654321/generate/
+supervisor POST /api/forecasting/scenarios/987654321/generate/
