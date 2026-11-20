@@ -268,6 +268,8 @@ SCREENS = [
                        'The above-policy discount is computed live and not stored; the check stays off until finance reviews the samples.'),
              'when': T('راجع «عينات للمراجعة» في SOFTECH وسجّل خصم كل فئة في الإعدادات قبل التشغيل.',
                        'Check the "samples to check" in SOFTECH and enter each class discount in settings before switching it on.'),
+             'warn': T('أرقام غير معتمدة — ماتحاسبش بيها موظف قبل مراجعة المالية. الشاشة دي مابتغيّرش أي خصم.',
+                       'Unvalidated numbers — do not hold anyone to them before finance reviews. This screen changes no discount.'),
              'open_hint': T('تبويب «💸 خصم فوق السياسة».', 'The "💸 Discount above policy" tab.')},
             {'target': 'stock-audit-main-hours', 'label': T('الإعدادات ← الفروع', 'Settings → branches'),
              'text': T('مواعيد كل فرع تُضبط من الإعدادات. الفرع بلا مواعيد لا يُفحص.', 'Each branch’s hours are set in Settings. A branch with no hours is not checked.'),
