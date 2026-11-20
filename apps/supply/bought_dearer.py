@@ -167,7 +167,6 @@ def to_excel(rep) -> bytes:
           [[g['name'], g['lines'], g['egp_above']] for g in rep['by_supplier']])
     sheet(wb.create_sheet(), 'حسب المشتري', ['المشتري', 'سطور', 'دفعنا زيادة (ج)'],
           [[g['name'] or g['code'] or '—', g['lines'], g['egp_above']] for g in rep['by_buyer']])
-    neutralise_formulas(wb)
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
