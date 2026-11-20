@@ -24,6 +24,15 @@ users, or reading fingerprint templates. `ZkClient._send` enforces this list.
    `icacls C:\ElRezeiky\agent\agent.ini /inheritance:r /grant:r "<account>:(R)"`
 5. Turn off sleep and hibernation on the PC, because the agent can't read machines while it sleeps.
 
+### Linked Gates (optional)
+
+Only if this PC also holds the Linked Gates HR portal. Install "ODBC Driver 18 for SQL Server"
+and run `pip install pyodbc`, then add a `[linkedgates]` section to `agent.ini` (see
+`agent.ini.example`). The agent reads only: five fixed SELECTs on the punch, device, employee and
+department tables, and never the pay, phone, email, photo or password columns. It runs only when
+the ERP also has Linked Gates switched on. Agents without the section never need `pyodbc`.
+The cursor is `lg_cursor.json` in the state folder.
+
 ### Run it
 
 From the folder that holds `attendance_agent`:
@@ -126,6 +135,15 @@ only, never in the ERP.
    والأسماء في الثاني. مثال:
    `icacls C:\ElRezeiky\agent\agent.ini /inheritance:r /grant:r "<account>:(R)"`
 5. أوقف وضع السكون والإسبات على الجهاز، لأن البرنامج لا يقرأ أجهزة البصمة أثناء السكون.
+
+### Linked Gates (اختياري)
+
+فقط إذا كان هذا الجهاز يحتوي أيضًا على بوابة الموارد البشرية Linked Gates. ثبّت "ODBC Driver 18 for
+SQL Server" ونفّذ `pip install pyodbc`، ثم أضف قسم `[linkedgates]` إلى `agent.ini` (انظر
+`agent.ini.example`). يقرأ البرنامج فقط: خمسة استعلامات SELECT ثابتة على جداول البصمات والأجهزة
+والموظفين والأقسام، ولا يقرأ أبدًا أعمدة الراتب أو الهاتف أو البريد أو الصورة أو كلمات المرور.
+ولا يعمل إلا إذا فعّل النظام Linked Gates أيضًا. والبرنامج بلا هذا القسم لا يحتاج `pyodbc`.
+المؤشر هو الملف `lg_cursor.json` في مجلد الحالة.
 
 ### التشغيل
 

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from .lg_reader import LinkedGatesReader, LinkedGatesSync
 from .spool import Spool
 from .uploader import Uploader, UploadError
 from .zk_client import ZkClient, ZkError, ZkProtocolError
@@ -41,6 +42,48 @@ class AgentConfig:
     secret: str = field(repr=False)
     state_dir: Path = None
     comm_keys: dict = field(default_factory=dict, repr=False)
+    # The optional [linkedgates] section: server, database, trusted, user, password,
+    # first_load_from. None when the section is absent, so no Linked Gates code runs.
+    linkedgates: dict = field(default=None, repr=False)
+
+
+def _load_linkedgates(parser):
+    if not parser.has_section('linkedgates'):
+        return None
+    section = parser['linkedgates']
+    lg = {key: section.get(key, '').strip() for key in
+          ('server', 'database', 'trusted', 'user', 'password', 'first_load_from')}
+    if not lg['server'] or not lg['database']:
+        raise ValueError('the [linkedgates] section needs server and database')
+    lg['trusted'] = lg['trusted'].lower() in ('', 'yes', 'true', '1')
+    if not lg['trusted'] and not (lg['user'] and lg['password']):
+        raise ValueError('[linkedgates] needs user and password when trusted is not yes')
+    if lg['first_load_from']:
+        try:
+            lg['first_load_from'] = datetime.fromisoformat(lg['first_load_from'])
+        except ValueError:
+            raise ValueError('[linkedgates] first_load_from is not a date') from None
+    else:
+        lg['first_load_from'] = None
+    return lg
+
+
+def make_lg_connect(lg):
+    """A function that opens a read-only connection to Linked Gates. pyodbc is imported
+    here, so an agent without [linkedgates] never needs it. Nothing about the connection
+    (server, user, password) is logged."""
+    parts = [
+        'DRIVER={ODBC Driver 18 for SQL Server}', f"SERVER={lg['server']}",
+        f"DATABASE={lg['database']}", 'Encrypt=no',
+    ]
+    parts += (['Trusted_Connection=yes'] if lg['trusted']
+              else [f"UID={lg['user']}", f"PWD={lg['password']}"])
+    connection_string = ';'.join(parts)
+
+    def connect():
+        import pyodbc  # lazy: only an agent with [linkedgates] needs it
+        return pyodbc.connect(connection_string, readonly=True, timeout=15)
+    return connect
 
 
 def load_config(path) -> AgentConfig:
@@ -62,6 +105,7 @@ def load_config(path) -> AgentConfig:
     state_dir = parser.get('agent', 'state_dir', fallback='').strip()
     comm_keys = dict(parser['comm_keys']) if parser.has_section('comm_keys') else {}
     return AgentConfig(
+        linkedgates=_load_linkedgates(parser),
         erp_url=erp_url,
         secret=secret,
         state_dir=Path(state_dir) if state_dir else Path(path).parent / 'agent_state',
@@ -355,7 +399,8 @@ def _valid_devices(devices):
 
 
 class AgentLoop:
-    def __init__(self, uploader, spool, client_factory, now, clock, cache_path, only_serial=None):
+    def __init__(self, uploader, spool, client_factory, now, clock, cache_path, only_serial=None,
+                 lg_sync=None):
         self._uploader = uploader
         self._spool = spool
         self._client_factory = client_factory
@@ -368,6 +413,8 @@ class AgentLoop:
         self._saved_devices = None
         self._held = {}
         self._collect_done_file = None
+        self._lg_sync = lg_sync          # None unless the ini has [linkedgates]
+        self._lg_enabled = False         # the ERP's `linkedgates` answer
         self._pc_offset = None   # seconds the ERP's (Cairo) wall clock is ahead of this PC's; None = not yet known
 
     def _corrected_now(self):
@@ -417,6 +464,8 @@ class AgentLoop:
             pending = self._spool.pending()
             self._collect_done_file = pending[-1] if pending else None
         drain(self._spool, self._uploader, clock=self._clock, held=self._held)
+        if self._lg_sync is not None and self._lg_enabled:
+            self._lg_sync.run(self._uploader)
 
     def _should_run_all(self, devices, collect_now, clock):
         """A collect-now request stays set until collect_done reaches the ERP. So once
@@ -443,9 +492,11 @@ class AgentLoop:
         except UploadError as exc:
             # The ERP being down must not stop collection, even after a PC restart.
             logger.warning('ERP config unavailable: %s', _safe_error(exc))
+            self._lg_enabled = False
             # The last known offset is kept, so stamps don't flip between corrected and not.
             return self._load_devices(), False
         self._pc_offset = self._learn_offset(config.get('server_time'))
+        self._lg_enabled = config.get('linkedgates') is True
         devices = _valid_devices(config['devices'])
         self._save_devices(devices)
         return devices, bool(config.get('collect_now'))
@@ -480,7 +531,15 @@ class AgentLoop:
 
 def _build_loop(config, only_serial=None):
     config.state_dir.mkdir(parents=True, exist_ok=True)
+    lg_sync = None
+    if config.linkedgates:
+        lg = config.linkedgates
+        lg_sync = LinkedGatesSync(
+            LinkedGatesReader(make_lg_connect(lg)),
+            config.state_dir / 'lg_cursor.json', datetime.now, lg['first_load_from'],
+        )
     return AgentLoop(
+        lg_sync=lg_sync,
         uploader=Uploader(config.erp_url, config.secret),
         spool=Spool(config.state_dir / 'spool'),
         client_factory=make_client_factory(config.comm_keys),
