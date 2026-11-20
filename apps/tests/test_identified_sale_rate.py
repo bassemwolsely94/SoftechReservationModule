@@ -37,7 +37,7 @@ class IdentifiedRateTests(TestCase):
         _inv(self.b, '')                            # walk-in
         _inv(self.b, '01HD3', doc='30')             # a return: not a sale
         _inv(self.b, '01HD4', user='U8')            # another salesperson, same branch
-        _inv(self.other, '')                        # another branch
+        _inv(self.other, '', user='U9')             # another branch (and salesperson: per-user capture spans branches)
         _inv(self.b, '', day=DAY - dt.timedelta(days=1))    # the day before
         p = mock.patch.object(G, '_excluded', return_value=frozenset({'HOUSE'}))
         p.start()
