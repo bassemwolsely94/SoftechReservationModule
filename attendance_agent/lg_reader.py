@@ -20,7 +20,6 @@ logger = logging.getLogger('attendance_agent')
 BATCH_LIMIT = 5000           # the TOP in the punch queries
 MAX_BATCHES_PER_TICK = 200   # a safety stop; the next tick carries on
 REREAD_DAYS = 45             # the nightly re-read covers this many days back
-DEFAULT_FIRST_LOAD_DAYS = REREAD_DAYS
 
 _PUNCH_COLUMNS = (
     'EmployeeCheckID, EnrollNo, INOutMode, CheckTime, DeviceID, CreatedBy, EditBy, EditOn'
@@ -58,6 +57,16 @@ def _int_or_none(value):
     return None if value is None else int(value)
 
 
+class Batch(list):
+    """The usable punches of one read, plus what the read itself saw: `max_id` is the
+    highest id in the raw rows (0 when the read was empty) and `skipped` counts rows that
+    were left out because EnrollNo or INOutMode was missing or not a number. The cursor
+    moves by `max_id`, so a bad row never blocks collection."""
+
+    max_id = 0
+    skipped = 0
+
+
 class LinkedGatesReader:
     def __init__(self, connect):
         self._connect = connect
@@ -90,13 +99,24 @@ class LinkedGatesReader:
             'edit_on': _iso(row['EditOn']),
         }
 
+    @classmethod
+    def _batch(cls, raw):
+        batch = Batch()
+        for row in raw:
+            batch.max_id = max(batch.max_id, int(row['EmployeeCheckID']))
+            try:
+                batch.append(cls._punch(row))
+            except (TypeError, ValueError):
+                batch.skipped += 1
+        return batch
+
     def read_new(self, after_id):
         """One batch of punches with an id above `after_id`, oldest id first."""
-        return [self._punch(r) for r in self._run('punches_after', after_id)]
+        return self._batch(self._run('punches_after', after_id))
 
     def read_since(self, since, after_id=0):
         """One batch of punches checked at or after `since`, with an id above `after_id`."""
-        return [self._punch(r) for r in self._run('punches_since', since, after_id)]
+        return self._batch(self._run('punches_since', since, after_id))
 
     def read_reference(self):
         return {
@@ -129,12 +149,15 @@ def make_lg_connect(lg):
     """A function that opens a read-only connection to Linked Gates. pyodbc is imported
     here, so an agent without [linkedgates] never needs it. Nothing about the connection
     (server, user, password) is logged."""
+    def wrap(value):
+        return '{' + value.replace('}', '}}') + '}'   # a ';' or '}' in a value stays inside
+
     parts = [
-        'DRIVER={ODBC Driver 18 for SQL Server}', f"SERVER={lg['server']}",
-        f"DATABASE={lg['database']}", 'Encrypt=no',
+        'DRIVER={ODBC Driver 18 for SQL Server}', f"SERVER={wrap(lg['server'])}",
+        f"DATABASE={wrap(lg['database'])}", 'Encrypt=no',
     ]
     parts += (['Trusted_Connection=yes'] if lg['trusted']
-              else [f"UID={lg['user']}", f"PWD={lg['password']}"])
+              else [f"UID={wrap(lg['user'])}", f"PWD={wrap(lg['password'])}"])
     connection_string = ';'.join(parts)
 
     def connect():
@@ -151,7 +174,7 @@ class LinkedGatesSync:
         self._reader = reader
         self._state_path = Path(state_path)
         self._now = now
-        self._first_load_from = first_load_from  # a datetime, or None for 45 days back
+        self._first_load_from = first_load_from  # a datetime, or None for the 1st of last month
 
     def _load(self):
         try:
@@ -175,11 +198,7 @@ class LinkedGatesSync:
         try:
             state = self._load()
             today = self._now().date().isoformat()
-            if state.get('last_reference') != today:
-                uploader.send('lg_reference', self._reader.read_reference())
-                state['last_reference'] = today
-                self._save(state)
-                logger.info('linked gates: reference data sent')
+            self._reference(uploader, state, today)
             self._incremental(uploader, state)
             if str(state.get('last_full_reread', ''))[:10] != today:
                 self._reread(uploader, state, today)
@@ -188,33 +207,57 @@ class LinkedGatesSync:
         except Exception as exc:  # a SQL Server or disk problem must not stop the ZK work
             logger.warning('linked gates: pass failed: %s', type(exc).__name__)
 
+    def _reference(self, uploader, state, today):
+        """Devices, employees and departments, once a day. A failure here is logged and
+        must not stop the punches. An upload failure still stops the pass, because the
+        ERP is the problem then."""
+        if state.get('last_reference') == today:
+            return
+        try:
+            reference = self._reader.read_reference()
+        except Exception as exc:
+            logger.warning('linked gates: reference not read: %s', type(exc).__name__)
+            return
+        uploader.send('lg_reference', reference)
+        state['last_reference'] = today
+        self._save(state)
+        logger.info('linked gates: reference data sent')
+
+    def _first_load_since(self):
+        if self._first_load_from:
+            return self._first_load_from
+        first_of_month = self._now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return (first_of_month - timedelta(days=1)).replace(day=1)
+
     def _incremental(self, uploader, state):
         first_load = 'last_check_id' not in state
         cursor = int(state.get('last_check_id', 0))
-        since = self._first_load_from or (
-            self._now().replace(hour=0, minute=0, second=0, microsecond=0)
-            - timedelta(days=DEFAULT_FIRST_LOAD_DAYS)
-        )
-        sent = batches = 0
+        since = self._first_load_since()
+        sent = skipped = batches = 0
         while batches < MAX_BATCHES_PER_TICK:
             rows = (
                 self._reader.read_since(since, cursor) if first_load
                 else self._reader.read_new(cursor)
             )
-            if not rows:
+            if not rows.max_id:
                 break
-            uploader.send('lg_punches', {'rows': rows, 'reread': False})
-            cursor = max(cursor, max(r['lg_check_id'] for r in rows))
+            if rows:
+                uploader.send('lg_punches', {'rows': list(rows), 'reread': False})
+            cursor = max(cursor, rows.max_id)
             state['last_check_id'] = cursor
             self._save(state)
             sent += len(rows)
+            skipped += rows.skipped
             batches += 1
         else:
             logger.info('linked gates: batch limit reached, the rest follows next pass')
             return
-        if first_load:
-            state['last_check_id'] = cursor
+        if first_load and 'last_check_id' in state:
+            # The first load is done, and it covered the re-read window: not sent twice today.
+            state['last_full_reread'] = self._now().replace(microsecond=0).isoformat()
             self._save(state)
+        if skipped:
+            logger.warning('linked gates: %d rows skipped, not usable punches', skipped)
         if sent:
             logger.info('linked gates: %d punches sent in %d batches', sent, batches)
 
@@ -227,10 +270,11 @@ class LinkedGatesSync:
         after = sent = batches = 0
         while batches < MAX_BATCHES_PER_TICK:
             rows = self._reader.read_since(since, after)
-            if not rows:
+            if not rows.max_id:
                 break
-            uploader.send('lg_punches', {'rows': rows, 'reread': True})
-            after = max(r['lg_check_id'] for r in rows)
+            if rows:
+                uploader.send('lg_punches', {'rows': list(rows), 'reread': True})
+            after = rows.max_id
             sent += len(rows)
             batches += 1
         else:

@@ -10,6 +10,7 @@ import shutil
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -70,7 +71,8 @@ class FakeConnection:
 class FakeDatabase:
     """Rows 1..total, served in pages like the real TOP query."""
 
-    def __init__(self, total=0, page=5000):
+    def __init__(self, total=0, page=5000, bad_ids=()):
+        self.bad_ids = set(bad_ids)
         self.total = total
         self.page = page
         self.executed = []
@@ -82,7 +84,8 @@ class FakeDatabase:
         if name in ('punches_after', 'punches_since'):
             after = params[-1]
             ids = [i for i in range(after + 1, self.total + 1)][:self.page]
-            return [punch_row(i) for i in ids]
+            return [punch_row(i) if i not in self.bad_ids
+                    else (i, None, 'x', None, 3, None, None, None) for i in ids]
         if name == 'devices':
             return [(3, 'Gate 1', '10.0.0.5', 1)]
         if name == 'employees':
@@ -124,20 +127,21 @@ class TempTestCase(SimpleTestCase):
 
 
 class SqlSafetyTests(SimpleTestCase):
-    FORBIDDEN = [
-        'INSERT', 'UPDATE', 'DELETE', 'EXEC', 'MERGE', 'DROP', 'ALTER', 'CREATE',
-        'Salary', 'Phone', 'Email', 'EmployeeImage', 'Password', 'Users', 'UserPermissions',
-    ]
+    KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'EXEC', 'MERGE', 'DROP', 'ALTER', 'CREATE']
+    PRIVATE = ['Salary', 'Phone', 'Email', 'EmployeeImage', 'Password', 'Users',
+               'UserPermissions']
 
     def test_only_allowed_sql(self):
         self.assertTrue(ALLOWED_QUERIES)
         for name, sql in ALLOWED_QUERIES.items():
             self.assertTrue(sql.lstrip().upper().startswith('SELECT'), name)
             self.assertNotIn(';', sql, name)
-            for word in self.FORBIDDEN:
+            for word in self.KEYWORDS:
                 self.assertIsNone(
                     re.search(rf'\b{word}\b', sql, re.IGNORECASE), f'{name} contains {word}',
                 )
+            for word in self.PRIVATE:
+                self.assertNotIn(word.lower(), sql.lower(), f'{name} names {word}')
 
     def test_no_other_execute(self):
         source = inspect.getsource(lg_reader)
@@ -202,6 +206,87 @@ class SyncTests(TempTestCase):
         )
         self.assertEqual(self.cursor()['last_check_id'], 6203)
 
+    def test_first_load_defaults_to_the_first_of_last_month(self):
+        db = FakeDatabase(total=3)
+        self.sync(db).run(FakeUploader())
+        first = [e for e in db.executed if e[0] == ALLOWED_QUERIES['punches_since']][0]
+        self.assertEqual(first[1][0], datetime(2026, 10, 1))
+        db2 = FakeDatabase(total=3)
+        LinkedGatesSync(
+            db2.reader(), self.root / 'b.json', lambda: datetime(2027, 1, 5, 9),
+        ).run(FakeUploader())
+        since = [e for e in db2.executed if e[0] == ALLOWED_QUERIES['punches_since']][0]
+        self.assertEqual(since[1][0], datetime(2026, 12, 1))
+
+    def test_empty_first_load_keeps_first_load_state(self):
+        db = FakeDatabase(total=0)
+        self.sync(db).run(FakeUploader())
+        self.assertNotIn('last_check_id', self.cursor())
+        db.total = 4
+        db.executed.clear()
+        self.sync(db).run(FakeUploader())
+        queries = [e[0] for e in db.executed]
+        self.assertIn(ALLOWED_QUERIES['punches_since'], queries)
+        self.assertNotIn(ALLOWED_QUERIES['punches_after'], queries)
+        since = [e for e in db.executed if e[0] == ALLOWED_QUERIES['punches_since']][0]
+        self.assertEqual(since[1][0], datetime(2026, 10, 1))
+        self.assertEqual(self.cursor()['last_check_id'], 4)
+
+    def test_first_load_marks_today_as_reread(self):
+        db = FakeDatabase(total=5)
+        uploader = FakeUploader()
+        self.sync(db).run(uploader)
+        self.assertEqual([p for p in uploader.of('lg_punches') if p['reread']], [])
+        self.assertEqual(self.cursor()['last_full_reread'][:10], '2026-11-20')
+
+    def test_bad_rows_are_skipped_and_the_cursor_passes_them(self):
+        db = FakeDatabase(total=5, bad_ids={5})
+        uploader = FakeUploader()
+        with self.assertLogs('attendance_agent', level=logging.INFO) as captured:
+            self.sync(db).run(uploader)
+        sent = [r['lg_check_id'] for p in uploader.of('lg_punches') for r in p['rows']]
+        self.assertEqual(sent, [1, 2, 3, 4])
+        self.assertEqual(self.cursor()['last_check_id'], 5)
+        self.assertIn('1 rows skipped', ' '.join(captured.output))
+
+    def test_a_batch_of_only_bad_rows_still_moves_the_cursor(self):
+        db = FakeDatabase(total=3, bad_ids={1, 2, 3})
+        uploader = FakeUploader()
+        self.sync(db).run(uploader)
+        self.assertEqual(uploader.of('lg_punches'), [])
+        self.assertEqual(self.cursor()['last_check_id'], 3)
+
+    def test_reference_failure_does_not_stop_punches(self):
+        db = FakeDatabase(total=3)
+        reader = db.reader()
+
+        def broken():
+            raise RuntimeError('Server=SECRET')
+        reader.read_reference = broken
+        uploader = FakeUploader()
+        with self.assertLogs('attendance_agent', level='WARNING') as captured:
+            LinkedGatesSync(reader, self.state, lambda: NOW).run(uploader)
+        self.assertEqual(uploader.of('lg_reference'), [])
+        self.assertTrue(uploader.of('lg_punches'))
+        self.assertIn('RuntimeError', ' '.join(captured.output))
+        self.assertNotIn('SECRET', ' '.join(captured.output))
+
+    def test_connection_string_wraps_values(self):
+        seen = []
+
+        def fake_connect(connection_string, **kwargs):
+            seen.append(connection_string)
+            return object()
+        fake = mock.Mock(connect=fake_connect)
+        with mock.patch.dict('sys.modules', {'pyodbc': fake}):
+            lg_reader.make_lg_connect({
+                'server': r'.\SQL;EXPRESS', 'database': 'd}x', 'trusted': False,
+                'user': 'u', 'password': 'p};q',
+            })()
+        self.assertIn(r'SERVER={.\SQL;EXPRESS}', seen[0])
+        self.assertIn('DATABASE={d}}x}', seen[0])
+        self.assertIn('PWD={p}};q}', seen[0])
+
     def test_three_reads_after_the_first_load(self):
         db = FakeDatabase(total=6200)
         self.sync(db).run(FakeUploader())
@@ -239,20 +324,25 @@ class SyncTests(TempTestCase):
     def test_nightly_reread_once_per_day(self):
         db = FakeDatabase(total=10)
         first = FakeUploader()
-        self.sync(db).run(first)
-        rereads = [p for p in first.of('lg_punches') if p['reread']]
-        self.assertEqual(len(rereads), 1)
-        self.assertEqual(len(rereads[0]['rows']), 10)
-        since = [e[1][0] for e in db.executed if 'CheckTime >= ?' in e[0]][-1]
-        self.assertEqual(since, datetime(2026, 11, 20) - timedelta(days=45))
+        self.sync(db).run(first)  # day one: the first load already covered the window
+        self.assertEqual([p for p in first.of('lg_punches') if p['reread']], [])
 
         again = FakeUploader()
         self.sync(db, now=lambda: NOW + timedelta(hours=3)).run(again)
         self.assertEqual([p for p in again.of('lg_punches') if p['reread']], [])
 
         tomorrow = FakeUploader()
-        self.sync(db, now=lambda: NOW + timedelta(days=1)).run(tomorrow)
-        self.assertEqual(len([p for p in tomorrow.of('lg_punches') if p['reread']]), 1)
+        later = NOW + timedelta(days=1)
+        self.sync(db, now=lambda: later).run(tomorrow)
+        rereads = [p for p in tomorrow.of('lg_punches') if p['reread']]
+        self.assertEqual(len(rereads), 1)
+        self.assertEqual(len(rereads[0]['rows']), 10)
+        since = [e[1][0] for e in db.executed if 'CheckTime >= ?' in e[0]][-1]
+        self.assertEqual(since, datetime(2026, 11, 21) - timedelta(days=45))
+
+        same_day = FakeUploader()
+        self.sync(db, now=lambda: later + timedelta(hours=2)).run(same_day)
+        self.assertEqual([p for p in same_day.of('lg_punches') if p['reread']], [])
 
     def test_reread_does_not_move_the_cursor(self):
         db = FakeDatabase(total=10)

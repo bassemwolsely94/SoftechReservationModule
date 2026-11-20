@@ -23,8 +23,10 @@ secret = paste-the-agent-secret-here
 # server = .\SQLEXPRESS
 # database = Linked_ERP_HR_v1
 # trusted = yes
+# With trusted = yes, this agent's Windows account must be granted only db_datareader plus
+# the column DENYs from the IT note, and must never be an owner.
 # With trusted = no, give a SQL login that can only read:
 # user = readonly_login
 # password = its-password
-# The first load starts from this date (default: 45 days back).
+# The first load starts from this date (default: the 1st of last month).
 # first_load_from = 2026-10-01

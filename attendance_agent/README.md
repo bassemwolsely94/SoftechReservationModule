@@ -32,6 +32,7 @@ and run `pip install pyodbc`, then add a `[linkedgates]` section to `agent.ini` 
 department tables, and never the pay, phone, email, photo or password columns. It runs only when
 the ERP also has Linked Gates switched on. Agents without the section never need `pyodbc`.
 The cursor is `lg_cursor.json` in the state folder.
+With `trusted = yes`, the agent's Windows account must be granted only `db_datareader` plus the column DENYs from the IT note. It must never be an owner.
 
 ### Run it
 
@@ -144,6 +145,7 @@ SQL Server" ونفّذ `pip install pyodbc`، ثم أضف قسم `[linkedgates]`
 والموظفين والأقسام، ولا يقرأ أبدًا أعمدة الراتب أو الهاتف أو البريد أو الصورة أو كلمات المرور.
 ولا يعمل إلا إذا فعّل النظام Linked Gates أيضًا. والبرنامج بلا هذا القسم لا يحتاج `pyodbc`.
 المؤشر هو الملف `lg_cursor.json` في مجلد الحالة.
+مع `trusted = yes` يجب ألا يُمنح حساب ويندوز الخاص بالبرنامج إلا `db_datareader` مع أوامر DENY للأعمدة الواردة في مذكرة تقنية المعلومات، وألا يكون مالكًا أبدًا.
 
 ### التشغيل
 
