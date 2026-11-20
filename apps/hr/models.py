@@ -538,7 +538,7 @@ class Employee(models.Model):
     employee_type = models.CharField(max_length=12, choices=TYPE_CHOICES, default='payroll')
     start_date    = models.DateField(null=True, blank=True)
     end_date      = models.DateField(null=True, blank=True)
-    day_boundary  = models.TimeField(default=datetime.time(4, 0), verbose_name='بداية يوم العمل')
+    day_boundary  = models.TimeField(null=True, blank=True, default=None, verbose_name='بداية يوم العمل')
     staff         = models.OneToOneField('users.StaffProfile', null=True, blank=True,
                                          on_delete=models.SET_NULL, related_name='hr_employee')
     softech_usercode = models.CharField(max_length=40, blank=True)
@@ -715,6 +715,88 @@ class AttendancePunch(models.Model):
 
     def delete(self, *args, **kwargs):
         raise PermissionError('Attendance punches are append-only.')
+
+
+class LinkedGatesDevice(models.Model):
+    """A machine as the Linked Gates portal lists it (read-only mirror), optionally tied to ours."""
+    lg_device_id = models.IntegerField(unique=True)
+    name         = models.CharField(max_length=120, blank=True, default='', db_default='')
+    ip           = models.CharField(max_length=64, blank=True, default='', db_default='')
+    lg_status    = models.BooleanField(default=True, db_default=True)
+    device       = models.ForeignKey(AttendanceDevice, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name='+')
+    refreshed_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.name} (LG {self.lg_device_id})'
+
+
+class LinkedGatesEmployee(models.Model):
+    """An employee as the Linked Gates portal lists them (read-only reference mirror)."""
+    lg_employee_id  = models.IntegerField(unique=True)
+    enroll_no       = models.IntegerField(default=0, db_default=0)
+    hr_code         = models.CharField(max_length=30, blank=True, default='', db_default='')
+    first_name      = models.CharField(max_length=120, blank=True, default='', db_default='')
+    last_name       = models.CharField(max_length=120, blank=True, default='', db_default='')
+    department_name = models.CharField(max_length=120, blank=True, default='', db_default='')
+    lg_department_id = models.IntegerField(null=True, blank=True)
+    shift_type      = models.IntegerField(null=True, blank=True)
+    is_manager      = models.BooleanField(default=False, db_default=False)
+    lg_status       = models.BooleanField(default=True, db_default=True)
+    refreshed_at    = models.DateTimeField(auto_now=True)
+
+
+class LinkedGatesPunch(models.Model):
+    """One Linked Gates check row, one VERSION of it (an edit there becomes version 2 here).
+    APPEND-ONLY except the two bookkeeping fields: superseded_at (a newer version exists) and
+    lg_removed (the row vanished from the source)."""
+    MUTABLE_FIELDS = frozenset({'superseded_at', 'lg_removed'})
+
+    lg_check_id   = models.BigIntegerField()
+    version       = models.PositiveIntegerField(default=1, db_default=1)
+    enroll_no     = models.IntegerField()
+    check_time    = models.DateTimeField()          # source is naive Cairo time; stored as aware Cairo
+    in_out_mode   = models.IntegerField(default=0, db_default=0)
+    lg_device_id  = models.IntegerField(null=True, blank=True)
+    created_by_lg = models.IntegerField(null=True, blank=True)
+    edit_by_lg    = models.IntegerField(null=True, blank=True)
+    edit_on_lg    = models.DateTimeField(null=True, blank=True)
+    employee      = models.ForeignKey(Employee, null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name='lg_punches')
+    received_at   = models.DateTimeField(auto_now_add=True)
+    superseded_at = models.DateTimeField(null=True, blank=True)
+    lg_removed    = models.BooleanField(default=False, db_default=False)
+    flag          = models.CharField(max_length=12, blank=True, default='', db_default='')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['lg_check_id', 'version'],
+                                               name='uniq_lg_punch_check_version')]
+        indexes = [models.Index(fields=['employee', 'check_time'])]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            fields = kwargs.get('update_fields')
+            original = type(self).objects.filter(pk=self.pk).first()
+            if original is None:
+                raise PermissionError('Linked Gates punches are append-only.')
+            changed = {f.name for f in self._meta.concrete_fields
+                       if f.name != 'id' and getattr(original, f.attname) != getattr(self, f.attname)}
+            if fields is not None:
+                changed &= set(fields)
+            if changed - self.MUTABLE_FIELDS:
+                raise PermissionError('Linked Gates punches are append-only.')
+            if fields is None:
+                kwargs['update_fields'] = list(changed) or ['superseded_at']
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError('Linked Gates punches are append-only.')
+
+
+class LinkedGatesCursor(models.Model):
+    """Singleton: how far the Linked Gates ingest has read."""
+    last_check_id      = models.BigIntegerField(default=0, db_default=0)
+    last_full_reread_at = models.DateTimeField(null=True, blank=True)
 
 
 class CollectionRun(models.Model):

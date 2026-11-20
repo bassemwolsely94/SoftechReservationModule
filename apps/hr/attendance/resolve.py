@@ -11,6 +11,7 @@ from collections import defaultdict
 
 from django.db.models import Q
 
+from apps.hr.attendance.days import effective_boundary
 from apps.hr.models import AttendancePunch, ConflictConfirmation, DeviceUser, Employee
 
 # A machine's internal slot, sent when its log holds no clean ID (8-byte logs). It means something
@@ -85,7 +86,7 @@ def _eligible(employee) -> Q:
     02:00 the morning after end_date is still end_date's, and 02:00 on start_date is not."""
     # A flagged punch has no date to trust, so the employment-date guard can't be checked.
     rule = Q(flag='', punch_date__isnull=False, punch_time__isnull=False)
-    early = Q(punch_time__lt=employee.day_boundary)     # work date = punch date - 1 day
+    early = Q(punch_time__lt=effective_boundary(employee))    # work date = punch date - 1 day
     if employee.start_date:
         rule &= (~early & Q(punch_date__gte=employee.start_date)) | (
             early & Q(punch_date__gt=employee.start_date))

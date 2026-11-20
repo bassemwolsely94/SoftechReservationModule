@@ -29,6 +29,15 @@ def _today() -> datetime.date:
     return timezone.localdate()
 
 
+DEFAULT_BOUNDARY = datetime.time(4, 0)
+
+
+def effective_boundary(employee) -> datetime.time:
+    """The cut-off used for employment-date eligibility: the employee's own, else 04:00. A null
+    ``day_boundary`` means 'no personal cut-off' (Linked Gates sessions need none)."""
+    return employee.day_boundary or DEFAULT_BOUNDARY
+
+
 def work_date_for(punch_date: datetime.date, punch_time: datetime.time,
                   boundary: datetime.time) -> datetime.date:
     """The work date a punch belongs to: before the boundary means the previous calendar day."""
@@ -168,7 +177,7 @@ def month_rows(employees, year, month, with_leave=False):
     info = leave_info(employees, year, month) if with_leave else {}
     out = []
     for e in employees:
-        rows = build_days(punches.get(e.pk, []), e.day_boundary, e.daily_hours, year, month,
+        rows = build_days(punches.get(e.pk, []), effective_boundary(e), e.daily_hours, year, month,
                           info.get(e.pk))
         out.append((e, rows, month_totals(rows)))
     return out
