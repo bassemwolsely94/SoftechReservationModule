@@ -595,6 +595,9 @@ SCREENS = [
         'tabs': [
             {'key': 'flagged', 'title': T('المُكتشفة', 'Detected'), 'body': T('الأصناف المُكتشفة مع نسبة الوهمية والنسبة الموصى بطلبها والطلب الحقيقي وقيمة التخفيض. «تأكيد» أو «ليست وهمية».', 'Detected items with phantom ratio, recommended order %, genuine need and reduction value. "Confirm" or "Not phantom".')},
             {'key': 'excluded', 'title': T('المستبعدة', 'Excluded'), 'body': T('ما استُبعد (ليس وهمياً) — «إرجاع للتلقائي» لإعادة الحكم للمحرك.', 'What was excluded (not phantom) — "Back to automatic" returns the decision to the engine.')},
+            {'key': 'monthly', 'title': T('جديد الشهر', 'New this month'),
+             'body': T('الأصناف اللي اتعلّمت «وهمية» لأول مرة في الشهر المختار، وحالة كل واحد (بانتظار القرار / مؤكَّد / مستبعد) وقيمته بالجنيه. أول كل شهر المالك بيوصله إشعار بأصناف الشهر اللي فات اللي لسه محتاجة قرار. القائمة للمراجعة بس — مفيش تخفيض كميات تلقائي ولا كتابة في SOFTECH.',
+                       'Items that turned "phantom" for the first time in the chosen month, with the state of each (waiting / confirmed / excluded) and its value in EGP. On the 1st of each month the owner gets a notification listing the previous month\'s items still waiting for a decision. The list is for review only — no automatic quantity cut and nothing written to SOFTECH.')},
         ],
         'workflows': [],
         'related': ['shortage.market', 'replacement.cases'],
@@ -610,6 +613,11 @@ SCREENS = [
              'more': T(
                  'الرقم جنب كل تبويب = عدد أصنافه.\n• الصنف اللي تقول عليه «ليست وهمية» بينتقل لـ «المستبعدة» وبيرجع يتطلب بكميته العادية.',
                  'The number next to each tab = its item count.\n• An item you mark "Not phantom" moves to "Excluded" and is ordered at its normal quantity again.')},
+            {'target': 'shortage-phantom-monthly', 'label': T('🗓 جديد الشهر', '🗓 New this month'),
+             'text': T('اختار الشهر وشوف الأصناف اللي اتعلّمت «وهمية» فيه لأول مرة، واللي لسه بانتظار قرارك بالجنيه.',
+                       'Pick a month to see the items first flagged "phantom" in it, and what still waits for your decision, in EGP.'),
+             'when': T('أول كل شهر، لما يوصلك إشعار «مبيعات وهمية جديدة».', 'At the start of each month, when the "New phantom sales" notification arrives.'),
+             'open_hint': T('في تبويب «🗓 جديد الشهر».', 'In the "🗓 New this month" tab.')},
             {'target': 'shortage-phantom-toolbar', 'label': T('كل التصنيفات · بحث بالكود/الاسم', 'All classes · Search by code/name'),
              'text': T('فلتر بالتصنيف العام (تقدر تختار أكثر من تصنيف) وابحث بالكود أو الاسم.', 'Filter by general class (you can tick several) and search by code or name.'),
              'more': T(
@@ -650,8 +658,9 @@ SCREENS = [
                  '• «تأكيد»: الحالة تبقى «مؤكَّد» والتخفيض يفضل مطبّق.\n• «ليست وهمية»: بيسألك عن سبب (اختياري) وينقله للمستبعدة.\n• «إرجاع للتلقائي»: يلغي قرارك ويرجّع الحكم للمحرك.',
                  '• "Confirm": the status becomes "Confirmed" and the reduction stays applied.\n• "Not phantom": asks for an (optional) reason and moves it to Excluded.\n• "Back to automatic": cancels your decision and hands it back to the engine.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر التصنيف بقى يقبل أكثر من اختيار.', 'The class filter now takes several choices.'),
+        'updated': '2026-11-20',
+        'change_note': T('تبويب جديد «🗓 جديد الشهر»: الأصناف اللي اتعلّمت وهمية لأول مرة في الشهر، وإشعار شهري للمالك.',
+                         'New "🗓 New this month" tab: items first flagged phantom in a month, plus a monthly notification to the owner.'),
     },
     {
         'key': 'shortage.mobile',

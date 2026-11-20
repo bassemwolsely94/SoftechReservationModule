@@ -688,6 +688,7 @@ supervisor GET /api/purchasing/isr/fulfilment/recent/
 viewer GET /api/purchasing/phantom/candidates/
 viewer GET /api/purchasing/phantom/excluded/
 viewer GET /api/purchasing/phantom/med-types/
+viewer GET /api/purchasing/phantom/monthly/
 viewer GET /api/purchasing/phantom/summary/
 viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/
@@ -823,3 +824,9 @@ pharmacist POST /api/pos-orders/live-check-gaps/987654321/review/
 salesperson GET /api/pos-orders/live-check-gaps/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/credit-points/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/review/
+
+# reason: W4-F3 (Wave 4, 2026-11-20, builder record) — posting a replacement leg needs replacement finalize
+#   (authz post) and deciding a reversal needs approve; pharmacist holds only create, which the matrix maps POST
+#   to. Same Z-11c pattern as the case decisions above: replacement managers only.
+pharmacist POST /api/replacement/cases/987654321/operations/00000000-0000-0000-0000-000000000000/post/
+pharmacist POST /api/replacement/cases/987654321/reversals/987654321/approve/

@@ -17,6 +17,12 @@ class NotificationSerializer(serializers.ModelSerializer):
     type_label = serializers.SerializerMethodField()
     time_ago   = serializers.SerializerMethodField()
     alarm_tier = serializers.CharField(read_only=True)
+    # C26: does this notification ask the reader to do something (action_items.ACTION_TYPES)?
+    is_action  = serializers.SerializerMethodField()
+
+    def get_is_action(self, obj):
+        from .action_items import is_action
+        return is_action(obj.notification_type)
 
     def get_type_label(self, obj):
         label = dict(Notification.NOTIFICATION_TYPES).get(obj.notification_type, '')
@@ -37,7 +43,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'notification_type', 'type_icon', 'type_label',
-            'category', 'alarm_tier',
+            'category', 'alarm_tier', 'is_action',
             'priority',
             'title', 'body',
             'is_read',
