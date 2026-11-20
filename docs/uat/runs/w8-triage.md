@@ -115,3 +115,11 @@ Worth a look when someone is in that page.
    session never blocks the re-login.
 6. After fix 1, the create tests run demand, transfer, shortage line and QA round for the 7 creating roles
    for the first time. Expect new findings there.
+
+## Run 3 (after the fixes, 2026-11-20 ~18:20 Cairo)
+
+88 passed, 2 failed, 2 skipped, in 17 min (run 2: 72 passed, 14 failed). The UAT copy was migrated first (users 0063).
+
+- **Both failures were pharmacist QA-round create on the phone (branch A and B).** The page went blank and the start POST never fired. A manual replay with the same user and screen in the same slot succeeded: the round was created (201) and the checklist loaded. Verdict: HARNESS (timing / blank page). Not an app defect.
+- **Still open:** P2, no admin 2FA reset (an owner decision; recorded in `w8-run3-findings.jsonl`).
+- **Seen in the replay (minor, pre-existing):** a React warning, "Cannot update a component while rendering a different component", from `QueryErrorStrip` inside `MobileQADetailPage`.
