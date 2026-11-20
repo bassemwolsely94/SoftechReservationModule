@@ -8,7 +8,10 @@ a real, long-lived database (office, VPS). Three incidents came from that gap: n
 
 Reports, per managed model:
   missing table · missing column · NULL-ability differs · extra NOT NULL column without a default
-  (a legacy column inserts will fail on).
+  (a legacy column inserts will fail on) · column narrower than the model (`column_width`: a
+  varchar(n) below a CharField's max_length, or a varchar(n) where the model has a TextField —
+  users 0008 left users_useractivitylog.action at varchar(20) vs max_length=30, UAT W8 2026-11-20;
+  repaired by users 0063). A column WIDER than the model is reported as harmless.
 
 Only SELECTs on information_schema. Exit status 1 when a finding BREAKS writes (missing table or
 column, a NOT NULL the code does not expect), so it can gate a deploy. A database looser than the
@@ -23,20 +26,50 @@ import json
 
 from django.apps import apps
 from django.core.management.base import BaseCommand
-from django.db import connection
+from django.db import connection as default_connection
+from django.db import models
 
 
-def collect_drift():
-    """[{'kind', 'table', 'column', 'detail'}] for the database `connection` points at."""
+def _width_finding(f, table, label, db_width):
+    """A `column_width` finding when the database column's character length differs from the
+    model's, else None. `db_width` is information_schema.character_maximum_length (None = no limit)."""
+    if db_width is None:
+        return None                                  # text / unlimited: never narrower
+    if isinstance(f, models.TextField):
+        model_width = None                           # unlimited in the model
+    elif isinstance(f, models.CharField) and f.max_length:
+        model_width = f.max_length
+    else:
+        return None
+    if model_width is None or db_width < model_width:
+        shown = 'text' if model_width is None else f'max_length={model_width}'
+        return {'kind': 'column_width', 'table': table, 'column': f.column,
+                'detail': f'{label}.{f.name}: model {shown}, database varchar({db_width}) '
+                          f'(BREAKS WRITES — longer values are refused)',
+                'breaks': True, 'model_width': model_width, 'db_width': db_width}
+    if db_width > model_width:
+        return {'kind': 'column_width', 'table': table, 'column': f.column,
+                'detail': f'{label}.{f.name}: model max_length={model_width}, database '
+                          f'varchar({db_width}) (harmless — the database is wider than the code)',
+                'breaks': False, 'model_width': model_width, 'db_width': db_width}
+    return None
+
+
+def collect_drift(connection=None):
+    """[{'kind', 'table', 'column', 'detail', 'breaks'}] for the database `connection` points at
+    (the default database when None)."""
+    connection = connection or default_connection
     with connection.cursor() as cur:
         cur.execute("""
-            SELECT table_name, column_name, is_nullable, column_default
+            SELECT table_name, column_name, is_nullable, column_default, character_maximum_length
             FROM information_schema.columns
             WHERE table_schema = current_schema()
         """)
         db = {}
-        for table, column, nullable, default in cur.fetchall():
+        widths = {}
+        for table, column, nullable, default, width in cur.fetchall():
             db.setdefault(table, {})[column] = (nullable == 'YES', default)
+            widths[(table, column)] = width
 
     found = []
     for model in apps.get_models():
@@ -63,6 +96,9 @@ def collect_drift():
                 found.append({'kind': 'nullability', 'table': table, 'column': f.column,
                               'detail': f'model null={f.null}, database null={db_nullable} ({risk})',
                               'breaks': f.null})
+            width = _width_finding(f, table, meta.label, widths.get((table, f.column)))
+            if width:
+                found.append(width)
         for column, (nullable, default) in cols.items():
             if column not in known and not nullable and default is None:
                 found.append({'kind': 'legacy_not_null', 'table': table, 'column': column,
@@ -84,9 +120,9 @@ class Command(BaseCommand):
         if opts['json']:
             self.stdout.write(json.dumps(found, ensure_ascii=False, indent=2))
         elif not found:
-            self.stdout.write(self.style.SUCCESS(f'No drift in {connection.settings_dict["NAME"]}.'))
+            self.stdout.write(self.style.SUCCESS(f'No drift in {default_connection.settings_dict["NAME"]}.'))
         else:
-            self.stdout.write(f'{len(found)} difference(s) in {connection.settings_dict["NAME"]}:')
+            self.stdout.write(f'{len(found)} difference(s) in {default_connection.settings_dict["NAME"]}:')
             for d in found:
                 self.stdout.write(f"  [{d['kind']}] {d['table']}.{d['column']} — {d['detail']}")
         if any(d['breaks'] for d in found) or (found and opts['strict']):
