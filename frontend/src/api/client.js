@@ -994,7 +994,6 @@ export const supplyApi = {
   purchasePricesExcel: (params = {}) => api.get('/supply/purchase-prices/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   purchasePriceItem:   (code)        => api.get(`/supply/purchase-prices/item/${code}/`),
   boughtDearer:        (params = {}) => api.get('/supply/bought-dearer/', { params }),
-  boughtDearerExcel:   (params = {}) => api.get('/supply/bought-dearer/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
   // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
   receipts:            (params)      => api.get('/supply/receipts/', { params }),

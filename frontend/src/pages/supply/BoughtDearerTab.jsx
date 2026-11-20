@@ -5,10 +5,12 @@
  * (apps/supply/bought_dearer.py); this screen filters, sorts and downloads.
  */
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { supplyApi } from '../../api/client'
+import { useQuery } from '@tanstack/react-query'
+import { exportJobsApi, supplyApi } from '../../api/client'
+import useExportJob from '../../hooks/useExportJob'
+import ExportJobStatus from '../../components/ExportJobStatus'
 import { FreshnessBar } from './AvailabilityControls'
-import { btnGhost, downloadBlob, errText, inputCls, money, q, SortTh, txt, useSort } from './supplyUi'
+import { btnGhost, errText, inputCls, money, q, SortTh, txt, useSort } from './supplyUi'
 
 const lastMonth = () => {
   const d = new Date()
@@ -39,9 +41,10 @@ export default function BoughtDearerTab() {
     queryFn: () => supplyApi.boughtDearer({ month }).then(r => r.data),
     staleTime: 5 * 60 * 1000,
   })
-  const xlsM = useMutation({
-    mutationFn: () => supplyApi.boughtDearerExcel({ month }),
-    onSuccess: (res) => downloadBlob(res.data, `bought_dearer_${month}.xlsx`),
+  // Stage 4: the workbook is built as a background job (start → progress → download)
+  const exp = useExportJob({
+    storageKey: 'export-job:bought-dearer',
+    start: () => exportJobsApi.start('/supply/bought-dearer/export/', { month }),
   })
   const d = rq.data
   const grid = useSort(d?.lines || [], {
@@ -62,9 +65,10 @@ export default function BoughtDearerTab() {
         <label className="flex flex-col gap-1 text-xs text-content/60">الشهر
           <input type="month" value={month} onChange={e => e.target.value && setMonth(e.target.value)} className={inputCls} />
         </label>
-        <button type="button" className={btnGhost} disabled={xlsM.isPending || !d} onClick={() => xlsM.mutate()}>
-          {xlsM.isPending ? '…' : '⬇ Excel'}
+        <button type="button" className={btnGhost} disabled={exp.busy || !d} onClick={() => exp.run()}>
+          {exp.busy ? '…' : '⬇ Excel'}
         </button>
+        <ExportJobStatus exp={exp} />
         {d && (
           <span className="text-sm text-content/80 mb-1.5">
             {q(d.totals.lines)} سطر من {q(d.totals.lines_checked)} — دفعنا زيادة <b className="text-amber-700">{money(d.totals.egp_above)} ج</b>

@@ -122,7 +122,8 @@ class ApiTests(TestCase):
         r = c.get(URL, {'month': '2026-10'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['month'], '2026-10')
-        self.assertIn('spreadsheetml', c.get(URL, {'month': '2026-10', 'format': 'xlsx'})['Content-Type'])
+        self.assertIn('spreadsheetml', c.get(URL + 'export/', {'month': '2026-10'})['Content-Type'])
+        self.assertEqual(c.get(URL + 'export/', {'month': 'x'}).status_code, 400)
         self.assertEqual(c.get(URL, {'month': '10-2026'}).status_code, 400)
 
     def test_without_the_purchasing_grant_refused(self):
@@ -142,3 +143,23 @@ class ApiTests(TestCase):
     def test_anonymous_refused(self):
         from rest_framework.test import APIClient
         self.assertIn(APIClient().get(URL).status_code, (401, 403))
+
+    def test_export_runs_as_a_background_job(self):
+        from apps.export_jobs import view_kinds
+        from apps.export_jobs.models import ExportJob
+        self.assertEqual(view_kinds.key_for_path(URL + 'export/'), 'v:bought_dearer')
+        _, _, c = make_user('c17_admin_job', role='admin', access_all=True)
+        r = c.post(URL + 'export/jobs/?month=2026-10')
+        self.assertIn(r.status_code, (200, 201, 202), r.content)
+        self.assertEqual(ExportJob.objects.get(pk=r.json()['id']).kind, 'v:bought_dearer')
+
+    def test_branch_bound_user_cannot_start_the_export_job(self):
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        for a in ('view', 'edit', 'export'):
+            RoleModuleAccess.objects.create(role='pharmacist', module='purchasing', action=a, is_allowed=True)
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        _, _, c = make_user('c17_pharm_job', role='pharmacist', branch=make_branch('فرع', '131'))
+        self.assertEqual(c.get(URL + 'export/', {'month': '2026-10'}).status_code, 403)
+        self.assertEqual(c.post(URL + 'export/jobs/?month=2026-10').status_code, 403)

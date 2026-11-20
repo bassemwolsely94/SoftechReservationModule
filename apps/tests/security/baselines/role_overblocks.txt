@@ -824,3 +824,4 @@ salesperson POST /api/pos-orders/live-check-gaps/987654321/review/
 #   branch, per buyer and supplier: company-level data, so on top of the purchasing view grant only an
 #   all-branch user may read it (core.branch_scope.sees_everything). Branch-bound viewer keeps /supply.
 viewer GET /api/supply/bought-dearer/
+viewer GET /api/supply/bought-dearer/export/

@@ -1,5 +1,8 @@
 """
-C17 «اشترينا أغلى» — GET /api/supply/bought-dearer/?month=YYYY-MM[&format=xlsx]
+C17 «اشترينا أغلى» — GET /api/supply/bought-dearer/?month=YYYY-MM          the report (JSON)
+                    GET /api/supply/bought-dearer/export/?month=YYYY-MM   the workbook; the screen starts
+                        it as a background job (POST …/export/jobs/, apps/export_jobs view_kinds
+                        'v:bought_dearer'), which replays this view as the requester
 
 Purchasing grant (CanOperateSupply) AND an all-branch user: the report is company-level money
 (HQ purchasing across every branch), so a branch-bound user is refused even with the grant.
@@ -34,26 +37,45 @@ def _month(raw):
     return dt.date(int(m.group(1)), int(m.group(2)), 1)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, CanOperateSupply])
-def bought_dearer(request):
+def export_gate(user):
+    """Extra export-job gate (view_kinds 'v:bought_dearer'): the report is company-level money."""
+    return sees_everything(user)
+
+
+def _report(request):
+    """(report, month) or (None, refusal Response) — shared by the screen and the export."""
     from apps.procurement import refresh
     from . import bought_dearer as BD
     if not sees_everything(request.user):
-        return Response({'detail': 'التقرير على مستوى الشركة — لمستخدمي كل الفروع فقط.'},
-                        status=status.HTTP_403_FORBIDDEN)
+        return None, Response({'detail': 'التقرير على مستوى الشركة — لمستخدمي كل الفروع فقط.'},
+                              status=status.HTTP_403_FORBIDDEN)
     month = _month(request.query_params.get('month'))
     if month is None:
-        return Response({'detail': 'month must be YYYY-MM'}, status=status.HTTP_400_BAD_REQUEST)
+        return None, Response({'detail': 'month must be YYYY-MM'}, status=status.HTTP_400_BAD_REQUEST)
     last = refresh.last_success()
     key = f'bought_dearer:{month:%Y-%m}:{last.pk if last else 0}'
     rep = cache.get(key)
     if rep is None:
         rep = BD.build(month)
         cache.set(key, rep, CACHE_SECONDS)
-    if request.query_params.get('format') == 'xlsx':
-        resp = HttpResponse(BD.to_excel(rep),
-                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        resp['Content-Disposition'] = f'attachment; filename="bought_dearer_{month:%Y-%m}.xlsx"'
-        return resp
-    return Response(rep)
+    return rep, month
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def bought_dearer(request):
+    rep, month = _report(request)
+    return month if rep is None else Response(rep)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def bought_dearer_export(request):
+    from . import bought_dearer as BD
+    rep, month = _report(request)
+    if rep is None:
+        return month
+    resp = HttpResponse(BD.to_excel(rep),
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="bought_dearer_{month:%Y-%m}.xlsx"'
+    return resp
