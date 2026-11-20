@@ -115,6 +115,18 @@ describe('RequireRole with a module only (UAT W2 unhandled-403 screens)', () => 
     expect(screen.getByText('dashboard page')).toBeTruthy()
   })
 
+  it('role review: a tool module opens for any role holding its grant, and not for one holding only the parent', () => {
+    const tool = <RequireRole module="catalog_tools"><div>secret page</div></RequireRole>
+    useAuthStore.setState({ user: { role: 'call_center' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: { catalog_tools: { view: true } } })
+    renderAt('/secret', tool)
+    expect(screen.getByText('secret page')).toBeTruthy()
+    cleanup()
+    usePermissionStore.setState({ permissions: { catalog: { view: true } } })
+    renderAt('/secret', tool)
+    expect(screen.getByText('dashboard page')).toBeTruthy()
+  })
+
   it('a role holding the module view opens it', () => {
     useAuthStore.setState({ user: { role: 'purchasing' }, isAuthenticated: true })
     usePermissionStore.setState({ permissions: { insurance: { view: true } } })

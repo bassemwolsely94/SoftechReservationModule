@@ -71,10 +71,13 @@ export default function InventoryDashboard() {
   const [filters,     setFilters]     = useState(defaultFilters())
   const [itemFilters, setItemFilters] = useState(emptyItemFilters())
 
-  const { data: opts } = useQuery({
+  // The filter lists live on the analytics module; a role with stock but not analytics gets a 403
+  // here — the page keeps working and says so inline (role review, no popup).
+  const { data: opts, isError: optsDenied } = useQuery({
     queryKey: ['analytics-filter-options'],
     queryFn:  () => analyticsApi.filterOptions().then(r => r.data),
     staleTime: 300_000,
+    retry: false,
   })
 
   const { data: itemFilterOpts } = useQuery({
@@ -129,6 +132,11 @@ export default function InventoryDashboard() {
 
       {/* Shared filter panel — show only inventory-relevant filters */}
       <div data-tour="catalog-inventory-filters">
+      {optsDenied && (
+        <div className="mb-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+          الفلاتر غير متاحة لصلاحيتك
+        </div>
+      )}
       <AnalyticsFilterPanel
         filters={filters}
         onChange={setFilters}

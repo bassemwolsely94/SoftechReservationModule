@@ -15,7 +15,6 @@ import CanDo from '../components/CanDo'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import GiftCouponsTab from './vouchers/GiftCouponsTab'
-import useAuthStore from '../store/authStore'
 import { usePermission } from '../hooks/usePermission'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
@@ -1379,11 +1378,12 @@ export default function VouchersPage() {
   useEffect(() => { if (tabParam) setActiveTab(tabParam) }, [tabParam])
   const [redeemTarget, setRedeemTarget] = useState(null)
 
-  const { user } = useAuthStore()
-  // Display only — the API enforces the same roles (apps/vouchers/coupon_views.py) and the
-  // middleware the vouchers view grant; a removed grant hides the tab (UAT D5).
+  // Display only — the API enforces the same rule (apps/vouchers/coupon_views.py can_view):
+  // vouchers view plus export or edit; a removed grant hides the tab (UAT D5).
   const vouchersView = usePermission('vouchers', 'view')
-  const canSeeCoupons = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && vouchersView
+  const vouchersExport = usePermission('vouchers', 'export')
+  const vouchersEdit = usePermission('vouchers', 'edit')
+  const canSeeCoupons = vouchersView && (vouchersExport || vouchersEdit)
 
   const tabs = [
     { key: 'vouchers',  label: '🎫 القسائم' },

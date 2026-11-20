@@ -851,7 +851,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── 7. Demand & supply control tower (server-gated) ──────── */}
-        {['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && supplyView && (
+        {supplyView && (   /* the server rule: supply_allowed = purchasing view (or SOFTECH supply group) */
           <SupplyKpiSection navigate={navigate} />
         )}
 
@@ -976,8 +976,8 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            {/* Purchasing shortcut (admin/purchasing only) */}
-            {isAdminOrCC && user?.role !== 'call_center' && (
+            {/* Purchasing shortcut: whoever holds purchasing view (the screen's own grant) */}
+            {supplyView && (
               <button data-tour="general-dashboard-purchasing"
                 onClick={() => navigate('/purchasing')}
                 className="w-full rounded-2xl p-4 border-2 text-right transition-all hover:shadow-md"
