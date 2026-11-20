@@ -31,6 +31,8 @@ VIEW_EXPORTS = {
                             False, ''),
     'v:rider_payouts': ('apps.rider_payouts.views:periods_export', 'أجور الطيارين', 'GET', False,
                         'apps.rider_payouts.access:export_allowed'),
+    'v:bought_dearer': ('apps.supply.dearer_views:bought_dearer_export', 'اشترينا أغلى', 'GET', False,
+                        'apps.supply.dearer_views:export_gate'),         # C17: company-level, all-branch users
 }
 
 
