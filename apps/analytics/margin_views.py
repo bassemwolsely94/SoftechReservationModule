@@ -28,7 +28,7 @@ from rest_framework.response import Response
 from core import branch_scope
 
 from . import margin as M
-from .views import ANALYTICS, _channel_label, _line_qs_for, _parse_date, _purchase_qs_filtered
+from .views import ANALYTICS, _get_channel_label_map, _line_qs_for, _parse_date, _purchase_qs_filtered
 
 OTHER = '__other__'
 ZERO = Decimal('0')
@@ -82,6 +82,13 @@ def board(params, user) -> dict:
     if has_other:
         cols.append(OTHER)
 
+    # one label map per call: views._get_channel_label_map caches only a non-empty map, so calling
+    # _channel_label() per row re-queried the classification tables for every channel (N+1)
+    labels = _get_channel_label_map()
+
+    def label(code):
+        return 'غير مصنّف' if not code else labels.get(str(code), str(code))
+
     channels = sorted({ch for ch, _c in cells}, key=lambda ch: -sum(cells[(ch, c)]['rev'] for c in cols))
     rows = []
     col_tot = defaultdict(_blank)
@@ -97,7 +104,7 @@ def board(params, user) -> dict:
             _add(row_tot, a)
             _add(col_tot[c], a)
         _add(grand, row_tot)
-        rows.append({'channel_code': ch, 'channel_label': _channel_label(ch), 'cells': row_cells,
+        rows.append({'channel_code': ch, 'channel_label': label(ch), 'cells': row_cells,
                      'total': _cell(row_tot)})
 
     return {
