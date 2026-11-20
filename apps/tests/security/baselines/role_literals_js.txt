@@ -3,8 +3,13 @@
 # access decisions in the RBAC matrix (core.permissions.matrix_permission) — never a new literal here.
 # Some lines are coincidences (module / channel names that happen to equal role keys); they stay
 # listed so the guard keeps a stable baseline. Format: path::keys xN (N = occurrences; a higher count fails)
+# Role review final fix C1 (2026-11-20): the menu items, the mobile customers tab and their routes that
+# the review moved to the matrix keep their pre-review role list as `legacyRoles` — used ONLY while their
+# module has no RoleModuleAccess rows (the server fails open there for the legacy roles). Same lists as
+# the base (62e3305d) baseline; route guards and pages reuse them through legacyRolesFor(), no new copies.
 frontend/src/App.jsx::accountant,admin,pharmacist,purchasing x1
 frontend/src/App.jsx::accountant,admin,pharmacist,purchasing,quality_manager x1
+frontend/src/App.jsx::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x1
 frontend/src/App.jsx::admin,call_center,pharmacist,salesperson,supervisor x1
 frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager,supervisor x3
 frontend/src/App.jsx::admin,pharmacist,quality_manager,supervisor x1
@@ -18,19 +23,39 @@ frontend/src/components/InTransitTab.jsx::purchasing x2
 frontend/src/components/navGroups.js::accountant,admin x1
 frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing x1
 frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing,quality_manager x2
+frontend/src/components/navGroups.js::accountant,admin,purchasing,quality_manager x1
 frontend/src/components/navGroups.js::admin,call_center,delivery,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x1
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x2
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,delivery,pharmacist,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing x1
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor x2
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x3
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,purchasing,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x2
 frontend/src/components/navGroups.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer x2
-frontend/src/components/navGroups.js::admin,call_center,pharmacist,salesperson,supervisor x1
-frontend/src/components/navGroups.js::admin,call_center,quality_manager,supervisor x5
-frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor x4
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,salesperson,supervisor x2
+frontend/src/components/navGroups.js::admin,call_center,pharmacist,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,purchasing,supervisor x1
+frontend/src/components/navGroups.js::admin,call_center,quality_manager,supervisor x7
+frontend/src/components/navGroups.js::admin,call_center,supervisor x2
+frontend/src/components/navGroups.js::admin,delivery,supervisor x1
+frontend/src/components/navGroups.js::admin,pharmacist x1
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing x2
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager x1
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor x9
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,quality_manager,supervisor,viewer x3
+frontend/src/components/navGroups.js::admin,pharmacist,purchasing,supervisor x2
+frontend/src/components/navGroups.js::admin,pharmacist,quality_manager x1
+frontend/src/components/navGroups.js::admin,pharmacist,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,pharmacist,quality_manager,supervisor,viewer x1
 frontend/src/components/navGroups.js::admin,pharmacist,supervisor x1
-frontend/src/components/navGroups.js::admin,purchasing x3
+frontend/src/components/navGroups.js::admin,purchasing x4
 frontend/src/components/navGroups.js::admin,purchasing,quality_manager x1
-frontend/src/components/navGroups.js::admin,purchasing,supervisor x1
-frontend/src/components/navGroups.js::admin,quality_manager,supervisor x3
-frontend/src/components/navGroups.js::admin,supervisor x2
+frontend/src/components/navGroups.js::admin,purchasing,quality_manager,supervisor x1
+frontend/src/components/navGroups.js::admin,purchasing,quality_manager,supervisor,viewer x1
+frontend/src/components/navGroups.js::admin,purchasing,supervisor x4
+frontend/src/components/navGroups.js::admin,purchasing,viewer x1
+frontend/src/components/navGroups.js::admin,quality_manager,supervisor x6
+frontend/src/components/navGroups.js::admin,supervisor x3
 frontend/src/pages/BatchesPage.jsx::admin,pharmacist,purchasing x2
 frontend/src/pages/BatchesPage.jsx::admin,quality_manager,supervisor x1
 frontend/src/pages/CallCenterAnalyticsPage.jsx::admin,call_center,quality_manager,supervisor x1

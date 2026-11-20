@@ -139,8 +139,9 @@ export default function Layout() {
   // An item with `module` also hides once the matrix takes that module's view away from the
   // role (until permissions load it stays; the server refuses anyway).
   const perms   = usePermissionStore(s => s.permissions)
+  const seeded  = usePermissionStore(s => s.seeded)
   const visibleGroups = NAV_GROUPS
-    .map(g => ({ ...g, items: g.items.filter(n => navItemVisible(n, { role: userRole, user, perms })) }))
+    .map(g => ({ ...g, items: g.items.filter(n => navItemVisible(n, { role: userRole, user, perms, seeded })) }))
     .filter(g => g.items.length > 0)
 
   // Which group is pinned open (clicked) — auto-tracks active route

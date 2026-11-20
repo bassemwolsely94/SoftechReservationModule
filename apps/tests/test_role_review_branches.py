@@ -222,3 +222,173 @@ class PbxCredentialGuardTests(TestCase):
         self.assertFalse(self.agent_c.get('/api/auth/me/').data['can_set_webrtc'])
         ph = make_user('cg_ph', role='pharmacist', branch=self.home)[2]
         self.assertFalse(ph.get('/api/auth/me/').data['can_set_webrtc'])
+
+
+class PbxAgentEditGuardTests(TestCase):
+    """Final review I2: the generic agents create / PATCH endpoints are audited, and on an extension
+    carrying a browser-phone credential only a PBX manager may change extension / sip_peer /
+    is_active (sip_peer is the WebRTC authorization user). The map endpoint applies the same rule to
+    the target staff's previous extension when that one is credentialed."""
+
+    def setUp(self):
+        from apps.omni.crypto import encrypt_credentials
+        from apps.pbx.models import AgentExtension
+        module_access.clear_cache()
+        for r in ('call_center', 'supervisor'):
+            seed_matrix(r)
+        self.home = make_branch()
+        _, self.agent, self.agent_c = make_user('eg_agent', role='call_center', branch=self.home)
+        _, self.victim, _ = make_user('eg_victim', role='call_center', branch=self.home)
+        _, self.sup, self.sup_c = make_user('eg_sup', role='supervisor', branch=self.home)
+        self.cred = AgentExtension.objects.create(
+            extension='401', staff=self.victim, sip_peer='401', webrtc_enabled=True,
+            webrtc_credentials=encrypt_credentials({'password': 'pw-401'}))
+        self.plain = AgentExtension.objects.create(extension='402', sip_peer='402')
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def _audits(self, action, ext):
+        from apps.audit.models import AuditLog
+        return AuditLog.objects.filter(action=action, object_id=str(ext.pk))
+
+    def test_agent_cannot_change_guarded_fields_of_a_credentialed_extension(self):
+        for field, value in (('sip_peer', 'hijack'), ('extension', '499'), ('is_active', False)):
+            with self.subTest(field=field):
+                r = self.agent_c.patch(f'/api/pbx/agents/{self.cred.pk}/', {field: value}, format='json')
+                self.assertEqual(r.status_code, 403)
+                self.cred.refresh_from_db()
+                self.assertEqual((self.cred.sip_peer, self.cred.extension, self.cred.is_active),
+                                 ('401', '401', True))
+
+    def test_agent_may_change_other_fields_of_a_credentialed_extension_audited(self):
+        r = self.agent_c.patch(f'/api/pbx/agents/{self.cred.pk}/', {'queue_name': 'q2'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        log = self._audits('pbx_extension_updated', self.cred).get()
+        self.assertEqual(log.changes, {'queue_name': ['', 'q2']})
+        self.assertEqual(log.user_id, self.agent.pk)
+
+    def test_agent_edit_of_a_plain_extension_is_allowed_and_audited(self):
+        r = self.agent_c.patch(f'/api/pbx/agents/{self.plain.pk}/', {'sip_peer': 'p-402'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._audits('pbx_extension_updated', self.plain).get().changes,
+                         {'sip_peer': ['402', 'p-402']})
+
+    def test_supervisor_may_change_a_credentialed_extension_audited(self):
+        r = self.sup_c.patch(f'/api/pbx/agents/{self.cred.pk}/', {'sip_peer': 'new-401'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._audits('pbx_extension_updated', self.cred).get().changes,
+                         {'sip_peer': ['401', 'new-401']})
+
+    def test_create_is_audited(self):
+        from apps.pbx.models import AgentExtension
+        r = self.agent_c.post('/api/pbx/agents/', {'extension': '410', 'sip_peer': '410'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        ext = AgentExtension.objects.get(extension='410')
+        log = self._audits('pbx_extension_created', ext).get()
+        self.assertEqual(log.changes['extension'], [None, '410'])
+
+    def test_map_refuses_to_clear_the_targets_credentialed_previous_extension(self):
+        # the victim holds credentialed 401; an agent maps the victim onto plain 402 — that would
+        # take the victim's browser phone off 401
+        r = self.agent_c.post('/api/pbx/extensions/map/', {'extension': '402', 'staff_id': self.victim.pk},
+                              format='json')
+        self.assertEqual(r.status_code, 403)
+        self.cred.refresh_from_db()
+        self.plain.refresh_from_db()
+        self.assertEqual(self.cred.staff_id, self.victim.pk)
+        self.assertIsNone(self.plain.staff_id)
+
+    def test_map_supervisor_moves_the_target_off_a_credentialed_extension_audited(self):
+        r = self.sup_c.post('/api/pbx/extensions/map/', {'extension': '402', 'staff_id': self.victim.pk},
+                            format='json')
+        self.assertEqual(r.status_code, 200)
+        self.cred.refresh_from_db()
+        self.assertIsNone(self.cred.staff_id)
+        self.assertEqual(self._audits('pbx_extension_mapped', self.cred).get().changes,
+                         {'staff': [self.victim.pk, None]})
+
+    def test_map_agent_cannot_change_sip_peer_of_a_credentialed_extension(self):
+        r = self.agent_c.post('/api/pbx/extensions/map/',
+                              {'extension': '401', 'staff_id': self.victim.pk, 'sip_peer': 'hijack'},
+                              format='json')
+        self.assertEqual(r.status_code, 403)
+        self.cred.refresh_from_db()
+        self.assertEqual(self.cred.sip_peer, '401')
+
+
+class CallListCloseScopeTests(TestCase):
+    """Final review I3: closing a call list (it cancels every open task) is for the list's creator,
+    an all-branch user, or a user whose branches cover every branch in the list's criteria."""
+
+    def setUp(self):
+        from apps.followups.models import CallList
+        module_access.clear_cache()
+        for r in ('pharmacist', 'supervisor'):
+            seed_matrix(r)
+        self.home = make_branch()
+        self.other = make_branch2()
+        _, self.creator, self.creator_c = make_user('cl_creator', role='pharmacist', branch=self.home)
+        self.mk = lambda branches: CallList.objects.create(
+            name='L', criteria={'branch_ids': branches} if branches is not None else {'segments': ['A']},
+            created_by=self.creator)
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def _close(self, client, cl):
+        return client.post(f'/api/followups/call-lists/{cl.pk}/close/', {}, format='json').status_code
+
+    def test_other_branch_pharmacist_is_refused(self):
+        cl = self.mk([self.home.pk])
+        c = make_user('cl_far', role='pharmacist', branch=self.other)[2]
+        self.assertEqual(self._close(c, cl), 403)
+        cl.refresh_from_db()
+        self.assertEqual(cl.status, 'active')
+
+    def test_branch_pharmacist_is_refused_on_a_company_wide_list(self):
+        cl = self.mk(None)
+        c = make_user('cl_near0', role='pharmacist', branch=self.home)[2]
+        self.assertEqual(self._close(c, cl), 403)
+
+    def test_creator_may_close(self):
+        cl = self.mk([self.other.pk])
+        self.assertEqual(self._close(self.creator_c, cl), 200)
+
+    def test_all_branch_supervisor_may_close(self):
+        cl = self.mk(None)
+        c = make_user('cl_sup', role='supervisor', branch=self.home)[2]
+        self.assertEqual(self._close(c, cl), 200)
+
+    def test_branch_pharmacist_may_close_a_list_inside_their_branch(self):
+        cl = self.mk([self.home.pk])
+        c = make_user('cl_near', role='pharmacist', branch=self.home)[2]
+        self.assertEqual(self._close(c, cl), 200)
+
+    def test_legacy_single_branch_criteria_counts(self):
+        from apps.followups.models import CallList
+        cl = CallList.objects.create(name='old', criteria={'branch_id': self.home.pk}, created_by=self.creator)
+        c = make_user('cl_near2', role='pharmacist', branch=self.home)[2]
+        self.assertEqual(self._close(c, cl), 200)
+
+    def test_list_rows_carry_the_close_rule(self):
+        mine = self.mk([self.home.pk])
+        far = self.mk([self.other.pk])
+        c = make_user('cl_rows', role='pharmacist', branch=self.home)[2]
+        rows = {r['id']: r['can_close'] for r in c.get('/api/followups/call-lists/').json()}
+        self.assertTrue(rows[mine.pk])
+        self.assertFalse(rows[far.pk])
+
+    def test_close_rule_on_rows_keeps_the_query_count_flat(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        c = make_user('cl_flat', role='pharmacist', branch=self.home)[2]
+        self.mk([self.home.pk])
+        c.get('/api/followups/call-lists/')                       # warm the session / memo
+        with CaptureQueriesContext(connection) as one:
+            c.get('/api/followups/call-lists/')
+        for _ in range(5):
+            self.mk([self.home.pk])
+        with CaptureQueriesContext(connection) as six:
+            c.get('/api/followups/call-lists/')
+        self.assertEqual(len(six), len(one))

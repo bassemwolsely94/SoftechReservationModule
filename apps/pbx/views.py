@@ -39,16 +39,56 @@ class IsAdminOrSupervisor(BasePermission):
         return is_pbx_manager(getattr(request.user, 'staff_profile', None))
 
 
+# Fields audited on the generic agents endpoints; the guarded ones break a browser phone when changed
+# (sip_peer is the WebRTC authorization user) — on a credentialed extension only a PBX manager.
+_EXT_AUDIT_FIELDS = ('extension', 'sip_peer', 'queue_name', 'pbx_name', 'is_active')
+CREDENTIALED_GUARDED_FIELDS = ('extension', 'sip_peer', 'is_active')
+CREDENTIALED_REFUSAL = 'تعديل رقم داخلي عليه هاتف متصفح للمشرف أو المدير فقط'
+
+
+def _is_credentialed(ext) -> bool:
+    return bool(ext is not None and (ext.webrtc_enabled or ext.webrtc_credentials))
+
+
+def _ext_snapshot(ext):
+    return {f: getattr(ext, f) for f in _EXT_AUDIT_FIELDS} if ext is not None else dict.fromkeys(_EXT_AUDIT_FIELDS)
+
+
+def _audit_extension(action, request, ext, before):
+    from apps.audit.models import AuditLog
+    after = _ext_snapshot(ext)
+    changes = {k: [before[k], after[k]] for k in after if before[k] != after[k]}
+    AuditLog.log(action, user=getattr(request.user, 'staff_profile', None), obj=ext, changes=changes,
+                 note=f'ext {ext.extension}')
+
+
 class AgentExtensionListView(generics.ListCreateAPIView):
     serializer_class   = AgentExtensionSerializer
     permission_classes = [IsAuthenticated, PBX, PBX_CONFIG]
     queryset           = AgentExtension.objects.select_related('staff').filter(is_active=True)
+
+    def perform_create(self, serializer):
+        ext = serializer.save()
+        _audit_extension('pbx_extension_created', self.request, ext, _ext_snapshot(None))
 
 
 class AgentExtensionDetailView(generics.RetrieveUpdateAPIView):
     serializer_class   = AgentExtensionSerializer
     permission_classes = [IsAuthenticated, PBX, PBX_CONFIG]
     queryset           = AgentExtension.objects.select_related('staff')
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+        from apps.pbx.access import is_pbx_manager
+        ext = serializer.instance
+        before = _ext_snapshot(ext)
+        data = serializer.validated_data
+        if (_is_credentialed(ext)
+                and any(f in data and data[f] != before[f] for f in CREDENTIALED_GUARDED_FIELDS)
+                and not is_pbx_manager(getattr(self.request.user, 'staff_profile', None))):
+            raise PermissionDenied(CREDENTIALED_REFUSAL)
+        ext = serializer.save()
+        _audit_extension('pbx_extension_updated', self.request, ext, before)
 
 
 class QueueListView(generics.ListAPIView):
@@ -189,27 +229,40 @@ class ExtensionMapView(APIView):
             ext, created = AgentExtension.objects.select_for_update().get_or_create(
                 extension=extension,
                 defaults={'extension_type': ext_type or AgentExtension.TYPE_AGENT})
-            # an extension carrying a browser-phone credential may only be handed to someone else by
-            # a PBX manager — otherwise mapping yourself onto it would let you read its SIP secret
-            if ((ext.webrtc_enabled or ext.webrtc_credentials)
-                    and (staff.pk if staff else None) != ext.staff_id
-                    and not is_pbx_manager(getattr(request.user, 'staff_profile', None))):
+            manager = is_pbx_manager(getattr(request.user, 'staff_profile', None))
+            new_peer = (str(request.data['sip_peer'] or '').strip()[:50] if 'sip_peer' in request.data
+                        else ext.sip_peer)
+            # an extension carrying a browser-phone credential may only be handed to someone else
+            # (or get a new SIP peer = WebRTC user) by a PBX manager — otherwise mapping yourself onto
+            # it would let you read its SIP secret, or break its owner's browser phone
+            if (_is_credentialed(ext) and not manager
+                    and ((staff.pk if staff else None) != ext.staff_id or new_peer != ext.sip_peer)):
                 transaction.set_rollback(True)
                 return Response({'detail': 'إعادة ربط رقم داخلي عليه هاتف متصفح للمشرف أو المدير فقط'},
                                 status=403)
             before = {'staff': ext.staff_id, 'type': ext.extension_type, 'sip_peer': ext.sip_peer}
             moved_from = None
             if staff is not None:
-                prev = AgentExtension.objects.filter(staff=staff).exclude(pk=ext.pk).first()
+                prev = (AgentExtension.objects.select_for_update()
+                        .filter(staff=staff).exclude(pk=ext.pk).first())
                 if prev:
+                    # moving the staff off a credentialed extension takes its browser phone away:
+                    # the same manager rule (final review I2)
+                    if _is_credentialed(prev) and not manager:
+                        transaction.set_rollback(True)
+                        return Response({'detail': 'الموظف مرتبط برقم داخلي عليه هاتف متصفح — '
+                                                   'نقله للمشرف أو المدير فقط'}, status=403)
                     moved_from = prev.extension
                     prev.staff = None
                     prev.save(update_fields=['staff', 'updated_at'])
+                    AuditLog.log('pbx_extension_mapped', user=request.user.staff_profile, obj=prev,
+                                 changes={'staff': [staff.pk, None]},
+                                 note=f'ext {prev.extension}: الموظف نُقل إلى {extension}')
             ext.staff = staff
             if ext_type:
                 ext.extension_type = ext_type
             if 'sip_peer' in request.data:
-                ext.sip_peer = str(request.data['sip_peer'] or '').strip()[:50]
+                ext.sip_peer = new_peer
             ext.save()
             after = {'staff': ext.staff_id, 'type': ext.extension_type, 'sip_peer': ext.sip_peer}
 

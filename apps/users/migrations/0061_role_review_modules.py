@@ -3,6 +3,12 @@ catalog_tools, stock, loyalty, dispatch, rider, reconciliation, access_control, 
 Inserts a row for every role x module x action (explicit False too); get_or_create, so a grant the
 owner changed since is kept. The only existing rows touched: purchasing/settings -> not allowed
 (owner, role review). GRANTS is a frozen copy of seed_permissions.PERMISSIONS for these modules.
+
+view comes from GRANTS. The other actions copy the parent module as the database holds it now
+(final review I5): when the parent has any RoleModuleAccess row (seeded), GRANTS' non-view actions
+intersected with the role's allowed parent rows — an action the owner switched off on the parent
+stays off on the new module; an unseeded parent falls back to GRANTS. admin keeps GRANTS (admins
+pass every check anyway; the rows are for the permissions screen).
 """
 from django.db import migrations, models
 
@@ -80,11 +86,28 @@ GRANTS = {
 }
 
 
+PARENTS = {'forecast': 'analytics', 'recommendations': 'analytics', 'catalog_tools': 'catalog',
+           'stock': 'catalog', 'loyalty': 'customers', 'dispatch': 'delivery', 'rider': 'delivery',
+           'reconciliation': 'finance', 'access_control': 'settings', 'code_maps': 'settings'}
+
+
+def _starting_grants(RMA, module, role, seeded_parents):
+    allowed = set(GRANTS[module].get(role, []))
+    parent = PARENTS[module]
+    if role == 'admin' or parent not in seeded_parents or 'view' not in allowed:
+        return allowed
+    live = set(RMA.objects.filter(role=role, module=parent, is_allowed=True).values_list('action', flat=True))
+    return {'view'} | ((allowed - {'view'}) & live)
+
+
 def forwards(apps, schema_editor):
     RMA = apps.get_model('users', 'RoleModuleAccess')
-    for module, by_role in GRANTS.items():
+    # decided before any insert: purchasing/settings is changed below, not read
+    seeded_parents = set(RMA.objects.filter(module__in=set(PARENTS.values()))
+                         .values_list('module', flat=True).distinct())
+    for module in GRANTS:
         for role in ROLES:
-            allowed = set(by_role.get(role, []))
+            allowed = _starting_grants(RMA, module, role, seeded_parents)
             for action in ACTIONS:
                 RMA.objects.get_or_create(role=role, module=module, action=action,
                                           defaults={'is_allowed': action in allowed})

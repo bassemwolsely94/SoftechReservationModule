@@ -26,7 +26,7 @@ function renderAt(path, element) {
 
 beforeEach(() => {
   useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false })
-  usePermissionStore.setState({ permissions: null, role: null, isLoading: false })
+  usePermissionStore.setState({ permissions: null, role: null, seeded: null, isLoading: false })
 })
 afterEach(cleanup)
 
@@ -186,6 +186,44 @@ describe('RequireAuth', () => {
     useAuthStore.setState({ user: { role: 'viewer' }, isAuthenticated: true })
     renderAt('/secret', guarded)
     expect(screen.getByText('secret page')).toBeTruthy()
+  })
+})
+
+describe('RequireRole unseeded fallback (role review C1)', () => {
+  const guarded = <RequireRole module="code_maps" legacyRoles={['admin', 'purchasing']}><div>secret page</div></RequireRole>
+
+  it('unseeded module: a role on the old list gets in without a grant', () => {
+    useAuthStore.setState({ user: { role: 'purchasing' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: {}, seeded: [] })
+    renderAt('/secret', guarded)
+    expect(screen.getByText('secret page')).toBeTruthy()
+  })
+
+  it('unseeded module: a role off the old list is sent to the dashboard', () => {
+    useAuthStore.setState({ user: { role: 'viewer' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: { code_maps: { view: true } }, seeded: [] })
+    renderAt('/secret', guarded)
+    expect(screen.getByText('dashboard page')).toBeTruthy()
+  })
+
+  it('seeded module: the matrix decides', () => {
+    useAuthStore.setState({ user: { role: 'purchasing' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: {}, seeded: ['code_maps'] })
+    renderAt('/secret', guarded)
+    expect(screen.getByText('dashboard page')).toBeTruthy()
+    cleanup()
+    useAuthStore.setState({ user: { role: 'viewer' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: { code_maps: { view: true } }, seeded: ['code_maps'] })
+    renderAt('/secret', guarded)
+    expect(screen.getByText('secret page')).toBeTruthy()
+  })
+
+  it('permissions not loaded yet: renders nothing (no redirect, no flash)', () => {
+    useAuthStore.setState({ user: { role: 'purchasing' }, isAuthenticated: true })
+    usePermissionStore.setState({ permissions: null, seeded: null })
+    renderAt('/secret', guarded)
+    expect(screen.queryByText('secret page')).toBeNull()
+    expect(screen.queryByText('dashboard page')).toBeNull()
   })
 })
 

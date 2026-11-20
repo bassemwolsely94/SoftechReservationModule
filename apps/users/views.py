@@ -847,9 +847,14 @@ def my_permissions_view(request):
     Admins receive all-true for every module/action.
     Non-admins receive only their role's RoleModuleAccess grants;
     missing entries default to False.
+
+    `seeded` lists the modules the matrix has rows for (module_access.seeded_modules). The server
+    fails open on any other module for the legacy roles (core.permissions.matrix_allows), so the
+    menu and route guards decide such a module by the item's old role list (role review C1).
     """
+    from core.middleware.module_access import seeded_modules
     role, perms = effective_permissions(request.user)
-    return Response({'role': role, 'permissions': perms})
+    return Response({'role': role, 'permissions': perms, 'seeded': sorted(seeded_modules())})
 
 
 def effective_permissions(user):

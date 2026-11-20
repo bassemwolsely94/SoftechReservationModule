@@ -7,6 +7,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deliveryApi } from '../api/client'
 import QueryState from '../components/QueryState'
 import { describeQueryError } from '../utils/queryErrors'
+import { useModuleAction } from '../hooks/usePermission'
+import { legacyRolesFor } from '../components/navGroups'
 
 const fmt = n => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const RSTATUS = {
@@ -22,6 +24,9 @@ export default function DispatchBoard() {
   const qc = useQueryClient()
   const [selected, setSelected] = useState(() => new Set())
   const [driverId, setDriverId] = useState('')
+  // building / launching a route is delivery assign (apps/delivery/views.py guard); the board opens
+  // on dispatch view, so a watch-only role (quality) sees the live status without them (I4)
+  const canAssign = useModuleAction('delivery', 'assign', legacyRolesFor('/delivery/dispatch'))
 
   const ordersQ = useQuery({
     queryKey: ['dispatch-ready'],
@@ -88,14 +93,14 @@ export default function DispatchBoard() {
               ))}
             </QueryState>
           </div>
-          <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+          {canAssign && <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
             <select className="input-field flex-1" data-tour="delivery-dispatch-driver" value={driverId} onChange={e => setDriverId(e.target.value)}>
               <option value="">اختر السائق…</option>
               {drivers.map(d => <option key={d.id} value={d.id}>{d.full_name} ({d.today_order_count})</option>)}
             </select>
             <button data-tour="delivery-dispatch-create" onClick={() => createRoute.mutate()} disabled={!driverId || !selected.size || createRoute.isPending}
               className="btn-primary text-sm disabled:opacity-40">إنشاء مسار</button>
-          </div>
+          </div>}
           {createRoute.isError && (
             <div role="alert" className="text-xs text-red-700 mt-2">⚠️ لم يُنشأ المسار: {describeQueryError(createRoute.error)}</div>
           )}
@@ -120,7 +125,7 @@ export default function DispatchBoard() {
                   </div>
                   <div className="text-[11px] text-gray-400 mt-0.5">نقدي متوقّع {fmt(r.expected_cash)} ج.م · تم {r.delivered_count}/{r.stop_count}</div>
                   <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1.5"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
-                  {r.status === 'planned' && (
+                  {canAssign && r.status === 'planned' && (
                     <button data-tour="delivery-dispatch-launch" onClick={() => dispatchRoute.mutate(r.id)} disabled={dispatchRoute.isPending}
                       className="w-full mt-2 text-xs bg-brand-600 text-white rounded-lg py-1.5 font-medium disabled:opacity-50">🚚 إطلاق المسار</button>
                   )}

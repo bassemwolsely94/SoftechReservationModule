@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { loginUrlFor } from '../api/sessionExpiry'
 import useAuthStore from '../store/authStore'
 import usePermissionStore from '../store/permissionStore'
+import { moduleUnseeded } from './navGroups'
 
 // Route guards. They only steer the browser: every API checks the role itself (server-side
 // permissions), so a guard bypassed in the browser still meets a 403.
@@ -27,11 +28,18 @@ export function RequireAuth({ children }) {
 // `cap` (optional) names a user capability flag from /auth/me that admits the user on its own —
 // a grant the server gives outside the matrix (e.g. can_stock_audit: named branch managers
 // review daily counts on /stock-count), as navGroups' `cap`.
-export function RequireRole({ roles, module, action = 'view', cap, children }) {
+// `legacyRoles` (optional, with `module`): the route's role list from before the role review —
+// used only while `module` has no matrix rows at all (my-permissions `seeded`), where the server
+// fails open for the legacy roles, so an unseeded database keeps today's routes (C1).
+export function RequireRole({ roles, module, action = 'view', cap, legacyRoles, children }) {
   const { user } = useAuthStore()
   const perms = usePermissionStore(s => s.permissions)
+  const seeded = usePermissionStore(s => s.seeded)
   const userRole = user?.role || 'viewer'
   if (cap && user?.[cap]) return children
+  if (userRole !== 'admin' && moduleUnseeded(module, legacyRoles, perms, seeded)) {
+    return legacyRoles.includes(userRole) ? children : <Navigate to="/dashboard" replace />
+  }
   if (roles && !roles.includes(userRole)) return <Navigate to="/dashboard" replace />   // no list = the matrix alone decides
   if (module && userRole !== 'admin') {
     if (perms === null) return null

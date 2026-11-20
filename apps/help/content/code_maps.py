@@ -75,8 +75,8 @@ SCREENS = [
         'title': T('ترميزات SOFTECH', 'SOFTECH codes'),
         'summary': T('معنى كل كود قناة بيع وكل كود تصنيف صنف من SOFTECH، يُعدّل في السطر نفسه.',
                      'The meaning of every SOFTECH sales-channel code and item-category code, edited in the row itself.'),
-        'audience': T('من يملك موديول «جداول الأكواد» (شاشة «الصلاحيات»): عرض للقراءة، تعديل للحفظ — افتراضياً المدير والمشتريات والمشرف للعرض.',
-                      'Whoever holds the "Code maps" module (Permissions screen): view to read, edit to save — by default admin, plus purchasing and supervisor to view.'),
+        'audience': T('من يملك موديول «جداول الأكواد» (شاشة «الصلاحيات»): عرض للقراءة، تعديل للحفظ — افتراضياً المدير والمشتريات والمشرف للعرض. بدون صلاحية التعديل تظهر القوائم والمربعات معطّلة.',
+                      'Whoever holds the "Code maps" module (Permissions screen): view to read, edit to save — by default admin, plus purchasing and supervisor to view. Without the edit grant the selects and ticks show disabled.'),
         'tabs': [
             {'key': 'channels', 'title': T('قنوات البيع', 'Sales channels'),
              'body': T('كل كود نوع عميل في SOFTECH. «الاسم في SOFTECH» يأتي من SOFTECH ويتحدث مع المزامنة. '

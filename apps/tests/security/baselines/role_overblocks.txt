@@ -237,26 +237,19 @@ supervisor POST /api/followups/tasks/cleanup-dead/
 supervisor POST /api/followups/tasks/deduplicate/
 supervisor POST /api/followups/tasks/update-priority-scores/
 
-# reason: Z-11c — omni analytics and automations, PBX diagnostics / spy / extension map & status and
-#   whisper control are admin / supervisor supervision tools (the wallboard opens to call
-#   center in decision 4).
+# reason: Z-11c — omni analytics and automations, PBX spy and whisper control are admin / supervisor
+#   supervision tools; the wallboard opens to call center in decision 4, and PBX diagnostics /
+#   extension map & status follow callcenter since the role review.
 call_center GET /api/omni/analytics/
 call_center GET /api/omni/automation-runs/
 call_center GET /api/omni/automations/
 call_center GET /api/omni/automations/987654321/
-call_center GET /api/pbx/extensions/status/
-call_center GET /api/pbx/staff-choices/
 call_center POST /api/callcenter/whisper/control/
 call_center POST /api/omni/automations/
-call_center POST /api/pbx/agents/
-call_center POST /api/pbx/diagnostics/
-call_center POST /api/pbx/extensions/map/
 call_center POST /api/pbx/spy/
 quality_manager GET /api/omni/automation-runs/
 quality_manager GET /api/omni/automations/
 quality_manager GET /api/omni/automations/987654321/
-quality_manager GET /api/pbx/extensions/status/
-quality_manager GET /api/pbx/staff-choices/
 
 # reason: Z-11c — the purchasing and supply dashboards are the purchasing / supply-group home screens.
 accountant GET /api/dashboard/purchasing/
@@ -346,9 +339,10 @@ supervisor GET /api/finance/reconciliation/unpaid/export/
 # (posdiscp / specialoffers) stay admin-only inside the view
 purchasing POST /api/offers/987654321/posdiscp-apply/
 purchasing POST /api/offers/987654321/promo-apply/
-# reason: Z-7b — forecasting is the analytics module; analytics export lets quality_manager (and
-# supervisor) past the middleware, the views keep every forecast write to the analyst roles
-# (admin / supervisor / purchasing) and the KPI rebuild to purchasing edit (Z-2)
+# reason: Z-7b — forecasting asks the forecast module since the role review (2026-11-20; it was
+# analytics); forecast export lets quality_manager (and supervisor) past the middleware, the views
+# keep every forecast write to the analyst roles (admin / supervisor / purchasing) and the KPI
+# rebuild to purchasing edit (Z-2)
 quality_manager POST /api/forecasting/accuracy/
 quality_manager POST /api/forecasting/accuracy/987654321/update-actual/
 quality_manager POST /api/forecasting/backtest/run/
@@ -423,13 +417,12 @@ purchasing PUT /api/procurement/classification-rules/987654321/
 supervisor PATCH /api/customers/segmentation-config/
 supervisor PATCH /api/offers/margin-config/
 
-# reason: Z-12 — omni channel accounts / automations and PBX extension edits are admin / supervisor (Z-8b).
+# reason: Z-12 — omni channel accounts / automations are admin / supervisor (Z-8b); PBX extension edits
+#   follow callcenter edit since the role review (decision 5).
 call_center PATCH /api/omni/accounts/987654321/
 call_center PATCH /api/omni/automations/987654321/
-call_center PATCH /api/pbx/agents/987654321/
 call_center PUT /api/omni/accounts/987654321/
 call_center PUT /api/omni/automations/987654321/
-call_center PUT /api/pbx/agents/987654321/
 
 # reason: Z-12 — product content / attributes / media / SEO edits are for content managers.
 pharmacist PATCH /api/products/x/attributes/
@@ -619,12 +612,12 @@ viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/
 viewer GET /api/purchasing/spike/summary/
 
-# reason: owner decision 2026-11-09 — call lists are created and closed by admin / supervisor / call_center
-#   only (followups/call_list_views.py, call_lists.CREATOR_ROLES); pharmacist and salesperson hold
-#   followups create for their own follow-ups, not for call lists.
-pharmacist POST /api/followups/call-lists/
+# reason: role review final fix I3 (2026-11-20) — creating a call list follows followups create
+#   (owner decision 6), but closing one cancels every open task of it: only its creator, an
+#   all-branch user, or a user whose branches cover every branch of the list
+#   (followups/call_list_views.py _can_close). A branch-bound pharmacist / salesperson closing
+#   someone else's company-wide list is refused.
 pharmacist POST /api/followups/call-lists/987654321/close/
-salesperson POST /api/followups/call-lists/
 salesperson POST /api/followups/call-lists/987654321/close/
 # reason: Z-8b — enabling an agent's browser phone stores its SIP password: admin / supervisor only
 #   (IsAdminOrSupervisor, audited without the secret), like the omni channel-account edits.

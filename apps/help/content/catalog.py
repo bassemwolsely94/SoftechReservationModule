@@ -731,7 +731,7 @@ SCREENS = [
         'routes': ['/catalog-intelligence'],
         'title': T('ذكاء الكتالوج', 'Catalog intelligence'),
         'summary': T('تنظيم الكتالوج وتحسين جودة بياناته.', 'Organise the catalog and improve its data quality.'),
-        'audience': T('من يملك موديول «أدوات الأصناف» (شاشة «الصلاحيات») — افتراضياً المشتريات والمشرف والكول سنتر والإدارة.', 'Whoever holds the "Catalog tools" module (Permissions screen) — by default purchasing, supervisor, call center and management.'),
+        'audience': T('من يملك موديول «أدوات الأصناف» (شاشة «الصلاحيات») — افتراضياً المشتريات والمشرف والكول سنتر والإدارة. أزرار الإضافة والحذف والإثراء لمن يملك صلاحية التعديل في موديول الكتالوج؛ غيرهم يقرأ الشاشة بدونها.', 'Whoever holds the "Catalog tools" module (Permissions screen) — by default purchasing, supervisor, call center and management. The add, delete and enrichment buttons need the edit grant of the Catalog module; others read the screen without them.'),
         'tabs': [
             {'key': 'variants', 'title': T('🔗 مجموعات المتغيرات', '🔗 Variant groups'), 'body': T('تجميع الأصناف التي هي نفس المنتج بأشكال أو أحجام مختلفة (مثلاً أقراص وشراب) في مجموعة واحدة.', 'Group items that are the same product in different forms or sizes (e.g. tablets and syrup).')},
             {'key': 'bundles', 'title': T('📦 الباقات', '📦 Bundles'), 'body': T('إنشاء باقات أصناف مع خصم اختياري (نسبة أو مبلغ ثابت) وإظهارها أو إخفاؤها.', 'Create item bundles with an optional discount (percent or fixed) and show or hide them.')},

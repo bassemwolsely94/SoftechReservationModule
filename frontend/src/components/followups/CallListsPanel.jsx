@@ -233,7 +233,7 @@ export default function CallListsPanel({ branches = [], activeListId, onSelectLi
                 <span>{cl.progress.pct}%</span>
               </div>
               {cl.script && <div className="text-xs text-gray-500 line-clamp-2">📝 {cl.script}</div>}
-              {canCreate && cl.status === 'active' && (
+              {cl.can_close && (
                 <div className="flex justify-end">
                   <ConfirmButton onConfirm={() => close.mutate(cl.id)} confirmLabel="إغلاق؟ تُلغى المكالمات التي لم تتم"
                     title={`إغلاق «${cl.name}»`}

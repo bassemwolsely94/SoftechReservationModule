@@ -15,6 +15,7 @@
 import { useEffect } from 'react'
 import usePermissionStore from '../store/permissionStore'
 import useAuthStore from '../store/authStore'
+import { moduleActionAllowed } from '../components/navGroups'
 
 export function usePermission(module, action) {
   const { isAuthenticated } = useAuthStore()
@@ -66,6 +67,25 @@ export function usePermissions(module) {
 export function usePermissionAny(module, actions) {
   const map = usePermissions(module)
   return actions.some(a => !!map[a])
+}
+
+/**
+ * useModuleAction(module, actions, legacyRoles?)
+ *
+ * usePermissionAny plus the unseeded fallback: on a module with no matrix rows (the server fails
+ * open for the legacy roles) it answers by `legacyRoles`, the screen's role list from before the
+ * role review — so a write control a view-only role would only get a 403 from is hidden, while an
+ * unseeded database keeps today's controls (final review I4 / C1).
+ *
+ *   const canEdit = useModuleAction('code_maps', 'edit', ['admin'])
+ */
+export function useModuleAction(module, actions, legacyRoles) {
+  const { isAuthenticated, user } = useAuthStore()
+  const { permissions, seeded, load } = usePermissionStore()
+  useEffect(() => {
+    if (isAuthenticated && permissions === null) load()
+  }, [isAuthenticated, permissions, load])
+  return moduleActionAllowed({ role: user?.role || 'viewer', perms: permissions, seeded }, module, actions, legacyRoles)
 }
 
 export default usePermission

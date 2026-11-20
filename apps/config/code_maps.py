@@ -9,7 +9,7 @@ The owner's editing API behind the /code-maps screen:
   GET   /api/config/code-maps/item-types/        item categories (MedicineTypeMap) — same shape
   PATCH /api/config/code-maps/item-types/<pk>/   group · is_medicine · excluded_from_planning
 
-GET needs settings/view, PATCH settings/edit (server-side matrix). Only the meaning
+GET needs code_maps/view, PATCH code_maps/edit (server-side matrix). Only the meaning
 fields are writable here — the KPI bucket / subtype / counts / profit flags stay in the
 Django admin + KPI config, so KPI figures never move from this screen; any other key in
 the body is ignored. Every real change writes one `code_map_changed` AuditLog row with
@@ -36,7 +36,7 @@ from apps.forecasting.models import ChannelBucketMap
 from core.permissions import matrix_permission
 
 # GET → view · PATCH → edit, on the code_maps module (role review 2026-11-20; was settings)
-SETTINGS = matrix_permission('code_maps')
+CODE_MAPS = matrix_permission('code_maps')
 SALES_WINDOW_DAYS = 90
 
 _GROUP_ERR = {'invalid_choice': 'مجموعة غير معروفة.', 'null': 'المجموعة مطلوبة.',
@@ -136,7 +136,7 @@ def _channel_sort_key(row):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, SETTINGS])
+@permission_classes([IsAuthenticated, CODE_MAPS])
 def channel_list(request):
     channels.ensure_defaults()
     rows = sorted(ChannelBucketMap.objects.filter(person_type=channels.CUSTOMER_PT),
@@ -148,7 +148,7 @@ def channel_list(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated, SETTINGS])
+@permission_classes([IsAuthenticated, CODE_MAPS])
 def channel_detail(request, pk: int):
     ser = ChannelPatchSerializer(data=request.data)
     if not ser.is_valid():
@@ -183,7 +183,7 @@ def _item_type_dict(row, counts: dict) -> dict:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, SETTINGS])
+@permission_classes([IsAuthenticated, CODE_MAPS])
 def item_type_list(request):
     rows = sorted(item_types.all_types(), key=lambda r: (r.group != 'unclassified', r.code))
     counts = _item_counts(r.code for r in rows)
@@ -192,7 +192,7 @@ def item_type_list(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated, SETTINGS])
+@permission_classes([IsAuthenticated, CODE_MAPS])
 def item_type_detail(request, pk: int):
     ser = ItemTypePatchSerializer(data=request.data)
     if not ser.is_valid():
