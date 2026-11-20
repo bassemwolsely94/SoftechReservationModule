@@ -289,6 +289,9 @@ class Item(models.Model):
                                                verbose_name='الطلب الحقيقي (مبيعات − إعادة شراء)')
     phantom_detected_at = models.DateTimeField(null=True, blank=True,
                                                verbose_name='آخر فحص وهمية')
+    phantom_flagged_at = models.DateTimeField(
+        null=True, blank=True, db_index=True, verbose_name='أول تحديد وهمية',
+        help_text='متى أصبح الصنف «وهمي» آخر مرة (قائمة المراجعة الشهرية C30). يُمسح عند زوال العلامة التلقائية.')
     phantom_source = models.CharField(max_length=10, blank=True, default='',
                                       verbose_name='مصدر التحديد',
                                       help_text="'auto' | 'manual'.")

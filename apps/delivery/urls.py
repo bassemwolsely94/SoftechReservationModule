@@ -36,6 +36,7 @@ urlpatterns = [
     path('area-heatmap/',        views.delivery_area_heatmap),          # F11
     path('shift-report/',        views.delivery_shift_report),          # F12
     path('csat-report/',         views.delivery_csat_report),           # F14
+    path('stuck-orders/',        views.delivery_stuck_orders),          # C21
 
     # ── Tools & helpers ──────────────────────────────────────────────────────
     path('threshold/',           views.delivery_threshold_check),       # F4

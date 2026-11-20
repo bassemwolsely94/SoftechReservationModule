@@ -116,6 +116,38 @@ def _visible_categories(profile):
     return visible
 
 
+def bell_scope(qs, profile, view='all'):
+    """Narrow a recipient's Notification queryset to the main bell (C26 / D-19).
+
+    view='all'    → today's bell: the visible categories that ride the bell (quiet feeds excluded).
+    view='action' → the action types (action_items.ACTION_TYPES) from EVERY visible category, so an
+                    @-mention or a branch to classify reaches the bell's action list too.
+    One helper for the list, the count and «قراءة الكل» (REST and websocket) so they always agree.
+    """
+    from .action_items import VIEW_ACTION, ACTION_TYPES
+    visible = _visible_categories(profile)
+    if view == VIEW_ACTION:
+        return qs.filter(category__in=visible, notification_type__in=ACTION_TYPES)
+    return qs.filter(category__in=[c for c in visible if c not in Notification.MODULE_CATEGORIES])
+
+
+def mark_bell_read(profile, category=None, view='all'):
+    """«قراءة الكل» — marks the unread, not-snoozed notifications the caller is looking at (one module
+    feed when `category` is given, else the bell in `view`) and stamps their NotificationLog rows.
+    Returns the number marked. Shared by the REST route and the websocket action.
+    Before C26 the log stamp covered EVERY unread log row of the user, and the websocket path
+    marked every category (quiet feeds + snoozed included)."""
+    now = timezone.now()
+    qs = (Notification.objects.filter(recipient=profile, is_read=False)
+          .exclude(snoozed_until__gt=now))
+    qs = qs.filter(category=category) if category else bell_scope(qs, profile, view)
+    # stamp the logs first, while the rows still match is_read=False
+    NotificationLog.objects.filter(
+        recipient=profile, read_at__isnull=True, notification__in=qs.values('pk'),
+    ).update(read_at=now)
+    return qs.update(is_read=True)
+
+
 # ── Gap-4: chatter branch scope ───────────────────────────────────────────────
 
 # Batch 5: which branches' chatter a user may read = core.branch_scope (all-branch roles incl.
@@ -170,6 +202,7 @@ def notification_list(request):
 
     Query params:
       ?unread_only=true
+      ?view=action                — the bell's action items only (C26); default 'all'
       ?type=follow_up_due         — filter by notification_type
       ?search=text                — search in title + body
       ?limit=50                   — page size (max 200)
@@ -191,10 +224,10 @@ def notification_list(request):
                             status=status.HTTP_403_FORBIDDEN)
         qs = qs.filter(category=category)
     else:
-        # Default bell = visible, non-quiet categories (per-role notifier visibility).
-        bell_visible = [c for c in _visible_categories(profile)
-                        if c not in Notification.MODULE_CATEGORIES]
-        qs = qs.filter(category__in=bell_visible)
+        # Default bell = visible, non-quiet categories (per-role notifier visibility);
+        # ?view=action = the action items only (C26).
+        from .action_items import clean_view
+        qs = bell_scope(qs, profile, clean_view(request.query_params.get('view')))
 
     if request.query_params.get('unread_only') == 'true':
         qs = qs.filter(is_read=False)
@@ -240,9 +273,8 @@ def unread_count(request):
             return Response({'count': 0}, status=status.HTTP_403_FORBIDDEN)
         qs = qs.filter(category=category)
     else:
-        bell_visible = [c for c in _visible_categories(profile)
-                        if c not in Notification.MODULE_CATEGORIES]
-        qs = qs.filter(category__in=bell_visible)
+        from .action_items import clean_view
+        qs = bell_scope(qs, profile, clean_view(request.query_params.get('view')))
     return Response({'count': qs.count()})
 
 
@@ -265,13 +297,20 @@ def unread_category_counts(profile):
     over the notification socket (perf Stage 5), so both always agree. Integers + the visible
     category keys only."""
     from django.db.models import Count
+    from .action_items import ACTION_TYPES
+    # One grouped scan (category x type) feeds every number below, the C26 action count included -
+    # the same rows the old per-category GROUP BY read, so the poll costs no extra query.
     rows = (
         Notification.objects.filter(recipient=profile, is_read=False)
         .exclude(snoozed_until__gt=timezone.now())
-        .values('category').annotate(n=Count('id'))
+        .values('category', 'notification_type').annotate(n=Count('id'))
     )
-    counts = {row['category']: row['n'] for row in rows}
     visible = _visible_categories(profile)
+    counts, action = {}, 0
+    for row in rows:
+        counts[row['category']] = counts.get(row['category'], 0) + row['n']
+        if row['notification_type'] in ACTION_TYPES and row['category'] in visible:
+            action += row['n']
     # Zero out any notifier the role can't see (explicit hide or no module view),
     # so a hidden feed never reveals a count.
     def _scoped(cat):
@@ -292,6 +331,8 @@ def unread_category_counts(profile):
             n for cat, n in counts.items()
             if cat in visible and cat not in Notification.MODULE_CATEGORIES
         ),
+        # C26: unread action items across every visible category (the bell's default view).
+        'action': action,
         # Which notifiers this role may see — drives front-end feed hiding + WS drop.
         'visible': sorted(visible),
     }
@@ -461,30 +502,20 @@ def reminder_detail(request, pk):
 def mark_all_read(request):
     """POST /api/notifications/mark-all-read/
 
-    Scoped like the list: default marks only the global bell; ?category=demand
-    marks just that module feed. Prevents the bell's "mark all" from silently
-    clearing module-scoped notifications the user hasn't seen yet.
+    Scoped like the list: default marks only the global bell; ?view=action marks only the action
+    items the bell shows (C26); ?category=demand marks just that module feed. Prevents the bell's
+    "mark all" from silently clearing module-scoped notifications the user hasn't seen yet.
     """
     profile = _get_profile(request)
     if not profile:
         return Response(status=status.HTTP_403_FORBIDDEN)
 
-    now = timezone.now()
-    qs  = (Notification.objects.filter(recipient=profile, is_read=False)
-           .exclude(snoozed_until__gt=now))   # don't mark snoozed (hidden) as read
     category = request.query_params.get('category')
-    if category:
-        if not _can_view_category(profile, category):
-            return Response({'marked': 0}, status=status.HTTP_403_FORBIDDEN)
-        qs = qs.filter(category=category)
-    else:
-        bell_visible = [c for c in _visible_categories(profile)
-                        if c not in Notification.MODULE_CATEGORIES]
-        qs = qs.filter(category__in=bell_visible)
-    count = qs.update(is_read=True)
-    NotificationLog.objects.filter(
-        recipient=profile, read_at__isnull=True
-    ).update(read_at=now)
+    if category and not _can_view_category(profile, category):
+        return Response({'marked': 0}, status=status.HTTP_403_FORBIDDEN)
+    from .action_items import clean_view
+    count = mark_bell_read(profile, category=category or None,
+                           view=clean_view(request.query_params.get('view')))
     if count:
         request_counts_push(profile.pk)
     return Response({'marked': count})
@@ -546,7 +577,8 @@ def preferences(request):
 
     Body (PATCH):
       { "enable_notifications": true, "enable_sound": false,
-        "enable_browser_push": false, "muted_notification_categories": ["monitoring"] }
+        "enable_browser_push": false, "muted_notification_categories": ["monitoring"],
+        "bell_view": "action" }
     """
     profile = _get_profile(request)
     if not profile:
@@ -558,6 +590,8 @@ def preferences(request):
             'enable_sound':         profile.enable_sound,
             'enable_browser_push':  profile.enable_browser_push,
             'muted_notification_categories': profile.muted_notification_categories or [],
+            # C26: the bell's remembered view - 'action' (default) or 'all'
+            'bell_view': profile.bell_view,
             # The categories this user's role exposes (so the UI can offer per-category mute)
             'notifiers': [{'value': v, 'label': l} for v, l in Notification.CATEGORY_CHOICES],
         }
@@ -576,6 +610,12 @@ def preferences(request):
         raw = request.data.get('muted_notification_categories') or []
         profile.muted_notification_categories = [c for c in raw if c in valid]
         updated.append('muted_notification_categories')
+    if 'bell_view' in request.data:
+        from .action_items import BELL_VIEWS
+        if request.data.get('bell_view') not in BELL_VIEWS:
+            return Response({'detail': 'عرض غير معروف'}, status=status.HTTP_400_BAD_REQUEST)
+        profile.bell_view = request.data['bell_view']
+        updated.append('bell_view')
     if updated:
         profile.save(update_fields=updated)
 
