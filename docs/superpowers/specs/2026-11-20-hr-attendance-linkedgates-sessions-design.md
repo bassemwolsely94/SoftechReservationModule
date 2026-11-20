@@ -1,7 +1,7 @@
 # HR Attendance: Linked Gates source and work sessions (Stage 1b)
 
 **Date:** 2026-11-20
-**Status:** draft for owner approval
+**Status:** approved by the owner 2026-11-20
 **Builds on:** Stage 1 (`docs/superpowers/specs/2026-11-07-hr-attendance-stage1-design.md`, PR 91 on main).
 **Not in scope:** lateness, penalties and salaries (Stages 2 and 3).
 
@@ -201,6 +201,12 @@ For each machine and each day:
   - A data migration sets the existing 04:00 values to null. The office DB was checked on 2026-11-20: all 55 rows are at the 04:00 default and none was customised.
   - Only a non-null value overrides sessions.
 - **Agents:** no Stage 1 agent has ever run. The office DB has 0 agents and 0 punches. The PC HR agent is the only agent, and every live machine is assigned to it in the section 5.5 migration, so no two agents compete for a machine.
+
+- **The Linked Gates collector, "Puma Service":** a Linked Gates program on PC HR built on BiometrixCore and the ZK SDK. Its buttons are Run Now, Set Schedule and Tools.
+  - **It runs on request only.** HR presses Run Now when they need the data, and the schedule is not used (owner, 2026-11-20). So there's no fixed Puma time to avoid.
+  - **How our agent avoids clashing:** it pulls at night, between 02:00 and 05:00, plus whenever a manager asks. If a machine refuses or times out, it backs off for 10 minutes, assuming Puma is busy, rather than retrying immediately.
+  - **Its Tools → Device Panel** offers Download/Upload/Delete Users Data, Get Device Time, Restart and Power Off, with no clear-logs action. Uploads and deletes stay Linked Gates' job; our agent's allow-list keeps excluding all of them.
+- **Approval:** the owner approved this design on 2026-11-20 with no changes.
 
 ## 6. Open items for the builder (minor, builder's call)
 - the batch size and the polling interval for Linked Gates (default every 15 minutes)
