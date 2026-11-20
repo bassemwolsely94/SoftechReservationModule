@@ -19,8 +19,8 @@
   row counts. The delta result is never written. First run with no watermark: seed only.
   Watermark only moves forward; a SOFTECH max below the stored watermark is logged (S6) and the
   watermark is re-seeded. A delta error never breaks the full sync.
-- `GET /api/sync/delta-shadow/?days=7` (admin) + a card on `/sync` + help text (AR/EN), and
-  `manage.py delta_shadow_report --days 7`.
+- `GET /api/sync/delta-shadow/?days=7` (admin) + a card on `/sync` + help text (AR/EN). The 7-day
+  sign-off report for the owner is read from that page (a separate command was left out as duplicate).
 
 ## Not in scope
 
