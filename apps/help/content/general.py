@@ -540,6 +540,8 @@ SCREENS = [
               'If "one of the servers is offline" appears, the SOFTECH save did not finish at the branch; try again later.'),
             T('لوحة «📋 مهام فرعي اليوم» تعرض لفرعك فقط نفس قسم «اليوم» في رسالة الصباح: مرتجع للمورد يُرسل للرئيسي قبل موعده (أو «متأخر»)، راكد يُباع بفرع آخر للنقل، وما ينتهي خلال 60 يوماً — أعلى 3 من كل نوع بقيمتها. لا تحتاج هوية؛ تعمل حتى لو إرسال واتساب متوقف.',
               'The "📋 My branch today" widget shows, for your own branch only, the same "Today" part as the morning message: supplier returns to send to HQ before their date (or "late"), slow stock that sells at another branch to move, and stock expiring within 60 days — the top 3 of each with their value. It needs no identity and works even while WhatsApp sending is off.'),
+            T('لوحة «📈 مبيعاتي» فيها «على كود عميل»: نسبة فواتيرك أمس وفي فترة اللوحة اللي اتعملت على كود عميل (PIC) — نفس رقم التحدي، والأكواد المشتركة ما بتتحسبش. أخضر لو وصلت الهدف. نسبة فرعك في سطر «أمس» في رسالة الصباح.',
+              'The "📈 My sales" widget shows "on a customer code": the share of your sale invoices yesterday and over the widget\'s period made on a customer code (PIC) — the same number the challenge uses; shared codes do not count. Green once you reach the target. Your branch\'s rate is in the "Yesterday" part of the morning message.'),
         ],
         'faq': [
             {'q': T('لماذا لوحتي فارغة؟', 'Why is my board empty?'),
@@ -697,8 +699,9 @@ SCREENS = [
              'when': T('لو الموبايل ده مش بتاعك أو مشترك في الفرع.', 'When this phone is not yours or is shared at the branch.'),
              'open_hint': T('في الشريط الأزرق فوق على الموبايل.', 'In the blue bar at the top on the phone.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('لوحة جديدة «📋 مهام فرعي اليوم»: قسم «اليوم» من رسالة الصباح لفرعك.', 'New widget "📋 My branch today": the "Today" part of the morning message for your branch.'),
+        'updated': '2026-11-20',
+        'change_note': T('«📈 مبيعاتي»: نسبة فواتيرك على كود عميل أمس وفي الفترة، ونسبة الفرع في رسالة الصباح.',
+                         '"📈 My sales": the share of your invoices on a customer code yesterday and over the period; the branch rate is in the morning message.'),
     },
     {
         'key': 'general.security',
