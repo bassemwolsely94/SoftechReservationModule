@@ -163,6 +163,8 @@ class AggregatedSerializer(serializers.ModelSerializer):
     season_stable = serializers.BooleanField(read_only=True, allow_null=True)
     season_note   = serializers.CharField(read_only=True, allow_null=True)
     season_month  = serializers.SerializerMethodField()
+    # C16: network months of cover + «شراء رغم تغطية عالية» (the P-31 rule, decided here, shown as a badge)
+    network_cover = serializers.SerializerMethodField()
 
     class Meta:
         model  = ItemDemandAggregated
@@ -186,8 +188,25 @@ class AggregatedSerializer(serializers.ModelSerializer):
             'total_lost_qty_30d', 'total_lost_revenue_30d', 'total_lost_margin_30d',
             'network_availability_rate_30d',
             'season_index', 'season_stable', 'season_note', 'season_month',
+            'network_cover',
         ]
         read_only_fields = fields
+
+    def _cover_limit(self):
+        """The P-31 threshold, read once per response (kept on the root serializer), not per row."""
+        holder = self.root if self.root is not None else self
+        lim = getattr(holder, '_c16_cover_limit', None)
+        if lim is None:
+            from apps.purchasing.pivot_sheets import buy_cover_limit
+            lim = buy_cover_limit()
+            holder._c16_cover_limit = lim
+        return lim
+
+    def get_network_cover(self, obj):
+        from apps.purchasing.pivot_sheets import buy_cover_flag
+        f = buy_cover_flag(obj.total_current_stock, obj.total_monthly_avg, self._cover_limit())
+        return {'months': float(f['months']) if f['months'] is not None else None,
+                'warn': f['warn'], 'label': f['label']}
 
     def get_season_month(self, obj):
         from apps.purchasing.seasonality import AR_MONTHS
