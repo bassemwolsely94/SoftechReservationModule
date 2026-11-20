@@ -14,7 +14,7 @@ import useAuthStore from '../../store/authStore'
 import { canPickAnyBranch } from '../../utils/branchAccess'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
 import { useModuleAction } from '../../hooks/usePermission'
-import { WRITE_ACTIONS, qaCreateAllowed } from './mobileWriteGates'
+import { WRITE_ACTIONS, qaCreateAllowed, qaLegacyRoles } from './mobileWriteGates'
 
 function scoreClass(s) {
   if (s == null) return 'bg-gray-100 text-gray-600'
@@ -51,7 +51,8 @@ export default function MobileQAPage() {
     enabled: creating && canPickBranch,
   })
 
-  const hasHrWrite = useModuleAction('hr', WRITE_ACTIONS.hr)
+  // unseeded hr: the server's own QA role rule (a role it let read the list), see qaLegacyRoles
+  const hasHrWrite = useModuleAction('hr', WRITE_ACTIONS.hr, qaLegacyRoles(user?.role, inspections.isSuccess))
   const canCreate  = qaCreateAllowed(hasHrWrite, inspections.error)
 
   const rows = Array.isArray(inspections.data) ? inspections.data : (inspections.data?.results || [])

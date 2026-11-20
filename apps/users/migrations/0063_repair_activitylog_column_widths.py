@@ -26,7 +26,18 @@ WIDTHS = {
 
 
 def forwards(apps, schema_editor):
-    with schema_editor.connection.cursor() as cur:
+    conn = schema_editor.connection
+    timeout_set = False
+
+    def alter(cur, sql):
+        # a busy audit table must not hang the deploy: give up after 5 s (this transaction only)
+        nonlocal timeout_set
+        if not timeout_set and conn.vendor == 'postgresql':
+            cur.execute("SET LOCAL lock_timeout = '5s'")
+            timeout_set = True
+        cur.execute(sql)
+
+    with conn.cursor() as cur:
         for column, width in WIDTHS.items():
             cur.execute(
                 'SELECT data_type, character_maximum_length FROM information_schema.columns '
@@ -40,9 +51,9 @@ def forwards(apps, schema_editor):
             if current is None:
                 continue                       # already text (unlimited)
             if width is None:
-                cur.execute(f'ALTER TABLE "{TABLE}" ALTER COLUMN "{column}" TYPE text')
+                alter(cur, f'ALTER TABLE "{TABLE}" ALTER COLUMN "{column}" TYPE text')
             elif current < width:
-                cur.execute(f'ALTER TABLE "{TABLE}" ALTER COLUMN "{column}" TYPE varchar({int(width)})')
+                alter(cur, f'ALTER TABLE "{TABLE}" ALTER COLUMN "{column}" TYPE varchar({int(width)})')
 
 
 class Migration(migrations.Migration):

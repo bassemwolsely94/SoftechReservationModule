@@ -490,7 +490,9 @@ SCREENS = [
             T('«📲 نبّه على الموبايل» (يظهر لو الإدارة فعّلته): يصل واتساب لمسؤول التوفير ويتابعه لحد ما يضغط «استلمت». لو الإدارة جعلته «دائماً» يكون مفعّل ولا يمكن إلغاؤه.',
               '"📲 Alert by phone" (shown when management enabled it): a WhatsApp message reaches the sourcing owner and follows up until they tap "Received". If management made it "always" it is on and cannot be unticked.'),
         ],
-        'tips': _TIPS_NEW,
+        'tips': _TIPS_NEW + [
+            T('لو دورك ما عندوش صلاحية الإنشاء هنا، الشاشة بتقول «ليس لديك صلاحية الإنشاء هنا» بدل النموذج — اطلب الصلاحية من المدير.', 'If your role has no create permission here, the screen says so instead of showing the form — ask your manager for the permission.'),
+        ],
         'faq': [
             {'q': T('الصنف موجود في فرع آخر، هل أسجّل حجزاً؟', 'The item is at another branch — should I still reserve?'),
              'a': T('نعم سجّل الحجز، ثم من صفحة الحجز اطلب «تحويل مخزون» من الفرع الذي لديه الصنف؛ الحجز يرتبط بطلب التحويل.',
@@ -597,7 +599,6 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'tips': [T('لو دورك ما عندوش صلاحية الإنشاء هنا، الشاشة بتقول «ليس لديك صلاحية الإنشاء هنا» بدل النموذج — اطلب الصلاحية من المدير.', 'If your role has no create permission here, the screen says so instead of showing the form — ask your manager for the permission.')],
         'updated': '2026-11-20',
         'change_note': T('اللي ما عندوش صلاحية الإنشاء بيشوف سطر هادي بدل نموذج كان السيرفر هيرفضه، وزر «جديد هنا؟» بقى فوق تحت العنوان على الموبايل · اختيار الفرع لأي دور له صلاحية كل الفروع، لا للكول سنتر والمدير فقط',
                          'Without the create permission you see a calm line instead of a form the server would refuse; on the phone the «New here?» chip now sits at the top, under the header · Any role with all-branch access picks the branch, not only call center and admin'),

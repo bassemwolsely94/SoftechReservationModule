@@ -4,6 +4,7 @@
  * only stop the screen offering a button the server would refuse. No role lists here: every gate
  * reads the grants /api/users/my-permissions/ returns (via useModuleAction).
  */
+import { moduleActionAllowed } from '../../components/navGroups'
 
 // POST rule of each create endpoint — keep in step with the server:
 export const WRITE_ACTIONS = {
@@ -40,6 +41,9 @@ export function reservationTransitions(status, canChangeStatus) {
   return [...(RESERVATION_TRANSITIONS[status] || [])]
 }
 
+// statuses the phone never offers a move on (UAT W8 review I2, controller ruling)
+export const PHONE_CLOSED = new Set(['fulfilled', 'cancelled'])
+
 // button order on the phone: forward moves first, cancel last
 const STATUS_RANK = Object.fromEntries(
   ['pending', 'available', 'contacted', 'confirmed', 'fulfilled', 'expired', 'cancelled'].map((s, i) => [s, i]))
@@ -48,6 +52,10 @@ const STATUS_RANK = Object.fromEntries(
  *  `allowed_transitions` (views.allowed_transitions, the rule change-status enforces), or, when an
  *  older server sends none, the local graph gated on the change-status grant. */
 export function offeredTransitions(r, canChangeStatus) {
+  // desktop parity (ReservationDetailPage hides every status change on a closed reservation): the
+  // phone offers nothing on fulfilled / cancelled, though the server list may still carry the
+  // override roles' correction cancel (the desktop keeps that path). expired keeps its moves.
+  if (PHONE_CLOSED.has(r?.status)) return []
   const list = Array.isArray(r?.allowed_transitions)
     ? r.allowed_transitions.filter(s => s !== r.status)
     : reservationTransitions(r?.status, canChangeStatus)
@@ -68,3 +76,20 @@ export function qaCreateAllowed(hasHrWrite, listError) {
   const status = listError?.response?.status
   return !(status === 401 || status === 403)
 }
+
+/** A mobile create screen's gate: 'loading' while the grants are not loaded (no false «no
+ *  permission» flash), else 'allowed' / 'denied' by the endpoint's POST rule — on a module without
+ *  matrix rows by `legacyRoles`, as the server fails open there (moduleActionAllowed). */
+export function createGateState({ role, perms, seeded } = {}, module, legacyRoles) {
+  if (role === 'admin') return 'allowed'
+  if (!perms) return 'loading'
+  return moduleActionAllowed({ role, perms, seeded }, module, WRITE_ACTIONS[module], legacyRoles) ? 'allowed' : 'denied'
+}
+
+/** QA's unseeded fallback list: the server's own role rule. With no hr rows the server fails open
+ *  for the legacy roles and the inspections list applies the qa_inspections role rule — so a role
+ *  the server let read the list is a QA role; any other is not. */
+export function qaLegacyRoles(role, listLoaded) {
+  return listLoaded && role ? [role] : []
+}
+

@@ -8,3 +8,8 @@ export default function MobileNoPermission({ text = 'ليس لديك صلاحي�
     </div>
   )
 }
+
+/** While the grants load (same look as mobileUi MobileLoading, without its offline-queue import). */
+export function MobileGateLoading() {
+  return <div className="text-center text-sm text-gray-400 py-12">جارٍ التحميل...</div>
+}

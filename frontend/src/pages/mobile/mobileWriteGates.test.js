@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { moduleActionAllowed } from '../../components/navGroups'
+import { menuRolesFor, moduleActionAllowed } from '../../components/navGroups'
 import {
   WRITE_ACTIONS, RESERVATION_TRANSITIONS, reservationTransitions, isFinalReservationStatus, qaCreateAllowed,
-  offeredTransitions,
+  offeredTransitions, createGateState, qaLegacyRoles,
 } from './mobileWriteGates'
 
 // grants as /api/users/my-permissions/ returns them (seed_permissions.py)
@@ -108,5 +108,58 @@ describe('offeredTransitions: the server list decides (allowed_transitions)', ()
   it('an older server without the field: the local graph behind the grant', () => {
     expect(offeredTransitions({ status: 'pending' }, true)).toEqual(['available', 'expired', 'cancelled'])
     expect(offeredTransitions({ status: 'pending' }, false)).toEqual([])
+  })
+})
+
+describe('create gates on an unseeded database (review I1): the server fails open, so do we', () => {
+  const SCREENS = { reservations: '/reservations', demand: '/demand', transfers: '/transfers', shortage: '/shortage' }
+  it('every role the menu let in before keeps the form while the module has no rows', () => {
+    for (const [module, path] of Object.entries(SCREENS)) {
+      const legacy = menuRolesFor(path)
+      expect(Array.isArray(legacy) && legacy.length > 0, `${path} has a fallback list`).toBe(true)
+      for (const role of legacy) {
+        expect(createGateState({ role, perms: {}, seeded: [] }, module, legacy), `${role} on ${module}`).toBe('allowed')
+      }
+    }
+  })
+  it('a role outside the old list stays out', () => {
+    const legacy = menuRolesFor('/reservations')
+    expect(legacy).not.toContain('delivery')
+    expect(createGateState({ role: 'delivery', perms: {}, seeded: [] }, 'reservations', legacy)).toBe('denied')
+  })
+  it('once seeded, the matrix decides', () => {
+    const legacy = menuRolesFor('/reservations')
+    expect(createGateState({ role: 'viewer', perms: { reservations: { view: true } }, seeded: ['reservations'] }, 'reservations', legacy)).toBe('denied')
+  })
+})
+
+describe('createGateState while permissions load (review M4)', () => {
+  it('is loading, never a false denial', () => {
+    expect(createGateState({ role: 'pharmacist', perms: null, seeded: null }, 'demand', ['pharmacist'])).toBe('loading')
+  })
+  it('admin is allowed at once', () => {
+    expect(createGateState({ role: 'admin', perms: null }, 'demand')).toBe('allowed')
+  })
+})
+
+describe('QA plus on an unseeded hr: the server QA role rule', () => {
+  const unseeded = (role, listLoaded) =>
+    moduleActionAllowed({ role, perms: {}, seeded: [] }, 'hr', WRITE_ACTIONS.hr, qaLegacyRoles(role, listLoaded))
+  it('a role the server let read the inspections may start one', () => {
+    expect(unseeded('pharmacist', true)).toBe(true)
+  })
+  it('a role the server refused (or before the list loads) may not', () => {
+    expect(unseeded('accountant', false)).toBe(false)
+  })
+})
+
+describe('phone matches the desktop on closed reservations (review I2)', () => {
+  it('no moves on fulfilled or cancelled, even when the server list has the override cancel', () => {
+    expect(offeredTransitions({ status: 'fulfilled', allowed_transitions: ['cancelled'] }, true)).toEqual([])
+    expect(offeredTransitions({ status: 'cancelled', allowed_transitions: [] }, true)).toEqual([])
+    expect(offeredTransitions({ status: 'fulfilled' }, true)).toEqual([])
+  })
+  it('expired keeps the reopen and the override cancel the server gives', () => {
+    expect(offeredTransitions({ status: 'expired', allowed_transitions: ['cancelled', 'pending'] }, true)).toEqual(['pending', 'cancelled'])
   })
 })
