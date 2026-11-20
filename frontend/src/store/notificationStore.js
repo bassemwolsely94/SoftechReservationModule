@@ -26,6 +26,8 @@ const useNotificationStore = create((set, get) => ({
   // Notifier categories this user's role may see (per-role visibility). Default:
   // all visible until the first category-counts reconcile narrows it.
   visible: new Set(ALL_CATEGORIES),
+  // The main bell's two counts (C26): `bell` = «الكل» view, `action` = «يحتاج إجراء» view.
+  bellCounts: { bell: 0, action: 0 },
 
   setModuleCounts: (counts) =>
     set({ moduleCounts: Object.fromEntries(MODULE_CATEGORIES.map(c => [c, counts[c] ?? 0])) }),
@@ -49,6 +51,7 @@ const useNotificationStore = create((set, get) => ({
     set({
       moduleCounts: Object.fromEntries(MODULE_CATEGORIES.map(c => [c, data[c] ?? 0])),
       visible: new Set(Array.isArray(data.visible) ? data.visible : ALL_CATEGORIES),
+      bellCounts: { bell: Number(data.bell) || 0, action: Number(data.action) || 0 },
     })
   },
 
