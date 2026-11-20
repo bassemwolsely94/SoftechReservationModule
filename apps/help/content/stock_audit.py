@@ -169,6 +169,16 @@ SCREENS = [
                        'Check 9: a document entered more than 30 minutes outside its branch\'s working hours (one finding per document; '
                        'a warning after two hours). Hours are set per branch in Settings → branches, and a window can apply to some '
                        'document types only (like the HQ call center until midnight). Branches open 24 hours are not checked.')},
+            {'key': 'discount_policy', 'title': T('💸 خصم فوق السياسة (غير معتمد)', '💸 Discount above policy (unvalidated)'),
+             'body': T('الفحص 12 للمراجعة فقط: سطور بيع خصم العميل فيها أعلى من المسموح، والمسموح = الأعلى من سقف خصم الصنف '
+                       'وخصم فئة العميل للقناة (يتسجل في الإعدادات زي 30:12) وخصم العميل نفسه. التعاقدات (10) والتبرعات (16) '
+                       'والتعويضات (17) مستبعدة. الأرقام بتتحسب مباشرة ومش بتتحفظ، ومكتوب عليها «غير معتمد» لحد ما المالية تراجع '
+                       '20 عينة في SOFTECH؛ الفحص نفسه متوقف لحد ما الإدارة تشغّله. مفيش أي تغيير في الخصومات.',
+                       'Check 12, for review only: sale lines whose customer discount is above what is allowed, where allowed = the highest of '
+                       'the item discount ceiling, the customer-class discount for the channel (set in settings like 30:12) and the customer\'s own '
+                       'discount. Contracts (10), donations (16) and compensations (17) are excluded. The numbers are computed live, not stored, '
+                       'and marked "unvalidated" until finance checks 20 samples in SOFTECH; the check itself stays off until management switches '
+                       'it on. No discount is changed.')},
             {'key': 'settings', 'title': T('⚙️ الإعدادات', '⚙️ Settings'),
              'body': T('حدود كل فحص للسلسلة كلها، وحدود خاصة لأي فرع (الخانة الفارغة = كالعام). التعديل للمدير والجودة، '
                        'وكل تغيير يُسجّل قبل وبعد. المدير فقط يمنح أو يسحب صلاحية مديري الفروع بالاسم.',
@@ -253,6 +263,12 @@ SCREENS = [
             {'target': 'stock-audit-main-overstock', 'label': T('لوحة المخزون ← الفائض', 'Inventory → Overstock'),
              'text': T('الفائض والتغطية الزائدة تُتابع في لوحة المخزون، ولا تتكرر هنا.', 'Overstock and excess cover are followed on the inventory dashboard, not repeated here.'),
              'open_hint': T('تبويب «📦 توافر المخزون».', 'The "📦 Stock availability" tab.')},
+            {'target': 'stock-audit-main-discount-banner', 'label': T('غير معتمد — للمراجعة فقط', 'Unvalidated — review only'),
+             'text': T('الخصم فوق السياسة محسوب مباشرة ومش محفوظ، والفحص متوقف لحد ما المالية تراجع العينات.',
+                       'The above-policy discount is computed live and not stored; the check stays off until finance reviews the samples.'),
+             'when': T('راجع «عينات للمراجعة» في SOFTECH وسجّل خصم كل فئة في الإعدادات قبل التشغيل.',
+                       'Check the "samples to check" in SOFTECH and enter each class discount in settings before switching it on.'),
+             'open_hint': T('تبويب «💸 خصم فوق السياسة».', 'The "💸 Discount above policy" tab.')},
             {'target': 'stock-audit-main-hours', 'label': T('الإعدادات ← الفروع', 'Settings → branches'),
              'text': T('مواعيد كل فرع تُضبط من الإعدادات. الفرع بلا مواعيد لا يُفحص.', 'Each branch’s hours are set in Settings. A branch with no hours is not checked.'),
              'open_hint': T('تبويب «🕘 مواعيد الإدخال».', 'The "🕘 Entry times" tab.')},
@@ -292,8 +308,8 @@ SCREENS = [
              'when': T('لمدير الفرع اللي عايزه يتابع ملاحظات فرعه بنفسه.', 'For a branch manager who should follow up his branch’s findings himself.'),
              'open_hint': T('ابحث عن الموظف بالاسم أو الكود (حرفين على الأقل). للإدارة.', 'Search the employee by name or code (2+ letters). Admin.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('«📋 مهمة + جرد مستهدف»: الملاحظة تبقى مهمة لمدير الفرع وجرد لأصنافها، وتتقفل بنتيجة الجرد',
-                         '"📋 Task + targeted count": a finding becomes a task for the branch manager and a count of its items, and closes from the count result'),
+        'updated': '2026-11-20',
+        'change_note': T('جديد: تبويب «💸 خصم فوق السياسة (غير معتمد)» للمراجعة فقط — الفحص 12 متوقف لحد اعتماد المالية',
+                         'New: a "💸 Discount above policy (unvalidated)" tab, review only — check 12 stays off until finance validates it'),
     },
 ]

@@ -42,6 +42,8 @@ class Command(BaseCommand):
         for code, c in run.counts.items():
             if 'error' in c:
                 self.stdout.write(self.style.ERROR(f'  {code}: FAILED — {c["error"]}'))
+            elif 'skipped' in c:
+                self.stdout.write(f'  {code}: skipped ({c["skipped"]})')
             else:
                 self.stdout.write(f'  {code}: seen={c["seen"]} new={c["new"]} updated={c["updated"]} '
                                   f'reopened={c["reopened"]}')

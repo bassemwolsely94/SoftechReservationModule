@@ -21,6 +21,7 @@ import useGridKeyboard from '../hooks/useGridKeyboard'
 import useHelpTab from '../help/useHelpTab'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import DiscountPolicyTab from '../components/stockAudit/DiscountPolicyTab'
 
 const TABS = [
   { key: 'summary',     label: '📊 ملخص' },
@@ -29,6 +30,7 @@ const TABS = [
   { key: 'availability', label: '📦 توافر المخزون' },
   { key: 'returns',     label: '↩️ المرتجعات' },
   { key: 'timing',      label: '🕘 مواعيد الإدخال' },
+  { key: 'discount_policy', label: '💸 خصم فوق السياسة (غير معتمد)' },
   { key: 'settings',    label: '⚙️ الإعدادات' },
 ]
 const STATUS = {
@@ -62,11 +64,14 @@ const PARAM_LABEL = {
   min_monthly_qty: 'أقل معدل بيع شهري', qty_tolerance: 'سماحية الكمية', hours: 'خلال (ساعة) من الجرد',
   grace_min: 'سماح (دقيقة)', warning_after_min: 'تنبيه بعد (دقيقة) خارج المواعيد',
   excluded_users: 'مستخدمو SOFTECH مستبعدون',
+  tolerance_pct: 'سماح (نقطة %)', min_excess_egp: 'أقل زيادة (ج.م)', critical_excess_egp: 'حرج من زيادة (ج.م)',
+  excluded_channels: 'قنوات مستبعدة (أكواد)', class_discounts: 'خصم الفئة لكل قناة (قناة:نسبة)',
 }
 
 const CODES_HINT = { doccodes: 'فارغ = كل أنواع المستندات', excluded_personcodes: 'مثال: 4785, 4283',
                      excluded_channel_buckets: 'مثال: credit', excluded_suppliers: 'مثال: 4469, 4470',
-                     excluded_users: 'مثال: 1509' }
+                     excluded_users: 'مثال: 1509', excluded_channels: 'مثال: 10, 16, 17',
+                     class_discounts: 'مثال: 30:12, 11:5' }
 
 const fmt = (v, d = 2) => (v == null || v === '' ? '—'
   : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }))
@@ -769,7 +774,7 @@ export default function StockAuditPage() {
         ))}
       </div>
       {tab !== 'settings' && <Filters f={filters} setF={setFilters} branches={branches} channels={me.data?.channels}
-                                                showStatus={tab !== 'summary'} />}
+                                                showStatus={tab !== 'summary' && tab !== 'discount_policy'} />}
       {tab === 'summary' && <SummaryTab f={filters} onOpenRule={openRule} />}
       {access.groups[tab] && (
         <>
@@ -789,6 +794,7 @@ export default function StockAuditPage() {
           {tab === 'adjustments' && <UserRanking f={filters} />}
         </>
       )}
+      {tab === 'discount_policy' && <DiscountPolicyTab f={filters} />}
       {tab === 'settings' && <SettingsTab access={access} />}
     </div>
   )
