@@ -157,3 +157,10 @@ Rules that follow CLAUDE.md:
 | M3 | Settlement import + commission journal (finance GL) | Money reconciliation |
 | M4 | Amazon / Noon adapter for non-medicine catalog from HQ | Only after category approval |
 | M5 | Instashop / Chefaa API adapters | Only if they offer an API |
+
+**M2 safety gates — done 2026-11-20 (before any real adapter):** every PushLog payload / response / error
+is masked before it is stored (`push.mask`: the channel's own credential values, secret-named keys such as
+token / secret / password / api key / authorization, plus `core.errors.redact`), so a platform echoing our
+token can never reach the push-log screen; the unauthenticated webhook is throttled per IP
+(`WebhookThrottle`, 300/minute, fail-closed counters) before the signature check. Still needed for M2:
+Talabat partner API credentials + their webhook signature scheme.

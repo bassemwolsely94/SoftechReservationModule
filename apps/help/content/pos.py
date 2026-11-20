@@ -259,6 +259,8 @@ SCREENS = [
               'Contact consent under the customer bar: ask once "Would you like refill reminders? And offers?" and tap the chip — ✓ agreed, ✕ refused, ? not asked yet. Without "✓" they get no reminders or campaigns.'),
             T('صورة الروشتة اللي بترفعها على الأمر بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل). لو مسحتها أو بدّلتها، القديمة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
               'A prescription photo you attach to the order is shrunk automatically (longest side 2000 px). If you delete or replace it, the old one is kept 30 days before it is gone for good.'),
+            T('الخصم المقترح بيتحدّث بعد ما تخلص إضافة الأصناف بلحظة (ربع ثانية) — مش مع كل صنف. لو أضفت نفس الصنف تاني أو غيّرت الكمية مش بيسأل السيرفر من جديد. القيم نفسها ما اتغيّرتش.',
+              'The suggested discount updates a moment (a quarter second) after you finish adding items — not on every item. Adding the same item again or changing a quantity does not ask the server again. The values themselves have not changed.'),
         ],
         'faq': [
             {'q': T('ما الفرق بين المعاينة والإرسال الفعلي؟', 'What is the difference between preview and live send?'),
@@ -575,7 +577,7 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-19',
+        'updated': '2026-11-20',
         'change_note': T('«يحسبه الخادم»: طريقة إرسال جديدة (مقفولة بمفتاح، فرع فرع) — الخادم يحسب الإجمالي وتقسيم نقدى/آجل ويبعت الأمر في طلب واحد. وزر 🛵 «طلبات المنصات»',
                          '"Worked out by the server": a new way of sending (behind a switch, one branch at a time) — the server works out the totals and the cash/credit split and sends the order in one request. Also the 🛵 "Platform orders" button'),
     },
@@ -817,7 +819,7 @@ SCREENS = [
              'text': T('يضيف الصنف المعلَّم في نتائج البحث للأمر — زي ما تضغط عليه.', 'Adds the highlighted search result to the order — same as tapping it.'),
              'open_hint': T('يظهر بعد ما تختار نتيجة في بحث الأصناف على الموبايل.', 'Appears after you highlight a result in the mobile item search.')},
         ],
-        'updated': '2026-11-19',
+        'updated': '2026-11-20',
         'change_note': T('زر 🛵 طلبات المنصات تحت اختيار الفرع: ترسل طلبات طلبات وغيرها للكاشير من الموبايل', 'A 🛵 Platform orders button under the branch picker sends Talabat and other platform orders to the cashier from the phone'),
     },
     {
