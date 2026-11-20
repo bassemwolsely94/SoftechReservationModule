@@ -925,15 +925,16 @@ class SeedTests(TestCase):
     def test_seed_devices_is_idempotent(self):
         self.run_seed()
         self.run_seed()
-        self.assertEqual(AttendanceDevice.objects.count(), 8)
+        self.assertEqual(AttendanceDevice.objects.count(), 16)
         by = {d.name: d for d in AttendanceDevice.objects.all()}
         self.assertEqual(by['Alia'].serial, 'A2ML173860738')
         self.assertEqual(by['Alia'].ip, '192.168.30.15')
-        self.assertEqual(by['8'].serial, 'A8ME185060308')
-        self.assertEqual((by['Alia'].location_label, by['8'].location_label), ('', ''))
+        self.assertEqual(by['Zahar'].serial, 'A8ME185060308')
         self.assertTrue(all(d.branch is None and d.port == 4370 for d in by.values()))
-        self.assertTrue(all(d.location_label for n, d in by.items() if n not in ('Alia', '8')))
-        self.assertEqual(by['Giza'].model_name, 'K14')
+        self.assertEqual(by['Balegh'].model_name, 'K14')
+        self.assertEqual(AttendanceDevice.objects.filter(is_active=True).count(), 7)
+        self.assertFalse(by['Aliaa'].is_active)
+        self.assertEqual(by['Aliaa'].location_label, 'مغلق')
 
     def test_seed_never_overwrites_an_edit(self):
         self.run_seed()

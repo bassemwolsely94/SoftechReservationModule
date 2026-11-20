@@ -118,6 +118,31 @@ def _resolve_all(codes) -> None:
             logger.error('attendance resolve failed: %s', type(exc).__name__)
 
 
+CLOSED_DEVICE_TITLE = 'جهاز مغلق أرسل بصمات'
+LOG_CLEARED_TITLE = 'سجل الجهاز اتمسح'
+
+
+def _device_alert(device, kind, title, body) -> None:
+    """One `attendance_alert` per device per day and kind, to the HR managers. An alert is a
+    convenience: its failure must never refuse punches or a run report that are already safe."""
+    try:
+        from apps.hr.attendance.access import manager_recipients
+        from apps.notifications.models import Notification
+        day = timezone.localdate().isoformat()
+        with transaction.atomic():   # a savepoint: a failure can't poison the caller's transaction
+            for staff in manager_recipients():
+                Notification.send_to_user(
+                    staff, 'attendance_alert', title, body,
+                    dedup_key=f'att:{kind}:{device.pk}:{day}', bypass_role_gate=True,
+                    dedup_once=True)
+    except Exception as exc:  # see the docstring
+        logger.error('attendance alert failed: %s', type(exc).__name__)
+
+
+def _label(device) -> str:
+    return f'{device.name} ({device.location_label})' if device.location_label else device.name
+
+
 def store_punches(device, rows, today=None) -> tuple[int, int]:
     """Store a batch, all or nothing. Returns (accepted, duplicate), which add up to len(rows)."""
     today = today or timezone.localdate()
@@ -135,6 +160,10 @@ def store_punches(device, rows, today=None) -> tuple[int, int]:
         AttendancePunch.objects.bulk_create(new, ignore_conflicts=True)
     # Duplicates too: the agent resends the whole log hourly, so an ID added since heals by itself.
     _resolve_all({punch.user_code for punch in punches.values()})
+    if new and not device.is_active:
+        # Stored like any other (they are evidence); someone is still using a machine marked closed.
+        _device_alert(device, 'closed_device', CLOSED_DEVICE_TITLE,
+                      f'الجهاز {_label(device)} مسجل كمغلق وأرسل بصمات.')
     return len(new), len(rows) - len(new)
 
 
@@ -202,6 +231,10 @@ def _update_device(device, run, finished_at, now) -> None:
             fields['last_contact_at'] = contact
         fields['last_drift_seconds'] = run.drift_seconds
         if run.device_log_count is not None:
+            if device.last_log_count is not None and run.device_log_count < device.last_log_count:
+                _device_alert(device, 'log_cleared', LOG_CLEARED_TITLE,
+                              f'عدد السجلات في {_label(device)} كان {device.last_log_count} '
+                              f'وأصبح {run.device_log_count}.')
             fields['last_log_count'] = run.device_log_count
     AttendanceDevice.objects.filter(pk=device.pk).update(**fields)
 

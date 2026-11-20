@@ -18,6 +18,8 @@ from rest_framework.test import APIClient
 
 from apps.audit.models import AuditLog
 from apps.hr.attendance import agent_auth, ingest, resolve
+from apps.notifications.models import Notification
+from apps.tests.factories import make_user
 from apps.hr.models import (AttendanceAgent, AttendanceDevice, AttendancePunch, CollectionRun,
                             DeviceUser, Employee)
 
@@ -624,3 +626,44 @@ class IssueCommandTests(TestCase):
         secret = out.getvalue().strip().splitlines()[-1].strip()
         entry = AuditLog.objects.filter(action='hr_attendance_agent_issue').get()
         self.assertNotIn(secret, str(entry.__dict__))
+
+
+class DeviceAlertTests(IngestBase):
+    """Closed machines still store punches (and tell HR once a day); a falling log count alerts."""
+
+    def alerts(self, title):
+        return Notification.objects.filter(notification_type='attendance_alert', title=title)
+
+    def setUp(self):
+        super().setUp()
+        make_user('ing_admin', role='admin')
+
+    def test_closed_device_punch_alerts(self):
+        AttendanceDevice.objects.filter(pk=self.device.pk).update(is_active=False)
+        first = self.send([punch(raw_stamp=1)])
+        self.assertEqual(first.json(), {'accepted': 1, 'duplicate': 0})        # stored, never refused
+        self.assertEqual(AttendancePunch.objects.count(), 1)
+        self.assertEqual(self.alerts('جهاز مغلق أرسل بصمات').count(), 1)
+        self.send([punch(raw_stamp=2)])                                          # same day: no second
+        self.assertEqual(AttendancePunch.objects.count(), 2)
+        self.assertEqual(self.alerts('جهاز مغلق أرسل بصمات').count(), 1)
+
+    def test_live_device_punch_does_not_alert(self):
+        self.send([punch(raw_stamp=1)])
+        self.assertFalse(self.alerts('جهاز مغلق أرسل بصمات').exists())
+
+    def test_log_count_drop_alerts(self):
+        self.post('runs', self.run_body())                                       # 3906
+        self.assertFalse(self.alerts('سجل الجهاز اتمسح').exists())
+        self.post('runs', self.run_body(started_at='2026-10-01T11:00:00', finished_at='2026-10-01T11:01:00',
+                                        device_log_count=120))
+        self.assertEqual(self.alerts('سجل الجهاز اتمسح').count(), 1)
+        self.post('runs', self.run_body(started_at='2026-10-01T12:00:00', finished_at='2026-10-01T12:01:00',
+                                        device_log_count=50))                    # same day: still one
+        self.assertEqual(self.alerts('سجل الجهاز اتمسح').count(), 1)
+
+    def test_log_count_growth_does_not_alert(self):
+        self.post('runs', self.run_body(device_log_count=100))
+        self.post('runs', self.run_body(started_at='2026-10-01T11:00:00', device_log_count=100))
+        self.post('runs', self.run_body(started_at='2026-10-01T12:00:00', device_log_count=130))
+        self.assertFalse(self.alerts('سجل الجهاز اتمسح').exists())
