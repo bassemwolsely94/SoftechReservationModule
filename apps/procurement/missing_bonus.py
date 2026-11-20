@@ -172,11 +172,11 @@ KIND_AR = {'none': 'بدون بونص', 'short': 'بونص ناقص'}
 
 
 def workbook(report, label=lambda c: c):
+    """Streaming (write-only) workbook: branch summary + lines. The caller saves it through neutralise_formulas."""
     from openpyxl import Workbook
     from core.export_safety import safe_sheet
-    wb = Workbook()
-    ws = safe_sheet(wb.active)
-    ws.title = 'ملخص الفروع'
+    wb = Workbook(write_only=True)
+    ws = safe_sheet(wb.create_sheet('ملخص الفروع'))
     ws.sheet_view.rightToLeft = True
     ws.append(['الفرع المستلم', 'سطور', 'قيمة البونص الناقص'])
     for b in report['branches']:

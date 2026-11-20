@@ -198,10 +198,41 @@ class ApiTests(_Lines):
     def test_excel(self):
         from openpyxl import load_workbook
         _u, _s, client = make_admin('c18_admin2')
-        r = client.get(URL, {'format': 'xlsx'})
+        r = client.get(f'{URL}export/')
         self.assertEqual(r.status_code, 200)
         wb = load_workbook(io.BytesIO(r.content))
         self.assertEqual(wb.sheetnames, ['ملخص الفروع', 'السطور'])
         lines = list(wb['السطور'].iter_rows(min_row=2, values_only=True))
         self.assertEqual(len(lines), 2)
         self.assertTrue(all(' · ' in row[1] for row in lines))
+
+
+class ExportJobTests(_Lines):
+    """Performance Stage 4: the screen starts the Excel as a background job; same file as the direct export."""
+
+    def setUp(self):
+        super().setUp()
+        self.history()
+        self.line(3, 20, 0)
+
+    def test_job_builds_the_same_file(self):
+        from unittest import mock
+        from apps.export_jobs.models import ExportJob
+        from apps.tests.test_export_jobs import JOBS, _cells, _inline
+        _u, _s, client = make_admin('c18_admin_job')
+        with mock.patch('core.threads.start_thread', side_effect=_inline):
+            r = client.post(f'{URL}export/jobs/?days=30')
+        self.assertEqual(r.status_code, 202, r.content[:300])
+        job = ExportJob.objects.get(pk=r.json()['id'])
+        self.assertEqual((job.kind, job.status), ('v:supply_missing_bonus', 'done'))
+        via = client.get(f'{JOBS}{job.pk}/download/')
+        self.assertEqual(_cells(via.content), _cells(client.get(f'{URL}export/?days=30').content))
+
+    def test_job_refused_without_rights(self):
+        from apps.tests.security.fixtures import seed_code_matrix
+        from core.middleware import module_access
+        seed_code_matrix()
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        _u, _s, client = make_user('c18_pharm_job', role='pharmacist', branch=self.b130)
+        self.assertEqual(client.post(f'{URL}export/jobs/').status_code, 403)

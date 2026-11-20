@@ -7,9 +7,11 @@
  */
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { supplyApi } from '../../api/client'
+import { exportJobsApi, supplyApi } from '../../api/client'
 import useBranchLabels from '../../hooks/useBranchLabels'
-import { Chip, q, money, errText, inputCls, btnGhost, SortTh, useSort, txt, downloadBlob } from './supplyUi'
+import useExportJob from '../../hooks/useExportJob'
+import ExportJobStatus from '../../components/ExportJobStatus'
+import { Chip, q, money, errText, inputCls, btnGhost, SortTh, useSort, txt } from './supplyUi'
 
 const DAYS = [7, 14, 30, 60, 90]
 
@@ -18,7 +20,6 @@ export default function MissingBonusTab() {
   const [days, setDays] = useState(30)
   const [branch, setBranch] = useState('')
   const [changed, setChanged] = useState(false)
-  const [msg, setMsg] = useState('')
   const params = { days, ...(branch ? { branch } : {}), ...(changed ? { changed: 1 } : {}) }
 
   const { data, isLoading, error } = useQuery({
@@ -31,9 +32,11 @@ export default function MissingBonusTab() {
     paid: r => r.paid_qty, missing: r => r.missing_free, value: r => r.missing_value,
   })
   const total = useMemo(() => rows.reduce((s, r) => s + r.missing_value, 0), [rows])
-  const exportXlsx = () => supplyApi.missingBonusExport(params)
-    .then(r => downloadBlob(r.data, `missing-bonus-${new Date().toISOString().slice(0, 10)}.xlsx`))
-    .catch(e => setMsg(errText(e)))
+  // Stage 4: built as a background job (start → progress → download)
+  const exp = useExportJob({
+    storageKey: 'export-job:supply-missing-bonus',
+    start: () => exportJobsApi.start('/supply/missing-bonus/export/', params),
+  })
 
   return (
     <div className="space-y-3">
@@ -57,9 +60,12 @@ export default function MissingBonusTab() {
         </label>
         <span className="text-content/70">{rows.length} سطر · {money(total)}</span>
         <span className="flex-1" />
-        <button data-tour="purchasing-supply-bonus-export" onClick={exportXlsx} className={btnGhost}>⬇ Excel</button>
+        <button data-tour="purchasing-supply-bonus-export" onClick={() => exp.run()} disabled={exp.busy} className={btnGhost}>
+          {exp.busy ? '… جارٍ تجهيز الملف' : '⬇ Excel'}
+        </button>
       </div>
-      {(msg || error) && <div className="text-sm bg-surface-2 border border-line rounded px-3 py-2">{msg || errText(error)}</div>}
+      <div className="flex justify-end"><ExportJobStatus exp={exp} /></div>
+      {error && <div className="text-sm bg-surface-2 border border-line rounded px-3 py-2">{errText(error)}</div>}
 
       {isLoading ? <div className="text-center py-10 text-content/50">جارٍ التحميل…</div> : rows.length === 0 ? (
         <div className="text-center py-14 text-content/50">مفيش فاتورة جت ببونص أقل من المعتاد في الفترة دي.</div>

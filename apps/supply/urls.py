@@ -7,7 +7,7 @@ from .views import (AvailabilityBatchViewSet, OrderListViewSet, SupplyCaseViewSe
                     supplier_network)
 
 from .receipt_views import receipt_check_decide, receipt_checks   # P-31
-from .missing_bonus_views import missing_bonus                     # C18
+from .missing_bonus_views import missing_bonus, missing_bonus_export   # C18
 
 router = SimpleRouter()     # no API-root index page (Z-7a)
 router.register(r'availability', AvailabilityBatchViewSet, basename='availability-batch')
@@ -18,6 +18,7 @@ router.register(r'decisions', SupplyDecisionViewSet, basename='supply-decision')
 urlpatterns = [
     path('receipts/', receipt_checks, name='supply-receipt-checks'),
     path('missing-bonus/', missing_bonus, name='supply-missing-bonus'),
+    path('missing-bonus/export/', missing_bonus_export, name='supply-missing-bonus-export'),
     path('receipts/<int:pk>/decide/', receipt_check_decide, name='supply-receipt-check-decide'),
     path('freshness/', freshness, name='supply-freshness'),
     path('freshness/sync-stock/', freshness_sync_stock, name='supply-freshness-sync-stock'),

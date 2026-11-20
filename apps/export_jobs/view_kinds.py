@@ -29,6 +29,8 @@ VIEW_EXPORTS = {
     'v:eta_recon': ('apps.tax_invoicing.history_views:recon_export', 'مطابقة الضرائب', 'GET', False, ''),
     'v:eta_recon_uncoded': ('apps.tax_invoicing.history_views:recon_uncoded_export', 'أصناف بلا كود ضريبي', 'GET',
                             False, ''),
+    'v:supply_missing_bonus': ('apps.supply.missing_bonus_views:missing_bonus_export', 'بونص ناقص', 'GET', False,
+                               ''),
 }
 
 
