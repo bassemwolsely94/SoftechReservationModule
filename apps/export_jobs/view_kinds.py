@@ -31,6 +31,8 @@ VIEW_EXPORTS = {
                             False, ''),
     'v:supply_missing_bonus': ('apps.supply.missing_bonus_views:missing_bonus_export', 'بونص ناقص', 'GET', False,
                                ''),
+    'v:bought_dearer': ('apps.supply.dearer_views:bought_dearer_export', 'اشترينا أغلى', 'GET', False,
+                        'apps.supply.dearer_views:export_gate'),         # C17: company-level, all-branch users
 }
 
 

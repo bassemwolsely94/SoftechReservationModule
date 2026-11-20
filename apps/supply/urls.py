@@ -8,6 +8,7 @@ from .views import (AvailabilityBatchViewSet, OrderListViewSet, SupplyCaseViewSe
 
 from .receipt_views import receipt_check_decide, receipt_checks   # P-31
 from .missing_bonus_views import missing_bonus, missing_bonus_export   # C18
+from .dearer_views import bought_dearer, bought_dearer_export      # C17
 
 router = SimpleRouter()     # no API-root index page (Z-7a)
 router.register(r'availability', AvailabilityBatchViewSet, basename='availability-batch')
@@ -25,6 +26,8 @@ urlpatterns = [
     path('freshness/refresh-purchases/', freshness_refresh_purchases, name='supply-freshness-refresh-purchases'),
     path('purchase-prices/', purchase_prices, name='supply-purchase-prices'),
     path('purchase-prices/item/<str:code>/', purchase_price_item, name='supply-purchase-price-item'),
+    path('bought-dearer/', bought_dearer, name='supply-bought-dearer'),
+    path('bought-dearer/export/', bought_dearer_export, name='supply-bought-dearer-export'),
     path('reports/supplier-codes/', supplier_code_report, name='supply-supplier-code-report'),
     path('comparison/', supplier_comparison, name='supply-comparison'),
     path('comparison/network/<int:item_id>/', supplier_network, name='supply-supplier-network'),
