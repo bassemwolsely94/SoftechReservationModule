@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 from apps.hr.models import AttendanceAgent, AttendanceDevice
 from core.errors import public_error
 
-from . import ingest
+from . import ingest, lg_ingest
 from .agent_auth import AgentSecretAuthentication, HasAgentSecret
 
 
@@ -84,6 +84,7 @@ class AgentConfigView(AgentView):
             # measures its own PC wall clock against this and reports machine drift
             # against the corrected time.
             'server_time': timezone.localtime().isoformat(),
+            'linkedgates': settings.HR_ATTENDANCE_LINKEDGATES_ENABLED,
             'devices': [{'serial': d.serial, 'name': d.name, 'ip': d.ip, 'port': d.port} for d in devices],
         })
 
@@ -114,3 +115,28 @@ class AgentRunsView(AgentView):
     def post(self, request):
         created = ingest.store_run(request.auth, self.device(request), self.body(request))
         return Response({'stored': created})
+
+
+class AgentLgView(AgentView):
+    """Linked Gates endpoints: they also need their own switch."""
+
+    def initial(self, request, *args, **kwargs):
+        if not settings.HR_ATTENDANCE_LINKEDGATES_ENABLED:
+            raise SwitchedOff()
+        super().initial(request, *args, **kwargs)
+
+
+class AgentLgPunchesView(AgentLgView):
+
+    def post(self, request):
+        rows = self.rows(request, 'rows')
+        if len(rows) > lg_ingest.MAX_LG_ROWS_PER_REQUEST:
+            return Response({'detail': 'عدد البصمات أكبر من المسموح'},
+                            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        return Response(lg_ingest.store_lg_punches(rows, self.body(request).get('reread') is True))
+
+
+class AgentLgReferenceView(AgentLgView):
+
+    def post(self, request):
+        return Response(lg_ingest.store_lg_reference(self.body(request)))

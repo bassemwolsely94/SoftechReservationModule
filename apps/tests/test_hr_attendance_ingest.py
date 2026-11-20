@@ -122,7 +122,7 @@ class ConfigTests(IngestBase):
         AttendanceDevice.objects.create(serial='SN3', name='٣', agent=self.agent, is_active=False)
         body = self.api.get(f'{PREFIX}config/').json()
         server_time = body.pop('server_time')
-        self.assertEqual(body, {'agent': 'office', 'collect_now': False, 'devices': [
+        self.assertEqual(body, {'agent': 'office', 'collect_now': False, 'linkedgates': False, 'devices': [
             {'serial': 'SN1', 'name': 'جهاز ١', 'ip': '192.168.3.15', 'port': 4370}]})
         # an aware ISO time within a minute of now, which the agent measures its PC clock against
         moment = _dt.datetime.fromisoformat(server_time)

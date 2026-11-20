@@ -37,5 +37,8 @@ urlpatterns = [
     path('agent/config/', agent_views.AgentConfigView.as_view(), name='hr-attendance-agent-config'),
     path('agent/punches/', agent_views.AgentPunchesView.as_view(), name='hr-attendance-agent-punches'),
     path('agent/roster/', agent_views.AgentRosterView.as_view(), name='hr-attendance-agent-roster'),
+    path('agent/lg/punches/', agent_views.AgentLgPunchesView.as_view(), name='hr-attendance-agent-lg-punches'),
+    path('agent/lg/reference/', agent_views.AgentLgReferenceView.as_view(),
+         name='hr-attendance-agent-lg-reference'),
     path('agent/runs/', agent_views.AgentRunsView.as_view(), name='hr-attendance-agent-runs'),
 ]
