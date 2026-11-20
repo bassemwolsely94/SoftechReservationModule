@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { moduleActionAllowed } from '../../components/navGroups'
 import {
   WRITE_ACTIONS, RESERVATION_TRANSITIONS, reservationTransitions, isFinalReservationStatus, qaCreateAllowed,
+  offeredTransitions,
 } from './mobileWriteGates'
 
 // grants as /api/users/my-permissions/ returns them (seed_permissions.py)
@@ -85,5 +86,27 @@ describe('reservation status buttons (mobile detail)', () => {
   it('returns a copy (callers cannot change the graph)', () => {
     reservationTransitions('pending', true).push('x')
     expect(RESERVATION_TRANSITIONS.pending).not.toContain('x')
+  })
+})
+
+describe('offeredTransitions: the server list decides (allowed_transitions)', () => {
+  it('shows exactly the server list, whatever the local grant says', () => {
+    // admin on an expired reservation: the override cancel the local graph does not know
+    expect(offeredTransitions({ status: 'expired', allowed_transitions: ['cancelled', 'pending'] }, false))
+      .toEqual(['pending', 'cancelled'])
+  })
+  it('an empty server list means no buttons, even with a local grant', () => {
+    expect(offeredTransitions({ status: 'pending', allowed_transitions: [] }, true)).toEqual([])
+  })
+  it('orders forward moves first, cancel last', () => {
+    expect(offeredTransitions({ status: 'available', allowed_transitions: ['cancelled', 'confirmed', 'contacted', 'expired'] }, true))
+      .toEqual(['contacted', 'confirmed', 'expired', 'cancelled'])
+  })
+  it('never offers the current status', () => {
+    expect(offeredTransitions({ status: 'pending', allowed_transitions: ['pending', 'available'] }, true)).toEqual(['available'])
+  })
+  it('an older server without the field: the local graph behind the grant', () => {
+    expect(offeredTransitions({ status: 'pending' }, true)).toEqual(['available', 'expired', 'cancelled'])
+    expect(offeredTransitions({ status: 'pending' }, false)).toEqual([])
   })
 })

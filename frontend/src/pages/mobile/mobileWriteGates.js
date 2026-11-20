@@ -21,9 +21,9 @@ export const WRITE_ACTIONS = {
   hr: ['create', 'edit', 'approve', 'finalize', 'export'],
 }
 
-// Mirror of ReservationViewSet._VALID_TRANSITIONS (apps/reservations/views.py). The server's extra
-// "cancel from any state" for its override roles is not offered here (a role rule the screen
-// cannot see); those users use the regular graph or the desktop screen.
+// Mirror of ReservationViewSet._VALID_TRANSITIONS (apps/reservations/views.py) — only the FALLBACK
+// for an older server whose detail answer has no `allowed_transitions` (it cannot see the server's
+// "cancel from any state" for its override roles).
 export const RESERVATION_TRANSITIONS = {
   pending:   ['available', 'cancelled', 'expired'],
   available: ['contacted', 'confirmed', 'cancelled', 'expired'],
@@ -38,6 +38,21 @@ export const RESERVATION_TRANSITIONS = {
 export function reservationTransitions(status, canChangeStatus) {
   if (!canChangeStatus) return []
   return [...(RESERVATION_TRANSITIONS[status] || [])]
+}
+
+// button order on the phone: forward moves first, cancel last
+const STATUS_RANK = Object.fromEntries(
+  ['pending', 'available', 'contacted', 'confirmed', 'fulfilled', 'expired', 'cancelled'].map((s, i) => [s, i]))
+
+/** The status buttons to offer for reservation `r`: exactly the server's per-requester
+ *  `allowed_transitions` (views.allowed_transitions, the rule change-status enforces), or, when an
+ *  older server sends none, the local graph gated on the change-status grant. */
+export function offeredTransitions(r, canChangeStatus) {
+  const list = Array.isArray(r?.allowed_transitions)
+    ? r.allowed_transitions.filter(s => s !== r.status)
+    : reservationTransitions(r?.status, canChangeStatus)
+  const rank = s => STATUS_RANK[s] ?? 99
+  return [...new Set(list)].sort((a, b) => rank(a) - rank(b))
 }
 
 /** Is the reservation in a final state (no move left in the server's graph)? */
