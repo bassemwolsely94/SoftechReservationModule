@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
+import { canPickAnyBranch } from '../utils/branchAccess'
 import { FALLBACK_POLL_MS, MAIN_SYNC_DOMAINS, useOnFreshnessChange } from '../store/liveStore'
 import { usePermission } from '../hooks/usePermission'
 import GamificationCard from '../components/GamificationCard'
@@ -684,7 +685,7 @@ export default function DashboardPage() {
   // The sync widget reads the summary's own `sync` block; Layout follows sync/status, so a second
   // 30 s poll here was duplicate load (perf Stage 3, audit PERF-10).
 
-  const isAdminOrCC = ['admin', 'call_center', 'purchasing'].includes(user?.role)
+  const isAdminOrCC = canPickAnyBranch(user)
 
   const r  = data?.reservations || {}
   const tr = data?.transfers    || {}
@@ -851,7 +852,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── 7. Demand & supply control tower (server-gated) ──────── */}
-        {['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && supplyView && (
+        {supplyView && (   /* the server rule: supply_allowed = purchasing view (or SOFTECH supply group) */
           <SupplyKpiSection navigate={navigate} />
         )}
 
@@ -976,8 +977,8 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            {/* Purchasing shortcut (admin/purchasing only) */}
-            {isAdminOrCC && user?.role !== 'call_center' && (
+            {/* Purchasing shortcut: whoever holds purchasing view (the screen's own grant) */}
+            {supplyView && (
               <button data-tour="general-dashboard-purchasing"
                 onClick={() => navigate('/purchasing')}
                 className="w-full rounded-2xl p-4 border-2 text-right transition-all hover:shadow-md"

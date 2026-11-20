@@ -8,6 +8,7 @@ import usePermissionStore from './store/permissionStore'
 import { initPush } from './push'
 import Layout from './components/Layout'
 import { RequireAuth, RequireRole } from './components/RouteGuards'
+import { legacyRolesFor } from './components/navGroups'
 import LoginPage from './pages/LoginPage'
 const NotifyPage = lazy(() => import('./pages/NotifyPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
@@ -247,11 +248,12 @@ const MOBILE_TABS = [
   { to: '/m/delivery',     label: 'التوصيل',   icon: '🚚', module: 'delivery' },
   { to: '/m/approvals',    label: 'الموافقات', icon: '✔️', module: 'approvals', badge: 'approvals' },
   { to: '/m/items',        label: 'الأصناف',   icon: '🔎' },
-  { to: '/m/customers',    label: 'العملاء',   icon: '👥', roles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
+  { to: '/m/customers',    label: 'العملاء',   icon: '👥', module: 'customers', legacyRoles: ['admin', 'call_center', 'pharmacist', 'salesperson', 'supervisor', 'quality_manager'] },
   { to: '/m/vouchers',     label: 'القسائم',   icon: '🎫', module: 'vouchers' },
   { to: '/m/tasks',        label: 'المهام',    icon: '✅', module: 'tasks' },
   { to: '/m/daily-count',  label: 'جردي اليوم', icon: '🧮', feature: 'daily_count' },
   { to: '/m/stock-count',  label: 'الجرد',     icon: '📦', module: 'stockcount' },
+  // /m/qa keeps its role list: the server rule is QA_INSPECTION_ROLES (PR 186), not a matrix grant
   { to: '/m/qa',           label: 'مراجعة الجودة', icon: '🧹', roles: ['admin', 'quality_manager', 'supervisor', 'pharmacist'] },
   { to: '/m/attendance',   label: 'الحضور',    icon: '🕐' },
   { to: '/m/my-incentives', label: 'حوافزي',   icon: '🏅' },
@@ -288,6 +290,10 @@ export default function App() {
       // Silently re-sync the Web Push subscription if the user already granted
       // permission on this device (never prompts here — opt-in is on the bell).
       initPush()
+      // a failed load stays "not loaded"; coming back to the window tries again (no-op once loaded)
+      const onFocus = () => loadPerms()
+      window.addEventListener('focus', onFocus)
+      return () => window.removeEventListener('focus', onFocus)
     } else {
       resetPerms()
     }
@@ -318,8 +324,8 @@ export default function App() {
             <Route path="loyalty"    element={<PortalLoyaltyPage />} />
           </Route>
           {/* Standalone mobile rider screen (no desktop sidebar) */}
-          <Route path="/rider" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
-          <Route path="/rider/security" element={<RequireAuth><RequireRole roles={['delivery','admin','supervisor']}><RiderLayout><SecurityPage /></RiderLayout></RequireRole></RequireAuth>} />
+          <Route path="/rider" element={<RequireAuth><RequireRole module="rider" legacyRoles={legacyRolesFor('/rider')}><RiderLayout><DriverDeliveryApp /></RiderLayout></RequireRole></RequireAuth>} />
+          <Route path="/rider/security" element={<RequireAuth><RequireRole module="rider" legacyRoles={legacyRolesFor('/rider')}><RiderLayout><SecurityPage /></RiderLayout></RequireRole></RequireAuth>} />
 
           {/* ── Standalone mobile web surfaces (no desktop sidebar) ─────────
               Phone-friendly, thin views over the existing APIs. Pilot: reservations.
@@ -470,9 +476,9 @@ export default function App() {
             <Route path="stock-count"        element={<RequireRole module="stockcount" cap="can_stock_audit"><StockCountPage /></RequireRole>} />
             <Route path="shortage"           element={<RequireRole module="shortage"><ShortagePage /></RequireRole>} />
             <Route path="purchasing"         element={<PurchasingDashboard />} />
-            <Route path="market-shortage"    element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']}><MarketShortagePage /></RequireRole>} />
-            <Route path="phantom-sales"      element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><PhantomSalesPage /></RequireRole>} />
-            <Route path="cash-optimization"  element={<RequireRole roles={['admin','purchasing','pharmacist','supervisor','quality_manager']} module="analytics"><CashOptimizationPage /></RequireRole>} />
+            <Route path="market-shortage"    element={<RequireRole module="shortage" legacyRoles={legacyRolesFor('/market-shortage')}><MarketShortagePage /></RequireRole>} />
+            <Route path="phantom-sales"      element={<RequireRole module="analytics" legacyRoles={legacyRolesFor('/phantom-sales')}><PhantomSalesPage /></RequireRole>} />
+            <Route path="cash-optimization"  element={<RequireRole module="analytics" legacyRoles={legacyRolesFor('/cash-optimization')}><CashOptimizationPage /></RequireRole>} />
 
             {/* ── Procurement hub (4 tabs) ──────────────────────────────
                 /procurement              → redirects to /procurement/overview
@@ -582,10 +588,10 @@ export default function App() {
               element={<RequireRole roles={['admin']}><ErpPermissionsPage /></RequireRole>} />
             {/* settings: admin + pharmacist (own branch settings) */}
             <Route path="settings"
-              element={<RequireRole roles={['admin','pharmacist']}><SettingsPage /></RequireRole>} />
+              element={<RequireRole module="settings" legacyRoles={legacyRolesFor('/settings')}><SettingsPage /></RequireRole>} />
             {/* SOFTECH code maps (channel + item-category meanings): admin only; server checks settings view/edit */}
             <Route path="code-maps"
-              element={<RequireRole roles={['admin']}><CodeMapsPage /></RequireRole>} />
+              element={<RequireRole module="code_maps" legacyRoles={legacyRolesFor('/code-maps')}><CodeMapsPage /></RequireRole>} />
             {/* sync: admin only */}
             <Route path="sync"
               element={<RequireRole roles={['admin']}><SyncPage /></RequireRole>} />
@@ -594,11 +600,11 @@ export default function App() {
               element={<RequireRole roles={['admin','supervisor','quality_manager']}><DataHealthPage /></RequireRole>} />
             {/* trusted networks (security N1): admin only */}
             <Route path="access/networks"
-              element={<RequireRole roles={['admin']}><TrustedNetworksPage /></RequireRole>} />
+              element={<RequireRole module="access_control" legacyRoles={legacyRolesFor('/access/networks')}><TrustedNetworksPage /></RequireRole>} />
             <Route path="access/devices"
-              element={<RequireRole roles={['admin']}><DevicesPage /></RequireRole>} />
+              element={<RequireRole module="access_control" legacyRoles={legacyRolesFor('/access/devices')}><DevicesPage /></RequireRole>} />
             <Route path="access/zone-policy"
-              element={<RequireRole roles={['admin']}><ZonePolicyPage /></RequireRole>} />
+              element={<RequireRole module="access_control" legacyRoles={legacyRolesFor('/access/zone-policy')}><ZonePolicyPage /></RequireRole>} />
             {/* procurement: purchasing + admin */}
             <Route path="invoices"
               element={<RequireRole roles={['admin','purchasing']}><InvoicePage /></RequireRole>} />
@@ -619,8 +625,8 @@ export default function App() {
             {/* crews «الأطقم»: RBAC module `crews` (admin by default; a matrix grant opens it); the page and every API check it */}
             <Route path="crews"         element={<CrewsPage />} />
             <Route path="payment-audit" element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager','accountant']}><PaymentAuditPage /></RequireRole>} />
-            <Route path="reconciliation" element={<RequireRole roles={['admin','purchasing','quality_manager','accountant']}><ReconciliationPage /></RequireRole>} />
-            <Route path="forecasting"   element={<RequireRole roles={['admin','purchasing','pharmacist','quality_manager']}><ForecastingPage /></RequireRole>} />
+            <Route path="reconciliation" element={<RequireRole module="reconciliation" legacyRoles={legacyRolesFor('/reconciliation')}><ReconciliationPage /></RequireRole>} />
+            <Route path="forecasting"   element={<RequireRole module="forecast" legacyRoles={legacyRolesFor('/forecasting')}><ForecastingPage /></RequireRole>} />
 
           </Route>
         </Routes>

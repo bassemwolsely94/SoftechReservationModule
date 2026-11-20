@@ -103,13 +103,56 @@ describe('permissionStore', () => {
     expect(usersApi.myPermissions).toHaveBeenCalledOnce()
   })
 
-  it('a failed load denies everything and falls back to viewer', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    usersApi.myPermissions.mockRejectedValue(new Error('500'))
+  it('keeps the seeded-module list (unseeded modules fall back to the old role lists)', async () => {
+    usersApi.myPermissions.mockResolvedValue({
+      data: { role: 'pharmacist', permissions: { followups: { view: true } }, seeded: ['followups'] },
+    })
     await perms().load()
-    expect(perms()).toMatchObject({ permissions: {}, role: 'viewer', isLoading: false })
-    expect(perms().error).toBeTruthy()
-    expect(perms().can('reservations', 'view')).toBe(false)
+    expect(perms().seeded).toEqual(['followups'])
+  })
+
+  it('an answer without the list leaves seeded null (no fallback, matrix decides)', async () => {
+    usersApi.myPermissions.mockResolvedValue({ data: { role: 'pharmacist', permissions: {} } })
+    await perms().load()
+    expect(perms().seeded).toBeNull()
+  })
+
+  it('a failed load is "not loaded" (never an empty grant set) and retries once', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      usersApi.myPermissions
+        .mockRejectedValueOnce(new Error('500'))
+        .mockResolvedValueOnce({ data: { role: 'pharmacist', permissions: { pos: { view: true } }, seeded: ['pos'] } })
+      await perms().load()
+      expect(perms()).toMatchObject({ permissions: null, isLoading: false })
+      expect(perms().error).toBeTruthy()
+      expect(perms().can('reservations', 'view')).toBe(false)
+      await vi.runOnlyPendingTimersAsync()
+      expect(usersApi.myPermissions).toHaveBeenCalledTimes(2)
+      expect(perms().can('pos', 'view')).toBe(true)
+      expect(perms().error).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('retries only once on its own; a later load() (window focus) tries again', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      usersApi.myPermissions.mockRejectedValue(new Error('500'))
+      await perms().load()
+      await vi.runOnlyPendingTimersAsync()
+      await vi.runOnlyPendingTimersAsync()
+      expect(usersApi.myPermissions).toHaveBeenCalledTimes(2)
+      expect(perms().permissions).toBeNull()
+      usersApi.myPermissions.mockResolvedValue({ data: { role: 'viewer', permissions: {} } })
+      await perms().load()
+      expect(perms().permissions).toEqual({})
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a missing role in the answer is viewer, not admin', async () => {

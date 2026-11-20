@@ -17,13 +17,28 @@ import SortTh from '../components/SortTh'
 import { fa } from '../utils/flowArrow'
 import { newBundleItems } from '../utils/bundleItems'
 import { confirmBar } from '../components/ui'
+import { useModuleAction } from '../hooks/usePermission'
+import { legacyRolesFor } from '../components/navGroups'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n) => n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
 
+// Writes here are catalog edits (variant groups / bundles: /api/items CATALOG_EDIT; enrichment:
+// catalog edit). The screen opens on catalog_tools view, so a role holding only catalog view
+// reads it without the write controls (final review I4). Old route roles = unseeded fallback.
+const LEGACY_ROLES = legacyRolesFor('/catalog-intelligence')
+function useCatalogWrites() {
+  return {
+    canWrite:  useModuleAction('catalog', ['edit', 'approve'], LEGACY_ROLES),
+    canDelete: useModuleAction('catalog', ['edit', 'delete'], LEGACY_ROLES),
+    canBatch:  useModuleAction('catalog', 'edit', LEGACY_ROLES),
+  }
+}
+
 // ── Variant Groups Tab ────────────────────────────────────────────────────────
 function VariantGroupsTab() {
   const qc = useQueryClient()
+  const { canWrite, canDelete } = useCatalogWrites()
   const [selected, setSelected] = useState(null)
   const [q, setQ] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
@@ -77,11 +92,11 @@ function VariantGroupsTab() {
             placeholder="بحث في المجموعات..."
             className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
-          <button
+          {canWrite && <button
             data-tour="catalog-intelligence-variant-new"
             onClick={() => setShowCreate(true)}
             className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-          >+</button>
+          >+</button>}
         </div>
 
         {showCreate && (
@@ -141,17 +156,17 @@ function VariantGroupsTab() {
                   <p className="text-sm text-gray-500">{selectedGroup.name}</p>
                 )}
               </div>
-              <button
+              {canDelete && <button
                 data-tour="catalog-intelligence-variant-delete"
                 onClick={async () => { if (await confirmBar('حذف هذه المجموعة؟', { tone: 'danger', confirmLabel: 'حذف' })) deleteMutation.mutate(selectedGroup.id) }}
                 className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded hover:bg-red-50"
               >
                 🗑 حذف
-              </button>
+              </button>}
             </div>
 
             {/* Add item */}
-            <div data-tour="catalog-intelligence-variant-add" className="mb-4">
+            {canWrite && <div data-tour="catalog-intelligence-variant-add" className="mb-4">
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للمجموعة</label>
               <ItemSearchWidget
                 selected={null}
@@ -159,7 +174,7 @@ function VariantGroupsTab() {
                 onClear={() => {}}
                 placeholder="ابحث باسم الصنف أو الكود أو الباركود..."
               />
-            </div>
+            </div>}
 
             {/* Members */}
             <h3 className="text-sm font-semibold text-gray-700 mb-2">
@@ -183,10 +198,10 @@ function VariantGroupsTab() {
                         </span>
                       )}
                     </div>
-                    <button data-tour="catalog-intelligence-variant-remove-item"
+                    {canDelete && <button data-tour="catalog-intelligence-variant-remove-item"
                       onClick={() => removeMemberMutation.mutate({ groupId: selectedGroup.id, memberId: m.id })}
                       className="text-gray-300 hover:text-red-400 text-sm"
-                    >✕</button>
+                    >✕</button>}
                   </div>
                 ))}
               </div>
@@ -200,6 +215,7 @@ function VariantGroupsTab() {
 
 // ── Product Bundles Tab ───────────────────────────────────────────────────────
 export function BundlesTab() {
+  const { canWrite, canDelete } = useCatalogWrites()
   const qc = useQueryClient()
   const [selected, setSelected] = useState(null)
   const [addErr, setAddErr] = useState(null)   // {bundleId, msg}: shown only on that bundle
@@ -255,8 +271,8 @@ export function BundlesTab() {
             placeholder="بحث في الباقات..."
             className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
           />
-          <button data-tour="catalog-intelligence-bundle-new" onClick={() => setShowCreate(true)}
-            className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">+</button>
+          {canWrite && <button data-tour="catalog-intelligence-bundle-new" onClick={() => setShowCreate(true)}
+            className="px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">+</button>}
         </div>
 
         {showCreate && (
@@ -344,6 +360,7 @@ export function BundlesTab() {
               </div>
               <button
                 data-tour="catalog-intelligence-bundle-visibility"
+                disabled={!canWrite}
                 onClick={() => updateMutation.mutate({
                   id: selectedBundle.id,
                   data: { is_active: !selectedBundle.is_active },
@@ -368,7 +385,7 @@ export function BundlesTab() {
             )}
 
             {/* Add item */}
-            <div className="mb-4" data-tour="catalog-intelligence-bundle-add-item">
+            {canWrite && <div className="mb-4" data-tour="catalog-intelligence-bundle-add-item">
               <label className="block text-xs font-medium text-gray-600 mb-1">إضافة صنف للباقة</label>
               <ItemSearchWidget
                 selected={null}
@@ -384,7 +401,7 @@ export function BundlesTab() {
               {addErr?.bundleId === selectedBundle.id && (
                 <div className="text-xs text-red-600 mt-1">{addErr.msg}</div>
               )}
-            </div>
+            </div>}
 
             {/* Items */}
             <h3 className="text-sm font-semibold text-gray-700 mb-2">
@@ -405,10 +422,10 @@ export function BundlesTab() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">×{fmt(bi.quantity)}</span>
-                      <button data-tour="catalog-intelligence-bundle-remove-item"
+                      {canDelete && <button data-tour="catalog-intelligence-bundle-remove-item"
                         onClick={() => removeItemMutation.mutate({ bundleId: selectedBundle.id, biId: bi.id })}
                         className="text-gray-300 hover:text-red-400 text-sm"
-                      >✕</button>
+                      >✕</button>}
                     </div>
                   </div>
                 ))}
@@ -597,6 +614,7 @@ function StatCard({ label, value, sub, color = 'blue' }) {
 }
 
 function EnrichmentManagementTab() {
+  const { canWrite, canBatch } = useCatalogWrites()
   const qc = useQueryClient()
 
   // ── Create-batch form state ───────────────────────────────────────────
@@ -776,26 +794,26 @@ function EnrichmentManagementTab() {
             </div>
           )}
 
-          <button data-tour="catalog-intelligence-recompute"
+          {canWrite && <button data-tour="catalog-intelligence-recompute"
             onClick={() => recompute.mutate()}
             disabled={recompute.isPending}
             className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 disabled:opacity-40 transition-colors"
           >
             {recompute.isPending ? 'جارٍ إعادة الحساب...' : '🔄 إعادة حساب نسب الاكتمال'}
-          </button>
+          </button>}
         </div>
 
         {/* Batch Management */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-gray-800 text-sm">⚙️ دفعات الإثراء</h3>
-            <button
+            {canBatch && <button
               data-tour="catalog-intelligence-batch-new"
               onClick={() => setShowCreateForm(v => !v)}
               className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition-colors"
             >
               {showCreateForm ? '✕ إلغاء' : '＋ دفعة جديدة'}
-            </button>
+            </button>}
           </div>
 
           {/* Create form */}
@@ -880,7 +898,7 @@ function EnrichmentManagementTab() {
                       {b.name || `دفعة #${b.id}`}
                     </span>
                     <BatchStatusBadge status={b.status} />
-                    {(b.status === 'running' || b.status === 'pending') && (
+                    {canBatch && (b.status === 'running' || b.status === 'pending') && (
                       <button
                         data-tour="catalog-intelligence-batch-cancel"
                         onClick={() => cancelBatch.mutate(b.id)}
@@ -1004,7 +1022,7 @@ function EnrichmentManagementTab() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* Generate suggestions */}
-                          <button
+                          {canWrite && <button
                             data-tour="catalog-intelligence-generate"
                             onClick={() => generate.mutate({ itemPk: item.item_id })}
                             disabled={generate.isPending}
@@ -1012,9 +1030,9 @@ function EnrichmentManagementTab() {
                             title="استخراج اقتراحات"
                           >
                             🔍 استخراج
-                          </button>
+                          </button>}
                           {/* Bulk approve ≥80% */}
-                          {item.pending_count > 0 && (
+                          {canWrite && item.pending_count > 0 && (
                             <button
                               data-tour="catalog-intelligence-approve-80"
                               onClick={() => bulkApprove.mutate({ itemId: item.item_id, conf: 0.80 })}

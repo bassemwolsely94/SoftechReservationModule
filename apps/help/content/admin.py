@@ -374,8 +374,8 @@ SCREENS = [
         'key': 'admin.permissions',
         'routes': ['/permissions'],
         'title': T('مصفوفة الصلاحيات', 'Permissions matrix'),
-        'summary': T('لكل دور × موديول × إجراء (عرض، إنشاء، تعديل، حذف، اعتماد، تصدير، إسناد، إنهاء): مسموح أو ممنوع. السيرفر يطبق نفس المصفوفة على كل طلب، والقائمة والأزرار تُخفى حسبها. المدير له وصول كامل غير قابل للتعديل.',
-                     'For each role × module × action (view, create, edit, delete, approve, export, assign, finalize): allowed or denied. The server applies the same matrix to every request, and menus and buttons hide accordingly. Admins have full, non-editable access.'),
+        'summary': T('لكل دور × موديول × إجراء (عرض، إنشاء، تعديل، حذف، اعتماد، تصدير، إسناد، إنهاء): مسموح أو ممنوع. السيرفر يطبق نفس المصفوفة على كل طلب، والقائمة والأزرار تُخفى حسبها. المدير له وصول كامل غير قابل للتعديل. عشرة موديولات للأدوات لكل منها صفها: «التنبؤ والسيناريوهات» و«التوصيات» و«أدوات الأصناف» و«المخزون والتشغيلات» و«الولاء والإحالة» و«توزيع التوصيل» و«شاشة المندوب» و«المطابقة المالية» و«الشبكات والأجهزة» و«جداول الأكواد» — هي التي تحدد من يرى كل شاشة، والقائمة وحرّاس الصفحات يسألون المصفوفة. انتبه: «توزيع التوصيل» و«الولاء والإحالة» و«المخزون والتشغيلات» تتحكم في الشاشات فقط، أما البيانات فما زالت تتبع الموديول الأصلي (التوصيل / العملاء / الكتالوج) — سحب موديول الشاشة يخفيها، لكن صلاحية الموديول الأصلي هي التي تحكم البيانات وأزرار الحفظ. وعلى قاعدة بيانات لم تُزرع فيها صفوف موديول ما بعد، تعمل الشاشة بقائمة الأدوار القديمة إلى أن تُحفظ صلاحياته.',
+                     'For each role × module × action (view, create, edit, delete, approve, export, assign, finalize): allowed or denied. The server applies the same matrix to every request, and menus and buttons hide accordingly. Admins have full, non-editable access. Ten tool modules have their own rows — "Forecast and scenarios", "Recommendations", "Catalog tools", "Stock and batches", "Loyalty and referral", "Delivery dispatch", "Rider screen", "Financial reconciliation", "Networks and devices" and "Code maps" — and they decide who sees each of their screens; menus and page guards ask the matrix. Note: "Delivery dispatch", "Loyalty and referral" and "Stock and batches" control the screens only — their data still follows the parent module (delivery / customers / catalog), so removing the screen module hides the screen while the parent grant still governs the data and the save buttons. On a database where a module has no rows yet, its screens keep the old role lists until its permissions are saved.'),
         'audience': T('المدير فقط.', 'Admins only.'),
         'tabs': [
             {'key': 'modules', 'title': T('صلاحيات الوحدات', 'Module permissions'), 'body': T('اختر الدور ← فعّل/أوقف كل إجراء لكل موديول، أو «منح/سحب الكل» ← «حفظ التغييرات». موديول «دليل الاستخدام» بإجراء «تعديل» = من يستطيع تعديل الشرح (المدربون).', 'Pick the role → toggle each action per module, or "grant/revoke all" → "Save changes". The "Help guide" module with the "edit" action = who may edit the help (trainers).')},
@@ -457,8 +457,8 @@ SCREENS = [
              'warn': T('«إيقاف الكل» معناه الدور ده مش هيوصله أي إشعار خالص بعد الحفظ.', '"Off all" means this role gets no notifications at all after saving.'),
              'open_hint': T('«🔔 ظهور الإشعارات» ← اختار دور — للمدير.', '"🔔 Notification visibility" → pick a role — admins.')},
         ],
-        'updated': '2026-11-13',
-        'change_note': T('أسماء الأدوار تظهر الآن بالعربية من قائمة الأدوار الموحدة', 'Role names now show in Arabic, from the single role list'),
+        'updated': '2026-11-20',
+        'change_note': T('عشرة موديولات جديدة للأدوات في المصفوفة تحدد من يرى كل شاشة؛ بيانات التوزيع والولاء والمخزون تبقى على الموديول الأصلي', 'Ten new tool modules in the matrix decide who sees each screen; dispatch, loyalty and stock data stay on the parent module'),
     },
     {
         'key': 'admin.erp_permissions',
@@ -549,7 +549,7 @@ SCREENS = [
         'routes': ['/settings'],
         'title': T('إعدادات النظام', 'System settings'),
         'summary': T('كل إعدادات النظام في تبويبات.', 'All system settings in tabs.'),
-        'audience': T('المدير (والصيدلي لإعدادات فرعه).', 'Admins (pharmacists for their branch settings).'),
+        'audience': T('حسب صلاحية «الإعدادات» في شاشة «الصلاحيات» — المدير (والصيدلي لإعدادات فرعه)؛ المشتريات لم تعد تملكها.', 'Follows the "Settings" grant on the Permissions screen — admins (pharmacists for their branch settings); purchasing no longer holds it.'),
         'tabs': [
             {'key': 'general', 'title': T('⚙️ عام', '⚙️ General'), 'body': T('بيانات الصيدلية (الاسم، الشعار، الموقع، واتساب الرئيسي، أرقام الاتصال — تظهر في الإيصالات ورسائل واتساب) ولغة الواجهة.', 'Pharmacy details (name, tagline, website, main WhatsApp, contact numbers — shown on receipts and WhatsApp messages) and the interface language.')},
             {'key': 'appearance', 'title': T('🎨 المظهر', '🎨 Appearance'), 'body': T('ألوان الهوية: الأساسي (الأزرار والقائمة)، الثانوي، ولون التنبيه.', 'Brand colours: primary (buttons and menu), secondary, and the alert colour.')},
@@ -699,8 +699,8 @@ SCREENS = [
              'text': T('يرجّع ألوان الهوية الأصلية في المعاينة. مش بيتحفظ غير بـ «حفظ».', 'Restores the original brand colours in the preview. Nothing is stored until "Save".'),
              'open_hint': T('في تبويب «🎨 المظهر».', 'On the "🎨 Appearance" tab.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('كل تعديل في الإعدادات والمظهر وبيانات الصيدلية والقوائم المنسدلة يُسجَّل في سجل التدقيق', 'Every change to settings, appearance, pharmacy details and dropdowns is written to the audit log'),
+        'updated': '2026-11-20',
+        'change_note': T('صلاحية «الإعدادات» لم تعد للمشتريات؛ والشبكات وجداول الأكواد لها موديولاتها', 'Purchasing no longer holds "Settings"; networks and code maps have their own modules'),
     },
     {
         'key': 'admin.sync',
@@ -906,7 +906,7 @@ SCREENS = [
         'title': T('الشبكات الموثوقة', 'Trusted networks'),
         'summary': T('الشبكات اللي النظام يعرفها (شبكة كل فرع، VPN الموظفين، السيرفر). منها يعرف الشارة «🏢 داخل الشبكة — فرع …» في أعلى الشاشة، ويسجّل مصدر كل دخول. للتسجيل فقط — لا يُرفض أي طلب بسبب الشبكة.',
                      'The networks the system recognises (each branch LAN, the staff VPN, the server). They give the "🏢 On the network — branch …" badge at the top of the screen and label where each login came from. Log only — no request is refused because of its network.'),
-        'audience': T('المدير فقط.', 'Admins only.'),
+        'audience': T('من يملك موديول «الشبكات والأجهزة» (شاشة «الصلاحيات») — المدير فقط افتراضياً.', 'Whoever holds the "Networks and devices" module (Permissions screen) — admin only by default.'),
         'steps': [
             T('«➕ إضافة شبكة»: الاسم، ثم النطاق بصيغة CIDR مثل 192.168.3.0/24، والنوع والفرع. لو كتبت عنواناً داخل النطاق (192.168.3.7/24) بيتحول لبداية النطاق.', '"➕ Add network": the name, then the range in CIDR form such as 192.168.3.0/24, the kind and the branch. An address inside the range (192.168.3.7/24) is stored as the start of the range.'),
             T('عمود «مفعّل» يوقف الشبكة من غير حذفها. الحذف بضغطتين على نفس الصف: «حذف» ثم «نعم، احذف».', 'The "Active" column switches a network off without deleting it. Delete takes two clicks on the same row: "Delete", then "Yes, delete".'),
@@ -937,8 +937,8 @@ SCREENS = [
                        'Delete is final (though audited). If unsure, untick "Active" instead of deleting.'),
              'open_hint': T('يظهر على كل صف في الجدول.', 'Shown on every row of the table.')},
         ],
-        'change_note': T('شاشة جديدة: الشبكات الموثوقة وشارة «من أين أتصل؟»', 'New screen: trusted networks and the "where am I connecting from?" badge'),
-        'updated': '2026-10-31',
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «الشبكات والأجهزة» في «الصلاحيات»', 'The screen follows the "Networks and devices" module on Permissions'),
     },
     {
         'key': 'admin.devices',
@@ -946,7 +946,7 @@ SCREENS = [
         'title': T('الأجهزة', 'Devices'),
         'summary': T('كل جهاز (كمبيوتر فرع، لابتوب، موبايل) دخل منه موظف على النظام. الجهاز الجديد يظهر «بانتظار الاعتماد» والمدير يعتمده أو يحظره. الجهاز المعتمد يقدر يحفظ التحقق بخطوتين، والجهاز المحظور تنتهي جلساته فوراً.',
                      'Every device (branch PC, laptop, phone) a user signed in from. A new device shows as "Pending"; the admin approves or blocks it. An approved device can remember two-step verification; a blocked device has its sessions ended at once.'),
-        'audience': T('المدير فقط.', 'Admins only.'),
+        'audience': T('من يملك موديول «الشبكات والأجهزة» (شاشة «الصلاحيات») — المدير فقط افتراضياً.', 'Whoever holds the "Networks and devices" module (Permissions screen) — admin only by default.'),
         'tabs': [
             {'key': 'pending', 'title': T('بانتظار الاعتماد', 'Pending'), 'body': T('الأجهزة الجديدة اللي لسه ما اتراجعتش. حدّد جهاز أو أكثر واضغط «اعتماد المحدد»، أو Enter لاعتماد الصف الحالي.', 'New devices not yet reviewed. Tick one or more and press "Approve selected", or Enter to approve the current row.')},
             {'key': 'approved', 'title': T('المعتمدة', 'Approved'), 'body': T('الأجهزة المعتمدة. يمكن حظرها (مع سبب) أو تقاعدها لو خرجت من الخدمة.', 'Approved devices. They can be blocked (with a reason) or retired when taken out of service.')},
@@ -984,8 +984,8 @@ SCREENS = [
              'warn': T('الحظر يقطع جلسات الجهاز فوراً.', 'Blocking ends the device\'s sessions at once.'),
              'open_hint': T('يظهر على كل صف معتمد أو معلّق.', 'Shown on every approved or pending row.')},
         ],
-        'change_note': T('فلترا الفروع والأنواع يقبلان الآن أكثر من اختيار معاً', 'The branch and kind filters now take several choices at once'),
-        'updated': '2026-11-12',
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «الشبكات والأجهزة» في «الصلاحيات»', 'The screen follows the "Networks and devices" module on Permissions'),
     },
     {
         'key': 'admin.zone_policy',
@@ -993,7 +993,7 @@ SCREENS = [
         'title': T('سياسة الشبكات', 'Network policy'),
         'summary': T('جدول الدور × المنطقة: إيه اللي يقدر كل دور يعمله حسب مكان الاتصال (داخل/خارج شبكة الشركة) وحالة الجهاز (معتمد/غير معتمد). السياسة بتضيّق صلاحيات الدور ولا تزوّدها.',
                      'A role × zone grid: what each role may do depending on where it connects from (inside or outside the company network) and the device status (approved or not). The policy narrows the role\'s own permissions; it never adds to them.'),
-        'audience': T('المدير فقط.', 'Admins only.'),
+        'audience': T('من يملك موديول «الشبكات والأجهزة» (شاشة «الصلاحيات») — المدير فقط افتراضياً.', 'Whoever holds the "Networks and devices" module (Permissions screen) — admin only by default.'),
         'steps': [
             T('المناطق: Z1 داخل الشبكة بجهاز معتمد، Z2 داخل الشبكة بجهاز غير معتمد، Z3 خارج الشبكة بجهاز معتمد، Z4 خارج الشبكة بجهاز غير معتمد.',
               'Zones: Z1 inside the network on an approved device, Z2 inside on an unapproved device, Z3 outside on an approved device, Z4 outside on an unapproved device.'),
@@ -1036,8 +1036,7 @@ SCREENS = [
                        'Allowed screens, view-only, export, two-step verification, session length and SOFTECH.'),
              'open_hint': T('اضغط ⚙ في أي خانة.', 'Press ⚙ in any cell.')},
         ],
-        'change_note': T('بوابة SOFTECH: أعمدة قراءة/كتابة SOFTECH تُطبَّق عند enforce، وسطر في الشريط العلوي، وفحص access_preflight لها. N5: فحص الاتصالات الحيّة، تسجيل وختم كل تصدير، وتنبيه القراءة الكثيفة',
-                         'SOFTECH gate: the SOFTECH read/write columns apply under enforce, a line in the top strip, and the access_preflight checks for it. N5: live connections are re-checked, every export is audited and stamped, and bulk reading alerts the admin'),
-        'updated': '2026-11-03',
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «الشبكات والأجهزة» في «الصلاحيات»', 'The screen follows the "Networks and devices" module on Permissions'),
     },
 ]

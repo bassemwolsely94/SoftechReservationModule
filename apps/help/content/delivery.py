@@ -281,7 +281,8 @@ SCREENS = [
             'إنشاء طلب جديد، وتفاصيل كل طلب (العميل والعنوان على خرائط جوجل، المالية، مراجع SOFTECH، الأصناف، سجل الحالات) مع أزرار الإجراء حسب الحالة.',
             'Manage every delivery order through its whole life: today\'s numbers (total, waiting, assigned, on the way, delivered, failed), status filters, '
             'creating a new order, and each order\'s details (customer and address on Google Maps, money, SOFTECH references, items, status log) with actions by status.'),
-        'audience': T('الكول سنتر، الصيادلة، المشرفون، مسؤول التوزيع.', 'Call center, pharmacists, supervisors, the dispatcher.'),
+        'audience': T('الكول سنتر، الصيادلة، المشرفون، مسؤول التوزيع — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Call center, pharmacists, supervisors, the dispatcher — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'details', 'title': T('الأصناف 📦', 'Items 📦'),
              'body': T('أصناف الطلب من SOFTECH: الكمية، سعر الوحدة، الخصم، السعر الفعلي والإجمالي، وكم وفّر العميل.',
@@ -462,8 +463,8 @@ SCREENS = [
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('جديد: شريط «طلبات مفتوحة أقدم من 24 ساعة» بحالتها في SOFTECH، والإغلاق التلقائي للي SOFTECH خلّصها (مطفأ لحد قرار الإدارة)',
-                         'New: an "Orders open over 24 hours" bar with their SOFTECH status, and auto-close for those SOFTECH finished (off until management decides)'),
+        'change_note': T('جديد: شريط «طلبات مفتوحة أقدم من 24 ساعة» بحالتها في SOFTECH، والإغلاق التلقائي للي SOFTECH خلّصها (مطفأ لحد قرار الإدارة) · الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»',
+                         'New: an "Orders open over 24 hours" bar with their SOFTECH status, and auto-close for those SOFTECH finished (off until management decides) · The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'delivery.dispatch',
@@ -471,7 +472,7 @@ SCREENS = [
         'title': T('لوحة التوزيع (المسارات)', 'Dispatch board (routes)'),
         'summary': T('جمّع الطلبات الجاهزة في «مسار» لسائق واحد ثم أطلق المسار دفعة واحدة، وتابع حالة مسارات اليوم والنقد المتوقع لكل مسار.',
                      'Group ready orders into one driver\'s "route", launch the whole route at once, and watch today\'s routes and the cash expected per route.'),
-        'audience': T('مسؤول التوزيع، الكول سنتر، المشرفون.', 'The dispatcher, call center, supervisors.'),
+        'audience': T('من يملك موديول «توزيع التوصيل» (شاشة «الصلاحيات») — افتراضياً مسؤول التوزيع والكول سنتر والمشرف ومدير الجودة والصيدلي والبائع. إنشاء المسار وإطلاقه لمن يملك صلاحية «إسناد» في موديول التوصيل؛ غيرهم يتابع المسارات للعرض فقط.', 'Whoever holds the "Delivery dispatch" module (Permissions screen) — by default the dispatcher, call center, supervisor, quality manager, pharmacist and salesperson. Creating and launching a route needs the "assign" grant of the Delivery module; others watch the routes read-only.'),
         'tips': [T('لو القائمة ما اتحمّلتش بيظهر «تعذّر التحميل» وزر «إعادة المحاولة» — مش «لا توجد طلبات». ولو المسار ما اتنشأش بيظهر السبب تحت الزر.', 'If a list fails to load it says «failed to load» with "Retry", not «no orders». A route that is not created shows the reason under the button.'), T('المندوب بيشوف رقم المستلم في الطلبات المسندة له حتى لو من فرع تاني. البحث برقم العميل لازم يكون بالرقم كامل — رقم ناقص (أقل من 7 أرقام) بيرجع «اكتب الرقم كامل.» ومبيلاقيش أي عميل، والرقم بيتطابق بالضبط مهما كانت كتابته (+20، مسافات، شرط، أرقام عربية).', "A rider sees the recipient's number on orders assigned to them, even from another branch. Looking a customer up by phone needs the full number — a short number (under 7 digits) returns «اكتب الرقم كامل.» (type the full number) and finds no customer; the number matches exactly however it is written (+20, spaces, dashes, Arabic digits).")],
         'steps': [
             T('من «جاهزة للتكليف» حدد الطلبات المتقاربة جغرافياً.', 'From "Ready to assign" select orders that are close to each other.'),
@@ -525,8 +526,8 @@ SCREENS = [
                  'بيظهر على المسارات «المُخطّطة» بس. اضغطه لحظة خروج السائق من الفرع.\n• كل طلبات المسار بتتحول مرة واحدة لـ«في الطريق»، والمسار يبقى «في الطريق 🚚».\n• بعدها السائق بيسجّل التسليم لكل محطة من تطبيقه.',
                  'It shows only on "Planned" routes. Press it the moment the driver leaves the branch.\n• All the route\'s orders switch to "Out for delivery" at once and the route becomes "On the way 🚚".\n• The driver then records each stop\'s delivery from their app.')},
         ],
-        'updated': '2026-11-18',
-        'change_note': T('فشل التحميل أو إنشاء/إطلاق المسار بيظهر بسببه بدل ما يبان إن مفيش طلبات.', 'A failed load or route create/launch now shows its reason instead of looking like no orders.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «توزيع التوصيل» في «الصلاحيات»؛ الصيدلي والبائع يفتحانها الآن', 'The screen follows the "Delivery dispatch" module on Permissions; pharmacists and salespeople now open it'),
     },
     {
         'key': 'delivery.driver',
@@ -534,7 +535,7 @@ SCREENS = [
         'title': T('مهام السائق', "Driver's tasks"),
         'summary': T('شاشة السائق على الموبايل: طلبات اليوم بترتيب المسار، مع اتصال بالعميل وفتح الخريطة، وخطوات: قبول ← انطلقت ← تم التسليم مع إثبات التسليم.',
                      'The driver\'s phone screen: today\'s orders in route order, with a call button and map, and the steps: accept → out → delivered with proof of delivery.'),
-        'audience': T('السائقون (والمشرف للمتابعة).', 'Drivers (and supervisors to follow).'),
+        'audience': T('من يملك موديول «شاشة المندوب» (شاشة «الصلاحيات») — افتراضياً السائقون والمشرف والكول سنتر؛ ويلزم ملف سائق مربوط بالحساب.', 'Whoever holds the "Rider screen" module (Permissions screen) — by default drivers, supervisor and call center; a driver profile linked to the account is also required.'),
         'steps': [
             T('«قبول الطلب» لكل طلب مكلَّف به، وبعد الاستلام من الفرع «انطلقت 🚚» — ولو نطاق الفرع مفعّل، «انطلقت» محتاجة تفعيل الموقع وإنك تكون جنب الفرع.', '"Accept" each assigned order, then "Set off 🚚" after collecting from the branch — when the branch geofence is on, "Set off" needs your location on and you near the branch.'),
             T('«انطلقت» عند الخروج للعميل.', '"Out" when leaving for the customer.'),
@@ -609,9 +610,8 @@ SCREENS = [
                        'Final from the app. It may be refused if you are far from the recorded customer address.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('«تأكيد التسليم» بيسجّل التسليم والتحصيل النقدي مع بعض؛ مبلغ مكتوب غلط بيترفض برسالة والطلب يفضل «في الطريق»',
-                         '"Confirm delivery" records the delivery and the cash collection together; a wrongly typed amount is refused with a message and the order stays "On the way"'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «شاشة المندوب» في «الصلاحيات»؛ الكول سنتر يفتحها الآن', 'The screen follows the "Rider screen" module on Permissions; call center now opens it'),
     },
     {
         'key': 'delivery.analytics',

@@ -1,5 +1,6 @@
 """
-«من أين أتصل؟» (whoami) and the admin-only trusted-networks API (security N1, log only).
+«من أين أتصل؟» (whoami) and the trusted-networks / devices / zone-policy API (security N1, log only;
+the access_control matrix module, admin only as seeded).
 """
 from django.db import transaction
 from django.db.models import Case, IntegerField, Prefetch, Value, When
@@ -13,7 +14,8 @@ from rest_framework.throttling import SimpleRateThrottle
 from core.limits import limits_cache
 
 from apps.audit.models import AuditLog
-from apps.users.permissions import IsAdminRole
+from core import branch_scope
+from core.permissions import matrix_permission
 from core.multi_filter import filter_in, multi_values
 
 from . import devices as dev_api
@@ -23,6 +25,15 @@ from .serializers import DeviceSerializer, TrustedNetworkSerializer, ZonePolicyS
 from .zones import ZONE_LABELS
 
 _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
+
+# The access_control matrix module (role review 2026-11-20; was IsAdminRole — only admin holds it as
+# seeded): GET view, POST create, PATCH / PUT edit, DELETE delete; approving / blocking / retiring a
+# device is an approval. While access_control has no rows it stays admin only (core.permissions
+# UNSEEDED_LEGACY). Devices are branch-level (core/branch_scope); trusted networks and zone policies
+# are company-level network config, for the access_control holders only.
+ACCESS_CONTROL = matrix_permission('access_control')
+DEVICE_ACCESS = matrix_permission('access_control', actions={
+    'approve': ('approve',), 'block': ('approve',), 'retire': ('approve',), 'bulk_approve': ('approve',)})
 
 
 class WhoamiThrottle(SimpleRateThrottle):
@@ -120,8 +131,10 @@ def _snapshot(tn):
 
 
 class TrustedNetworkViewSet(viewsets.ModelViewSet):
+    # company-level: the office / branch network ranges every request is classified by — not branch
+    # data; only access_control holders (admin as seeded) list or edit them
     serializer_class = TrustedNetworkSerializer
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, ACCESS_CONTROL]
     pagination_class = None
     queryset = TrustedNetwork.objects.select_related('branch').order_by('name', 'id')
 
@@ -151,7 +164,7 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
     """Admin device registry (N2). No create, no delete: a deleted row would revive its tokens
     (unknown device ids count as not revoked), so devices are retired instead."""
     serializer_class = DeviceSerializer
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, DEVICE_ACCESS]
     pagination_class = None
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
@@ -160,6 +173,9 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         qs = (Device.objects.select_related('branch', 'owner__user', 'approved_by__user')
               .prefetch_related(Prefetch('device_users',
                                          queryset=DeviceUser.objects.select_related('user__user'))))
+        # branch-level: a holder who doesn't see every branch gets its own branches' devices only
+        # (list, detail, edit, approve / block / retire); a device with no branch = all-branch users
+        qs = branch_scope.scope(qs, self.request.user)
         p = self.request.query_params
         if p.get('status'):
             qs = qs.filter(status=p['status'])
@@ -181,6 +197,7 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
     def perform_update(self, serializer):
         if serializer.instance.status == 'retired':
             raise ValidationError({'error': dev_api.RETIRED_MESSAGE})
+        branch_scope.check_branch_value(self.request.user, serializer)
         before = dev_api.snapshot(serializer.instance)
         device = serializer.save(updated_by=self.request.user.staff_profile)
         after = dev_api.snapshot(device)
@@ -228,7 +245,8 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         note = str(request.data.get('note') or '').strip()
         approved = 0
         with transaction.atomic():
-            for device in Device.objects.filter(pk__in=ids, status='pending').select_related('owner'):
+            pending = branch_scope.scope(Device.objects.filter(pk__in=ids, status='pending'), request.user)
+            for device in pending.select_related('owner'):
                 dev_api.set_status(device, 'approved', request.user.staff_profile, note, request=request)
                 approved += 1
         return Response({'approved': approved, 'skipped': len(ids) - approved})
@@ -243,7 +261,7 @@ class ZonePolicyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
     """«سياسة الشبكات» (N3): the role x zone grid. Edit only: rows are seeded, never created or
     deleted here, and PUT is not offered."""
     serializer_class = ZonePolicySerializer
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, ACCESS_CONTROL]
     pagination_class = None
     http_method_names = ['get', 'patch', 'head', 'options']
     queryset = ZonePolicy.objects.select_related('updated_by__user').order_by('role', 'zone')
@@ -260,10 +278,10 @@ class ZonePolicyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
     @action(detail=False, methods=['get'])
     def choices(self, request):
         """The module keys a policy may list (with Arabic labels) and the access levels."""
+        # every matrix module: module_access.required() also maps paths to rule-only modules (stock,
+        # rider, reconciliation, code_maps, forecast — role review 2026-11-20)
         from apps.users.models import MODULE_CHOICES
-        from core.middleware.module_access import MODULE_BY_PREFIX
-        known = set(MODULE_BY_PREFIX.values())
         return Response({
-            'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES if v in known],
+            'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES],
             'access': [{'value': v, 'label': l} for v, l in ZonePolicy.ACCESS_CHOICES],
         })

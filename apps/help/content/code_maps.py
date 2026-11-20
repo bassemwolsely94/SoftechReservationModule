@@ -75,8 +75,8 @@ SCREENS = [
         'title': T('ترميزات SOFTECH', 'SOFTECH codes'),
         'summary': T('معنى كل كود قناة بيع وكل كود تصنيف صنف من SOFTECH، يُعدّل في السطر نفسه.',
                      'The meaning of every SOFTECH sales-channel code and item-category code, edited in the row itself.'),
-        'audience': T('المدير فقط (صلاحية الإعدادات: عرض للقراءة، تعديل للحفظ).',
-                      'Admin only (Settings permission: view to read, edit to save).'),
+        'audience': T('من يملك موديول «جداول الأكواد» (شاشة «الصلاحيات»): عرض للقراءة، تعديل للحفظ — افتراضياً المدير والمشتريات والمشرف للعرض. بدون صلاحية التعديل تظهر القوائم والمربعات معطّلة.',
+                      'Whoever holds the "Code maps" module (Permissions screen): view to read, edit to save — by default admin, plus purchasing and supervisor to view. Without the edit grant the selects and ticks show disabled.'),
         'tabs': [
             {'key': 'channels', 'title': T('قنوات البيع', 'Sales channels'),
              'body': T('كل كود نوع عميل في SOFTECH. «الاسم في SOFTECH» يأتي من SOFTECH ويتحدث مع المزامنة. '
@@ -145,6 +145,7 @@ SCREENS = [
              'text': T('للعرض فقط. بنود KPI لا تُعدّل من هنا حتى لا تتغير أرقام الأداء.',
                        'Shown only. KPI buckets are not edited here, so performance figures never move.')},
         ],
-        'updated': '2026-11-13',
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «جداول الأكواد» في «الصلاحيات»؛ المشتريات والمشرف يفتحانها للقراءة', 'The screen follows the "Code maps" module on Permissions; purchasing and supervisor open it to read'),
     },
 ]

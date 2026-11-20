@@ -76,6 +76,17 @@ BRANCH_SCOPE = {
     'alerts':       'all — company-level: phone-alert policies and announcements (audience picks roles/branches); admin + supervisor by default',
     'usage_print':  'own — invoice lookup (403 before any SOFTECH read), sheets, lines, print, prescription (branch_scope); presets + slip settings chain-wide',
     'marketplace':  'own — orders, platform stores and push logs carry their branch (branch_scope; per-branch qty on listings); channels, listings, settlement are company-level (edit/approve = supervisor); webhooks = own gate',
+    # role review 2026-11-20: tool modules split from their parent; scope = the parent's, until the endpoints move
+    'forecast':        'own — same as analytics (parent); endpoints move to this module in role-review task 2',
+    'recommendations': 'own — same as analytics (parent)',
+    'catalog_tools':   'all — same as catalog (parent): catalogue data',
+    'stock':           'all — same as catalog (parent): stock readable network-wide (decision 3); batches / expiry own',
+    'loyalty':         'own — same as customers (parent): browse / edit own branch (B-2)',
+    'dispatch':        'own — same as delivery (parent)',
+    'rider':           'own — rider acts only on orders assigned to them (as delivery)',
+    'reconciliation':  'own — same as finance (parent): consolidated = all-branch roles (B-1)',
+    'access_control':  'all — company-level: network zones and device gating (admin only)',
+    'code_maps':       'all — company-level reference tables (admin, purchasing, supervisor)',
 }
 
 

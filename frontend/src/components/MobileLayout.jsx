@@ -21,6 +21,7 @@ import ErrorBoundary from './ErrorBoundary'
 import PageSuspense from './PageSuspense'
 import { approvalsApi, pricingApprovalsApi, notificationsApi } from '../api/client'
 import usePermissionStore from '../store/permissionStore'
+import { navItemVisible } from './navGroups'
 import { useOnline, useOfflineQueue } from './mobileUi'
 import NetworkBadge from './NetworkBadge'
 import ZoneBanner from './ZoneBanner'
@@ -51,10 +52,12 @@ export default function MobileLayout({ title = 'صيدليات الرزيقي', 
   const [moreOpen, setMoreOpen] = useState(false)
   const role = user?.role || 'viewer'
   // `feature` (optional) hides a tab while its server switch is off (/api/auth/me/ features).
-  // `module` (optional) hides a tab once the role matrix takes that module's view away.
+  // `roles` / `module` / `legacyRoles`: the side menu's rule (navItemVisible) — the matrix decides
+  // a module, its old role list while that module has no matrix rows (role review C1).
   const perms = usePermissionStore(s => s.permissions)
-  const visibleTabs = tabs.filter(t => (!t.roles || t.roles.includes(role)) && (!t.feature || user?.features?.[t.feature])
-    && (!t.module || !perms || role === 'admin' || !!perms[t.module]?.view))
+  const seeded = usePermissionStore(s => s.seeded)
+  const visibleTabs = tabs.filter(t => (!t.feature || user?.features?.[t.feature])
+    && navItemVisible(t, { role, user, perms, seeded }))
 
   // Split into inline tabs + overflow ("More") when there are too many for the bar.
   const overflow    = visibleTabs.length > INLINE_MAX

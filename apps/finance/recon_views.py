@@ -16,7 +16,7 @@ from rest_framework import filters, generics
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import (
@@ -33,18 +33,9 @@ from .views import _is_admin_or_pharmacist
 from core.errors import public_error
 from core.permissions import matrix_permission
 
-# Every reconciliation view checks the finance matrix too (Batch 4, Z-3); the admin / pharmacist
-# checks inside stay until the owner's overblock review.
-def _can_read_recon_reports(user) -> bool:
-    """Read-only A/P reconciliation reports + their Excel exports: admin / pharmacist as before,
-    plus the finance-department `accountant` (owner decision 2026-11-05). Never used on a
-    write / approve / allocation / SOFTECH-write view."""
-    if _is_admin_or_pharmacist(user):
-        return True
-    try:
-        return user.staff_profile.role == 'accountant'
-    except Exception:
-        return False
+# Every reconciliation view checks the reconciliation matrix module (Batch 4, Z-3; own module since the
+# role review 2026-11-20). The read-only reports and their exports follow the matrix alone (spec decision
+# 1 — reads are not decision-2 items); the admin / pharmacist checks on approve / write views stay.
 
 
 def _company_only(perm):
@@ -61,13 +52,34 @@ def _company_only(perm):
     return CompanyFinance
 
 
+# Company-level finance gates — the cash view, receivables and supplier terms import these (finance).
 FINANCE          = _company_only(matrix_permission('finance'))
-FINANCE_APPROVE  = _company_only(matrix_permission('finance', post=('approve',)))
 FINANCE_EDIT     = _company_only(matrix_permission('finance', post=('edit',)))
-FINANCE_FINALIZE = _company_only(matrix_permission('finance', post=('finalize',)))     # SOFTECH write-back
 FINANCE_EXPORT   = _company_only(matrix_permission('finance', get=('export',)))
-# C15 exception decisions: the finance grant gates the door; _can_review_exceptions decides who acts
-FINANCE_REVIEW   = _company_only(matrix_permission('finance', post=('view',)))
+
+# Supplier A/P reconciliation: its own `reconciliation` module since the role review 2026-11-20 (was
+# finance); the action each view needs is unchanged.
+RECON          = _company_only(matrix_permission('reconciliation'))
+RECON_APPROVE  = _company_only(matrix_permission('reconciliation', post=('approve',)))
+RECON_EDIT     = _company_only(matrix_permission('reconciliation', post=('edit',)))
+RECON_FINALIZE = _company_only(matrix_permission('reconciliation', post=('finalize',)))     # SOFTECH write-back
+RECON_EXPORT   = _company_only(matrix_permission('reconciliation', get=('export',)))
+# C15 exception decisions: the reconciliation grant gates the door; _can_review_exceptions decides who acts
+RECON_REVIEW   = _company_only(matrix_permission('reconciliation', post=('view',)))
+
+
+class UnseededReportReaders(BasePermission):
+    """The read-only reports / exports' reader rule before the role review (admin / pharmacist +
+    the A/P review accountant), kept while `reconciliation` has no rows (spec: "Unseeded databases
+    behave as today"; RECON then asks finance). Once seeded, the matrix alone decides (decision 1)."""
+    message = 'صلاحية غير كافية'
+
+    def has_permission(self, request, view):
+        from core.middleware import module_access
+        if 'reconciliation' in module_access.seeded_modules():
+            return True
+        from apps.users.roles import AP_REVIEW_ROLES
+        return _is_admin_or_pharmacist(request.user) or             getattr(getattr(request.user, 'staff_profile', None), 'role', None) in AP_REVIEW_ROLES
 
 
 def _scope(request, qs, party_path='party'):
@@ -107,7 +119,7 @@ def _sum(qs, field):
 # ── 1. dashboard KPIs ─────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def reconciliation_dashboard(request):
     inv = _scope(request, APInvoice.objects.all())
     pay = _scope(request, Payment.objects.all())
@@ -157,7 +169,7 @@ def reconciliation_dashboard(request):
 # ── 2. lists ──────────────────────────────────────────────────────────────────
 
 class ReconPartyListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, FINANCE]
+    permission_classes = [IsAuthenticated, RECON]
     serializer_class   = ReconPartySerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['softech_personcode', 'name']
@@ -168,7 +180,7 @@ class ReconPartyListView(generics.ListAPIView):
 
 
 class InvoiceListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, FINANCE]
+    permission_classes = [IsAuthenticated, RECON]
     serializer_class   = APInvoiceSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['docnumber', 'docnumber2']
@@ -183,7 +195,7 @@ class InvoiceListView(generics.ListAPIView):
 
 
 class PaymentListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, FINANCE]
+    permission_classes = [IsAuthenticated, RECON]
     serializer_class   = PaymentSerializer
     filter_backends    = [WildcardSearchFilter, filters.OrderingFilter]
     search_fields      = ['cheqsno', 'cheqno', 'ourcheqsno', 'note']
@@ -249,7 +261,7 @@ def _candidate_qs(request):
 
 
 class CandidateListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, FINANCE]
+    permission_classes = [IsAuthenticated, RECON]
     serializer_class   = MatchCandidateSerializer
     pagination_class   = ReconPagination
     filter_backends    = [StableOrdering]
@@ -272,7 +284,7 @@ class CandidateListView(generics.ListAPIView):
 
 
 class ExceptionListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, FINANCE]
+    permission_classes = [IsAuthenticated, RECON]
     serializer_class   = ReconExceptionSerializer
     pagination_class   = ReconPagination
     filter_backends    = [StableOrdering]
@@ -294,7 +306,7 @@ class ExceptionListView(generics.ListAPIView):
 
 
 class ReconRunListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, FINANCE]
+    permission_classes = [IsAuthenticated, RECON]
     serializer_class   = ReconciliationRunSerializer
     ordering           = ['-started_at']
 
@@ -305,7 +317,7 @@ class ReconRunListView(generics.ListAPIView):
 # ── 3. workbench (3-pane payload) ─────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def reconciliation_workbench(request):
     """
     ?invoice=<id>  → the invoice + its candidate payments (with evidence)
@@ -345,7 +357,7 @@ def reconciliation_workbench(request):
 # ── 4. per-party حصر ledger (lightweight; full reconstruction = Phase F) ──────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def party_ledger(request, personcode):
     try:
         party = ReconParty.objects.get(softech_personcode=personcode)
@@ -374,7 +386,7 @@ def party_ledger(request, personcode):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def party_timeline(request, personcode):
     """حصر chronological ledger: signed events + running owed balance + equation."""
     from . import recon_balances
@@ -396,19 +408,20 @@ def _guard_write(request):
 
 
 def _can_review_exceptions(user) -> bool:
-    """C15: who records a decision on an exception — admin / pharmacist holding finance `approve`
-    (the gate for approving a match), plus the finance-department accountant (owner decision
-    2026-11-19). Only this endpoint: the accountant still cannot approve, write or reverse a match."""
+    """C15: who records a decision on an exception — admin / pharmacist holding reconciliation `approve`
+    (the gate for approving a match; was finance approve before the role review 2026-11-20), plus the
+    finance-department accountant (owner decision 2026-11-19). Only this endpoint: the accountant still
+    cannot approve, write or reverse a match."""
     from core.permissions import matrix_allows
     profile = getattr(user, 'staff_profile', None)
     if _is_admin_or_pharmacist(user):
-        return profile is None or matrix_allows(profile, 'finance', 'approve')
+        return profile is None or matrix_allows(profile, 'reconciliation', 'approve')
     from apps.users.roles import AP_REVIEW_ROLES
     return getattr(profile, 'role', None) in AP_REVIEW_ROLES
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_REVIEW])
+@permission_classes([IsAuthenticated, RECON_REVIEW])
 def decide_exceptions_view(request):
     """C15: bulk decision on exceptions — {ids, action: investigating|resolved|dismissed|open, note}.
     Mirror only: nothing goes to SOFTECH, and a decision never releases a held match by itself
@@ -434,7 +447,7 @@ def decide_exceptions_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_APPROVE])
+@permission_classes([IsAuthenticated, RECON_APPROVE])
 def approve_candidate_view(request, pk):
     denied = _guard_write(request)
     if denied:
@@ -454,7 +467,7 @@ def approve_candidate_view(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_APPROVE])
+@permission_classes([IsAuthenticated, RECON_APPROVE])
 def reject_candidate_view(request, pk):
     denied = _guard_write(request)
     if denied:
@@ -472,7 +485,7 @@ def reject_candidate_view(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_APPROVE])
+@permission_classes([IsAuthenticated, RECON_APPROVE])
 def bulk_approve_view(request):
     """
     Approve every PROPOSED candidate in a confidence class at once (default: all
@@ -505,7 +518,7 @@ def bulk_approve_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_APPROVE])
+@permission_classes([IsAuthenticated, RECON_APPROVE])
 def bulk_reject_view(request):
     """Reject a whole review group (or a strategy/confidence slice) at once."""
     denied = _guard_write(request)
@@ -526,7 +539,7 @@ def bulk_reject_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def candidate_groups_view(request):
     """Grouped review: every candidate under its invoice (?by=invoice) or voucher
     (?by=payment), with capacity/excess, existing links and duplicate flags.
@@ -553,7 +566,7 @@ def candidate_groups_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_APPROVE])
+@permission_classes([IsAuthenticated, RECON_APPROVE])
 def selection_action_view(request):
     """Apply one action to the rows ticked in the grid / a group.
     approve | reject | review → mirror only (admin/pharmacist);
@@ -619,7 +632,7 @@ def _reverse_selection(request, ids, note):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_EDIT])
+@permission_classes([IsAuthenticated, RECON_EDIT])
 def manual_allocate_view(request):
     denied = _guard_write(request)
     if denied:
@@ -638,7 +651,7 @@ def manual_allocate_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_EDIT])
+@permission_classes([IsAuthenticated, RECON_EDIT])
 def undo_allocation_view(request, pk):
     denied = _guard_write(request)
     if denied:
@@ -667,7 +680,7 @@ def _is_admin(user) -> bool:
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_FINALIZE])
+@permission_classes([IsAuthenticated, RECON_FINALIZE])
 def write_allocation_softech(request, pk):
     """
     GATED write-back of one approved Allocation to SOFTECH (records the missing
@@ -700,7 +713,7 @@ def write_allocation_softech(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_FINALIZE])
+@permission_classes([IsAuthenticated, RECON_FINALIZE])
 def reverse_allocation_softech(request, pk):
     """Undo an allocation WE wrote to SOFTECH, then reject its candidate (admin, gated)."""
     from . import recon_writer
@@ -719,12 +732,10 @@ def reverse_allocation_softech(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def unpaid_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_unpaid_xlsx(request.query_params.get('party_type', 'supplier'),
                                f=RF.parse(request.query_params, 'supplier'))
@@ -734,12 +745,10 @@ def unpaid_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def review_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_review_xlsx(request.query_params.get('party_type', 'supplier'),
                                f=RF.parse(request.query_params, 'supplier'))
@@ -749,7 +758,7 @@ def review_export(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, FINANCE_FINALIZE])
+@permission_classes([IsAuthenticated, RECON_FINALIZE])
 def bulk_write_softech(request):
     """Write APPROVED allocations to SOFTECH in bounded batches over one connection
     (admin only; the page loops on `remaining`). Validation failures are skipped
@@ -839,12 +848,10 @@ def _sort_rows(rows, ordering, allowed) -> bool:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON, UnseededReportReaders])
 def unpaid_report(request):
     """Totals + supplier summary + unpaid invoice rows for the finance department."""
     from . import recon_reports as R
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     pt = request.query_params.get('party_type', 'supplier')
     from . import recon_filters as RF
     f = RF.parse(request.query_params, 'supplier')
@@ -873,12 +880,10 @@ def unpaid_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON, UnseededReportReaders])
 def partial_report(request):
     """Invoices paid part-way (with the vouchers that paid them) + part-used vouchers."""
     from . import recon_reports as R
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     inv_rows, pay_rows = R.partial_payments(request.query_params.get('party_type', 'supplier'),
                                             f=RF.parse(request.query_params, 'supplier'))
@@ -898,12 +903,10 @@ def partial_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def partial_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_partial_xlsx(request.query_params.get('party_type', 'supplier'),
                                 f=RF.parse(request.query_params, 'supplier'))
@@ -913,14 +916,12 @@ def partial_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def returns_chains_export(request):
     """Open returns owed by suppliers, purchases paid although returned, and the
     مدفوعات → مقبوضات → مدفوعات correction chains (doc 23 §17)."""
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_returns_chains_xlsx(request.query_params.get('party_type', 'supplier'),
                                        f=RF.parse(request.query_params, 'supplier'))
@@ -944,7 +945,7 @@ def _apply_body_filters(qs, request, kind):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def supplier_options(request):
     """Every party of a type (code + name + SOFTECH balance) for the multi-select."""
     pt = request.query_params.get('party_type', 'supplier')
@@ -955,7 +956,7 @@ def supplier_options(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, FINANCE])
+@permission_classes([IsAuthenticated, RECON])
 def invoice_lines_view(request, pk):
     """Item lines of one invoice/return — live from SOFTECH, only on demand."""
     from . import recon_lines

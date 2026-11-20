@@ -47,6 +47,10 @@ ALL_MODULES = [
     'crews',         # الأطقم: 'view' = list/members/history/unattributed sales, 'edit' = create/change/end rows/archive; admin only by default
     'rpa',           # روبوت الإدخال (SOFTECH screen RPA): view = see jobs, create = upload / run on my PC, approve = approve jobs + recipes, edit = resolve a needs_person document
     'alerts',        # التنبيهات والإعلانات: 'view' = phone-alert log + policies, 'edit' = change policies/channel, 'create' = publish an announcement (admin + supervisor, owner 2026-11-17)
+    # Role review 2026-11-20: ten tool modules split out of their parent so the matrix can decide
+    # who sees each screen (parents in ROLE_REVIEW_MODULES below).
+    'forecast', 'recommendations', 'catalog_tools', 'stock', 'loyalty',
+    'dispatch', 'rider', 'reconciliation', 'access_control', 'code_maps',
 ]
 
 ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export', 'assign', 'finalize']
@@ -184,7 +188,7 @@ PERMISSIONS = {
         'analytics':    {'view', 'export', 'edit', 'delete'},   # owner Q-7c 2026-11-05: forecasting / targets (Z-7b, Z-9a)
         'chronic':      RO,
         'delivery':     RE,
-        'settings':     RO,
+        # settings removed: owner, role review 2026-11-20 (purchasing no longer sees the settings module)
         'hr':           {'view', 'create'},                              # self-service
         'approvals':    {'view', 'approve'},                             # finance approval steps
     },
@@ -348,6 +352,32 @@ RPA_GRANTS = {
 }
 for _role, _actions in RPA_GRANTS.items():
     PERMISSIONS[_role].setdefault('rpa', set(_actions))
+
+# Role review 2026-11-20 (spec "New modules"): module -> (parent module, roles that get 'view').
+# Each listed role gets 'view' plus whatever it already holds on the parent (other actions copy the
+# parent); a role outside the set gets nothing. admin is covered by the all-actions line above.
+ROLE_REVIEW_MODULES = {
+    'forecast':        ('analytics', frozenset({'admin', 'purchasing', 'supervisor', 'quality_manager'})),
+    'recommendations': ('analytics', frozenset({'admin', 'call_center', 'pharmacist', 'purchasing',
+                                                'supervisor', 'quality_manager'})),
+    'catalog_tools':   ('catalog', frozenset({'admin', 'purchasing', 'supervisor', 'call_center'})),
+    'stock':           ('catalog', frozenset({'admin', 'pharmacist', 'purchasing', 'quality_manager',
+                                              'supervisor', 'call_center', 'salesperson'})),
+    'loyalty':         ('customers', frozenset({'admin', 'call_center', 'pharmacist', 'salesperson',
+                                                'supervisor', 'quality_manager'})),
+    'dispatch':        ('delivery', frozenset({'admin', 'call_center', 'quality_manager', 'supervisor',
+                                               'pharmacist', 'salesperson'})),
+    'rider':           ('delivery', frozenset({'admin', 'delivery', 'supervisor', 'call_center'})),
+    'reconciliation':  ('finance', frozenset({'admin', 'accountant', 'purchasing', 'quality_manager',
+                                              'supervisor'})),
+    'access_control':  ('settings', frozenset({'admin'})),
+    'code_maps':       ('settings', frozenset({'admin', 'purchasing', 'supervisor'})),
+}
+for _module, (_parent, _roles) in ROLE_REVIEW_MODULES.items():
+    for _role in _roles:
+        if _role == 'admin':
+            continue
+        PERMISSIONS[_role][_module] = {'view'} | (PERMISSIONS[_role].get(_parent, set()) - {'view'})
 
 
 class Command(BaseCommand):

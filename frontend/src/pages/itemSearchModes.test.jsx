@@ -1,6 +1,6 @@
 // S3 Task 4 — call sites hand ItemSearchWidget their selection mode, and a `multi` site turns
 // the ONE onSelect(items[]) into its own per-item add (with its own dedupe).
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -42,6 +42,7 @@ const { default: MobileNewTransferPage } = await import('./mobile/MobileNewTrans
 const { BundlesTab } = await import('./CatalogIntelligencePage')
 const { CreateVoucherModal } = await import('./VouchersPage')
 const { catalogIntelApi, vouchersApi } = await import('../api/client')
+const { default: usePermissionStore } = await import('../store/permissionStore')
 
 const lastOnSelect = () => widget.props[widget.props.length - 1].onSelect
 const A = { id: 1, item_id: 1, softech_id: '101', name: 'ALPHA' }
@@ -105,6 +106,8 @@ const withClient = (ui) => (
 const settle = () => act(async () => { await new Promise(r => setTimeout(r, 50)) })
 
 describe('catalog-intelligence bundle items (multi)', () => {
+  // adding items is a catalog edit (final review I4: the controls follow the grant)
+  beforeEach(() => usePermissionStore.setState({ permissions: { catalog: { view: true, edit: true } }, seeded: ['catalog'] }))
   afterEach(() => {
     cleanup(); widget.props = []
     catalogIntelApi.addBundleItem.mockReset()
@@ -159,5 +162,19 @@ describe('voucher eligible items (multi)', () => {
     fireEvent.click(screen.getByText('✓ إنشاء القسيمة'))
     await waitFor(() => expect(vouchersApi.create).toHaveBeenCalledTimes(1))
     expect(vouchersApi.create.mock.calls[0][0].applicable_items).toEqual([1, 2, 3])
+  })
+})
+
+describe('catalog-intelligence bundles for a view-only role (final review I4)', () => {
+  beforeEach(() => usePermissionStore.setState({ permissions: { catalog: { view: true } }, seeded: ['catalog'] }))
+  afterEach(() => { cleanup(); widget.props = [] })
+
+  it('reads the bundle without the add / remove / new controls', async () => {
+    render(withClient(<BundlesTab />))
+    fireEvent.click(await screen.findByText('BOX'))
+    await settle()
+    expect(widget.props.length).toBe(0)
+    expect(document.querySelector('[data-tour="catalog-intelligence-bundle-new"]')).toBeNull()
+    expect(document.querySelector('[data-tour="catalog-intelligence-bundle-remove-item"]')).toBeNull()
   })
 })

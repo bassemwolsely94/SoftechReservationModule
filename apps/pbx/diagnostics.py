@@ -13,6 +13,8 @@ import time
 
 from django.conf import settings
 
+from core.errors import public_error
+
 OK, WARN, FAIL, SKIP = 'ok', 'warn', 'fail', 'skip'
 
 
@@ -65,7 +67,7 @@ def _tcp_failure_hint(exc, host, port):
                 '(manager.conf → enabled = yes) أو المنفذ مختلف، أو Asterisk متوقف.')
     if code in (errno.EHOSTUNREACH, errno.ENETUNREACH, 10065, 10051):
         return ('لا يوجد مسار للسيرفر', 'عنوان IP خاطئ أو الشبكة غير موصلة بالسيرفر.')
-    return (str(exc), 'خطأ شبكة غير متوقع — راجع الاتصال بالسيرفر.')
+    return (public_error(None, exc), 'خطأ شبكة غير متوقع — راجع الاتصال بالسيرفر.')
 
 
 def run_diagnostics(timeout: float = 5.0) -> dict:
@@ -102,7 +104,7 @@ def run_diagnostics(timeout: float = 5.0) -> dict:
             ip = socket.gethostbyname(host)
             add('dns', 'تحليل عنوان السيرفر', OK, ip, ms=int((time.monotonic() - t) * 1000))
         except OSError as exc:
-            add('dns', 'تحليل عنوان السيرفر', FAIL, str(exc),
+            add('dns', 'تحليل عنوان السيرفر', FAIL, public_error(None, exc),
                 f'الاسم «{host}» لا يُترجم لعنوان IP — استخدم عنوان IP مباشرة أو صحّح الـ DNS.')
             blocked = True
 
@@ -168,7 +170,7 @@ def run_diagnostics(timeout: float = 5.0) -> dict:
                         'AMI_CHANNEL_TECH لا يطابق نوع الأرقام الداخلية في Issabel — '
                         'غيّره إلى SIP أو PJSIP حسب السنترال وإلا سيفشل الاتصال من الشاشة.')
         except (OSError, ConnectionError) as exc:
-            add(key, label, FAIL, str(exc) or type(exc).__name__,
+            add(key, label, FAIL, public_error(None, exc),
                 'انقطع الاتصال أثناء الفحص — غالباً عنوان IP غير مسموح في manager.conf أو ضغط على السيرفر.')
             blocked = True
 
@@ -236,7 +238,7 @@ def _recordings_step():
                 conn.close()
                 rel = recordings.relative_path(row['recordingfile'], row['calldate']) if row else ''
             except Exception as exc:
-                return _step('recordings', label, WARN, f'CDR: {exc}',
+                return _step('recordings', label, WARN, f'CDR: {public_error(None, exc)}',
                              'تعذر قراءة قاعدة CDR — راجع ISSABEL_CDR_USER / PASSWORD وأن المنفذ 3306 مسموح.')
         try:
             client = recordings._sftp_connect()
@@ -257,7 +259,7 @@ def _recordings_step():
             return _step('recordings', label, FAIL, 'لا صلاحية قراءة',
                          'مستخدم SFTP لا يملك صلاحية القراءة على مجلد monitor — أضفه لمجموعة asterisk.')
         except Exception as exc:
-            return _step('recordings', label, FAIL, f'SFTP: {type(exc).__name__}: {exc}',
+            return _step('recordings', label, FAIL, f'SFTP: {public_error(None, exc)}',
                          'تعذر الدخول عبر SFTP — راجع PBX_RECORDINGS_SFTP_USER / PASSWORD وأن المنفذ 22 مفتوح.')
 
     local = getattr(settings, 'PBX_RECORDINGS_DIR', '')
@@ -274,7 +276,7 @@ def _recordings_step():
             ok = r.status_code < 500
             return _step('recordings', label, OK if ok else WARN, f'{remote} → HTTP {r.status_code}')
         except Exception as exc:
-            return _step('recordings', label, WARN, str(exc),
+            return _step('recordings', label, WARN, public_error(None, exc),
                          'رابط التسجيلات لا يرد — لن يعمل التفريغ والاستماع للتسجيلات.')
     return _step('recordings', label, WARN, 'غير مضبوط',
                  'اضبط PBX_RECORDINGS_SFTP_HOST / USER / PASSWORD (موصى به) لتفعيل الاستماع والتفريغ.')

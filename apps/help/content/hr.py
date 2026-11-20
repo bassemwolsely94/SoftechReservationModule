@@ -786,8 +786,8 @@ SCREENS = [
                        'Use it when you start a quality walk-through at a branch; nothing is created until you press "Start inspection".'),
          },
             {'target': 'hr-qa-new-form', 'label': T('القالب · الفرع *', 'Template · Branch *'),
-             'text': T('اختار قالب المراجعة والفرع. الصيدلي يراجع فرعه بس؛ المدير والجودة والمشرف يختاروا أي فرع.',
-                       'Pick the template and branch. A pharmacist inspects their own branch; admin, quality and supervisors pick any.'),
+             'text': T('اختار قالب المراجعة والفرع. الصيدلي يراجع فرعه بس؛ الأدوار اللي ليها صلاحية كل الفروع (المدير والجودة والمشرف) يختاروا أي فرع.',
+                       'Pick the template and branch. A pharmacist inspects their own branch; roles with all-branch access (admin, quality, supervisors) pick any.'),
              'open_hint': _QA_FORM,
              'more': T('• «القالب»: قائمة البنود اللي هتراجعها.\n'
                        '• «الفرع»: حسب دورك يا إما تختار الفرع من القائمة، يا إما بيتحدد فرعك تلقائياً.\n'
@@ -861,8 +861,8 @@ SCREENS = [
              'open_hint': _QA_OPEN},
         ],
         'updated': '2026-11-20',
-        'change_note': T('جديد: قالب «تجهيز زيارة هيئة الدواء» وزرار «سجل حرارة الثلاجة» فوق القائمة',
-                         'New: the "EDA visit readiness" template and a "Fridge temperature log" button above the list'),
+        'change_note': T('جديد: قالب «تجهيز زيارة هيئة الدواء» وزرار «سجل حرارة الثلاجة» فوق القائمة · اختيار الفرع لأي دور له صلاحية كل الفروع',
+                         'New: the "EDA visit readiness" template and a "Fridge temperature log" button above the list · Any role with all-branch access picks the branch'),
     },
     {
         'key': 'hr.qa_fridge',

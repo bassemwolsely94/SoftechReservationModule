@@ -31,7 +31,7 @@ lesser data, misleading screen, or a rule bent · P3 = polish, owner decision, o
 | D1 | Require the full-phone search first: another branch's customer opens by id only within 12 h of a full-phone find (`CustomerFound`, `CUSTOMER_FOUND_HOURS`). | `claude/uat-fixes` |
 | D2 | Yes — POS locked to the user's own branches (picker + every POS lookup; order creation was already checked). | `claude/uat-fixes` |
 | D3 | No — returns off the POS screen (`POS_RETURNS_ENABLED`, default off; existing returns keep their posting path). | `claude/uat-fixes` |
-| D4 | Real user roles to be revised together with the owner before go-live. | open |
+| D4 | Real user roles to be revised together with the owner before go-live. | partly done — the code side (roles follow the matrix, 10 tool modules; role review 2026-11-20, branch `claude/role-review`); assigning real roles to the real accounts is still open |
 | D5 | Tighten the code to the matrix: the 24 looser frontend gates now also ask the matrix grant their API checks. Backend role lists that are looser than the matrix are listed as follow-ups. | `claude/uat-fixes` |
 
 The questions as originally asked:
@@ -78,7 +78,7 @@ The questions as originally asked:
     module «التنبيهات والإعلانات» (admin + supervisor by default, owner 2026-11-17). Still looser on
     the server (follow-up): `CanPushPosOrders` PUSH_ROLES fallback, procurement trigger (`IsAdminUser`),
     insights generate, vouchers coupons (settings role lists).
-- **103 P3 — the code is stricter than the matrix** (a role the matrix allows is kept out). Matrix wins → loosen or update the matrix.
+- ~~**103 P3 — the code is stricter than the matrix** (a role the matrix allows is kept out). Matrix wins → loosen or update the matrix.~~ (done, role review 2026-11-20, branch `claude/role-review`: the matrix decides; 10 tool modules; see `docs/superpowers/specs/2026-11-20-role-review-design.md`; the catalogue is regenerated statically, 14 stricter rows left, all owner decision-2 exceptions or documented narrower server rules)
 - **3 P3 — role words that do not exist:** `'manager'` (`MobileReservationDetailPage.jsx:33,108`), `'branch'` (`navGroups.js:66`).
 
 ### W6 — hands-on pass (this branch, `docs/uat/runs/w6-findings.jsonl`)
@@ -244,7 +244,7 @@ vouchers (5% of 300 = 15), the approvals inbox and the HR leave chain worked.
   office `DEBUG` off; the rider-shell menu (W2 P2).
 - **Follow-up fixes:** ~~the 60 W2 P1 screens~~ (resolved, `claude/uat-server-gates`, see W2); ~~126 unhandled-403 screens~~ (fixed, `claude/uat-403-screens`: the 13 screens route-guard on their module, so a role without it lands on the dashboard);
   ~~`/market-shortage` loading~~ (fixed, PR 188); ~~backend role lists still looser than
-  the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons)~~ (fixed, `claude/uat-backend-role-lists`: all four ask the matrix; only procurement changes who may act — the purchasing role gains run / reclassify / override, a bare is_staff account loses them); the 103
-  stricter-than-matrix checks (W3).
+  the matrix (`CanPushPosOrders`, procurement trigger, insights generate, vouchers coupons)~~ (fixed, `claude/uat-backend-role-lists`: all four ask the matrix; only procurement changes who may act — the purchasing role gains run / reclassify / override, a bare is_staff account loses them); ~~the 103
+  stricter-than-matrix checks (W3)~~ (done, role review 2026-11-20, branch `claude/role-review`: the matrix decides; 10 tool modules; see `docs/superpowers/specs/2026-11-20-role-review-design.md`).
 - **Housekeeping:** ~~`makemigrations --check` on main wants a migration deleting `reservations.ActivityLog`~~ (the table is live — the reservation call log; fixed by loading the model in the app's `ready()`, `claude/reservations-activitylog-register`, no schema change)
   (not from this round); ~~harness fixes from W2 into the shared lib~~ (done, `claude/uat-lib-w2-lessons`: `lib/page.js` gotoSettled is time-to-content with the W2 rules; visibility uses it).

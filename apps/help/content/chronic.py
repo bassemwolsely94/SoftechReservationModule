@@ -135,8 +135,8 @@ SCREENS = [
         'title': T('مصنّف الأدوية المزمنة', 'Chronic medicine classifier'),
         'summary': T('تحديد أي الأصناف أدوية مزمنة، وإدارة المواد الفعّالة وبروتوكولات المتابعة، وتوليد مهام المتابعة من تاريخ الشراء.',
                      'Decide which items are chronic medicines, manage active ingredients and follow-up protocols, and generate follow-up tasks from purchase history.'),
-        'audience': T('الصيادلة والمشرفون والكول سنتر والمدير يصنّفون؛ الجودة والمشتريات للاطلاع.',
-                      'Pharmacists, supervisors, the call center and admins classify; quality and purchasing view.'),
+        'audience': T('الصيادلة والمشرفون والكول سنتر والمدير يصنّفون؛ الجودة والمشتريات للاطلاع — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Pharmacists, supervisors, the call center and admins classify; quality and purchasing view — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'classifier', 'title': T('🔬 مصنّف الأصناف', '🔬 Item classifier'),
              'body': T('ابحث عن صنف (اسم، كود، باركود) وصفِّ (غير مصنَّف / مصنَّف / مزمن). «تصنيف»: اربطه بمادة فعّالة موجودة أو أنشئ جديدة (الاسم، ATC، التركيز)، وحدد هل هو دواء مزمن وتصنيف المرض ووسوم الوصفة.',
@@ -283,9 +283,8 @@ SCREENS = [
              'warn': T('مفيش تأكيد. لو رفضت غلط، «🔄» بيستخرج اقتراحات جديدة.', 'No confirmation. If you reject by mistake, "🔄" extracts fresh suggestions.'),
              'open_hint': T('على أي كارت اقتراح معلّق.', 'On any pending suggestion card.')},
         ],
-        'updated': '2026-11-13',
-        'change_note': T('نوع العميل في البروتوكولات بقى من قناة آخر فاتورة، وفيه اختيار جديد «غير مصنف».',
-                         'Protocol customer type now comes from the latest invoice\'s channel, with a new "Unclassified" choice.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»', 'The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'chronic.composition',

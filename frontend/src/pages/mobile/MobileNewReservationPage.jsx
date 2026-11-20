@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { branchesApi } from '../../api/client'
 import { queuedPost } from '../../api/offlineQueue'
 import useAuthStore from '../../store/authStore'
+import { canPickAnyBranch } from '../../utils/branchAccess'
 import CustomerSearchWidget from '../../components/CustomerSearchWidget'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import PhoneAlertToggle from '../../components/PhoneAlertToggle'
@@ -32,7 +33,7 @@ export default function MobileNewReservationPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = user?.role === 'admin' || user?.role === 'call_center'
+  const canPickBranch = canPickAnyBranch(user)
 
   const [form, setForm] = useState({
     customer:           '',

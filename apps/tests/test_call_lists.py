@@ -11,7 +11,7 @@ from apps.followups import call_lists
 from apps.customers import consent
 from apps.followups.models import CallList, FollowUpTask
 from apps.notifications.models import Notification
-from .factories import make_admin, make_call_center, make_customer, make_pharmacist
+from .factories import make_admin, make_call_center, make_customer, make_pharmacist, make_user
 
 URL = '/api/followups/call-lists/'
 
@@ -76,8 +76,17 @@ class CallListTests(TestCase):
         self.assertEqual(self.client_admin.post(URL, self._body(name=''), format='json').status_code, 400)
         self.assertEqual(self.client_admin.post(URL, self._body(criteria={}), format='json').status_code, 400)
         self.assertEqual(self.client_admin.post(URL, self._body(agent_ids=[]), format='json').status_code, 400)
+        # owner decision 6 (role review): creating follows followups:create — a viewer holds none
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        RoleModuleAccess.objects.create(role='viewer', module='followups', action='view', is_allowed=True)
+        RoleModuleAccess.objects.create(role='pharmacist', module='followups', action='create', is_allowed=True)
+        RoleModuleAccess.objects.create(role='call_center', module='followups', action='create', is_allowed=True)
+        module_access.clear_cache()
+        _, _, viewer = make_user('cl_vw', role='viewer')
+        self.assertEqual(viewer.post(URL, self._body(), format='json').status_code, 403)
         _, _, pharm = make_pharmacist('cl_ph')
-        self.assertEqual(pharm.post(URL, self._body(), format='json').status_code, 403)
+        self.assertEqual(pharm.post(URL, self._body(), format='json').status_code, 201)
         # call-center agents may create (owner decision)
         self.assertEqual(self.client_a1.post(URL, self._body(), format='json').status_code, 201)
 

@@ -134,7 +134,12 @@ class StatusEndpointTests(TestCase):
         self.assertFalse(data['alive'])
 
     @override_settings(AMI_HOST='', AMI_USER='', AMI_SECRET='')
-    def test_diagnostics_supervisor_only(self):
+    def test_diagnostics_follow_the_callcenter_matrix(self):
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        RoleModuleAccess.objects.create(role='pharmacist', module='callcenter', action='view', is_allowed=True)
+        RoleModuleAccess.objects.create(role='call_center', module='callcenter', action='edit', is_allowed=True)
+        module_access.clear_cache()
         _, _, pharm = make_pharmacist('pbx_diag_ph')
         self.assertEqual(pharm.post('/api/pbx/diagnostics/').status_code, 403)
         _, _, admin = make_admin('pbx_diag_admin')

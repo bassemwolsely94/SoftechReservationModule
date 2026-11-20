@@ -11,6 +11,8 @@ from apps.users.models import StaffProfile
 ROLES = ['admin', 'supervisor', 'purchasing', 'quality_manager', 'call_center', 'delivery',
          'pharmacist', 'salesperson', 'viewer']
 CC_MODULES = ['callcenter', 'demand', 'reservations', 'customers']
+# role review 2026-11-20 (access 0008): `customers` brings its tool module `loyalty` (/api/referral/)
+CC_MODULES_NOW = CC_MODULES + ['loyalty']
 
 
 def _expected(role, zone):
@@ -57,7 +59,7 @@ class SeedTests(TestCase):
                     self.assertEqual(row.max_session_hours, cap, f'{role} {zone}')
                 self.assertFalse(row.view_only, f'{role} {zone}')
         cc = ZonePolicy.objects.get(role='call_center', zone='Z3')
-        self.assertEqual(sorted(cc.modules), sorted(CC_MODULES))
+        self.assertEqual(sorted(cc.modules), sorted(CC_MODULES_NOW))
 
     def test_call_center_modules_are_real_module_keys(self):
         from core.middleware.module_access import MODULE_BY_PREFIX

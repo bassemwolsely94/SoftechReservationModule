@@ -3,16 +3,15 @@
 # access decisions in the RBAC matrix (core.permissions.matrix_permission) — never a new literal here.
 # Some lines are coincidences (module / channel names that happen to equal role keys); they stay
 # listed so the guard keeps a stable baseline. Format: path::keys xN (N = occurrences; a higher count fails)
-
+# Role review final fix C1 (2026-11-20): the menu items, the mobile customers tab and their routes that
+# the review moved to the matrix keep their pre-review role list as `legacyRoles` — used ONLY while their
+# module has no RoleModuleAccess rows (the server fails open there for the legacy roles). Same lists as
+# the base (62e3305d) baseline; route guards and pages reuse them through legacyRolesFor(), no new copies.
 frontend/src/App.jsx::accountant,admin,pharmacist,purchasing x1
 frontend/src/App.jsx::accountant,admin,pharmacist,purchasing,quality_manager x1
-frontend/src/App.jsx::accountant,admin,purchasing,quality_manager x1
 frontend/src/App.jsx::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x1
 frontend/src/App.jsx::admin,call_center,pharmacist,salesperson,supervisor x1
-frontend/src/App.jsx::admin,delivery,supervisor x2
-frontend/src/App.jsx::admin,pharmacist x1
-frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager x1
-frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager,supervisor x6
+frontend/src/App.jsx::admin,pharmacist,purchasing,quality_manager,supervisor x3
 frontend/src/App.jsx::admin,pharmacist,quality_manager,supervisor x1
 frontend/src/App.jsx::admin,pharmacist,supervisor x2
 frontend/src/App.jsx::admin,purchasing x1
@@ -21,7 +20,6 @@ frontend/src/App.jsx::admin,quality_manager,supervisor x2
 frontend/src/App.jsx::admin,supervisor x1
 frontend/src/App.jsx::delivery x1
 frontend/src/components/InTransitTab.jsx::purchasing x2
-frontend/src/components/followups/CallListsPanel.jsx::admin,call_center,supervisor x1
 frontend/src/components/navGroups.js::accountant,admin x1
 frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing x1
 frontend/src/components/navGroups.js::accountant,admin,pharmacist,purchasing,quality_manager x2
@@ -62,30 +60,17 @@ frontend/src/pages/BatchesPage.jsx::admin,pharmacist,purchasing x2
 frontend/src/pages/BatchesPage.jsx::admin,quality_manager,supervisor x1
 frontend/src/pages/CallCenterAnalyticsPage.jsx::admin,call_center,quality_manager,supervisor x1
 frontend/src/pages/CallCenterPage.jsx::admin,quality_manager,supervisor x1
-frontend/src/pages/DashboardPage.jsx::admin,call_center,purchasing x1
-frontend/src/pages/DashboardPage.jsx::admin,purchasing,quality_manager,supervisor x1
-frontend/src/pages/DashboardPage.jsx::call_center x1
-frontend/src/pages/DemandPage.jsx::admin,call_center,purchasing x1
 frontend/src/pages/ForecastScenarioPage.jsx::admin,purchasing,supervisor x1
 frontend/src/pages/InsightsPage.jsx::admin,purchasing,quality_manager,supervisor x1
 frontend/src/pages/InsightsPage.jsx::admin,supervisor x1
 frontend/src/pages/KpiBoardPage.jsx::admin,purchasing,supervisor x1
 frontend/src/pages/LoginPage.jsx::delivery x1
-frontend/src/pages/NewReservationPage.jsx::call_center x1
 frontend/src/pages/OmniWallboardPage.jsx::admin,supervisor x1
-frontend/src/pages/PbxLivePage.jsx::admin,supervisor x1
 frontend/src/pages/PickZonesPage.jsx::purchasing x1
 frontend/src/pages/PurchasingDashboard.jsx::purchasing x1
 frontend/src/pages/PurchasingPage.jsx::admin,purchasing x1
 frontend/src/pages/RecommendationsPage.jsx::admin,supervisor x1
-frontend/src/pages/ReservationsKanban.jsx::call_center x1
 frontend/src/pages/SalespersonBoardPage.jsx::admin,purchasing,supervisor x1
 frontend/src/pages/TargetsPage.jsx::admin,purchasing,supervisor x1
-frontend/src/pages/VouchersPage.jsx::admin,purchasing,quality_manager,supervisor x1
-frontend/src/pages/mobile/MobileNewDemandPage.jsx::admin,call_center x1
-frontend/src/pages/mobile/MobileNewReservationPage.jsx::call_center x1
-frontend/src/pages/mobile/MobileNewShortagePage.jsx::admin,call_center,purchasing x1
-frontend/src/pages/mobile/MobileNewTransferPage.jsx::admin,call_center,purchasing x1
-frontend/src/pages/mobile/MobileQAPage.jsx::admin,call_center,quality_manager,supervisor x1
 frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x1
 frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer x1

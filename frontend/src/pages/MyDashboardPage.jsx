@@ -82,6 +82,7 @@ function BranchFilter({ options, selected, onChange }) {
 export default function MyDashboardPage() {
   const isMobileRoute = window.location.pathname.startsWith('/m/')
   const { user } = useAuthStore()
+  // role review decision 2: the admin-only dashboard actions are admin actions, not a screen grant
   const isAdmin = user?.role === 'admin'
   const qc = useQueryClient()
   const toast = useToast()

@@ -120,6 +120,7 @@ export default function InsightsPage() {
   // (analytics — INSIGHTS asks view for every call), so a removed grant hides it (UAT D5)
   const analyticsView = usePermission('analytics', 'view')
   const canRun = ['admin', 'supervisor', 'purchasing', 'quality_manager'].includes(user?.role) && analyticsView
+  // role review decision 2: editing insight rules changes what every report shows, so it stays with the rule managers (server guard)
   const canEditRules = ['admin', 'supervisor'].includes(user?.role)   // matches InsightRuleViewSet._guard
   // 'reports' | 'rules' | 'exceptions' (C32 weekly HQ exception list; ?tab=exceptions from the digest)
   const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get('tab') === 'exceptions' ? 'exceptions' : 'reports'))

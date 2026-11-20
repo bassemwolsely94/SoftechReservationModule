@@ -141,21 +141,9 @@ call_center POST /api/delivery/app/orders/987654321/location/
 delivery GET /api/delivery/app/my-orders/
 delivery GET /api/delivery/app/my-route/
 delivery POST /api/delivery/app/orders/987654321/location/
-pharmacist GET /api/delivery/app/my-orders/
-pharmacist GET /api/delivery/app/my-route/
-pharmacist POST /api/delivery/app/orders/987654321/location/
-purchasing GET /api/delivery/app/my-orders/
-purchasing GET /api/delivery/app/my-route/
-quality_manager GET /api/delivery/app/my-orders/
-quality_manager GET /api/delivery/app/my-route/
-salesperson GET /api/delivery/app/my-orders/
-salesperson GET /api/delivery/app/my-route/
-salesperson POST /api/delivery/app/orders/987654321/location/
 supervisor GET /api/delivery/app/my-orders/
 supervisor GET /api/delivery/app/my-route/
 supervisor POST /api/delivery/app/orders/987654321/location/
-viewer GET /api/delivery/app/my-orders/
-viewer GET /api/delivery/app/my-route/
 
 # reason: Z-11c — delivery assign / routes / dispatch / backfill need assign; drivers do not create
 #   orders, drivers or area fees (DeliveryModulePermission).
@@ -210,33 +198,22 @@ quality_manager GET /api/transfers/discrepancy-report/
 salesperson GET /api/transfers/discrepancy-report/
 viewer GET /api/transfers/discrepancy-report/
 
-# reason: Z-11c — finance reconciliation writes and SOFTECH allocation need finance approve / finalize,
-#   its reports and exports finance export (Z-3).
-purchasing GET /api/finance/reconciliation/partial/
-purchasing GET /api/finance/reconciliation/partial/export/
-purchasing GET /api/finance/reconciliation/returns-chains/export/
-purchasing GET /api/finance/reconciliation/review/export/
-purchasing GET /api/finance/reconciliation/unpaid/
-purchasing GET /api/finance/reconciliation/unpaid/export/
+# reason: Z-11c — reconciliation writes and SOFTECH allocation need approve / finalize (and the views'
+#   admin / pharmacist check); since the role review 2026-11-20 the module is `reconciliation`.
 purchasing POST /api/finance/reconciliation/allocations/987654321/reverse-softech/
 purchasing POST /api/finance/reconciliation/allocations/987654321/undo/
 purchasing POST /api/finance/reconciliation/allocations/987654321/write-softech/
 purchasing POST /api/finance/reconciliation/allocations/bulk-write-softech/
 purchasing POST /api/finance/reconciliation/allocations/manual/
 
-# reason: C15 (owner 2026-11-19) — A/P exception decisions are admin / pharmacist with finance approve,
+# reason: C15 (owner 2026-11-19) — A/P exception decisions are admin / pharmacist with reconciliation approve,
 #   plus the accountant (apps.users.roles AP_REVIEW_ROLES); purchasing reads finance but does not decide.
 purchasing POST /api/finance/reconciliation/exceptions/decide/
 purchasing POST /api/finance/reconciliation/candidates/987654321/approve/
 purchasing POST /api/finance/reconciliation/candidates/987654321/reject/
 purchasing POST /api/finance/reconciliation/candidates/bulk-approve/
 purchasing POST /api/finance/reconciliation/candidates/bulk-reject/
-quality_manager GET /api/finance/reconciliation/partial/
-quality_manager GET /api/finance/reconciliation/partial/export/
-quality_manager GET /api/finance/reconciliation/returns-chains/export/
-quality_manager GET /api/finance/reconciliation/review/export/
-quality_manager GET /api/finance/reconciliation/unpaid/
-quality_manager GET /api/finance/reconciliation/unpaid/export/
+
 
 # reason: Z-11c — follow-up maintenance (dedupe / cleanup / backfill / priority scores / reminders run-now)
 #   are admin batch jobs.
@@ -260,26 +237,19 @@ supervisor POST /api/followups/tasks/cleanup-dead/
 supervisor POST /api/followups/tasks/deduplicate/
 supervisor POST /api/followups/tasks/update-priority-scores/
 
-# reason: Z-11c — omni analytics and automations, PBX diagnostics / spy / extension map & status and
-#   whisper control are admin / supervisor supervision tools (the wallboard opens to call
-#   center in decision 4).
+# reason: Z-11c — omni analytics and automations, PBX spy and whisper control are admin / supervisor
+#   supervision tools; the wallboard opens to call center in decision 4, and PBX diagnostics /
+#   extension map & status follow callcenter since the role review.
 call_center GET /api/omni/analytics/
 call_center GET /api/omni/automation-runs/
 call_center GET /api/omni/automations/
 call_center GET /api/omni/automations/987654321/
-call_center GET /api/pbx/extensions/status/
-call_center GET /api/pbx/staff-choices/
 call_center POST /api/callcenter/whisper/control/
 call_center POST /api/omni/automations/
-call_center POST /api/pbx/agents/
-call_center POST /api/pbx/diagnostics/
-call_center POST /api/pbx/extensions/map/
 call_center POST /api/pbx/spy/
 quality_manager GET /api/omni/automation-runs/
 quality_manager GET /api/omni/automations/
 quality_manager GET /api/omni/automations/987654321/
-quality_manager GET /api/pbx/extensions/status/
-quality_manager GET /api/pbx/staff-choices/
 
 # reason: Z-11c — the purchasing and supply dashboards are the purchasing / supply-group home screens.
 accountant GET /api/dashboard/purchasing/
@@ -296,18 +266,6 @@ salesperson GET /api/dashboard/purchasing/
 salesperson GET /api/dashboard/supply/
 supervisor GET /api/dashboard/purchasing/
 viewer GET /api/dashboard/purchasing/
-
-# reason: Z-11c — OCR corpus statistics are internals for admin / supervisor / purchasing / pharmacist.
-call_center GET /api/vision/corpus-accuracy/
-call_center GET /api/vision/corpus-stats/
-delivery GET /api/vision/corpus-accuracy/
-delivery GET /api/vision/corpus-stats/
-quality_manager GET /api/vision/corpus-accuracy/
-quality_manager GET /api/vision/corpus-stats/
-salesperson GET /api/vision/corpus-accuracy/
-salesperson GET /api/vision/corpus-stats/
-viewer GET /api/vision/corpus-accuracy/
-viewer GET /api/vision/corpus-stats/
 
 # reason: Z-11c — customer merges and loyalty point adjustments are sensitive customer / money data
 #   (merge reviewers, point adjusters).
@@ -367,19 +325,24 @@ quality_manager POST /api/insights/reports/backfill/
 # quality_manager past the middleware, the view keeps the engine run to admin / supervisor
 purchasing POST /api/recommendations/trigger/
 quality_manager POST /api/recommendations/trigger/
-# reason: Z-3 — reconciliation exports need finance export (pharmacist has view only);
-# the sweep counts any GET as view
-pharmacist GET /api/finance/reconciliation/partial/export/
-pharmacist GET /api/finance/reconciliation/returns-chains/export/
-pharmacist GET /api/finance/reconciliation/review/export/
-pharmacist GET /api/finance/reconciliation/unpaid/export/
+# reason: Z-3 — reconciliation exports need the export grant (reconciliation module since the role
+# review 2026-11-20); quality_manager and supervisor hold view only; the sweep counts any GET as view
+quality_manager GET /api/finance/reconciliation/partial/export/
+quality_manager GET /api/finance/reconciliation/returns-chains/export/
+quality_manager GET /api/finance/reconciliation/review/export/
+quality_manager GET /api/finance/reconciliation/unpaid/export/
+supervisor GET /api/finance/reconciliation/partial/export/
+supervisor GET /api/finance/reconciliation/returns-chains/export/
+supervisor GET /api/finance/reconciliation/review/export/
+supervisor GET /api/finance/reconciliation/unpaid/export/
 # reason: Z-5a — offers edit lets purchasing past the matrix; the SOFTECH channel A/B writes
 # (posdiscp / specialoffers) stay admin-only inside the view
 purchasing POST /api/offers/987654321/posdiscp-apply/
 purchasing POST /api/offers/987654321/promo-apply/
-# reason: Z-7b — forecasting is the analytics module; analytics export lets quality_manager (and
-# supervisor) past the middleware, the views keep every forecast write to the analyst roles
-# (admin / supervisor / purchasing) and the KPI rebuild to purchasing edit (Z-2)
+# reason: Z-7b — forecasting asks the forecast module since the role review (2026-11-20; it was
+# analytics); forecast export lets quality_manager (and supervisor) past the middleware, the views
+# keep every forecast write to the analyst roles (admin / supervisor / purchasing) and the KPI
+# rebuild to purchasing edit (Z-2)
 quality_manager POST /api/forecasting/accuracy/
 quality_manager POST /api/forecasting/accuracy/987654321/update-actual/
 quality_manager POST /api/forecasting/backtest/run/
@@ -454,13 +417,12 @@ purchasing PUT /api/procurement/classification-rules/987654321/
 supervisor PATCH /api/customers/segmentation-config/
 supervisor PATCH /api/offers/margin-config/
 
-# reason: Z-12 — omni channel accounts / automations and PBX extension edits are admin / supervisor (Z-8b).
+# reason: Z-12 — omni channel accounts / automations are admin / supervisor (Z-8b); PBX extension edits
+#   follow callcenter edit since the role review (decision 5).
 call_center PATCH /api/omni/accounts/987654321/
 call_center PATCH /api/omni/automations/987654321/
-call_center PATCH /api/pbx/agents/987654321/
 call_center PUT /api/omni/accounts/987654321/
 call_center PUT /api/omni/automations/987654321/
-call_center PUT /api/pbx/agents/987654321/
 
 # reason: Z-12 — product content / attributes / media / SEO edits are for content managers.
 pharmacist PATCH /api/products/x/attributes/
@@ -485,30 +447,13 @@ pharmacist PUT /api/transits/item-overrides/987654321/
 pharmacist PUT /api/transits/pick-rules/987654321/
 pharmacist PUT /api/transits/pick-zones/987654321/
 
-# reason: owner decision B-1 (2026-10-30) — supplier A/P reconciliation is company-level finance: all-branch roles only; a branch pharmacist keeps the finance grant for their own branch's screens.
-pharmacist GET /api/finance/reconciliation/candidates/
-pharmacist GET /api/finance/reconciliation/candidates/groups/
-pharmacist GET /api/finance/reconciliation/dashboard/
-pharmacist GET /api/finance/reconciliation/exceptions/
-pharmacist GET /api/finance/reconciliation/invoices/
-pharmacist GET /api/finance/reconciliation/invoices/987654321/lines/
-pharmacist GET /api/finance/reconciliation/partial/
-pharmacist GET /api/finance/reconciliation/parties/
-pharmacist GET /api/finance/reconciliation/parties/x/ledger/
-pharmacist GET /api/finance/reconciliation/parties/x/timeline/
-pharmacist GET /api/finance/reconciliation/payments/
-pharmacist GET /api/finance/reconciliation/runs/
-pharmacist GET /api/finance/reconciliation/supplier-options/
-pharmacist GET /api/finance/reconciliation/unpaid/
-pharmacist GET /api/finance/reconciliation/workbench/
-
 # reason: Batch 5 part 2, owner decision B-1 — the branch-contribution (every branch's revenue, COGS,
 #   expenses, contribution margin) and inventory-investment (every branch's capital) boards compare
 #   all branches, so they are for the all-branch roles; branch roles keep their own-branch analytics.
 pharmacist GET /api/analytics/branch-contribution/
 pharmacist GET /api/analytics/inventory-investment/
+salesperson GET /api/analytics/inventory-investment/
 viewer GET /api/analytics/branch-contribution/
-viewer GET /api/analytics/inventory-investment/
 # reason: owner decision B-1 (2026-10-30) — P-40 cash view, P-41 contract receivables and P-42 supplier terms are company-level
 #   finance (recon_views._company_only): all-branch roles only; finance exports need the finance export grant (Z-3).
 pharmacist GET /api/finance/receivables/export/
@@ -530,28 +475,6 @@ pharmacist GET /api/finance/cash-view/fixed-outflows/
 pharmacist GET /api/finance/cash-view/lines/x/
 pharmacist GET /api/finance/cash-view/opening-balance/
 quality_manager GET /api/finance/cash-view/export/
-
-# reason: owner answer Q-1 (2026-11-05): trusted networks and the zone-policy grid stay admin only. Security N1 — the trusted-network list decides who counts as "inside the company"; it is
-#   admin only (IsAdminRole) like the rest of the access settings, even for roles that can open settings.
-pharmacist GET /api/access/networks/
-pharmacist GET /api/access/networks/987654321/
-purchasing GET /api/access/networks/
-purchasing GET /api/access/networks/987654321/
-
-# reason: security N2 — the device registry (approve / block / retire a browser) is admin only
-#   (IsAdminRole, §7.2 owner decision) even for roles that can open settings.
-pharmacist GET /api/access/devices/
-pharmacist GET /api/access/devices/987654321/
-purchasing GET /api/access/devices/
-purchasing GET /api/access/devices/987654321/
-# reason: owner answer Q-1 (2026-11-05), security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
-#   registry), even for roles that can open settings.
-pharmacist GET /api/access/zone-policies/
-pharmacist GET /api/access/zone-policies/987654321/
-pharmacist GET /api/access/zone-policies/choices/
-purchasing GET /api/access/zone-policies/
-purchasing GET /api/access/zone-policies/987654321/
-purchasing GET /api/access/zone-policies/choices/
 
 # reason: owner 2026-11-01 — disposal status changes are mapped to the expiry screen (catalog view) so
 #   supervisor / quality manager reach them; the view's gate then admits only admin / quality manager /
@@ -690,12 +613,12 @@ viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/
 viewer GET /api/purchasing/spike/summary/
 
-# reason: owner decision 2026-11-09 — call lists are created and closed by admin / supervisor / call_center
-#   only (followups/call_list_views.py, call_lists.CREATOR_ROLES); pharmacist and salesperson hold
-#   followups create for their own follow-ups, not for call lists.
-pharmacist POST /api/followups/call-lists/
+# reason: role review final fix I3 (2026-11-20) — creating a call list follows followups create
+#   (owner decision 6), but closing one cancels every open task of it: only its creator, an
+#   all-branch user, or a user whose branches cover every branch of the list
+#   (followups/call_list_views.py _can_close). A branch-bound pharmacist / salesperson closing
+#   someone else's company-wide list is refused.
 pharmacist POST /api/followups/call-lists/987654321/close/
-salesperson POST /api/followups/call-lists/
 salesperson POST /api/followups/call-lists/987654321/close/
 # reason: Z-8b — enabling an agent's browser phone stores its SIP password: admin / supervisor only
 #   (IsAdminOrSupervisor, audited without the secret), like the omni channel-account edits.
@@ -764,10 +687,7 @@ supervisor POST /api/rpa/screens/x/
 # reason: UAT W2 (owner 2026-11-19, per-screen split) — the salesperson board (each rep's sales against
 #   target) is for the analysts who set the targets (forecasting ANALYST_ROLES: admin, supervisor,
 #   purchasing), reads too, as its menu entry; analytics view alone is not enough.
-call_center GET /api/forecasting/salesperson-board/
-pharmacist GET /api/forecasting/salesperson-board/
 quality_manager GET /api/forecasting/salesperson-board/
-viewer GET /api/forecasting/salesperson-board/
 
 # reason: UAT W2 (owner 2026-11-19, per-screen split) — branch QA inspections only for roles the registry
 #   marks qa_inspections (admin, pharmacist, supervisor, quality manager); every role holds hr for its own

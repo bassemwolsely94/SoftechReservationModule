@@ -21,6 +21,8 @@ import useGridKeyboard from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import useHelpTab from '../help/useHelpTab'
+import { useModuleAction } from '../hooks/usePermission'
+import { legacyRolesFor } from '../components/navGroups'
 
 const TABS = [
   { key: 'channels', label: 'قنوات البيع' },
@@ -112,10 +114,10 @@ function CodeCell({ row }) {
   )
 }
 
-function GroupSelect({ row, groups, saver }) {
+function GroupSelect({ row, groups, saver, readOnly }) {
   const current = saver.value(row, 'group')
   return (
-    <select className="input py-1" value={current}
+    <select className="input py-1" value={current} disabled={readOnly}
             data-code-map-group={row.id} aria-label={`مجموعة الكود ${row.code}`}
             onChange={e => saver.save(row, { group: e.target.value })}>
       {groups.filter(g => g.value !== UNCLASSIFIED || current === UNCLASSIFIED)
@@ -124,9 +126,10 @@ function GroupSelect({ row, groups, saver }) {
   )
 }
 
-function Check({ row, field, saver, label }) {
+function Check({ row, field, saver, label, readOnly }) {
   return (
-    <input type="checkbox" className="accent-brand-600 cursor-pointer" aria-label={`${label} — ${row.code}`}
+    <input type="checkbox" className="accent-brand-600 cursor-pointer disabled:cursor-default" disabled={readOnly}
+           aria-label={`${label} — ${row.code}`}
            checked={!!saver.value(row, field)}
            onChange={e => saver.save(row, { [field]: e.target.checked })} />
   )
@@ -159,7 +162,7 @@ const sortValue = (r, k) => {
   return typeof v === 'boolean' ? Number(v) : v
 }
 
-function ChannelsTable({ query }) {
+function ChannelsTable({ query, readOnly }) {
   const saver = useRowSaver('channels')
   const rows = useMemo(() => query.data?.rows || [], [query.data])
   const groups = query.data?.choices?.groups || []
@@ -192,10 +195,10 @@ function ChannelsTable({ query }) {
               <tr {...rp} aria-busy={saver.saving(r.id) || undefined} className={`border-b border-line ${rp.className}`}>
                 <CodeCell row={r} />
                 <td className="p-2">{r.label || '—'}</td>
-                <td className="p-2"><GroupSelect row={r} groups={groups} saver={saver} /></td>
-                <td className="p-2 text-center"><Check row={r} field="is_contract_sale" saver={saver} label="بيع تعاقد" /></td>
+                <td className="p-2"><GroupSelect row={r} groups={groups} saver={saver} readOnly={readOnly} /></td>
+                <td className="p-2 text-center"><Check row={r} field="is_contract_sale" saver={saver} label="بيع تعاقد" readOnly={readOnly} /></td>
                 <td className="p-2">
-                  <select className="input py-1 w-20" value={rank ?? ''}
+                  <select className="input py-1 w-20" value={rank ?? ''} disabled={readOnly}
                           aria-label={`أولوية المتابعة — ${r.code}`}
                           onChange={e => saver.save(r, { followup_rank: e.target.value === '' ? null : Number(e.target.value) })}>
                     <option value="">—</option>
@@ -215,7 +218,7 @@ function ChannelsTable({ query }) {
   )
 }
 
-function ItemTypesTable({ query }) {
+function ItemTypesTable({ query, readOnly }) {
   const saver = useRowSaver('item-types')
   const rows = useMemo(() => query.data?.rows || [], [query.data])
   const groups = query.data?.choices?.groups || []
@@ -244,9 +247,9 @@ function ItemTypesTable({ query }) {
               <tr {...rp} aria-busy={saver.saving(r.id) || undefined} className={`border-b border-line ${rp.className}`}>
                 <CodeCell row={r} />
                 <td className="p-2">{r.label || '—'}</td>
-                <td className="p-2"><GroupSelect row={r} groups={groups} saver={saver} /></td>
-                <td className="p-2 text-center"><Check row={r} field="is_medicine" saver={saver} label="دواء" /></td>
-                <td className="p-2 text-center"><Check row={r} field="excluded_from_planning" saver={saver} label="مستبعد من التخطيط" /></td>
+                <td className="p-2"><GroupSelect row={r} groups={groups} saver={saver} readOnly={readOnly} /></td>
+                <td className="p-2 text-center"><Check row={r} field="is_medicine" saver={saver} label="دواء" readOnly={readOnly} /></td>
+                <td className="p-2 text-center"><Check row={r} field="excluded_from_planning" saver={saver} label="مستبعد من التخطيط" readOnly={readOnly} /></td>
                 <td className="p-2 text-end tabular-nums">{num(r.item_count)}</td>
                 <StatusCell row={r} saver={saver} />
               </tr>
@@ -262,6 +265,8 @@ function ItemTypesTable({ query }) {
 export default function CodeMapsPage() {
   const [tab, setTab] = useState('channels')
   useHelpTab(tab)
+  // PATCH needs code_maps edit (apps/config/code_maps.py); a view-only role reads the meanings
+  const readOnly = !useModuleAction('code_maps', 'edit', legacyRolesFor('/code-maps'))
   const channels = useQuery({ queryKey: QUERIES.channels.key, queryFn: () => QUERIES.channels.list().then(r => r.data) })
   const itemTypes = useQuery({ queryKey: QUERIES['item-types'].key, queryFn: () => QUERIES['item-types'].list().then(r => r.data) })
   const unclassified = {
@@ -275,6 +280,7 @@ export default function CodeMapsPage() {
         <h1 className="text-xl font-bold">🏷️ ترميزات SOFTECH</h1>
         <p className="text-sm text-muted">
           معنى كل كود قناة بيع وتصنيف صنف من SOFTECH. الأسماء تأتي من SOFTECH؛ أي تغيير هنا يُحفظ فورًا ويُسجّل.
+          {readOnly && ' للعرض فقط — التعديل لمن يملك صلاحية تعديل الترميزات.'}
         </p>
       </div>
 
@@ -290,7 +296,7 @@ export default function CodeMapsPage() {
         ))}
       </div>
 
-      {tab === 'channels' ? <ChannelsTable query={channels} /> : <ItemTypesTable query={itemTypes} />}
+      {tab === 'channels' ? <ChannelsTable query={channels} readOnly={readOnly} /> : <ItemTypesTable query={itemTypes} readOnly={readOnly} />}
 
       <div className="text-xs text-faint">{HINT}</div>
     </div>

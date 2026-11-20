@@ -261,10 +261,10 @@ SCREENS = [
         'summary': T(
             'أول شاشة تظهر بعد الدخول. تعطيك صورة سريعة عن يوم العمل: الحجوزات النشطة ومسارها، '
             'متابعات الأدوية المزمنة المطلوبة اليوم، تنبيهات التحويلات، المخزون المنخفض، المبيعات، '
-            'وحالة المزامنة مع SOFTECH. المحتوى يختلف حسب دورك وفرعك.',
+            'وحالة المزامنة مع SOFTECH. المحتوى يختلف حسب دورك وفرعك؛ والأدوار ذات صلاحية كل الفروع (المدير والمشرف ومدير الجودة والمحاسب والمشتريات) ترى تفصيل الفروع.',
             'The first screen after login. It gives a quick picture of the working day: active '
             'reservations and their pipeline, chronic follow-ups due today, transfer alerts, low stock, '
-            'sales, and the SOFTECH sync status. What you see depends on your role and branch.'),
+            'sales, and the SOFTECH sync status. What you see depends on your role and branch; roles with all-branch access (admin, supervisor, quality manager, accountant, purchasing) also see the per-branch breakdown.'),
         'audience': T('كل الأدوار — كل دور يرى الأقسام التي تخصه.',
                       'All roles — each role sees the sections that concern it.'),
         'steps': [
@@ -513,8 +513,8 @@ SCREENS = [
              'open_hint': T('الجرس ← «⚙️ الإعدادات».', 'Bell → "⚙️ Settings".')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('الجرس بيفتح على «يحتاج إجراء» و«الكل» بضغطة، واختيارك بيتحفظ؛ «قراءة الكل» بتعلّم التبويب اللي إنت فيه بس. «آخر تحديث HH:MM» جنب التاريخ، والأرقام بتتحدّث لوحدها بعد كل مزامنة؛ انتهاء الجلسة لا يضيّع الصفحة؛ وكل خانات البحث بنفس القواعد: * و% بدل أي حروف والكلمات بأي ترتيب؛ وشريط أحمر لما بيانات الصفحة ما تتحمّلش.',
-                         'The bell opens on "Needs action" with "All" one click away, and your choice is saved; "Read all" marks only the tab you are on. "Last updated HH:MM" next to the date, and the figures refresh by themselves after every sync; an ended session no longer loses the page; every search box follows the same rules: * and % wildcards, words in any order; and a red strip when page data fails to load.'),
+        'change_note': T('الجرس بيفتح على «يحتاج إجراء» و«الكل» بضغطة، واختيارك بيتحفظ؛ «قراءة الكل» بتعلّم التبويب اللي إنت فيه بس. «آخر تحديث HH:MM» جنب التاريخ، والأرقام بتتحدّث لوحدها بعد كل مزامنة؛ انتهاء الجلسة لا يضيّع الصفحة؛ وكل خانات البحث بنفس القواعد: * و% بدل أي حروف والكلمات بأي ترتيب؛ وشريط أحمر لما بيانات الصفحة ما تتحمّلش. · تفصيل الفروع على الرئيسية لكل دور له صلاحية كل الفروع',
+                         'The bell opens on "Needs action" with "All" one click away, and your choice is saved; "Read all" marks only the tab you are on. "Last updated HH:MM" next to the date, and the figures refresh by themselves after every sync; an ended session no longer loses the page; every search box follows the same rules: * and % wildcards, words in any order; and a red strip when page data fails to load. · The per-branch breakdown shows for any role with all-branch access'),
     },
     {
         'key': 'general.me',

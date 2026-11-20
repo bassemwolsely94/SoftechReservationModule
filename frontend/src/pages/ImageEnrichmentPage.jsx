@@ -9,7 +9,7 @@
  *  4. Revise All    — re-run search for existing images to replace bad ones
  *  5. Job History   — full audit log
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, createContext, useContext } from 'react'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { imageApi } from '../api/client'
 import useHelpTab from '../help/useHelpTab'
@@ -20,6 +20,15 @@ import MultiSelectFilter from '../components/MultiSelectFilter'
 import { wildcardMatch } from '../utils/wildcard'
 import { useToast } from '../components/ui'
 import { useConfirm } from '../components/InlineConfirm'
+import { useModuleAction } from '../hooks/usePermission'
+import { legacyRolesFor } from '../components/navGroups'
+
+// Writes (jobs, review, uploads, primary) need catalog_tools edit / approve, deletes edit / delete
+// (apps/images/views.py CATALOG_EDIT). A view-only role (call center, supervisor) sees the images
+// and the history without the write controls (final review I4). Old route roles = unseeded fallback.
+const LEGACY_ROLES = legacyRolesFor('/image-enrichment')
+const ImageWrites = createContext({ canEdit: true, canDelete: true })
+const useImageWrites = () => useContext(ImageWrites)
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card  = { background: '#fff', borderRadius: 10, padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,.08)', marginBottom: 16 }
@@ -129,6 +138,7 @@ function FilterPanel({ filters, onChange, meta }) {
 
 // ── CandidateCard ─────────────────────────────────────────────────────────────
 function CandidateCard({ c, onApprove, onReject, loading }) {
+  const { canEdit } = useImageWrites()
   const imgUrl = c.image_url || c.source_url
   const ts     = c.total_score
   const wm     = c.watermark_score || c.score_breakdown?.watermark_score || 0
@@ -185,8 +195,8 @@ function CandidateCard({ c, onApprove, onReject, loading }) {
 
         {/* Actions */}
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button data-tour="catalog-images-approve" style={btn('#059669')} onClick={()=>onApprove(c)} disabled={loading}>✓ قبول</button>
-          <button data-tour="catalog-images-reject" style={btn('#dc2626',true)} onClick={()=>onReject(c)} disabled={loading}>✗ رفض</button>
+          {canEdit && <button data-tour="catalog-images-approve" style={btn('#059669')} onClick={()=>onApprove(c)} disabled={loading}>✓ قبول</button>}
+          {canEdit && <button data-tour="catalog-images-reject" style={btn('#dc2626',true)} onClick={()=>onReject(c)} disabled={loading}>✗ رفض</button>}
           {c.source_page_url && (
             <a href={c.source_page_url} target="_blank" rel="noreferrer"
                style={{...btn('#6b7280',true,true),textDecoration:'none'}}>
@@ -574,6 +584,7 @@ function HistoryTab() {
 
 // ── Gallery: Right panel — item image manager ─────────────────────────────────
 function ItemImageManager({ item, onClose }) {
+  const { canEdit, canDelete } = useImageWrites()
   const toast = useToast()
   const { confirm: confirmInline, ui: confirmUi } = useConfirm()
   const qc            = useQueryClient()
@@ -695,8 +706,8 @@ function ItemImageManager({ item, onClose }) {
                    background:'#fff', flexShrink:0}}>
         {panelTab('approved',   '🖼️ الصور المعتمدة', images.length)}
         {panelTab('candidates', '🔍 المرشحون', pendingCount)}
-        {panelTab('upload',     '⬆️ رفع صورة', 0)}
-        {panelTab('search',     '🚀 بحث جديد', 0)}
+        {canEdit && panelTab('upload',     '⬆️ رفع صورة', 0)}
+        {canEdit && panelTab('search',     '🚀 بحث جديد', 0)}
       </div>
 
       {/* Panel content */}
@@ -740,10 +751,10 @@ function ItemImageManager({ item, onClose }) {
                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                       فتح الصورة ↗
                     </a>
-                    <button data-tour="catalog-images-gallery-delete-primary" style={btn('#dc2626', true, true)} disabled={busy}
+                    {canDelete && <button data-tour="catalog-images-gallery-delete-primary" style={btn('#dc2626', true, true)} disabled={busy}
                             onClick={() => handleDelete(primary.id, true)}>
                       🗑 حذف
-                    </button>
+                    </button>}
                   </div>
                 </div>
               </div>
@@ -773,14 +784,14 @@ function ItemImageManager({ item, onClose }) {
                       <div style={{padding:'6px 8px'}}>
                         <div style={{fontSize:10, color:'#94a3b8', marginBottom:5}}>{m.source}</div>
                         <div style={{display:'flex', gap:4, flexWrap:'wrap'}}>
-                          <button data-tour="catalog-images-gallery-set-primary" style={btn('#059669', false, true)} disabled={busy}
+                          {canEdit && <button data-tour="catalog-images-gallery-set-primary" style={btn('#059669', false, true)} disabled={busy}
                                   onClick={() => handleSetPrimary(m.id)}>
                             ⭐ افتراضية
-                          </button>
-                          <button data-tour="catalog-images-gallery-delete" style={btn('#dc2626', true, true)} disabled={busy}
+                          </button>}
+                          {canDelete && <button data-tour="catalog-images-gallery-delete" style={btn('#dc2626', true, true)} disabled={busy}
                                   onClick={() => handleDelete(m.id, false)}>
                             🗑
-                          </button>
+                          </button>}
                         </div>
                       </div>
                     </div>
@@ -851,7 +862,7 @@ function ItemImageManager({ item, onClose }) {
                         {c.source_url?.slice(0,70)}…
                       </a>
                     </div>
-                    {canAct && (
+                    {canAct && canEdit && (
                       <div style={{display:'flex', gap:6}}>
                         <button data-tour="catalog-images-gallery-cand-approve" style={btn('#059669', false, true)} disabled={busy}
                                 onClick={() => handleApprove(c)}>
@@ -1274,8 +1285,8 @@ function InsightsTab() {
 const TABS = [
   {id:'dashboard', label:'📊 لوحة التحكم'},
   {id:'review',    label:'👁️ قائمة المراجعة', badge:'pending_review'},
-  {id:'batch',     label:'🚀 إطلاق دفعة'},
-  {id:'revise',    label:'🔄 مراجعة شاملة'},
+  {id:'batch',     label:'🚀 إطلاق دفعة', write:true},
+  {id:'revise',    label:'🔄 مراجعة شاملة', write:true},
   {id:'history',   label:'📋 السجل'},
   {id:'gallery',   label:'🖼️ معرض المنتج'},
   {id:'insights',  label:'🧠 نتائج التعلم'},
@@ -1289,6 +1300,9 @@ export default function ImageEnrichmentPage() {
   const {data:meta} = useQuery({queryKey:['img-filter-meta'],queryFn:()=>imageApi.filterMeta?.().then(r=>r.data).catch(()=>({})), staleTime:300000})
 
   const pending = rpt?.pending_review || 0
+  const canEdit   = useModuleAction('catalog_tools', ['edit', 'approve'], LEGACY_ROLES)
+  const canDelete = useModuleAction('catalog_tools', ['edit', 'delete'], LEGACY_ROLES)
+  const tabs = TABS.filter(t => !t.write || canEdit)
 
   const openGallery = (itemId) => {
     setGalleryItem(String(itemId || ''))
@@ -1306,7 +1320,7 @@ export default function ImageEnrichmentPage() {
 
       {/* Tabs */}
       <div data-tour="catalog-images-tabs" style={{display:'flex',gap:2,marginBottom:18,borderBottom:'2px solid #e2e8f0',flexWrap:'wrap'}}>
-        {TABS.map(t=>(
+        {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
                   style={{padding:'9px 16px',border:'none',background:'none',cursor:'pointer',
                           fontSize:13,fontWeight:600,position:'relative',
@@ -1323,13 +1337,15 @@ export default function ImageEnrichmentPage() {
         ))}
       </div>
 
+      <ImageWrites.Provider value={{ canEdit, canDelete }}>
       {tab==='dashboard' && <DashboardTab/>}
       {tab==='review'    && <ReviewQueueTab onGallery={openGallery}/>}
-      {tab==='batch'     && <BatchLaunchTab meta={meta}/>}
-      {tab==='revise'    && <ReviseTab meta={meta}/>}
+      {tab==='batch'     && canEdit && <BatchLaunchTab meta={meta}/>}
+      {tab==='revise'    && canEdit && <ReviseTab meta={meta}/>}
       {tab==='history'   && <HistoryTab/>}
       {tab==='gallery'   && <GalleryTab initialItemId={galleryItem}/>}
       {tab==='insights'  && <InsightsTab/>}
+      </ImageWrites.Provider>
     </div>
   )
 }

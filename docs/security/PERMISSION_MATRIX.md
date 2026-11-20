@@ -43,7 +43,7 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `dashboard` | all | V | V | V | V | V | V | V | V | V | own — reservation + sales KPIs (?branch only narrows) |
 | `audit` | all | — | — | — | — | — | — | VX | VX | — | all — HQ module |
 | `sync` | all | — | — | — | — | — | — | — | — | — | all — HQ module |
-| `settings` | all | — | V | — | V | — | — | — | — | — | all — HQ module |
+| `settings` | all | — | V | — | — | — | — | — | — | — | all — HQ module |
 | `users` | all | — | — | — | — | — | — | V | — | — | all — HQ module |
 | `admin` | all | — | — | — | — | — | — | — | — | — | all — HQ module |
 | `help` | all | — | — | — | — | — | — | VE | VE | — | n/a — no branch data |
@@ -61,6 +61,16 @@ All-branch roles: admin, call_center, purchasing, supervisor, quality_manager, a
 | `crews` | all | — | — | — | — | — | — | — | — | — | all — company-level by design (spec 2026-11-13 §10): crews group people across branches; admin only by default |
 | `rpa` | all | — | — | — | VC | — | — | VCEA | VCA | — | branch — jobs scoped by RpaJob.branch via core.branch_scope; recipes/devices company-level (admin); portal jobs (/rpa/portals) are company-level — ordered for HQ, seen by rpa.view holders |
 | `alerts` | all | — | — | — | — | — | — | VCE | — | — | all — company-level: phone-alert policies and announcements (audience picks roles/branches); admin + supervisor by default |
+| `forecast` | all | — | — | — | VEDX | — | — | VEDX | VX | — | own — same as analytics (parent); endpoints move to this module in role-review task 2 |
+| `recommendations` | all | V | V | — | VEDX | — | — | VEDX | VX | — | own — same as analytics (parent) |
+| `catalog_tools` | all | V | — | — | VEAX | — | — | V | — | — | all — same as catalog (parent): catalogue data |
+| `stock` | all | V | VEX | V | VEAX | — | — | V | V | — | all — same as catalog (parent): stock readable network-wide (decision 3); batches / expiry own |
+| `loyalty` | all | VE | VE | V | — | — | — | VEX | VX | — | own — same as customers (parent): browse / edit own branch (B-2) |
+| `dispatch` | all | VCS | VCEAF | VC | — | — | — | VCEAXS | VX | — | own — same as delivery (parent) |
+| `rider` | all | VCS | — | — | — | VE | — | VCEAXS | — | — | own — rider acts only on orders assigned to them (as delivery) |
+| `reconciliation` | all | — | — | — | VCEAXF | — | — | V | V | VX | own — same as finance (parent): consolidated = all-branch roles (B-1) |
+| `access_control` | all | — | — | — | — | — | — | — | — | — | all — company-level: network zones and device gating (admin only) |
+| `code_maps` | all | — | — | — | V | — | — | V | — | — | all — company-level reference tables (admin, purchasing, supervisor) |
 
 ## Record-state and separation-of-duty rules enforced on the server
 

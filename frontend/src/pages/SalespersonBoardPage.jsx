@@ -113,8 +113,9 @@ export default function SalespersonBoardPage() {
   const [pullSid, setPullSid] = useState('')
   const [msg, setMsg]         = useState('')
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['salesperson-board', year, month],
+    retry: (n, e) => e?.response?.status !== 403 && n < 2,
     queryFn: () => kpiApi.salespersonBoard({ year, month }).then(r => r.data),
   })
 
@@ -213,6 +214,9 @@ export default function SalespersonBoardPage() {
 
       {isLoading ? (
         <div className="text-center py-16 text-gray-400">جارٍ التحميل…</div>
+      ) : isError && error?.response?.status === 403 ? (
+        // the API keeps an analyst-role rule (admin, supervisor, purchasing): a calm refusal, not an error box
+        <div className="text-center py-16 text-gray-500">بيانات لوحة البائعين متاحة للمحللين فقط</div>
       ) : isError ? (
         <div className="text-center py-16 text-red-400">تعذّر تحميل اللوحة</div>
       ) : !data?.has_data ? (

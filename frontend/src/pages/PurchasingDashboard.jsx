@@ -1487,6 +1487,7 @@ const VIEW_TABS = [
 export default function PurchasingDashboard() {
   const { user }   = useAuthStore()
   const qc         = useQueryClient()
+  // role review decision 2: full re-sync, catch-up, items sync and settings are admin actions (server-enforced)
   const isAdmin    = user?.role === 'admin'
   // quick engine run («▶ تشغيل») also for the Purchasing role + SOFTECH supply groups;
   // full re-sync / catch-up / items sync / ⚙ settings stay admin only (server-enforced, Z-2)
