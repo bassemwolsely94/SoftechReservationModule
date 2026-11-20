@@ -83,3 +83,37 @@ def record_snapshot(lines, *, staff, run, params, source='download', exported_at
         PivotSheetSnapshot.objects.filter(pk=s.pk).update(exported_at=exported_at)
         s.exported_at = exported_at
     return s
+
+
+# ── C16: warn on the order sheet itself, before the buy (same rule as the P-31 receipt check) ──────────
+BUY_COVER_LABEL = 'تغطية الشبكة (شراء رغم تغطية)'
+
+
+def buy_cover_limit():
+    """The P-31 threshold in months (SystemSetting receipt_check_cover_months, default 6) — one rule for
+    the order sheet and the receipt check."""
+    from apps.procurement.receipt_check import cover_months
+    return cover_months()
+
+
+def buy_cover_flag(stock, rate, limit=None):
+    """Network months of cover and the «buying despite cover» warning for one item.
+
+    Returns {'months': Decimal|None, 'warn': bool, 'label': str}. months = stock ÷ monthly rate
+    (cover_tiers.months_of_cover, 2 decimals — the same rounding the P-31 sheet keeps). warn when months
+    ≥ limit, or stock on hand with no sales anywhere (P-31 NO_SALES). Advisory only — never changes a gap."""
+    from decimal import Decimal
+    from .cover_tiers import months_of_cover
+    limit = buy_cover_limit() if limit is None else float(limit)
+    months = months_of_cover(stock, rate)
+    try:
+        has_stock = Decimal(str(stock or 0)) > 0
+    except Exception:
+        has_stock = False
+    if months is None:
+        if has_stock:
+            return {'months': None, 'warn': True, 'label': '⚠ رصيد بلا مبيعات — لا تشترِ'}
+        return {'months': None, 'warn': False, 'label': ''}
+    if float(months) >= limit:
+        return {'months': months, 'warn': True, 'label': f'⚠ {months:.1f} شهر — شراء رغم تغطية عالية'}
+    return {'months': months, 'warn': False, 'label': ''}

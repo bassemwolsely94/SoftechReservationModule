@@ -26,7 +26,7 @@ KNOWN_PUBLIC_VIEWS = {
     # inbound webhooks (signature / secret-token checked inside the views)
     'apps.whatsapp.views.WebhookView', 'apps.social.views.MetaGraphWebhookView',
     'apps.social.views.TelegramWebhookView', 'apps.social.views.TikTokWebhookView',
-    'apps.marketplace.views.WebhookView',   # doc 38: flag + active channel + adapter signature
+    'apps.marketplace.views.WebhookView',   # doc 38: flag + active channel + adapter signature, throttled 300/min per IP
     # public appearance theme (PUT checks admin inside), public demand capture,
     # tokenised delivery tracking, signed PBX recording links
     'apps.config.views.theme',
