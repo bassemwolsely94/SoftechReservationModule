@@ -54,6 +54,8 @@ BUDGETS: dict[str, Budget] = {
                                              'first measured in CI'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
+    'supply/bought-dearer': Budget('report', 14, 'C17, 2026-11-20: lines + suppliers + items + buyers + branches + '
+                                                 'refresh marker (+ auth); not measured locally, CI is the first run'),
     'stockcount/variance-report': Budget('report', 10, 'C14, 2026-11-20: session + snapshots + item costs + one '
                                                        'grouped sales query (+ auth); CI is the first run'),
     'qa/fridges/<id>/month': Budget('report', 10, 'C31, 2026-11-20: fridge + one month of readings (+ auth); '
