@@ -30,6 +30,8 @@ VIEW_EXPORTS = {
     'v:eta_recon_uncoded': ('apps.tax_invoicing.history_views:recon_uncoded_export', 'أصناف بلا كود ضريبي', 'GET',
                             False, ''),
     'v:supply_out_here': ('apps.supply.out_here_views:out_here_export', 'ناقص هنا · موجود هناك', 'GET', False, ''),
+    'v:bought_dearer': ('apps.supply.dearer_views:bought_dearer_export', 'اشترينا أغلى', 'GET', False,
+                        'apps.supply.dearer_views:export_gate'),         # C17: company-level, all-branch users
 }
 
 

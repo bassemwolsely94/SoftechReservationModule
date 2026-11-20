@@ -507,6 +507,12 @@ export const helpApi = {
 }
 
 export const personalApi = {
+  // C23 saved filters per user on worklist screens (own + shared with my role)
+  savedViews:      (screen)    => api.get('/personal/saved-views/', { params: { screen } }),
+  createSavedView: (data)      => api.post('/personal/saved-views/', data),
+  updateSavedView: (id, data)  => api.patch(`/personal/saved-views/${id}/`, data),
+  deleteSavedView: (id)        => api.delete(`/personal/saved-views/${id}/`),
+
   // Person search for claiming an identity — kind: 'supplier' | 'customer'
   searchPersons: (q, kind) => api.get('/personal/persons/search/', { params: { q, ...(kind ? { kind } : {}) } }),
 
@@ -726,6 +732,11 @@ export const qaApi = {
   create:    (data)     => api.post('/qa/inspections/', data),
   update:    (id, data) => api.patch(`/qa/inspections/${id}/`, data),
   submit:    (id, data) => api.post(`/qa/inspections/${id}/submit/`, data),
+  // C31 fridge log
+  fridges:   (params)   => api.get('/qa/fridges/', { params }),
+  createFridge: (data)  => api.post('/qa/fridges/', data),
+  fridgeMonth: (id, month) => api.get(`/qa/fridges/${id}/month/`, { params: { month } }),
+  recordFridgeReading: (data) => api.post('/qa/fridge-readings/', data),
 }
 
 // ── Transfers ─────────────────────────────────────────────────────────────────
@@ -994,6 +1005,7 @@ export const supplyApi = {
   purchasePrices:      (params = {}) => api.get('/supply/purchase-prices/', { params }),
   purchasePricesExcel: (params = {}) => api.get('/supply/purchase-prices/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   purchasePriceItem:   (code)        => api.get(`/supply/purchase-prices/item/${code}/`),
+  boughtDearer:        (params = {}) => api.get('/supply/bought-dearer/', { params }),
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
   // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
   receipts:            (params)      => api.get('/supply/receipts/', { params }),

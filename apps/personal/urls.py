@@ -1,7 +1,7 @@
 """apps/personal/urls.py — mounted at /api/personal/"""
 from django.urls import path
 
-from . import views
+from . import saved_views_api, views
 
 urlpatterns = [
     # person search (for claiming)
@@ -25,4 +25,8 @@ urlpatterns = [
     path('widgets/', views.widgets, name='personal-widgets'),
     path('widgets/<int:pk>/', views.widget_detail, name='personal-widget-detail'),
     path('widgets/<int:pk>/data/', views.widget_data, name='personal-widget-data'),
+
+    # C23 saved filters per user on worklist screens
+    path('saved-views/', saved_views_api.saved_views, name='personal-saved-views'),
+    path('saved-views/<int:pk>/', saved_views_api.saved_view_detail, name='personal-saved-view-detail'),
 ]
