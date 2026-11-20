@@ -174,10 +174,24 @@ class PurchasingListBudgets(TestCase):
         assert_budget(self, 'purchasing/metrics', self.client_, '/api/purchasing/metrics/',
                       grow=self._metrics, min_rows=30, rows_of=_count_list)
 
+    def _aggregated(self, n=30):
+        from apps.purchasing.models import ItemDemandAggregated
+        for _ in range(n):
+            self.n += 1
+            it = make_item(f'دواء {self.n}', f'M{self.n:05d}')
+            ItemDemandAggregated.objects.create(run=self.run, item=it, calc_date=self.TODAY, total_monthly_avg=1,
+                                                total_current_stock=self.n % 9)
+
+    def test_aggregated(self):
+        self._aggregated(2)
+        assert_budget(self, 'purchasing/aggregated', self.client_, '/api/purchasing/aggregated/',
+                      grow=self._aggregated, min_rows=30, rows_of=_count_list)
+
     def test_filter_options(self):
         self._metrics(2)
+        # the grown items carry 5 effect codes (E0–E4): they must reach the effects list
         assert_budget(self, 'purchasing/filter-options', self.client_, '/api/purchasing/filter-options/',
-                      grow=self._metrics, min_rows=0)
+                      grow=self._metrics, min_rows=5, rows_of=lambda r: len(r.data.get('effects') or []))
 
 
 class DeliveryListBudgets(TestCase):
