@@ -7,6 +7,7 @@ from .views import (AvailabilityBatchViewSet, OrderListViewSet, SupplyCaseViewSe
                     supplier_network)
 
 from .receipt_views import receipt_check_decide, receipt_checks   # P-31
+from .missing_bonus_views import missing_bonus, missing_bonus_export   # C18
 from .out_here_views import out_here, out_here_export              # C06
 from .dearer_views import bought_dearer, bought_dearer_export      # C17
 
@@ -18,6 +19,8 @@ router.register(r'decisions', SupplyDecisionViewSet, basename='supply-decision')
 
 urlpatterns = [
     path('receipts/', receipt_checks, name='supply-receipt-checks'),
+    path('missing-bonus/', missing_bonus, name='supply-missing-bonus'),
+    path('missing-bonus/export/', missing_bonus_export, name='supply-missing-bonus-export'),
     path('out-here/', out_here, name='supply-out-here'),
     path('out-here/export/', out_here_export, name='supply-out-here-export'),
     path('receipts/<int:pk>/decide/', receipt_check_decide, name='supply-receipt-check-decide'),
