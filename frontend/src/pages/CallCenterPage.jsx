@@ -71,9 +71,9 @@ const OUTCOME_OPTIONS = [
   { value: 'follow_up',     label: '🔔 يحتاج متابعة' },
 ]
 
-function ChipRow({ options, value, onChange, tour, allowClear = false }) {
+function ChipRow({ options, value, onChange, dataTour, allowClear = false }) {
   return (
-    <div className="flex flex-wrap gap-1.5" data-tour={tour} role="group">
+    <div className="flex flex-wrap gap-1.5" data-tour={dataTour} role="group">
       {options.map(o => {
         const on = value === o.value
         return (
@@ -2162,7 +2162,7 @@ export default function CallCenterPage() {
 
                       <div>
                         <label className="label text-xs">نتيجة المكالمة</label>
-                        <ChipRow tour="callcenter-operator-postsave-result" options={OUTCOME_OPTIONS}
+                        <ChipRow dataTour="callcenter-operator-postsave-result" options={OUTCOME_OPTIONS}
                           value={logForm.outcome} onChange={handleOutcomeAfterSave} />
                       </div>
 
@@ -2220,7 +2220,7 @@ export default function CallCenterPage() {
                     <div className="space-y-3">
                       <div>
                         <label className="label text-xs">سبب المكالمة</label>
-                        <ChipRow tour="callcenter-operator-purpose" options={PRIMARY_PURPOSES}
+                        <ChipRow dataTour="callcenter-operator-purpose" options={PRIMARY_PURPOSES}
                           value={logForm.purpose}
                           onChange={v => setLogForm(p => ({ ...p, purpose: v }))} />
                         <select aria-label="أسباب أخرى" className="input-field text-xs mt-1.5 py-1"
@@ -2234,7 +2234,7 @@ export default function CallCenterPage() {
                       </div>
                       <div>
                         <label className="label text-xs">النتيجة <span className="text-gray-400">(اختياري)</span></label>
-                        <ChipRow tour="callcenter-operator-result" options={OUTCOME_OPTIONS} allowClear
+                        <ChipRow dataTour="callcenter-operator-result" options={OUTCOME_OPTIONS} allowClear
                           value={logForm.outcome}
                           onChange={v => setLogForm(p => ({ ...p, outcome: v }))} />
                       </div>

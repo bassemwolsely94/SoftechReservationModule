@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='calllog',
             name='outcome',
-            field=models.CharField(blank=True, choices=[('', '—'), ('ordered', '🛒 تم الطلب'), ('reserved', '📋 حجز / تحويل'), ('informed', '✅ تمت الإجابة'), ('not_available', '❌ غير متوفر'), ('follow_up', '🔔 يحتاج متابعة')], db_index=True, default='', max_length=15, verbose_name='نتيجة المكالمة'),
+            field=models.CharField(blank=True, choices=[('', '—'), ('ordered', '🛒 تم الطلب'), ('reserved', '📋 حجز / تحويل'), ('informed', '✅ تمت الإجابة'), ('not_available', '❌ غير متوفر'), ('follow_up', '🔔 يحتاج متابعة')], db_default='', db_index=True, default='', max_length=15, verbose_name='نتيجة المكالمة'),
         ),
         migrations.AlterField(
             model_name='calllog',

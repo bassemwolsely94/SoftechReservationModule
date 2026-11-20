@@ -107,7 +107,7 @@ class CallLog(models.Model):
     outcome = models.CharField(
         max_length=15,
         choices=OUTCOME_CHOICES,
-        blank=True, default='',
+        blank=True, default='', db_default='',
         db_index=True,
         verbose_name='نتيجة المكالمة',
     )
