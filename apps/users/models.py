@@ -61,6 +61,17 @@ MODULE_CHOICES = [
     ('crews',        'الأطقم'),
     ('rpa',          'روبوت الإدخال'),
     ('alerts',       'التنبيهات والإعلانات'),
+    # ── Role review 2026-11-20: tool modules split from their parents ─────────
+    ('forecast',     'التنبؤ والسيناريوهات'),
+    ('recommendations', 'التوصيات'),
+    ('catalog_tools', 'أدوات الأصناف'),
+    ('stock',        'المخزون والتشغيلات'),
+    ('loyalty',      'الولاء والإحالة'),
+    ('dispatch',     'توزيع التوصيل'),
+    ('rider',        'شاشة المندوب'),
+    ('reconciliation', 'المطابقة المالية'),
+    ('access_control', 'الشبكات والأجهزة'),
+    ('code_maps',    'جداول الأكواد'),
 ]
 
 ACTION_CHOICES = [
