@@ -30,7 +30,7 @@ from .models import (
     SoftechSalesOrder, SoftechSalesOrderLine, SoftechSalesOrderPayment,
     PTCODE_CUSTOMER, CLAIM_CHANNELS,
 )
-from .platform_accounts import CREDIT_ONLY_MSG as PLATFORM_CREDIT_ONLY_MSG, is_platform_order
+from .platform_accounts import CREDIT_ONLY_MSG as PLATFORM_CREDIT_ONLY_MSG, is_platform_order, platform_comment
 
 logger = logging.getLogger('elrezeiky.pos_orders')
 
@@ -715,6 +715,9 @@ def build_payload(order: SoftechSalesOrder):
         'refdoctorcode': order.referral_doctor_code or None,
         'vf2': softech_token(order),   # short idempotency marker (vf2 is varchar(15))
     })
+    _comment = platform_comment(order)
+    if _comment:
+        header['comments'] = _comment   # platform order no. (doc 38) — same value _header_row writes
     # settlement type (طريقة السداد) is payment-mix driven — same rule as _header_row, so the DRY-RUN
     # PREVIEW shows the REAL fatstatus (co-pay 50/15, credit 10/15, cash 30/90) not the static sentinel.
     _pt = [str(p.pay_type) for p in order.payments.all()]
@@ -1142,6 +1145,9 @@ def _header_row(order, docnumber, seller, personnewbal=None, earns_points=True):
         'docvaluepaybc': f(order.doc_value_pay),
         'cashiercode': (order.cashier_usercode or seller) or None, 'mitemsys': 'AR', 'origdoc': 5,
         'refdoctorcode': order.referral_doctor_code or None, 'vf2': softech_token(order),
+        # platform orders only: «طلبات #123» so accounts match the sale to the platform statement (doc 38).
+        # Native POS leaves comments empty; every other sale still does.
+        **({'comments': _c} if (_c := platform_comment(order)) else {}),
     }
 
 

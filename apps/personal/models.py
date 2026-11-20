@@ -230,3 +230,38 @@ class DocumentRevision(models.Model):
     @property
     def is_revised(self):
         return self.status == self.STATUS_REVISED
+
+
+class SavedView(models.Model):
+    """C23 — a named set of filters on one worklist screen, owned by one staff member.
+
+    Only filters, never data or rights: opening a view just pre-fills the screen's filters, and the
+    screen's own endpoints still enforce module grants and branch scope. `shared_role` (optional)
+    lets the owner's colleagues with that role see and apply the view (read-only for them). Filter
+    keys are allow-listed per screen in apps/personal/saved_views.py; unknown keys are dropped.
+    """
+    staff = models.ForeignKey(
+        'users.StaffProfile', on_delete=models.CASCADE,
+        related_name='saved_views', verbose_name='الموظف',
+    )
+    screen = models.CharField(max_length=60, db_index=True, verbose_name='الشاشة')
+    name = models.CharField(max_length=80, verbose_name='اسم العرض')
+    filters = models.JSONField(default=dict, blank=True, verbose_name='الفلاتر')
+    is_default = models.BooleanField(default=False, verbose_name='افتراضي')
+    shared_role = models.CharField(max_length=30, blank=True, default='', db_index=True,
+                                   verbose_name='مشترك مع دور')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'عرض محفوظ'
+        verbose_name_plural = 'العروض المحفوظة'
+        ordering = ['screen', 'name', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['staff', 'screen', 'name'], name='personal_savedview_unique_name'),
+            models.UniqueConstraint(fields=['staff', 'screen'], condition=models.Q(is_default=True),
+                                    name='personal_savedview_one_default'),
+        ]
+
+    def __str__(self):
+        return f'{self.staff_id}:{self.screen}:{self.name}'

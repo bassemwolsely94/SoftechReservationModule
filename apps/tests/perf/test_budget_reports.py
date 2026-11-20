@@ -63,3 +63,38 @@ class TrackBudgets(TestCase):
         _, _, client = make_pharmacist('perf_track', branch=make_branch())
         assert_budget(self, 'audit/screen-view', client, '/api/audit/screen-view/', method='post',
                       data={'route': '/reservations/123', 'tab': 'grid'}, grow=lambda: None, min_rows=0)
+
+
+class FridgeLogBudgets(TestCase):
+    """C31: the fridge readings list and the month sheet read one fridge's rows in one query."""
+
+    def setUp(self):
+        from apps.qa.models import FridgeUnit
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_fridge_admin')
+        self.fridge = FridgeUnit.objects.create(branch=self.branch, name='ثلاجة الأداء')
+        self.day = timezone.localdate().replace(day=1)
+
+    def _readings(self, n=20):
+        from apps.qa.models import FridgeReading
+        have = FridgeReading.objects.filter(fridge=self.fridge).count()
+        for i in range(have, have + n):
+            FridgeReading.objects.create(fridge=self.fridge, day=self.day - datetime.timedelta(days=i // 2),
+                                         slot='am' if i % 2 == 0 else 'pm', temp_c=Decimal('5'), initials='x')
+
+    def test_fridge_readings_list(self):
+        self._readings(2)
+        assert_budget(self, 'qa/fridge-readings', self.client_, f'/api/qa/fridge-readings/?fridge={self.fridge.pk}',
+                      grow=self._readings, min_rows=20, rows_of=_count_list)
+
+    def test_fridge_month_sheet(self):
+        from apps.qa.models import FridgeReading
+        FridgeReading.objects.create(fridge=self.fridge, day=self.day, slot='am', temp_c=Decimal('5'), initials='x')
+
+        def grow():
+            for d in range(1, 15):
+                for s in ('am', 'pm'):
+                    FridgeReading.objects.get_or_create(fridge=self.fridge, day=self.day.replace(day=d), slot=s,
+                                                        defaults={'temp_c': Decimal('5'), 'initials': 'x'})
+        assert_budget(self, 'qa/fridges/<id>/month', self.client_,
+                      f'/api/qa/fridges/{self.fridge.pk}/month/?month={self.day:%Y-%m}', grow=grow, min_rows=0)

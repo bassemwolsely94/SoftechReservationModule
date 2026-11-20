@@ -1,14 +1,17 @@
 from django.utils import timezone
-from rest_framework import viewsets, generics, status
+from rest_framework import generics, mixins, status, viewsets
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import QAChecklistTemplate, QAInspection
+from . import fridge as fridge_svc
+from .models import FridgeReading, FridgeUnit, QAChecklistTemplate, QAInspection
 from .serializers import (
     QAChecklistTemplateSerializer,
     QAInspectionListSerializer, QAInspectionDetailSerializer,
     QAInspectionCreateSerializer,
+    FridgeReadingSerializer, FridgeUnitSerializer,
 )
 
 from core import branch_scope                                     # noqa: E402
@@ -113,3 +116,75 @@ class QAInspectionViewSet(viewsets.ModelViewSet):
         inspection.submitted_at = timezone.now()
         inspection.save(update_fields=['results', 'notes', 'score', 'status', 'submitted_at'])
         return Response(QAInspectionDetailSerializer(inspection).data)
+
+
+# ── C31: fridge temperature log (P-53) ─────────────────────────────────────────────────────────
+# Same gate as the inspections (QA: hr matrix, roles marked qa_inspections). A fridge's allowed range
+# is set when it is registered and cannot be changed through the API (an admin-site change only),
+# so a reading's in/out-of-range verdict cannot be rewritten afterwards. Readings are append-only.
+
+
+
+class FridgeUnitViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin,
+                        mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    """GET/POST /api/qa/fridges/, PATCH name / is_active. No delete (readings point at it)."""
+    permission_classes = [IsAuthenticated, QA, RouteModulePermission]
+    serializer_class = FridgeUnitSerializer
+
+    def get_queryset(self):
+        qs = branch_scope.scope(FridgeUnit.objects.select_related('branch'), self.request.user)
+        branch = self.request.query_params.get('branch')
+        if branch:
+            qs = qs.filter(branch_id=branch)
+        if self.request.query_params.get('active') == '1':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_create(self, serializer):
+        branch_scope.check_branch_value(self.request.user, serializer)
+        serializer.save(created_by=_profile(self.request))
+
+    def perform_update(self, serializer):
+        if {'min_c', 'max_c', 'branch'} & set(self.request.data):
+            raise ValidationError({'detail': 'نطاق الحرارة والفرع بيتحددوا عند التسجيل بس'})
+        serializer.save()
+
+    @action(detail=True, methods=['get'])
+    def month(self, request, pk=None):
+        """GET /api/qa/fridges/{id}/month/?month=YYYY-MM — the printable month sheet."""
+        f = self.get_object()
+        raw = request.query_params.get('month') or timezone.localdate().strftime('%Y-%m')
+        try:
+            year, mon = (int(x) for x in raw.split('-'))
+            if not 1 <= mon <= 12 or not 2020 <= year <= 2100:
+                raise ValueError
+        except ValueError:
+            return Response({'detail': 'الشهر لازم يكون YYYY-MM'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(fridge_svc.month_sheet(f, year, mon))
+
+
+class FridgeReadingViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+    """GET/POST /api/qa/fridge-readings/ — append-only: no edit, no delete."""
+    permission_classes = [IsAuthenticated, QA, RouteModulePermission]
+    serializer_class = FridgeReadingSerializer
+
+    def get_queryset(self):
+        qs = branch_scope.scope(FridgeReading.objects.select_related('fridge', 'recorded_by'),
+                                self.request.user, 'fridge__branch')
+        p = self.request.query_params
+        if p.get('fridge'):
+            qs = qs.filter(fridge_id=p['fridge'])
+        if p.get('day'):
+            qs = qs.filter(day=p['day'])
+        return qs.order_by('-day', '-slot')
+
+    def perform_create(self, serializer):
+        f = serializer.validated_data['fridge']
+        if not branch_scope.allows(self.request.user, f.branch_id):
+            raise PermissionDenied('لا يمكنك التسجيل على فرع خارج فروعك.')
+        reading = FridgeReading(**serializer.validated_data, recorded_by=_profile(self.request))
+        reading.out_of_range = reading.compute_out_of_range()
+        reading.save()
+        serializer.instance = reading
+        if reading.out_of_range:
+            fridge_svc.notify_out_of_range(reading)
