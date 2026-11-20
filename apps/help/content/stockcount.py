@@ -386,8 +386,8 @@ SCREENS = [
         'title': T('جرد المخزون', 'Stock count'),
         'summary': T('إنشاء جلسات الجرد ومتابعتها خطوة بخطوة عبر أربعة تبويبات: الجلسات ← اللقطة ← العد ← الفروق.',
                      'Create count sessions and run them step by step through four tabs: sessions → snapshot → count → variance.'),
-        'audience': T('الصيادلة والمشرفون يفتحون الجرد ويعدّون؛ الجودة والمشتريات يتابعون ويصدّرون.',
-                      'Pharmacists and supervisors open and count; quality and purchasing follow and export.'),
+        'audience': T('الصيادلة والمشرفون يفتحون الجرد ويعدّون؛ الجودة والمشتريات يتابعون ويصدّرون — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Pharmacists and supervisors open and count; quality and purchasing follow and export — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'sessions', 'title': T('📋 الجلسات', '📋 Sessions'),
              'body': T('كل جلسات الجرد بحالتها وعدد الأصناف والزيادة والنقص والمطابق. «جلسة جديدة»: اسم، كود الفرع، النوع، الفترة، أكواد المستندات، وفلاتر المستخدم والتصنيف. '
@@ -534,8 +534,8 @@ SCREENS = [
              'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
              'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('من ليس له صلاحية هذه الشاشة يرجع للوحة الرئيسية بدل شاشة فاضية', 'Without access to this screen you go back to the dashboard instead of an empty screen'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»', 'The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'stockcount.mobile',

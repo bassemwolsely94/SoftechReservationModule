@@ -232,6 +232,7 @@ function DetailPanel({ transit, onClose, onAction }) {
     }
   }
 
+  // role review decision 2: force-close / correction of an in-transit transfer is a stock-moving action the server limits to the transfer managers
   const isAdmin      = user?.role === 'admin' || user?.role === 'purchasing'
   const isReceivingBranch = user?.branch_id === transit.receiving_branch
 
@@ -1178,6 +1179,7 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
 
   const inTransitCount  = items.filter(i => i.transit_status === 'in_transit').length
   const criticalCount   = items.filter(i => i.priority === 'critical').length
+  // role review decision 2: force-close / correction of an in-transit transfer is a stock-moving action the server limits to the transfer managers
   const isAdmin = user?.role === 'admin' || user?.role === 'purchasing'
 
   return (

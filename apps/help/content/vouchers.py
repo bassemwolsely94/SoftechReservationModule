@@ -207,7 +207,8 @@ SCREENS = [
         'routes': ['/vouchers'],
         'title': T('القسائم', 'Vouchers'),
         'summary': T('إدارة القسائم وصرفها ومستندات نقطة البيع والتقارير، وكوبونات الهدايا الورقية.', 'Manage vouchers, redeem them, POS documents and reports, and paper gift coupons.'),
-        'audience': T('الإدارة تنشئ؛ الصيادلة والكول سنتر يصرفون.', 'Management creates; pharmacists and the call center redeem.'),
+        'audience': T('الإدارة تنشئ؛ الصيادلة والكول سنتر يصرفون — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Management creates; pharmacists and the call center redeem — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'vouchers', 'title': T('🎫 القسائم', '🎫 Vouchers'),
              'body': T('قائمة القسائم بالكود والفئة والقيمة والاستخدام والصلاحية والحالة. «قسيمة جديدة»: العنوان، الفئة (عام/خاص/أول مرة/مخصص بالهاتف)، آلية الخصم، الحد الأدنى والأقصى، فترة الصلاحية، الحد الكلي ولكل عميل ويومياً، والأصناف والفروع المؤهلة. '
@@ -413,9 +414,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('تبويب كوبونات الهدايا لمن له صلاحية القسائم (عرض + تصدير أو تعديل). القسيمة اللي ليها استخدامات مسجلة ماتتحذفش — تتلغي (أرشفة) وسجل استخدامها يفضل محفوظ.',
-                         'The gift-coupons tab needs vouchers view plus export or edit. A voucher with recorded redemptions cannot be deleted — it is cancelled (archived) and its redemption record is kept.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»', 'The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'vouchers.mobile',

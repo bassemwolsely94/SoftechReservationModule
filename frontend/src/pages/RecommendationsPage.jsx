@@ -99,6 +99,7 @@ function LiftBadge({ value }) {
 
 function EngineStatusStrip({ onTriggerSuccess }) {
   const { user } = useAuthStore()
+  // role review decision 2: triggering the engine run is an operational action, narrower than the screen's view grant
   const isAdmin  = ['admin', 'supervisor'].includes(user?.role)
   const qc       = useQueryClient()
 

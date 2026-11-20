@@ -175,7 +175,7 @@ SCREENS = [
         'title': T('النقاط والولاء', 'Points & loyalty'),
         'summary': T('ابحث عن عميل لترى رصيد نقاطه في SOFTECH والنقاط الإضافية وسجل معاملاته، وسجل تعديلات SOFTECH، وعدّل نقاط الشراء أو اخصم نقاط الإحالة.',
                      'Search a customer to see their SOFTECH points, extra points and transaction log and SOFTECH adjustment log, and adjust purchase points or deduct referral points.'),
-        'audience': T('الكول سنتر والمشرفون (التعديل والاعتماد).', 'Call center and supervisors (adjusting and approving).'),
+        'audience': T('من يملك موديول «الولاء والإحالة» (شاشة «الصلاحيات») — افتراضياً الكول سنتر والمشرف والصيادلة والبائع ومدير الجودة؛ التعديل والاعتماد حسب صلاحيتك فيه.', 'Whoever holds the "Loyalty and referral" module (Permissions screen) — by default call center, supervisor, pharmacists, salespeople and quality manager; adjusting and approving follow your grant in it.'),
         'steps': [
             T('ابحث بالاسم أو الهاتف أو كود PIC.', 'Search by name, phone or PIC.'),
             T('«تعديل نقاط SOFTECH»: رقم موجب للإضافة أو سالب للخصم (مثال 100 أو -50) مع سبب إلزامي ← «تنفيذ في SOFTECH». يؤثر على رصيد كل الفروع.',
@@ -278,9 +278,8 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('خصم نقاط الإحالة بسبب مكتوب (حتى 500 نقطة، الأكثر للمدير)، واسم من عمل كل حركة في سجل المعاملات',
-                         'Deduct referral points with a written reason (up to 500, more for the admin), and who made each change in the transaction log'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «الولاء والإحالة» في «الصلاحيات»', 'The screen follows the "Loyalty and referral" module on Permissions'),
     },
     {
         'key': 'loyalty.branch',
@@ -288,7 +287,7 @@ SCREENS = [
         'title': T('استعلام نقاط الفرع', 'Branch points lookup'),
         'summary': T('للرد على سؤال العميل في الفرع «كام عندي نقاط؟»: بحث وعرض الرصيد الحي من SOFTECH فقط، بدون تعديل.',
                      'To answer the walk-in question "how many points do I have?": search and show the live SOFTECH balance only, no changes.'),
-        'audience': T('موظفو الفرع.', 'Branch staff.'),
+        'audience': T('من يملك موديول «الولاء والإحالة» (شاشة «الصلاحيات») — موظفو الفرع افتراضياً.', 'Whoever holds the "Loyalty and referral" module (Permissions screen) — branch staff by default.'),
         'steps': [
             T('ابحث بالاسم أو الهاتف أو PIC، ثم «تحديث من SOFTECH» لأحدث رصيد.', 'Search by name, phone or PIC, then "Refresh from SOFTECH" for the latest balance.'),
             T('لاستبدال النقاط وجّه العميل لخدمة العملاء.', 'To redeem points, send the customer to customer service.'),
@@ -342,8 +341,8 @@ SCREENS = [
              'text': T('يستخدم الرقم ده كـ «عميل غير مسجل» في الشاشة دي — مش بيضيف عميل جديد لقائمة العملاء.', 'Uses this number as an "unregistered customer" on this screen — it does not add a customer to the list.'),
              'warn': T('راجع الرقم كويس: التواصل والرسايل بتروح على الرقم ده.', 'Check the number carefully: calls and messages go to it.')},
         ],
-        'updated': '2026-11-01',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «الولاء والإحالة» في «الصلاحيات»', 'The screen follows the "Loyalty and referral" module on Permissions'),
     },
     {
         'key': 'loyalty.referral',
@@ -351,7 +350,7 @@ SCREENS = [
         'title': T('نظام الإحالات', 'Referrals'),
         'summary': T('قائمة الإحالات بحالاتها مع إجراءات الدعوة والتحقق، وكود الإحالة الخاص بك (QR ورابط) لتشاركه.',
                      'The referral list by status with invite and validate actions, and your own referral code (QR and link) to share.'),
-        'audience': T('الكول سنتر والمشرفون؛ كل موظف يرى كوده.', 'Call center and supervisors; every employee sees their own code.'),
+        'audience': T('من يملك موديول «الولاء والإحالة» (شاشة «الصلاحيات»)؛ كل موظف يرى كوده.', 'Whoever holds the "Loyalty and referral" module (Permissions screen); every employee sees their own code.'),
         'tabs': [
             {'key': 'leads', 'title': T('قائمة الإحالات', 'Referral list'),
              'body': T('الإحالات حسب الحالة. «دعوة» يرسل دعوة واتساب، «تحقق» يؤكد الإحالة ويحدد نقاط المكافأة للمُحيل، و«الأحداث» تعرض سجلها وإشارات الاحتيال.',
@@ -409,7 +408,7 @@ SCREENS = [
                  '• «دعوة» بيطلب تأكيد قبل ما يبعت دعوة الواتساب للاسم والرقم.\n• «تحقق» بتحدد فيه «نقاط المكافأة للمُحيل» (افتراضي 100) وبعدين «تأكيد التحقق».\n• «الأحداث» بيعرض كل اللي حصل في الإحالة.',
                  '• "Invite" asks for confirmation before sending the WhatsApp invite to the name and number.\n• "Validate" lets you set the "Reward points for the referrer" (default 100), then "Confirm validation".\n• "Events" shows everything that happened on the referral.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «الولاء والإحالة» في «الصلاحيات»؛ الشراء والتوصيل والمشاهد لم يعودوا يفتحونها', 'The screen follows the "Loyalty and referral" module on Permissions; purchasing, delivery and viewer no longer open it'),
     },
 ]

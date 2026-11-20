@@ -98,11 +98,13 @@ SCREENS = [
     {
         'key': 'counselling.review',
         'routes': ['/counselling'],
-        'updated': '2026-11-05',
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»', 'The screen opens for every role that holds its module on Permissions'),
         'title': T('إرشادات الاستخدام', 'Usage guidance'),
         'summary': T('قائمة الإرشادات بمراحلها، ومحرر الإرشاد على الجنب: الحقول، الأصناف المرتبطة، والاعتماد أو السحب.',
                      'The sheets by stage, with the sheet editor on the side: fields, linked items, and approve or withdraw.'),
-        'audience': T('الصيادلة (كتابة واعتماد)، ومدير الجودة (قراءة).', 'Pharmacists (write and approve); quality manager (read).'),
+        'audience': T('الصيادلة (كتابة واعتماد)، ومدير الجودة (قراءة) — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Pharmacists (write and approve); quality manager (read) — the screen opens for every role that holds its module on the Permissions screen.'),
         'steps': [
             T('ابدأ من «يحتاج محتوى»: أصناف اتباعت آخر 30 يوم ومالهاش إرشاد، الأكثر مبيعاً أولاً.',
               'Start from "Needs content": items sold in the last 30 days with no sheet, best sellers first.'),

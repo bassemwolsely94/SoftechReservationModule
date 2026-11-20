@@ -783,12 +783,12 @@ SCREENS = [
         'title': T('المكالمات الحية', 'Live calls'),
         'summary': T('لحظياً من السنترال: المكالمات النشطة (رنين، متصل، في الطابور) وسجل المكالمات الأخيرة. عند مكالمة واردة تظهر بطاقة العميل: الاسم، الشريحة، آخر المشتريات، القسائم والحالات المفتوحة، ورصيد النقاط.',
                      'Live from the PBX: active calls (ringing, connected, queued) and recent calls. On an incoming call the customer card shows: name, segment, last purchases, open vouchers and cases, and points balance.'),
-        'audience': T('الكول سنتر والمشرفون.', 'Call center and supervisors.'),
+        'audience': T('الكول سنتر والمشرفون؛ وتبويب «⚙️ إعدادات السنترال» لمن يملك صلاحية «تعديل» في موديول مركز الاتصال (شاشة «الصلاحيات»).', 'Call center and supervisors; the "⚙️ PBX settings" tab is for whoever holds "edit" in the Call center module (Permissions screen).'),
         'tabs': [
             {'key': 'live', 'title': T('📞 المكالمات', '📞 Calls'),
              'body': T('المكالمات النشطة وسجل المكالمات الأخيرة لحظياً.', 'Active calls and the recent call log, live.')},
             {'key': 'config', 'title': T('⚙️ إعدادات السنترال', '⚙️ PBX settings'),
-             'body': T('للمدير والمشرف: حالة الربط مع السنترال (متصل منذ، آخر نبضة، آخر خطأ، مرات إعادة الاتصال) وزر «🩺 فحص الاتصال» '
+             'body': T('لمن يملك صلاحية «تعديل» في موديول مركز الاتصال (شاشة «الصلاحيات»): حالة الربط مع السنترال (متصل منذ، آخر نبضة، آخر خطأ، مرات إعادة الاتصال) وزر «🩺 فحص الاتصال» '
                        'الذي يفحص الإعدادات ← الوصول للسيرفر ← AMI ← تسجيل الدخول ← زمن الاستجابة ← تعريف القنوات ← عملية استقبال الأحداث ← التسجيلات، '
                        'ويشرح سبب أي عطل وطريقة إصلاحه. أول خطوة حمراء هي سبب المشكلة.\n\n'
                        '«الأرقام الداخلية والهواتف»: كل رقم داخلي وحالة تسجيل هاتفه لحظياً (متصل / غير متصل / في مكالمة، عنوان IP، زمن الاستجابة)، '
@@ -797,14 +797,14 @@ SCREENS = [
                        'بجانب الرقم الداخلي غير المرتبط يظهر «في السنترال: …» — الاسم الذي يستخدمه السنترال نفسه له (مثل Agent -CC15)؛ '
                        'عند «ربط» يُكتب أول اسم في البحث فيظهر الموظف المرجّح أولاً، والاختيار يبقى لك. '
                        'وفي نفس النافذة «🎧 هاتف المتصفح»: فعّله واكتب كلمة سر SIP للرقم الداخلي (نفس الموجودة في Issabel) — تُحفظ مشفّرة ولا تظهر لأحد، '
-                       'وتُرسل فقط لمتصفح الموظف صاحب الرقم.\n\n'
+                       'وتُرسل فقط لمتصفح الموظف صاحب الرقم. تفعيل هاتف المتصفح وكلمة السر وربط رقم له بيانات دخول بموظف آخر للمدير والمشرف فقط.\n\n'
                        'سجل المكالمات للتقارير يُنسخ كل 10 دقائق من سجل السنترال نفسه (CDR) — قراءة فقط — فلا يضيع شيء حتى لو انقطع الربط اللحظي. '
                        'كل مكالمة عميل تُربط بكود PIC من رقم الهاتف؛ الرقم المشترك بين أكثر من عميل يُحسب مرة واحدة لآخر من اشترى قبل المكالمة، '
                        'وتُحفظ معه كل الأكواد المشتركة. لو السنترال سجّل مكالمات ولم يصل الربط اللحظي أي حدث خلال 30 دقيقة يصل تنبيه للمدير والمشرف.\n\n'
                        'التفريغ المحلي للمكالمات (Whisper): يعمل ليلاً في نافذته (افتراضياً 2–6 صباحاً) بأولوية منخفضة، وما لا يكتمل يُستكمل الليلة التالية. '
                        'يمكن الإيقاف المؤقت / الاستئناف / إيقاف التشغيل الحالي، وتغيير النافذة والنموذج وعدد أنوية المعالج. '
                        '«مقارنة وتصحيح» يعرض نص Whisper ونص Gemini جنباً إلى جنب؛ حفظ النص الصحيح يعلّم Whisper أسماء الأدوية والكلمات التي يخطئ فيها.',
-                       'For admin and supervisors: the PBX link status (connected since, last heartbeat, last error, reconnect count) and the "🩺 Test connection" button, '
+                       'For whoever holds "edit" in the Call center module (Permissions screen): the PBX link status (connected since, last heartbeat, last error, reconnect count) and the "🩺 Test connection" button, '
                        'which checks settings → server reachability → AMI → login → response time → channel driver → the event process → recordings, '
                        'and explains the cause and fix of any fault. The first red step is the cause.\n\n'
                        '"Extensions and phones": every extension and its phone\'s live registration (online / offline / on a call, IP address, response time), '
@@ -813,7 +813,7 @@ SCREENS = [
                        'An unmapped extension shows "In PBX: …" — the name the PBX itself uses for it (e.g. Agent -CC15); '
                        '"Map" pre-fills the search with its first name so the likely person is on top, and you still choose. '
                        'The same panel has "🎧 Browser phone": switch it on and enter the extension\'s SIP password (the one in Issabel) — stored encrypted, shown to nobody, '
-                       'and sent only to the browser of the staff member who owns the extension.\n\n'
+                       'and sent only to the browser of the staff member who owns the extension. Switching the browser phone on, its password, and re-mapping an extension that has credentials are for admin and supervisors only.\n\n'
                        'The call history used by reports is copied every 10 minutes from the PBX\'s own call record (CDR), read-only, so nothing is lost even when the live link drops. '
                        'Each customer call is linked to a PIC by phone number; a number shared by several customers counts once, for whoever bought most recently before the call, '
                        'and all the sharing codes are kept with it. If the PBX logs calls but the live link received no event for 30 minutes, admin and supervisors get an alert.\n\n'
@@ -833,7 +833,7 @@ SCREENS = [
         'tour': [
             {'target': 'callcenter-pbx-tabs', 'label': T('📞 المكالمات · ⚙️ إعدادات السنترال', '📞 Calls · ⚙️ PBX settings'),
              'text': T('المكالمات الحية، وإعدادات الربط مع السنترال.', 'Live calls, and the PBX link settings.'),
-             'open_hint': T('التبويبات بتظهر للمدير والمشرف بس.', 'The tabs show for admin and supervisor only.')},
+             'open_hint': T('التبويبات بتظهر لمن عنده صلاحية «تعديل» في موديول مركز الاتصال.', 'The tabs show for whoever holds "edit" in the Call center module.')},
             {'target': 'callcenter-pbx-status', 'label': T('السنترال · التحديث اللحظي', 'PBX · Live updates'),
              'text': T('«السنترال» يعني السيرفر بيستقبل أحداث المكالمات. «التحديث اللحظي» اتصال متصفحك بالسيرفر بس.',
                        '"PBX" means the server receives call events. "Live updates" is only your browser link to the server.'),
@@ -861,18 +861,18 @@ SCREENS = [
             {'target': 'callcenter-pbx-diagnose', 'label': T('🩺 فحص الاتصال', '🩺 Test connection'),
              'text': T('بيفحص الإعدادات والشبكة وAMI والدخول والأحداث والتسجيلات ويشرح سبب أي عطل. أول خطوة حمرا هي السبب.',
                        'Checks settings, network, AMI, login, events and recordings and explains any fault. The first red step is the cause.'),
-             'open_hint': T('تبويب «⚙️ إعدادات السنترال» (مدير أو مشرف).', 'The "⚙️ PBX settings" tab (admin or supervisor).')},
+             'open_hint': T('تبويب «⚙️ إعدادات السنترال» (صلاحية «تعديل» في مركز الاتصال).', 'The "⚙️ PBX settings" tab (Call center "edit" grant).')},
             {'target': 'callcenter-pbx-extensions', 'label': T('الأرقام الداخلية والهواتف · ربط', 'Extensions and phones · Map'),
              'text': T('حالة كل رقم داخلي وهاتفه لحظياً والموظف المربوط بيه. «ربط» بيربط الرقم الداخلي بموظف عندنا بس، مش في Issabel.',
                        'Each extension and its phone status live, and its staff member. "Map" links it to a staff member here only, not in Issabel.'),
              'warn': T('الربط الغلط بيبعت المكالمات والاتصال لموظف تاني. الموظف بيتنقل من رقمه الداخلي القديم.',
                        'A wrong mapping sends screen pops and dial-outs to the wrong person. The staff member leaves their old extension.'),
-             'open_hint': T('تبويب «⚙️ إعدادات السنترال» (مدير أو مشرف).', 'The "⚙️ PBX settings" tab (admin or supervisor).')},
+             'open_hint': T('تبويب «⚙️ إعدادات السنترال» (صلاحية «تعديل» في مركز الاتصال).', 'The "⚙️ PBX settings" tab (Call center "edit" grant).')},
             {'target': 'callcenter-pbx-whisper', 'label': T('تفريغ المكالمات المحلي (Whisper)', 'Local call transcription (Whisper)'),
              'text': T('التفريغ الليلي: ⏸ إيقاف مؤقت، ▶ استئناف، النافذة والنموذج والأنوية. «مقارنة وتصحيح» يعلّمه الكلمات الصح.',
                        'Nightly transcription: ⏸ pause, ▶ resume, window, model and cores. "Compare and correct" teaches it the right words.'),
              'warn': T('«⏹ إيقاف التشغيل الحالي» بيوقف التفريغ الشغّال، والباقي بيكمل الليلة الجاية.', '"⏹ Stop current run" halts the running job; the rest continues the next night.'),
-             'open_hint': T('تبويب «⚙️ إعدادات السنترال» (مدير أو مشرف).', 'The "⚙️ PBX settings" tab (admin or supervisor).')},
+             'open_hint': T('تبويب «⚙️ إعدادات السنترال» (صلاحية «تعديل» في مركز الاتصال).', 'The "⚙️ PBX settings" tab (Call center "edit" grant).')},
             {'target': 'callcenter-pbx-header', 'label': T('لوحة المكالمات الحية', 'Live calls board'), 'when': T('لما تحب تتابع المكالمات وهي شغالة.', 'When you want to watch calls as they happen.'),  # from the GitHub-side tour
              'text': T('لوحة المكالمات الحية: تتحدث لحظياً من السنترال.',
                        'The live calls board: updated in real time from the PBX.'),
@@ -886,7 +886,7 @@ SCREENS = [
                        'A call in progress and its duration. If the caller is a known customer, clicking opens the customer card.'),
              'open_hint': T('في «مكالمات نشطة» أثناء وجود مكالمة.', 'Under "Active calls" while a call is in progress.')},
         ],
-        'updated': '2026-11-10',
-        'change_note': T('جديد: تفعيل «🎧 هاتف المتصفح» لكل رقم داخلي من «ربط».', 'New: switch on the "🎧 Browser phone" per extension from "Map".'),
+        'updated': '2026-11-20',
+        'change_note': T('تبويب إعدادات السنترال يتبع صلاحية «تعديل» في مركز الاتصال؛ كلمة سر SIP وربط الأرقام المعتمدة للمدير والمشرف', 'The PBX settings tab follows the Call center "edit" grant; the SIP password and re-mapping credentialed extensions stay with admin and supervisor'),
     },
 ]

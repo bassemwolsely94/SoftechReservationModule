@@ -1133,8 +1133,8 @@ SCREENS = [
                  'The items you added, each with its code (or "uncoded") and a quantity box.\n• Change the quantity or remove the item before recording.'),
          },
             {'target': 'demand-mobile-new-details', 'label': T('الفرع · الأولوية · المصدر', 'Branch · Priority · Source'),
-             'text': T('الفرع هو فرعك (الكول سنتر والمدير يختاروه). حدد الأولوية والمصدر وأي ملاحظة.',
-                       'The branch is yours (call center and admin choose it). Set the priority, source and any note.'),
+             'text': T('الفرع هو فرعك (أي دور له صلاحية كل الفروع يختاره). حدد الأولوية والمصدر وأي ملاحظة.',
+                       'The branch is yours (any role with all-branch access chooses it). Set the priority, source and any note.'),
              'more': T(
                  '• الفرع بيتحط فرعك تلقائياً (بعض الأدوار تقدر تختار فرع تاني).\n• اختار الأولوية والمصدر بالضغط، وضيف ملاحظات لو فيه تفاصيل.',
                  '• The branch is set to yours automatically (some roles can pick another).\n• Tap to choose the priority and the source, and add notes if there are details.')},
@@ -1159,8 +1159,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('خانة البحث بتفضى بعد كل صنف وتفضل جاهزة للصنف اللي بعده', 'The search box clears after each item and stays ready for the next one'),
+        'updated': '2026-11-20',
+        'change_note': T('اختيار الفرع لأي دور له صلاحية كل الفروع', 'Any role with all-branch access picks the branch'),
     },
     {
         'key': 'demand.mobile_detail',
