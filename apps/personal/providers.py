@@ -250,7 +250,27 @@ def _my_sales(person_key, config, staff=None):
         'returns_value': float(ret['value'] or 0),
         'returns_count': ret['count'] or 0,
         'trend':         [{'date': k, **v} for k, v in trend.items()],
+        'identified':    _identified(usercode, days),
     }
+
+
+def _identified(usercode, days):
+    """C11 / P-37: share of the caller's sale invoices on a customer code, yesterday and over the
+    widget's period — the same count gamification judges (apps/gamification/pic.capture_by_user)."""
+    from apps.gamification.engine import day_bounds
+    from apps.gamification.pic import capture_by_user, capture_pct
+
+    def rate(first, last):
+        start, _ = day_bounds(first)
+        _, end = day_bounds(last)
+        total, on_pic = capture_by_user(start, end, [usercode]).get(usercode, (0, 0))
+        return {'invoices': total, 'on_pic': on_pic,
+                'pct': round(on_pic * 100 / total, 1) if total else None}
+
+    yesterday = timezone.localdate() - timedelta(days=1)
+    return {'yesterday': rate(yesterday, yesterday),
+            'period': rate(yesterday - timedelta(days=days - 1), yesterday),
+            'target_pct': capture_pct()}
 
 
 def _my_analytics(person_key, config, staff=None):

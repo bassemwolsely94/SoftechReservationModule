@@ -343,9 +343,36 @@ def _margin(profit, revenue):
     return round(profit / revenue * 100, 2) if revenue else 0.0
 
 
-# Module-level caches — invalidated by sync task after every run.
+# Module-level caches — invalidated by sync task after every run (it sets them back to None).
+# A map with labels is kept until then. An EMPTY map (no classification synced yet) is kept for
+# EMPTY_LABEL_TTL seconds only: long enough that one request never re-queries per row (every
+# _channel_label() call used to re-run the lookups — an N+1 on by_channel), short enough that labels
+# synced by another process show up soon without that process's invalidation reaching this one.
+EMPTY_LABEL_TTL = 300
 _channel_label_cache: dict | None = None
 _person_type_label_cache: dict | None = None
+_empty_until: dict = {}          # cache name → time.monotonic() deadline while that cache holds an empty map
+
+
+def _cached(name):
+    """The cached map for `name`, or None when absent or an empty map past its TTL."""
+    import time
+    m = globals()[name]
+    if m is None:
+        return None
+    until = _empty_until.get(name)
+    if until is not None and time.monotonic() >= until:
+        return None
+    return m
+
+
+def _store(name, m, empty):
+    import time
+    globals()[name] = m
+    if empty:
+        _empty_until[name] = time.monotonic() + EMPTY_LABEL_TTL
+    else:
+        _empty_until.pop(name, None)
 
 
 def _get_channel_label_map() -> dict:
@@ -356,9 +383,9 @@ def _get_channel_label_map() -> dict:
     Fallback: Customer.person_classif_label (populated during customer sync).
     Cached per process; invalidated by sync task.
     """
-    global _channel_label_cache
-    if _channel_label_cache is not None:
-        return _channel_label_cache
+    hit = _cached('_channel_label_cache')
+    if hit is not None:
+        return hit
 
     m: dict = {'': 'غير مصنّف'}
 
@@ -404,8 +431,7 @@ def _get_channel_label_map() -> dict:
             if code and label:
                 m[code] = label
 
-    if len(m) > 1:
-        _channel_label_cache = m
+    _store('_channel_label_cache', m, empty=len(m) <= 1)
     return m
 
 
@@ -415,9 +441,9 @@ def _get_person_type_label_map() -> dict:
 
     Primary source: SoftechPersonType cache; fallback: Customer.person_type_label.
     """
-    global _person_type_label_cache
-    if _person_type_label_cache is not None:
-        return _person_type_label_cache
+    hit = _cached('_person_type_label_cache')
+    if hit is not None:
+        return hit
 
     m: dict = {}
 
@@ -441,8 +467,7 @@ def _get_person_type_label_map() -> dict:
             if r['softech_ptcode'] and r['person_type_label']:
                 m[r['softech_ptcode']] = r['person_type_label']
 
-    if m:
-        _person_type_label_cache = m
+    _store('_person_type_label_cache', m, empty=not m)
     return m
 
 

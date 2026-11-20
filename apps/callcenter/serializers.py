@@ -277,6 +277,7 @@ class CallLogListSerializer(RecordPhoneMask, serializers.ModelSerializer):
     direction_label = serializers.CharField(source='get_direction_display', read_only=True)
     status_label    = serializers.CharField(source='get_status_display',    read_only=True)
     purpose_label   = serializers.CharField(source='get_purpose_display',   read_only=True)
+    outcome_label   = serializers.CharField(source='get_outcome_display',   read_only=True)
     duration_label  = serializers.CharField(read_only=True)
     whatsapp_url    = serializers.CharField(read_only=True)
     has_case        = serializers.SerializerMethodField()
@@ -296,6 +297,7 @@ class CallLogListSerializer(RecordPhoneMask, serializers.ModelSerializer):
             'direction', 'direction_label',
             'status', 'status_label',
             'purpose', 'purpose_label',
+            'outcome', 'outcome_label',
             'duration_seconds', 'duration_label',
             'summary', 'whatsapp_url',
             'handled_by', 'handled_by_name',
@@ -333,6 +335,7 @@ class CallLogDetailSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.M
     direction_label  = serializers.CharField(source='get_direction_display',   read_only=True)
     status_label     = serializers.CharField(source='get_status_display',      read_only=True)
     purpose_label    = serializers.CharField(source='get_purpose_display',     read_only=True)
+    outcome_label    = serializers.CharField(source='get_outcome_display',     read_only=True)
     duration_label   = serializers.CharField(read_only=True)
     whatsapp_url     = serializers.CharField(read_only=True)
     address_updates  = AddressUpdateSerializer(many=True, read_only=True)
@@ -350,6 +353,7 @@ class CallLogDetailSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.M
             'direction', 'direction_label',
             'status', 'status_label',
             'purpose', 'purpose_label',
+            'outcome', 'outcome_label',
             'duration_seconds', 'duration_label',
             'notes', 'summary', 'whatsapp_url',
             'case', 'case_number',
@@ -372,6 +376,12 @@ class CallLogDetailSerializer(RetentionNoteMixin, RecordPhoneMask, serializers.M
                             'ai_summary', 'ai_intent', 'ai_sentiment', 'ai_urgency',
                             'ai_next_action', 'ai_processed_at']
 
+    def validate_purpose(self, value):
+        # C12: an edit can tag a PBX log's reason but never put a call back to «لم يُحدَّد»
+        if value == 'pending':
+            raise serializers.ValidationError('اختر سبب المكالمة')
+        return value
+
     def get_ai_sentiment_label(self, obj):
         labels = {'positive': 'إيجابي 😊', 'neutral': 'محايد 😐', 'negative': 'سلبي 😟'}
         return labels.get(obj.ai_sentiment, '')
@@ -382,7 +392,7 @@ class CallLogCreateSerializer(serializers.ModelSerializer):
         model  = CallLog
         fields = [
             'phone_number', 'caller_name', 'customer',
-            'direction', 'status', 'purpose',
+            'direction', 'status', 'purpose', 'outcome',
             'duration_seconds', 'notes', 'summary',
             'case', 'reservation', 'followup_task',
             'payment_method', 'branch', 'callback_due',
@@ -393,6 +403,15 @@ class CallLogCreateSerializer(serializers.ModelSerializer):
         if not v or not v.strip():
             raise serializers.ValidationError('رقم الهاتف مطلوب')
         return v.strip()
+
+    def validate(self, data):
+        # C12 (P-49): an agent's save always names why the customer called — one tap on a chip.
+        # Checked on initial_data so a merge into the PBX's log (partial save) is held too.
+        purpose = str(self.initial_data.get('purpose') or '').strip()
+        if not purpose or purpose == 'pending':
+            raise serializers.ValidationError({'purpose': 'اختر سبب المكالمة'})
+        return data
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

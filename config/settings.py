@@ -669,6 +669,10 @@ POS_CANCEL_WRITE_ENABLED = config('POS_CANCEL_WRITE_ENABLED', default=False, cas
 MISSED_SALES_ENABLED = config('MISSED_SALES_ENABLED', default=False, cast=bool)
 MISSED_SALES_MIN_AGE_MINUTES = config('MISSED_SALES_MIN_AGE_MINUTES', default=60, cast=int)
 MISSED_SALES_EXPIRE_DAYS = config('MISSED_SALES_EXPIRE_DAYS', default=14, cast=int)
+# C28: call-centre call items as a second source (OFF until the owner agrees — they chose
+# "our POS only" for Project 3); a call must be this many days old before it can be suggested.
+MISSED_SALES_CALLCENTER_ENABLED = config('MISSED_SALES_CALLCENTER_ENABLED', default=False, cast=bool)
+MISSED_SALES_CALL_WAIT_DAYS = config('MISSED_SALES_CALL_WAIT_DAYS', default=2, cast=int)
 MISSED_CALL_CALLBACKS_ENABLED = config('MISSED_CALL_CALLBACKS_ENABLED', default=False, cast=bool)
 MISSED_CALL_OPEN_HOUR = config('MISSED_CALL_OPEN_HOUR', default=9, cast=int)
 MISSED_CALL_CLOSE_HOUR = config('MISSED_CALL_CLOSE_HOUR', default=23, cast=int)

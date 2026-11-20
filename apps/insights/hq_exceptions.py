@@ -262,13 +262,14 @@ def _setting(key, default):
         return default
 
 
-def digest_recipients():
-    """SystemSetting hq_exception_digest_recipients (StaffProfile ids), else the roles registry's HQ digest
-    roles. Company-level money, so only all-branch users ever receive it."""
+def digest_recipients(setting_key='hq_exception_digest_recipients'):
+    """SystemSetting `setting_key` (StaffProfile ids), else the roles registry's HQ digest roles.
+    Company-level money, so only all-branch users ever receive it. C30's phantom review digest
+    passes its own key (phantom_review_recipients)."""
     from apps.users.models import StaffProfile
     from apps.users.roles import HQ_DIGEST_ROLES
     from core.branch_scope import sees_everything
-    ids = _setting('hq_exception_digest_recipients', None)
+    ids = _setting(setting_key, None)
     if isinstance(ids, list) and ids:
         qs = StaffProfile.objects.filter(pk__in=ids, is_active=True)
     else:
