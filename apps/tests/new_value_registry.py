@@ -142,6 +142,11 @@ def rider_payouts_export():
     return _get('/api/delivery/payouts/periods/export/?month=2026-10')
 
 
+def out_here_export():
+    """C06 /supply «ناقص هنا · موجود هناك» workbook: its summary lists every live retail branch in view (HQ is a
+    source, never a destination); pending / closed / call center never show."""
+    return _get('/api/supply/out-here/export/')
+
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
@@ -160,4 +165,5 @@ EXPORTS = [
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
     # its branches come from the riders' periods (one ride planted, into '230'): presence only
     ('rider_payouts_export', rider_payouts_export, frozenset()),
+    ('out_here_export', out_here_export, ABSENT_ALL),
 ]

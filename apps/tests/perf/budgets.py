@@ -58,14 +58,19 @@ BUDGETS: dict[str, Budget] = {
                                                 '(+ auth); first measured in CI'),
     'qa/fridge-readings': Budget('list', 12, 'C31, 2026-11-20: page + count, fridge/recorder joined (+ auth); '
                                              'first measured in CI'),
+    'finance/gl/exceptions/mixed-patterns': Budget('list', 9, 'measured 7 on 2026-11-20'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
+    'supply/out-here': Budget('report', 16, 'C06 2026-11-20: not measured yet (CI first run); six fixed queries '
+                                            '(branches, run, candidates, stock, metrics, items) + auth + scope'),
     'supply/bought-dearer': Budget('report', 14, 'C17, 2026-11-20: lines + suppliers + items + buyers + branches + '
                                                  'refresh marker (+ auth); not measured locally, CI is the first run'),
     'stockcount/variance-report': Budget('report', 10, 'C14, 2026-11-20: session + snapshots + item costs + one '
                                                        'grouped sales query (+ auth); CI is the first run'),
     'qa/fridges/<id>/month': Budget('report', 10, 'C31, 2026-11-20: fridge + one month of readings (+ auth); '
                                                   'first measured in CI'),
+    'stock-audit/discount-policy': Budget('report', 20, 'C07, 2026-11-20: rule row + ledger window + invoices + '
+                                                       'items + branches + user names (+ auth); first measured in CI'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '
                                                '(one KpiResolver + one grouped query per metric and period)'),
     # ── export jobs (Stage 4): the start answers ≤ 1 s, the status is polled every 1.5 s ─────

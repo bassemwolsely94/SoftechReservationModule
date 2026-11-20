@@ -49,14 +49,18 @@ def build_context(date_from, date_to, report_from=None):
     from apps.forecasting.channels import CUSTOMER_PT
     channel_bucket = dict(ChannelBucketMap.objects.filter(active=True, person_type=CUSTOMER_PT)
                           .values_list('channel', 'bucket'))
-    channel_of_invoice = {}
-    for bc, dn, d, ch in (PurchaseHistory.objects
-                          .filter(doc_code='115', invoice_date__date__gte=date_from, invoice_date__date__lt=date_to)
-                          .values_list('branch__softech_branch_id', 'docnumber', 'invoice_date', 'sales_channel')):
+    channel_of_invoice, customer_disc = {}, {}
+    for bc, dn, d, ch, disc in (PurchaseHistory.objects
+                                .filter(doc_code='115', invoice_date__date__gte=date_from, invoice_date__date__lt=date_to)
+                                .values_list('branch__softech_branch_id', 'docnumber', 'invoice_date', 'sales_channel',
+                                             'customer__discount_percent')):
         try:
-            channel_of_invoice[(bc, int(float(dn)), timezone.localtime(d).date() if timezone.is_aware(d) else d.date())] = ch
+            key = (bc, int(float(dn)), timezone.localtime(d).date() if timezone.is_aware(d) else d.date())
         except (TypeError, ValueError):
             continue
+        channel_of_invoice[key] = ch
+        if disc:
+            customer_disc[key] = disc
     returned = set(StockLedgerLine.objects
                    .filter(doccode='30', docdate__gte=date_from, r_docnumber__isnull=False, r_docdate__isnull=False)
                    .values_list('branchcode', 'r_docnumber', 'r_docdate'))
@@ -78,7 +82,10 @@ def build_context(date_from, date_to, report_from=None):
                        monthly_qty=monthly_qty, on_hand=on_hand, sales=sales, returns_total=returns_total,
                        ledger_from=StockLedgerLine.objects.aggregate(m=Min('docdate'))['m'],
                        counts=_counted_rows(date_from - _dt.timedelta(days=30)),
-                       branch_hours=_branch_hours())
+                       branch_hours=_branch_hours(),
+                       item_ceiling=dict(Item.objects.filter(softech_id__in=codes, pos_discp__gt=0)
+                                         .values_list('softech_id', 'pos_discp')),
+                       customer_disc_of_invoice=customer_disc)
 
 
 def _branch_hours():
@@ -252,6 +259,10 @@ def run_stock_audit(days=30, rules=None, branches=None, today=None, triggered_by
                     loads.update(spec['doccodes'] or [])
                     if spec['doccodes'] is not None and 'doccodes' in p:
                         loads.update(p['doccodes'])
+            if spec['doccodes'] is not None and not loads:
+                # off at every branch: skip, rather than loading every ledger line for nothing
+                counts[code] = {'skipped': 'disabled'}
+                continue
             lp = spec.get('lookback_param')
             start = widest if lp else date_from
             lines = _lines_by_branch(start, date_to, sorted(loads) if spec['doccodes'] is not None else None, branches)

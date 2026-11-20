@@ -58,7 +58,7 @@ class RuleContext:
                  excluded_item_codes=None, channel_of_invoice=None, channel_bucket=None,
                  returned_invoices=None, report_from=None, medicine_items=None, monthly_qty=None,
                  on_hand=None, sales=None, returns_total=None, ledger_from=None, counts=None,
-                 branch_hours=None):
+                 branch_hours=None, item_ceiling=None, customer_disc_of_invoice=None):
         self.date_from = date_from                               # earliest line loaded (lookbacks)
         self.date_to = date_to                                   # exclusive
         self.report_from = report_from or date_from              # findings only for events from here
@@ -76,6 +76,8 @@ class RuleContext:
         self.channel_of_invoice = channel_of_invoice or {}       # (branch, docnumber, docdate) → channel
         self.channel_bucket = channel_bucket or {}               # channel → bucket
         self.returned_invoices = set(returned_invoices or ())    # (branch, docnumber, docdate) of returned 115s
+        self.item_ceiling = item_ceiling or {}                   # itemcode → Item.pos_discp (SOFTECH posdiscp)
+        self.customer_disc_of_invoice = customer_disc_of_invoice or {}   # (branch, docnumber, docdate) → Customer.discount_percent
 
     def item(self, code):
         return self.item_names.get(code) or code
@@ -586,6 +588,79 @@ def adjustments_by_user(lines, doccodes=('50', '150', '160')):
                   key=lambda x: -x['value_egp'])
 
 
+# ── 12. Discount above policy (C07 / P-36) — REPORT ONLY, UNVALIDATED ─────────────────────────
+# Owner (2026-10-30): a cashier may not discount beyond the customer's class discount or the item's
+# discount ceiling, so any line above that is a breach. This rule only REPORTS it: it never changes
+# a discount, a price or SOFTECH. It ships disabled (RULES 'default_enabled': False) and every result
+# carries "unvalidated" until finance has checked samples (class B: is custdiscp the class policy or a
+# cashier's manual discount?).
+
+def parse_class_discounts(codes):
+    """['30:12', '11:5'] → {'30': Decimal('12'), '11': Decimal('5')} (channel → class discount %)."""
+    out = {}
+    for c in codes or ():
+        ch, sep, pct = str(c).partition(':')
+        if not sep:
+            continue
+        try:
+            out[ch.strip()] = Decimal(pct.strip())
+        except Exception:   # validate_params refuses bad entries before they are stored
+            continue
+    return out
+
+
+def expected_discount(itemcode, invoice_key, channel, ctx, class_discounts):
+    """The policy ceiling for one line: the highest of the item's ceiling (posdiscp), the class
+    discount set for the invoice's channel, and the customer's own discount_percent."""
+    return max(Decimal(str(ctx.item_ceiling.get(itemcode) or 0)),
+               class_discounts.get(channel or '', ZERO),
+               Decimal(str(ctx.customer_disc_of_invoice.get(invoice_key) or 0)))
+
+
+def check_discount_above_policy(lines, p, ctx):
+    excluded_people = {str(c).strip() for c in p['excluded_personcodes']}
+    excluded_channels = {str(c).strip() for c in p['excluded_channels']}
+    class_discounts = parse_class_discounts(p['class_discounts'])
+    tol, min_egp, crit_egp = _num(p['tolerance_pct']), _num(p['min_excess_egp']), _num(p['critical_excess_egp'])
+    out = []
+    for l in lines:
+        if l.doccode != '115' or l.transqty <= 0 or not l.custdiscp or l.custdiscp <= 0:
+            continue
+        if l.personcode in excluded_people or l.itemcode in ctx.excluded_item_codes:
+            continue
+        key = (l.branchcode, l.docnumber, l.docdate)
+        channel = ctx.channel_of_invoice.get(key)
+        if channel is not None and str(channel) in excluded_channels:
+            continue
+        expected = expected_discount(l.itemcode, key, channel, ctx, class_discounts)
+        excess = l.custdiscp - expected
+        if excess <= tol:
+            continue
+        list_price = l.itemsaleprice if l.itemsaleprice and l.itemsaleprice > 0 else (
+            l.transprice / (1 - l.custdiscp / HUNDRED) if l.custdiscp < HUNDRED else l.transprice)
+        excess_egp = list_price * l.transqty * excess / HUNDRED
+        if excess_egp < min_egp:
+            continue
+        name = ctx.item(l.itemcode)
+        out.append(dict(
+            _base(l, ctx), severity='critical' if excess_egp >= crit_egp else 'warning',
+            dedup_key=f'{l.branchcode}|{l.docnumber}|{l.docdate}|{l.itemcode}|'
+                      f'{l.trans_time.isoformat() if l.trans_time else ""}|{l.custdiscp}',
+            value_egp=_q2(excess_egp), metric=excess.quantize(Decimal('0.0001')), threshold=tol,
+            evidence={'line': _line_ref(l), 'unvalidated': True, 'channel': channel,
+                      'actual_pct': str(l.custdiscp), 'expected_pct': str(expected),
+                      'item_ceiling_pct': str(ctx.item_ceiling.get(l.itemcode) or 0),
+                      'class_pct': str(class_discounts.get(channel or '', ZERO)),
+                      'customer_pct': str(ctx.customer_disc_of_invoice.get(key) or 0),
+                      'list_price': str(_q2(list_price))},
+            message_ar=f'(غير معتمد) خصم فوق السياسة: «{name}» بخصم {_fmt(l.custdiscp)}% والمسموح {_fmt(expected)}% — '
+                       f'زيادة {_fmt(excess_egp)} ج.م — فاتورة {l.docnumber} في {ctx.branch(l.branchcode)}.',
+            message_en=f'(unvalidated) Discount above policy: “{name}” at {_fmt(l.custdiscp)}% vs allowed {_fmt(expected)}% — '
+                       f'{_fmt(excess_egp)} EGP over — invoice {l.docnumber} at {ctx.branch(l.branchcode, "en")}.',
+        ))
+    return out
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 # schema: param → ('number', min, max) | ('codes',) | ('bool',) — validated in params.validate_params.
 # `doccodes` = what the engine loads; `lookback` = days of lines the rule needs (≥ the engine window).
@@ -651,6 +726,18 @@ RULES = {
         'fn': check_return_without_invoice, 'doccodes': ['30'],
         'defaults': {'qty_tolerance': 0},
         'schema': {'qty_tolerance': ('number', 0, 1000)},
+    },
+    'discount_above_policy': {
+        'number': 12, 'name_ar': 'خصم فوق السياسة (غير معتمد)', 'name_en': 'Discount above policy (unvalidated)',
+        'fn': check_discount_above_policy, 'doccodes': ['115'],
+        # Report only, and OFF until finance validates samples (C07): no findings, no tasks, no digest.
+        'default_enabled': False, 'unvalidated': True,
+        'defaults': {'tolerance_pct': 0.5, 'min_excess_egp': 1, 'critical_excess_egp': 200,
+                     'excluded_channels': ['10', '16', '17'], 'class_discounts': [],
+                     'excluded_personcodes': ['4785', '4283']},
+        'schema': {'tolerance_pct': ('number', 0, 100), 'min_excess_egp': ('number', 0, 1_000_000),
+                   'critical_excess_egp': ('number', 0, 10_000_000), 'excluded_channels': ('codes',),
+                   'class_discounts': ('codes', 'pct_map'), 'excluded_personcodes': ('codes',)},
     },
     'adjustment_after_count': {
         'number': 11, 'name_ar': 'تسوية لا تطابق الجرد', 'name_en': 'Adjustment not matching the count',
