@@ -53,6 +53,22 @@ _CONVERTERS = {
 }
 
 
+def _group_value(sub, id_value):
+    """A value the regex group `sub` accepts: the id, a UUID, 'x', or the first word of an
+    alternation (approve|reject|cancel → approve). Before Wave 4 every group got the id, so a UUID
+    or verb group rendered a path that resolved nowhere and answered 404 to everyone."""
+    for v in (id_value, _CONVERTERS['uuid'], 'x'):
+        try:
+            if re.fullmatch(sub, v):
+                return v
+        except re.error:
+            return id_value
+    first = sub.split('|')[0]
+    if re.fullmatch(r'[\w-]+', first) and re.fullmatch(sub, first):
+        return first
+    return id_value
+
+
 def _render(pattern_str, id_value='1'):
     """Turn a route/regex pattern into a concrete path, or None if not renderable."""
     s = pattern_str
@@ -60,7 +76,7 @@ def _render(pattern_str, id_value='1'):
         if 'format' in s:
             return None                         # DRF format-suffix duplicates
         s = s.lstrip('^').rstrip('$')
-        s = re.sub(r'\(\?P<[^>]+>[^)]*\)', id_value, s)
+        s = re.sub(r'\(\?P<[^>]+>([^)]*)\)', lambda m: _group_value(m.group(1), id_value), s)
         s = s.replace('\\.', '.').replace('\\/', '/')
         if re.search(r'[()\[\]*+?|\\]', s):
             return None
