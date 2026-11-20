@@ -25,6 +25,8 @@ BUDGETS: dict[str, Budget] = {
     # ── polled by every open screen ──────────────────────────────────────────────
     'notifications/': Budget('poll', 4, 'measured 2 on 2026-11-19'),
     'notifications/category-counts': Budget('poll', 4, 'measured 2 on 2026-11-19'),
+    'notifications/?view=action': Budget('poll', 4, 'C26 2026-11-20: the bell default; same scan as the '
+                                                    'list + a type filter (+ auth)'),
     'sync/status': Budget('poll', 5, 'measured 3 on 2026-11-19'),
     'sync/freshness': Budget('poll', 8, 'measured 47 on 2026-11-19; 5 core queries after Stage 3 (+ auth)'),
     'dashboard/summary': Budget('poll', 12, 'measured 34 on 2026-11-19; 8 core queries after Stage 3 (+ auth)'),

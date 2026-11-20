@@ -83,6 +83,19 @@ class PolledRouteBudgets(TestCase):
         assert_budget(self, 'notifications/', self.client, '/api/notifications/',
                       grow=lambda: self._notifications(30, global_only=True), min_rows=20)
 
+    def test_notifications_action_view(self):
+        # C26: the bell's default view — action types from every visible category (a global churn
+        # alert + a quiet-feed @-mention), plus non-action noise that must not reach the reply.
+        def grow(n=30):
+            for i in range(n):
+                self._n += 1
+                for t in ('churn_alert', 'mention', 'transit_critical'):
+                    Notification.objects.create(recipient=self.profile, notification_type=t,
+                                                title=f'perf {self._n}')
+        grow(3)
+        assert_budget(self, 'notifications/?view=action', self.client, '/api/notifications/?view=action',
+                      grow=grow, min_rows=40)   # the list caps at 50
+
     def test_category_counts(self):
         self._notifications(3)
         assert_budget(self, 'notifications/category-counts', self.client,
