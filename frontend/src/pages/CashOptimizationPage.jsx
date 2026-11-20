@@ -18,10 +18,11 @@ import CoverTiersTab from './cash/CoverTiersTab' // C25 / P-34 (read-only)
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { notify } from '../components/ui'
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const invalidate = (qc) => ['spike-candidates', 'spike-summary'].forEach(k => qc.invalidateQueries({ queryKey: [k] }))
-const onErr = (e) => window.alert(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء.')
+const onErr = (e) => notify.error('تعذّر تنفيذ الإجراء.', e?.response?.data?.detail || e?.message)
 
 const spikeValue = (r, k) => (k === 'order' ? r.order_qty : k === 'tierRank' ? (r.tier === 'strong' ? 1 : 0) : r[k])
 function Stat({ label, value, tone = 'text-gray-800' }) {

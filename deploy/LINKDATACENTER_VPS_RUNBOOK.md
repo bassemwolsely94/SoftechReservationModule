@@ -2367,6 +2367,17 @@ is still a reader, with a test staff account without 2FA: 20 users for 15 minute
 write p50/p95/p99 per route into `docs/full-project-audit/07_PERFORMANCE_AUDIT.md`. Stage B waits until the
 20-user run has p95 under 2 s on the polled routes and no failures.
 
+After the performance boost (design `docs/superpowers/specs/2026-11-19-performance-boost-design.md` §4),
+run each size twice and compare:
+
+1. `LOADTEST_POLL_MODE=push` (default; screens get bell/freshness over the WebSocket) at 20, then 40 users.
+2. The same again with `LOADTEST_EXPORT_JOBS=1`: one extra user keeps the purchasing export running as a
+   background job (it needs an account allowed to export purchasing; that account's own export_jobs rows
+   are the only write). The other routes' p95 must stay within the §4 targets while the export runs:
+   polled ≤ 300 ms, lists ≤ 800 ms, reports ≤ 2 s, export start ≤ 1 s.
+
+Optional: `LOADTEST_POLL_MODE=poll` once, to see what the old 30/60/90 s polling would have cost.
+
 ### 13.8 Export jobs service (performance Stage 4)
 
 Every big export (purchasing list / pivot, PIC analytics, …) is a background job: the button returns at once,
