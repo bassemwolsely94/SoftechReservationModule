@@ -82,8 +82,10 @@ class EligibleNullBoundaryTests(TestCase):
         device = AttendanceDevice.objects.create(serial='SN1', name='جهاز')
         start = _dt.date(2026, 10, 1)
         e = _emp('9', day_boundary=None, start_date=start)
-        mk = lambda stamp, t: AttendancePunch.objects.create(    # noqa: E731 - local test helper
-            device=device, user_code='9', raw_stamp=stamp, punch_date=start, punch_time=t)
+        def mk(stamp, t):
+            return AttendancePunch.objects.create(device=device, user_code='9', raw_stamp=stamp,
+                                                  punch_date=start, punch_time=t)
+
         before = mk(1, _dt.time(3, 0))     # before 04:00 on start day: belongs to the day before
         after = mk(2, _dt.time(4, 30))
         ids = set(AttendancePunch.objects.filter(resolve.eligible_q(e)).values_list('pk', flat=True))

@@ -660,10 +660,10 @@ MARKETPLACE_ALLOW_FAKE_ADAPTER = DEBUG or _RUNNING_TESTS
 # the agent endpoints answer 503 and no collection is accepted. Read-only; never writes SOFTECH.
 HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool)
 # Linked Gates (legacy HR portal, SQL Server) as a second READ-ONLY punch source, and which source
-# the day/session figures use ('zk' | 'linkedgates'); a session ends after this many hours' gap.
+# the day figures use ('linkedgates' | 'sessions'); a session ends after this many hours' gap.
 HR_ATTENDANCE_LINKEDGATES_ENABLED = config('HR_ATTENDANCE_LINKEDGATES_ENABLED', default=False, cast=bool)
-HR_ATTENDANCE_DAY_SOURCE = config('HR_ATTENDANCE_DAY_SOURCE', default='zk')
-HR_ATTENDANCE_SESSION_GAP_HOURS = config('HR_ATTENDANCE_SESSION_GAP_HOURS', default=12, cast=int)
+HR_ATTENDANCE_DAY_SOURCE = config('HR_ATTENDANCE_DAY_SOURCE', default='linkedgates')
+HR_ATTENDANCE_SESSION_GAP_HOURS = config('HR_ATTENDANCE_SESSION_GAP_HOURS', default=6, cast=int)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the
