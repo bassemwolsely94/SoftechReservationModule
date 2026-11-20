@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.db.models import Count, Q, Avg, Case, When, IntegerField
 
 from .models import CallLog, AddressUpdate, CallLogAttachment, CustomerCase, CaseEvent, CallQualityScore, CallItem
+from .reasons import reason_stats
 from core import branch_scope
 from core.multi_filter import filter_in, multi_values
 from core.errors import public_error
@@ -61,6 +62,12 @@ from core.permissions import RouteModuleDeletePermission  # round 2, owner answe
 # check (admin / supervisor / quality manager / call center): the matrix asks only view there.
 CALLCENTER = matrix_permission('callcenter', post=('create', 'edit', 'approve'), delete=('edit', 'delete'),
                                actions={'quality': ('view',)})
+
+
+def _mark_reserved(call):
+    """C12: a call whose items became a reservation/transfer ended as «حجز / تحويل» — unless the
+    agent already tagged the outcome themself (never overwrite a person's choice)."""
+    CallLog.objects.filter(pk=call.pk, outcome='').update(outcome='reserved')
 
 
 class CallLogViewSet(viewsets.ModelViewSet):
@@ -418,6 +425,10 @@ class CallLogViewSet(viewsets.ModelViewSet):
                   .select_related('handled_by__user', 'pbx_session').order_by('-called_at')[:5]
                   if tail else CallLog.objects.none())
         result['recent_calls'] = CallLogListSerializer(recent, many=True, context={'request': request}).data
+
+        # C12: preselect a reason chip from what is open for the caller (the agent confirms)
+        from .reasons import suggest_purpose
+        result['suggested_purpose'] = suggest_purpose(result)
 
         # mask what this user may not see (B-2 per customer; can_see_customer_phone)
         from apps.customers.models import Customer as _Cust
@@ -870,6 +881,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'detail': f'فشل إنشاء الحجز: {public_error(request, e)}'}, status=500)
 
+        _mark_reserved(call)
         return Response({'created': created, 'count': len(created)}, status=201)
 
     @action(detail=True, methods=['post'], url_path='convert-to-transfer')
@@ -953,6 +965,7 @@ class CallLogViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'detail': f'فشل إنشاء طلب النقل: {public_error(request, e)}'}, status=500)
 
+        _mark_reserved(call)
         return Response({
             'transfer_request_id': tr.pk,
             'request_number':      tr.request_number,
@@ -985,6 +998,8 @@ class CallLogViewSet(viewsets.ModelViewSet):
             'by_purpose': list(
                 qs.values('purpose').annotate(count=Count('id')).order_by('-count')
             ),
+            # C12: share of calls with a real reason + how they ended
+            **reason_stats(qs),
             'by_staff': list(
                 qs.values('handled_by__user__first_name', 'handled_by__user__last_name')
                 .annotate(count=Count('id'))
