@@ -1,8 +1,8 @@
 # 40 — SOFTECH Delta Sync (PERF-6): read only the rows that changed
 
 **Status:** ✅ DESIGN APPROVED by the owner (2026-11-19). Not built: each table's build is a
-separate step that the owner confirms first. Evidence gates (§10): G1 passed (morning run),
-G3 price passed, G4 passed; G2 and G3 cost still open. §10.1 lists a fix needed before stock SHADOW.
+separate step that the owner confirms first. Evidence gates (§10): G1 passed (morning and afternoon
+runs), G3 price passed, G4 passed; G2 and G3 cost still open. The §10.1 stock fix is merged (PR 279).
 No production code, no migration and no SOFTECH write is part of this document.
 **Builds on:** doc 30 *SOFTECH Load Reduction*, Phase 2 (steps 2.0–2.3). This document is the
 detailed plan for that phase.
@@ -328,12 +328,13 @@ Changes (small, part of the build):
 
 | Gate | Test | Result | Status |
 |---|---|---|---|
-| **G1** | `probe_softech_change_columns --watch 15`, section [3]: every stock quantity change must carry a newer `modif_lastupdate` | **Morning run, 2026-11-19 12:16–12:33:** 4,319 rows watched, **6 of 6** quantity changes had a newer stamp, 0 without. Section [2b]: in working hours stamps arrive every minute or so (12:14:50, 12:15:49, 12:15:51; max gap 7.8 min). 501 rows changed in the last hour → a 5-min delta would read ≈ 41 rows instead of 32,563. | ✅ passed (small sample). **Afternoon run missing:** the 17:00 run was queued but the session ended before it fired. Re-run `probe_softech_change_columns --watch 15` on an afternoon before stock SHADOW. |
+| **G1** | `probe_softech_change_columns --watch 15`, section [3]: every stock quantity change must carry a newer `modif_lastupdate` | **Morning run, 2026-11-19 12:16–12:33:** 4,319 rows watched, **6 of 6** quantity changes had a newer stamp, 0 without. Section [2b]: in working hours stamps arrive every minute or so (12:14:50, 12:15:49, 12:15:51; max gap 7.8 min). 501 rows changed in the last hour → a 5-min delta would read ≈ 41 rows instead of 32,563. **Afternoon run, 2026-11-20 16:05–16:24:** 1,775 rows watched (changed in 24 h or moved today), **2 of 2** quantity changes had a newer stamp, 0 without, 0 stamp-only moves. Section [2b]: 200 distinct change times / 226 rows in the last 3 h, median gap 0.0 min, max 15.0 min (batches). 168 rows changed in the last hour → a 5-min delta would read ≈ 14 rows instead of 32,653. | ✅ passed, both runs (small samples: 6 + 2 changes). SHADOW (§6) proves it at volume. |
 | **G2** | same run, section [6b]: customers whose flags changed must have a newer `trans_time` / `table_dumped` | 0 customers with a changed flag since our last customer sync, so nothing could be tested. `trans_time` and `table_dumped` each moved on 41 rows in 24 h. | ⏳ open — re-run later in the day. |
 | **G3** | section [5]: price changes must bump `itemlastupdate`; also cost changes from a received purchase | Probe [5]: **21 of 21** price-changed items had a newer `itemlastupdate`. Separate watcher (baseline 06:52, compared after the 12:57 item sync): **22 of 22** price-changed items bumped it, e.g. 127652 275→315 (cost 204.6→234.36) stamped 10:59:57; 129257 unit price only 40→60 stamped 10:32:26. Those cost changes came **with** price changes. No cost-only change (a purchase receipt with no price change) in that window. A second watcher (baseline 13:06) saw 15 more price-changed items over three hourly item syncs and still **0 cost-only changes**; it stopped at 16:2x when PostgreSQL closed its connection. | ✅ price passed · ⏳ cost-only open |
 | **G4** | bounded count of `itembarcode.modif_lastupdate` and `deltrans_time` coverage | **2026-11-20 05:55:** 85,250 rows. `modif_lastupdate` is NULL on 15,003 (17.6 %, old untouched rows); 80 changed in 24 h, 165 in 7 days. `deltrans_time` is the **block time**: all 17,156 blocked barcodes (`blockbarcode=1`) have it, and 723 more have it but were unblocked later. All **176 of 176** barcodes blocked in the last 30 days also have `modif_lastupdate >= deltrans_time`, so the delta catches a block. A hard-deleted row still leaves no trace (nightly full, §3.4). | ✅ passed |
 
-Raw reports: `scratch/softech_change_columns_probe_G1_morning.txt` on the owner's PC.
+Raw reports: `scratch/softech_change_columns_probe_G1_morning.txt` and
+`scratch/softech_change_columns_probe_2026-11-20_pm.txt` on the owner's PC.
 Avoid joins between `stktrans` and `stkbal` in these probes (Appendix A note).
 
 ### 10.1 Found while checking: the stock "changed" count is wrong (must be fixed before SHADOW)
@@ -346,8 +347,9 @@ comparison in `sync_stock` (P-56) sees a difference again. Effects:
 - the SHADOW check in §6.1 uses that same "really changed" set, so these rows would look like
   real changes that the delta "missed".
 
-Fix before stock SHADOW (small, separate PR): round the incoming value to the stored precision
-(3 decimals, half-up) before comparing. Whether 3 decimals is precise enough for strip
+**Fixed (PR 279, merged and live 2026-11-20):** the incoming value is rounded to the stored precision
+(3 decimals, half-up) before comparing. First stock run after the scheduler restart: 14 rows written
+instead of 2,774. Whether 3 decimals is precise enough for strip
 quantities (memory note: SOFTECH uses 5 decimals for strips) is a separate question.
 **Stop-and-ask S10:** changing the column precision is a schema change on a stock table.
 
