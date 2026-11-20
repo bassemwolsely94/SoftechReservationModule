@@ -50,6 +50,18 @@ class CallLog(models.Model):
         ('followup',     '🔔 متابعة مزمن'),
         ('demand',       '🔍 صنف غير متوفر'),
         ('general',      '💬 استفسار عام'),
+        # C12 (P-49): a PBX auto-log has no reason yet — the agent tags it. Not a valid choice
+        # for an agent's own save (CallLogCreateSerializer rejects it).
+        ('pending',      '⏳ لم يُحدَّد السبب'),
+    ]
+    # C12: how the call ended. Blank = not tagged yet (PBX log, or the agent tags it after saving).
+    OUTCOME_CHOICES = [
+        ('',              '—'),
+        ('ordered',       '🛒 تم الطلب'),
+        ('reserved',      '📋 حجز / تحويل'),
+        ('informed',      '✅ تمت الإجابة'),
+        ('not_available', '❌ غير متوفر'),
+        ('follow_up',     '🔔 يحتاج متابعة'),
     ]
 
     # ── Caller identity ───────────────────────────────────────────────────────
@@ -88,9 +100,16 @@ class CallLog(models.Model):
     purpose = models.CharField(
         max_length=15,
         choices=PURPOSE_CHOICES,
-        default='general',
+        default='pending',
         db_index=True,
         verbose_name='الغرض',
+    )
+    outcome = models.CharField(
+        max_length=15,
+        choices=OUTCOME_CHOICES,
+        blank=True, default='',
+        db_index=True,
+        verbose_name='نتيجة المكالمة',
     )
     duration_seconds = models.PositiveIntegerField(
         default=0,
