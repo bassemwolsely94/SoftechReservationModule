@@ -46,6 +46,13 @@ DEFAULT_SETTINGS = [
     dict(key='delivery_driver_fee_per_km', label='أجر التوصيل لكل كم (ج.م)',
          description='يُضاف لكل كيلومتر من الفرع حتى نقطة التسليم',
          value='3', value_type='decimal', category='delivery', is_public=False),
+    # C22 rider payout ledger (apps/rider_payouts/rule.py): 0 = no daily minimum until the owner confirms
+    dict(key='delivery_payout_daily_minimum', label='الحد الأدنى اليومي لأجر الطيار (ج.م)',
+         description='لو أجر رحلات الطيار في يوم أقل من الرقم ده يُستكمل للحد الأدنى (سجل أجور الطيارين). 0 = متوقف',
+         value='0', value_type='decimal', category='delivery', is_public=False),
+    dict(key='delivery_payout_minimum_vehicles', label='المركبات المشمولة بالحد الأدنى اليومي',
+         description='أنواع المركبات مفصولة بفاصلة: motorcycle, car, bicycle, on_foot, van',
+         value='motorcycle', value_type='string', category='delivery', is_public=False),
 
     # ━━ General ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     dict(key='pharmacy_name',         label='اسم الصيدلية',                 description='يظهر في التقارير والإيصالات',

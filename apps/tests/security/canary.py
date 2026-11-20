@@ -42,7 +42,9 @@ def branch_linked_models():
 
 # Models unique per (parent, branch) — e.g. one platform store per channel and branch: a second row for
 # the same branch is refused, so a dependant (marketplace.ExternalOrder) reuses the one already in it.
-REUSE_BRANCH_ROW = {'marketplace.ChannelStore'}
+# A rider payout ride needs its period, which is unique per (rider, branch, month): the ride reuses the
+# period already planted in the branch instead of building a second, clashing one (C22).
+REUSE_BRANCH_ROW = {'marketplace.ChannelStore', 'rider_payouts.RiderPayoutPeriod'}
 
 PHONE_KEYS = ('phone', 'mobile', 'wa_id', 'caller_number', 'caller_id')
 

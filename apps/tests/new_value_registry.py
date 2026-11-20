@@ -127,6 +127,20 @@ def cover_tiers_export():
     return _get('/api/purchasing/cover-tiers/lines/?format=xlsx')
 
 
+def rider_payouts_export():
+    """C22 rider payout periods workbook (/delivery/analytics → 💵 أجور الطيارين → تصدير). Its rows are the
+    riders' periods, so one ride is recorded in the new branch '230' first."""
+    import datetime as dt
+
+    from apps.branches.models import Branch
+    from apps.delivery.models import DeliveryDriver
+    from apps.rider_payouts import ledger
+
+    branch = Branch.objects.get(softech_branch_id='230')
+    driver = DeliveryDriver.objects.create(full_name='طيار قيمة جديدة', mobile='0109990230', branch=branch)
+    ledger.add_ride(driver=driver, branch=branch, ride_date=dt.date(2026, 10, 5), deliveries=1)
+    return _get('/api/delivery/payouts/periods/export/?month=2026-10')
+
 def delivery_small_orders_export():
     """C20 delivery small-order / fee-less invoice workbook (/delivery/analytics → 💸 طلبات صغيرة): one small
     channel-90 sale planted per branch; live branches only, so pending / closed / call center never show."""
@@ -180,6 +194,8 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    # its branches come from the riders' periods (one ride planted, into '230'): presence only
+    ('rider_payouts_export', rider_payouts_export, frozenset()),
     ('delivery_small_orders_export', delivery_small_orders_export, ABSENT_ALL),
     ('margin_board', margin_board, ABSENT_ALL),
     ('missing_bonus_export', missing_bonus_export, ABSENT_ALL),

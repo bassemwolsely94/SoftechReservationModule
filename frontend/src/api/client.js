@@ -3529,3 +3529,18 @@ export const posApi = {
     approvalCheck: (customer, value) => api.get('/pos-orders/contract-assist/approval-check/', { params: { customer, value } }).then(r => r.data),
   },
 }
+
+// C22 / P-48 — rider payout ledger (/delivery/analytics → 💵 أجور الطيارين). Internal record: no money moves.
+export const riderPayoutsApi = {
+  rule:        ()            => api.get('/delivery/payouts/rule/'),
+  rides:       (params)      => api.get('/delivery/payouts/rides/', { params }),
+  recordRide:  (data)        => api.post('/delivery/payouts/rides/', data),
+  voidRide:    (id, reason)  => api.post(`/delivery/payouts/rides/${id}/void/`, { reason }),
+  periods:     (params)      => api.get('/delivery/payouts/periods/', { params }),
+  period:      (id)          => api.get(`/delivery/payouts/periods/${id}/`),
+  finalize:    (id, reason)  => api.post(`/delivery/payouts/periods/${id}/finalize/`, { reason }),
+  unlock:      (id, reason)  => api.post(`/delivery/payouts/periods/${id}/unlock/`, { reason }),
+  addAdjustment:    (id, data)    => api.post(`/delivery/payouts/periods/${id}/adjustments/`, data),
+  removeAdjustment: (id, reason)  => api.post(`/delivery/payouts/adjustments/${id}/remove/`, { reason }),
+  build:       (data)        => api.post('/delivery/payouts/build/', data),
+}

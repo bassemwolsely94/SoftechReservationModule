@@ -345,6 +345,17 @@ def required(path, method):
             return 'marketplace', ('approve',)
         if parts[3:4] in (['channels'], ['stores'], ['settlements']):
             return 'marketplace', ('edit',)
+    # Rider payout ledger (C22, apps/rider_payouts/access.py): each call asks exactly what its view asks —
+    # export = export / finalize / approve; record a ride = create; build / void = edit; finalize, unlock
+    # and adjustments = finalize / approve (unlock is admin-only in the view, D-16)
+    if prefix == 'delivery' and parts[3:4] == ['payouts']:
+        if method in ('GET', 'HEAD', 'OPTIONS'):
+            return 'delivery', (('export', 'finalize', 'approve') if parts[4:6] == ['periods', 'export'] else ('view',))
+        if parts[4:6] == ['rides', '']:
+            return 'delivery', ('create',)
+        if parts[4:5] == ['build'] or (parts[4:5] == ['rides'] and parts[6:7] == ['void']):
+            return 'delivery', ('edit',)
+        return 'delivery', ('finalize', 'approve')
     # POS alternatives live under /api/composition/ (chronic) but belong to the POS module
     if prefix == 'composition' and len(parts) > 3 and parts[3] == 'alternatives':
         return 'pos', (('view',) if method in ('GET', 'HEAD', 'OPTIONS') else _POST_ACTIONS)

@@ -29,6 +29,8 @@ VIEW_EXPORTS = {
     'v:eta_recon': ('apps.tax_invoicing.history_views:recon_export', 'مطابقة الضرائب', 'GET', False, ''),
     'v:eta_recon_uncoded': ('apps.tax_invoicing.history_views:recon_uncoded_export', 'أصناف بلا كود ضريبي', 'GET',
                             False, ''),
+    'v:rider_payouts': ('apps.rider_payouts.views:periods_export', 'أجور الطيارين', 'GET', False,
+                        'apps.rider_payouts.access:export_allowed'),
     'v:delivery_small_orders': ('apps.delivery.report_views:small_orders_export', 'طلبات توصيل صغيرة وبدون رسوم',
                                 'GET', False, ''),                         # C20
     'v:supply_missing_bonus': ('apps.supply.missing_bonus_views:missing_bonus_export', 'بونص ناقص', 'GET', False,
