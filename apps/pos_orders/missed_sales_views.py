@@ -46,6 +46,8 @@ class MissedSaleSerializer(serializers.ModelSerializer):
     selected_by_name = serializers.SerializerMethodField()
     decided_by_name = serializers.SerializerMethodField()
     bought_in_cart = serializers.SerializerMethodField()
+    source_label = serializers.CharField(source='get_source_display', read_only=True)
+    call_log = serializers.IntegerField(source='call_item.call_log_id', read_only=True, default=None)
 
     class Meta:
         model = MissedSaleSuggestion
@@ -53,7 +55,8 @@ class MissedSaleSerializer(serializers.ModelSerializer):
                   'customer_pic', 'item', 'item_code', 'item_name', 'qty', 'value', 'seen_at',
                   'seller_usercode', 'selected_by_name', 'status', 'status_label',
                   'reject_reason', 'reject_reason_label', 'reject_note', 'decided_by_name',
-                  'decided_at', 'reservation', 'bought_in_cart']
+                  'decided_at', 'reservation', 'bought_in_cart',
+                  'source', 'source_label', 'call_log']
 
     def get_customer_phone(self, o):
         """The number serves this branch's own record (D2), masked for staff who may not see phones
@@ -99,11 +102,15 @@ class MissedSaleList(generics.ListAPIView):
 
     def get_queryset(self):
         qs = (MissedSaleSuggestion.objects
-              .select_related('customer', 'branch', 'selected_by__user', 'decided_by__user'))
+              .select_related('customer', 'branch', 'selected_by__user', 'decided_by__user',
+                              'call_item'))
         qs = branch_scope.scope(qs, self.request.user)
         st = self.request.query_params.get('status', 'new')
         if st and st != 'all':
             qs = qs.filter(status=st)
+        src = self.request.query_params.get('source')
+        if src in dict(MissedSaleSuggestion.SOURCE_CHOICES):
+            qs = qs.filter(source=src)
         br = self.request.query_params.get('branch')
         if br and str(br).isdigit():
             qs = qs.filter(branch_id=int(br))
@@ -126,7 +133,8 @@ class MissedSaleList(generics.ListAPIView):
 def missed_sale_detail(request, pk):
     if not enabled():
         return Response(DISABLED, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-    o = branch_scope.get_or_404(MissedSaleSuggestion.objects.select_related('customer', 'branch'),
+    o = branch_scope.get_or_404(MissedSaleSuggestion.objects.select_related('customer', 'branch',
+                                                                           'call_item'),
                                 request.user, pk=pk)
     return Response(MissedSaleSerializer(o, context={'sold_by_cart': _sold_by_cart({o.cart_token}), 'request': request}).data)
 
