@@ -33,18 +33,9 @@ from .views import _is_admin_or_pharmacist
 from core.errors import public_error
 from core.permissions import matrix_permission
 
-# Every reconciliation view checks the finance matrix too (Batch 4, Z-3); the admin / pharmacist
-# checks inside stay until the owner's overblock review.
-def _can_read_recon_reports(user) -> bool:
-    """Read-only A/P reconciliation reports + their Excel exports: admin / pharmacist as before,
-    plus the finance-department `accountant` (owner decision 2026-11-05). Never used on a
-    write / approve / allocation / SOFTECH-write view."""
-    if _is_admin_or_pharmacist(user):
-        return True
-    try:
-        return user.staff_profile.role == 'accountant'
-    except Exception:
-        return False
+# Every reconciliation view checks the reconciliation matrix module (Batch 4, Z-3; own module since the
+# role review 2026-11-20). The read-only reports and their exports follow the matrix alone (spec decision
+# 1 — reads are not decision-2 items); the admin / pharmacist checks on approve / write views stay.
 
 
 def _company_only(perm):
@@ -403,13 +394,14 @@ def _guard_write(request):
 
 
 def _can_review_exceptions(user) -> bool:
-    """C15: who records a decision on an exception — admin / pharmacist holding finance `approve`
-    (the gate for approving a match), plus the finance-department accountant (owner decision
-    2026-11-19). Only this endpoint: the accountant still cannot approve, write or reverse a match."""
+    """C15: who records a decision on an exception — admin / pharmacist holding reconciliation `approve`
+    (the gate for approving a match; was finance approve before the role review 2026-11-20), plus the
+    finance-department accountant (owner decision 2026-11-19). Only this endpoint: the accountant still
+    cannot approve, write or reverse a match."""
     from core.permissions import matrix_allows
     profile = getattr(user, 'staff_profile', None)
     if _is_admin_or_pharmacist(user):
-        return profile is None or matrix_allows(profile, 'finance', 'approve')
+        return profile is None or matrix_allows(profile, 'reconciliation', 'approve')
     from apps.users.roles import AP_REVIEW_ROLES
     return getattr(profile, 'role', None) in AP_REVIEW_ROLES
 
@@ -730,8 +722,6 @@ def reverse_allocation_softech(request, pk):
 def unpaid_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_unpaid_xlsx(request.query_params.get('party_type', 'supplier'),
                                f=RF.parse(request.query_params, 'supplier'))
@@ -745,8 +735,6 @@ def unpaid_export(request):
 def review_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_review_xlsx(request.query_params.get('party_type', 'supplier'),
                                f=RF.parse(request.query_params, 'supplier'))
@@ -850,8 +838,6 @@ def _sort_rows(rows, ordering, allowed) -> bool:
 def unpaid_report(request):
     """Totals + supplier summary + unpaid invoice rows for the finance department."""
     from . import recon_reports as R
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     pt = request.query_params.get('party_type', 'supplier')
     from . import recon_filters as RF
     f = RF.parse(request.query_params, 'supplier')
@@ -884,8 +870,6 @@ def unpaid_report(request):
 def partial_report(request):
     """Invoices paid part-way (with the vouchers that paid them) + part-used vouchers."""
     from . import recon_reports as R
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     inv_rows, pay_rows = R.partial_payments(request.query_params.get('party_type', 'supplier'),
                                             f=RF.parse(request.query_params, 'supplier'))
@@ -909,8 +893,6 @@ def partial_report(request):
 def partial_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_partial_xlsx(request.query_params.get('party_type', 'supplier'),
                                 f=RF.parse(request.query_params, 'supplier'))
@@ -926,8 +908,6 @@ def returns_chains_export(request):
     مدفوعات → مقبوضات → مدفوعات correction chains (doc 23 §17)."""
     from . import recon_reports as R
     from django.http import HttpResponse
-    if not _can_read_recon_reports(request.user):
-        return Response({'detail': 'صلاحية غير كافية'}, status=403)
     from . import recon_filters as RF
     data = R.build_returns_chains_xlsx(request.query_params.get('party_type', 'supplier'),
                                        f=RF.parse(request.query_params, 'supplier'))

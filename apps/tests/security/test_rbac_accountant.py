@@ -211,9 +211,13 @@ class AccountantReconReportsReadOnlyTests(TestCase):
             with self.subTest(route=route):
                 self.assertEqual(self.acc.post(RECON + route, {}, format='json').status_code, 403)
 
-    def test_purchasing_and_quality_manager_still_refused_on_reports(self):
-        for role in ('purchasing', 'quality_manager'):
-            c = bearer_client(make_user(f'{role}_recon', role=role)[0])
+    def test_other_roles_follow_the_reconciliation_matrix(self):
+        # role review 2026-11-20 (fix round 1, I3): the reports and exports follow the matrix, no
+        # admin / pharmacist / accountant reader list — view opens a report, an export needs export
+        cases = (('purchasing', True, True), ('quality_manager', True, False), ('viewer', False, False))
+        for role, reads, exports in cases:
+            c = bearer_client(make_user(f'{role}_recon', role=role, access_all=True)[0])
             for route in RECON_READ_ROUTES:
                 with self.subTest(role=role, route=route):
-                    self.assertEqual(c.get(RECON + route).status_code, 403)
+                    allowed = exports if route.endswith('export/') else reads
+                    self.assertEqual(c.get(RECON + route).status_code != 403, allowed)

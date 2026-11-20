@@ -268,10 +268,10 @@ class ZonePolicyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
     @action(detail=False, methods=['get'])
     def choices(self, request):
         """The module keys a policy may list (with Arabic labels) and the access levels."""
+        # every matrix module: module_access.required() also maps paths to rule-only modules (stock,
+        # rider, reconciliation, code_maps, forecast — role review 2026-11-20)
         from apps.users.models import MODULE_CHOICES
-        from core.middleware.module_access import MODULE_BY_PREFIX
-        known = set(MODULE_BY_PREFIX.values())
         return Response({
-            'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES if v in known],
+            'modules': [{'value': v, 'label': l} for v, l in MODULE_CHOICES],
             'access': [{'value': v, 'label': l} for v, l in ZonePolicy.ACCESS_CHOICES],
         })

@@ -198,43 +198,22 @@ quality_manager GET /api/transfers/discrepancy-report/
 salesperson GET /api/transfers/discrepancy-report/
 viewer GET /api/transfers/discrepancy-report/
 
-# reason: Z-11c — finance reconciliation writes and SOFTECH allocation need finance approve / finalize,
-#   its reports and exports finance export (Z-3).
-purchasing GET /api/finance/reconciliation/partial/
-purchasing GET /api/finance/reconciliation/partial/export/
-purchasing GET /api/finance/reconciliation/returns-chains/export/
-purchasing GET /api/finance/reconciliation/review/export/
-purchasing GET /api/finance/reconciliation/unpaid/
-purchasing GET /api/finance/reconciliation/unpaid/export/
+# reason: Z-11c — reconciliation writes and SOFTECH allocation need approve / finalize (and the views'
+#   admin / pharmacist check); since the role review 2026-11-20 the module is `reconciliation`.
 purchasing POST /api/finance/reconciliation/allocations/987654321/reverse-softech/
 purchasing POST /api/finance/reconciliation/allocations/987654321/undo/
 purchasing POST /api/finance/reconciliation/allocations/987654321/write-softech/
 purchasing POST /api/finance/reconciliation/allocations/bulk-write-softech/
 purchasing POST /api/finance/reconciliation/allocations/manual/
 
-# reason: C15 (owner 2026-11-19) — A/P exception decisions are admin / pharmacist with finance approve,
+# reason: C15 (owner 2026-11-19) — A/P exception decisions are admin / pharmacist with reconciliation approve,
 #   plus the accountant (apps.users.roles AP_REVIEW_ROLES); purchasing reads finance but does not decide.
 purchasing POST /api/finance/reconciliation/exceptions/decide/
 purchasing POST /api/finance/reconciliation/candidates/987654321/approve/
 purchasing POST /api/finance/reconciliation/candidates/987654321/reject/
 purchasing POST /api/finance/reconciliation/candidates/bulk-approve/
 purchasing POST /api/finance/reconciliation/candidates/bulk-reject/
-quality_manager GET /api/finance/reconciliation/partial/
-quality_manager GET /api/finance/reconciliation/partial/export/
-quality_manager GET /api/finance/reconciliation/returns-chains/export/
-quality_manager GET /api/finance/reconciliation/review/export/
-quality_manager GET /api/finance/reconciliation/unpaid/
-quality_manager GET /api/finance/reconciliation/unpaid/export/
 
-# reason: role review 2026-11-20 — supervisor now holds the reconciliation module (owner, spec table); the
-#   read-only A/P reports and their exports keep their own reader list (_can_read_recon_reports: admin /
-#   pharmacist / accountant), as for purchasing and quality_manager above, until the owner widens it.
-supervisor GET /api/finance/reconciliation/partial/
-supervisor GET /api/finance/reconciliation/partial/export/
-supervisor GET /api/finance/reconciliation/returns-chains/export/
-supervisor GET /api/finance/reconciliation/review/export/
-supervisor GET /api/finance/reconciliation/unpaid/
-supervisor GET /api/finance/reconciliation/unpaid/export/
 
 # reason: Z-11c — follow-up maintenance (dedupe / cleanup / backfill / priority scores / reminders run-now)
 #   are admin batch jobs.
@@ -353,8 +332,16 @@ quality_manager POST /api/insights/reports/backfill/
 # quality_manager past the middleware, the view keeps the engine run to admin / supervisor
 purchasing POST /api/recommendations/trigger/
 quality_manager POST /api/recommendations/trigger/
-# reason: Z-3 — reconciliation exports need finance export (pharmacist has view only);
-# the sweep counts any GET as view
+# reason: Z-3 — reconciliation exports need the export grant (reconciliation module since the role
+# review 2026-11-20); quality_manager and supervisor hold view only; the sweep counts any GET as view
+quality_manager GET /api/finance/reconciliation/partial/export/
+quality_manager GET /api/finance/reconciliation/returns-chains/export/
+quality_manager GET /api/finance/reconciliation/review/export/
+quality_manager GET /api/finance/reconciliation/unpaid/export/
+supervisor GET /api/finance/reconciliation/partial/export/
+supervisor GET /api/finance/reconciliation/returns-chains/export/
+supervisor GET /api/finance/reconciliation/review/export/
+supervisor GET /api/finance/reconciliation/unpaid/export/
 # reason: Z-5a — offers edit lets purchasing past the matrix; the SOFTECH channel A/B writes
 # (posdiscp / specialoffers) stay admin-only inside the view
 purchasing POST /api/offers/987654321/posdiscp-apply/

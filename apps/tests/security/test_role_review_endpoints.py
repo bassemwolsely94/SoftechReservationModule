@@ -242,3 +242,102 @@ class ViewGateTests(_Base):
         r = bearer_client(user).get('/api/delivery/app/my-orders/')
         self.assertEqual(r.status_code, 403)
         self.assertIn('سائق', str(r.data))
+
+
+# ── Fix round 1 ──────────────────────────────────────────────────────────────
+
+NEW_MODULES = ('forecast', 'recommendations', 'catalog_tools', 'stock', 'loyalty', 'dispatch',
+               'rider', 'reconciliation', 'access_control', 'code_maps')
+
+
+class ZonePolicyMovedModulesTests(TestCase):
+    """I1: a `listed` zone policy keeps the moved paths of a parent it lists (access 0008)."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_call_center_off_network_keeps_referral(self):
+        import importlib
+        from types import SimpleNamespace
+        from django.apps import apps as django_apps
+        from django.core.cache import cache
+        from apps.access.models import ZonePolicy
+        from apps.access.policy import decide
+        row = ZonePolicy.objects.get(role='call_center', zone='Z3')
+        row.modules = ['callcenter', 'demand', 'reservations', 'customers']     # as seeded by 0006
+        row.save(update_fields=['modules'])
+        cache.clear()
+        path = '/api/referral/leads/'
+        cc = SimpleNamespace(role='call_center', external_export=False, external_softech_write=False)
+        self.assertFalse(decide(cc, 'Z3', path, 'GET', required(path, 'GET')[0]).allowed)
+        mig = importlib.import_module('apps.access.migrations.0008_zone_policy_role_review_modules')
+        mig.forwards(django_apps, None)
+        mig.forwards(django_apps, None)                                         # idempotent
+        row.refresh_from_db()
+        self.assertEqual(row.modules, ['callcenter', 'demand', 'reservations', 'customers', 'loyalty'])
+        cache.clear()
+        self.assertTrue(decide(cc, 'Z3', path, 'GET', required(path, 'GET')[0]).allowed)
+
+    def test_parent_map_is_the_seed_map(self):
+        import importlib
+        from apps.users.management.commands.seed_permissions import ROLE_REVIEW_MODULES
+        mig = importlib.import_module('apps.access.migrations.0008_zone_policy_role_review_modules')
+        self.assertEqual(mig.PARENT, {m: parent for m, (parent, _roles) in ROLE_REVIEW_MODULES.items()})
+
+    def test_choices_offer_every_new_module(self):
+        user, _, _ = make_user('rr2_zp_admin', role='admin', access_all=True)
+        r = bearer_client(user).get('/api/access/zone-policies/choices/')
+        self.assertEqual(r.status_code, 200)
+        mods = {m['value'] for m in r.json()['modules']}
+        self.assertTrue(set(NEW_MODULES) <= mods, set(NEW_MODULES) - mods)
+        # and a policy may be saved with one of them
+        from apps.access.models import ZonePolicy
+        row = ZonePolicy.objects.get(role='call_center', zone='Z3')
+        r = bearer_client(user).patch(f'/api/access/zone-policies/{row.pk}/',
+                                      {'modules': list(row.modules) + ['rider']}, format='json')
+        self.assertEqual(r.status_code, 200, r.content)
+
+
+class ReconExceptionReviewTests(_Base):
+    """I2: the C15 decision asks reconciliation approve (the module of the view it sits in)."""
+
+    def test_pharmacist_needs_reconciliation_approve_not_finance(self):
+        from apps.finance.recon_views import _can_review_exceptions
+        user, _, _ = make_user('rr2_c15_pharm', role='pharmacist', branch=self.branch, access_all=True)
+        self._deny('pharmacist', 'reconciliation')
+        self._grant('pharmacist', 'finance', 'approve')
+        self.assertFalse(_can_review_exceptions(user))
+        self._deny('pharmacist', 'finance')
+        self._grant('pharmacist', 'reconciliation', 'approve')
+        user.staff_profile.refresh_from_db()
+        self.assertTrue(_can_review_exceptions(user))
+
+
+RECON_REPORTS = ('/api/finance/reconciliation/unpaid/', '/api/finance/reconciliation/partial/')
+RECON_EXPORTS = ('/api/finance/reconciliation/unpaid/export/', '/api/finance/reconciliation/partial/export/',
+                 '/api/finance/reconciliation/review/export/', '/api/finance/reconciliation/returns-chains/export/')
+
+
+@override_settings(RBAC_ENFORCEMENT='log')
+class ReconReportsFollowTheMatrixTests(_Base):
+    """I3: the read-only reports / exports follow the matrix (no admin / pharmacist / accountant list)."""
+
+    def test_supervisor_with_reconciliation_view_reads_the_reports(self):
+        c = self._client('supervisor')
+        for path in RECON_REPORTS:
+            with self.subTest(path=path):
+                self.assertEqual(c.get(path).status_code, 200)
+
+    def test_exports_need_reconciliation_export(self):
+        sup, pur = self._client('supervisor'), self._client('purchasing')
+        for path in RECON_EXPORTS:
+            with self.subTest(path=path):
+                self.assertEqual(sup.get(path).status_code, 403)      # view only
+                self.assertEqual(pur.get(path).status_code, 200)      # view + export
+
+    def test_roles_without_reconciliation_are_refused(self):
+        c = self._client('viewer')
+        for path in RECON_REPORTS + RECON_EXPORTS:
+            with self.subTest(path=path):
+                self.assertEqual(c.get(path).status_code, 403)
