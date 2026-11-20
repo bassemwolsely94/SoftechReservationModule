@@ -50,7 +50,8 @@ from core.threads import start_thread
 
 logger = logging.getLogger('elrezeiky.stock_audit')
 
-GROUPS = {'sales': ['sale_below_cost', 'duplicate_line', 'price_variance_invoice', 'cost_fluctuation'],
+GROUPS = {'sales': ['sale_below_cost', 'duplicate_line', 'price_variance_invoice', 'cost_fluctuation',
+                   'discount_above_policy'],
           'adjustments': ['stock_adjustment', 'adjustment_after_count'],
           'availability': ['frequent_stockout'],
           'returns': ['return_without_invoice'],
@@ -104,7 +105,8 @@ def _user_names(codes):
 
 def _rule_meta(code):
     s = RULES.get(code, {})
-    return {'code': code, 'number': s.get('number'), 'name_ar': s.get('name_ar', code), 'name_en': s.get('name_en', code)}
+    return {'code': code, 'number': s.get('number'), 'name_ar': s.get('name_ar', code), 'name_en': s.get('name_en', code),
+            'unvalidated': bool(s.get('unvalidated'))}
 
 
 def _finding_json(f, bnames, unames, sales=None, links=None):
@@ -683,3 +685,22 @@ def refresh(request):
     start_thread(_work)
     return Response({'detail': 'بدأ التحديث في الخلفية.', 'ledger_run_id': sync_run.pk},
                     status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def discount_policy_preview(request):
+    """GET /api/stock-audit/discount-policy/?from&to&branch — C07 check 12 computed live, read-only and
+    labelled unvalidated (stores nothing; the rule ships disabled). Same viewers as the findings,
+    scoped to their branches; at most 31 days."""
+    from .discount_policy import MAX_DAYS, preview
+    acc = Access(request)
+    if not acc.can_view:
+        return _deny()
+    d_from, d_to = _period(request, default_days=7)
+    if (d_to - d_from).days + 1 > MAX_DAYS:
+        return _bad(f'الفترة أطول من {MAX_DAYS} يوم — Period longer than {MAX_DAYS} days')
+    branches = multi_values(request.query_params, 'branch')
+    if branches and acc.branches is not None:
+        branches = [b for b in branches if b in acc.branches] or ['-']   # asked only for others' branches
+    return Response(preview(acc, d_from, d_to, branches=branches or None, user_names=_user_names))

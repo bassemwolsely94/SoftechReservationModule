@@ -132,6 +132,10 @@ def margin_board():
     """C19 analytics «💹 الهامش: قناة × فرع» (JSON): one column per live branch in view; sales of a closed / pending
     branch are folded into one code-less «فروع أخرى» column, so those branches never show."""
     return _get('/api/analytics/margin-board/')
+def out_here_export():
+    """C06 /supply «ناقص هنا · موجود هناك» workbook: its summary lists every live retail branch in view (HQ is a
+    source, never a destination); pending / closed / call center never show."""
+    return _get('/api/supply/out-here/export/')
 
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
@@ -150,4 +154,5 @@ EXPORTS = [
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
     ('margin_board', margin_board, ABSENT_ALL),
+    ('out_here_export', out_here_export, ABSENT_ALL),
 ]

@@ -1009,6 +1009,7 @@ export const supplyApi = {
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
   // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
   receipts:            (params)      => api.get('/supply/receipts/', { params }),
+  outHere:             (params)      => api.get('/supply/out-here/', { params }),
   receiptDecide:       (id, body)    => api.post(`/supply/receipts/${id}/decide/`, body),
   supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
   supplierCodeReport:      (days) => api.get('/supply/reports/supplier-codes/', { params: { days } }),
@@ -2321,6 +2322,8 @@ export const glApi = {
   exceptionsCounts: (params)       => api.get('/finance/gl/exceptions/counts/', { params }),
   exceptionsPage:  (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
   exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
+  mixedPatterns:   ()              => api.get('/finance/gl/exceptions/mixed-patterns/'),
+  mixedPatternDecide: (body)       => api.post('/finance/gl/exceptions/mixed-patterns/decide/', body),
   exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
   exceptionAcceptSoftech: (id, body) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, body),   // {note, version}
   exceptionKeepEdit: (id, body)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, body),          // {note, version}
@@ -3316,6 +3319,7 @@ export const stockAuditApi = {
   candidates:   (q)             => api.get('/stock-audit/access/candidates/', { params: { q } }),
   refresh:      ()              => api.post('/stock-audit/refresh/'),
   runs:         ()              => api.get('/stock-audit/runs/'),
+  discountPolicy: (params = {}) => api.get('/stock-audit/discount-policy/', { params }),   // C07 unvalidated preview
 }
 
 // HR attendance (stage 1) — fingerprint machines → days. Every route is gated on the server by level
