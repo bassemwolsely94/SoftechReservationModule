@@ -176,5 +176,6 @@ class PurchasingListBudgets(TestCase):
 
     def test_filter_options(self):
         self._metrics(2)
+        # the grown items carry 5 effect codes (E0–E4): they must reach the effects list
         assert_budget(self, 'purchasing/filter-options', self.client_, '/api/purchasing/filter-options/',
-                      grow=self._metrics, min_rows=0)
+                      grow=self._metrics, min_rows=5, rows_of=lambda r: len(r.data.get('effects') or []))
