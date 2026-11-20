@@ -41,6 +41,8 @@ BUDGETS: dict[str, Budget] = {
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
     'personal/saved-views': Budget('list', 6, 'C23, 2026-11-20: own + role-shared views in one query (+ auth); '
                                               'not measured locally yet — CI first run'),
+    'purchasing/aggregated': Budget('list', 9, 'C16 2026-11-20: not measured yet (CI first run); '
+                                               'the cover limit is read once per response, not per row'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '

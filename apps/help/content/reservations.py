@@ -658,10 +658,14 @@ SCREENS = [
              'text': T('رصيد الصنف في الفروع، عشان تعرف تطلب تحويل منين.', 'The item\'s stock across branches, so you know where to request a transfer from.'),
              'open_hint': T('الكارت ده على الموبايل؛ على الكمبيوتر شوف قسم الأصناف.', 'This card is on the phone; on desktop see the items section.')},
             {'target': 'reservations-detail-items', 'label': T('الأصناف', 'Items'),
-             'text': T('أصناف الحجز وكمياتها.', 'The reservation\'s items and quantities.'),
+             'text': T('أصناف الحجز وكمياتها، وجنب كل صنف شارة رصيده في فرع الحجز.', 'The reservation\'s items and quantities, each with a stock badge for the reservation\'s branch.'),
              'more': T(
-                 'كل صنف بكوده وكميته. تقدر تضيف صنف بـ«+ إضافة صنف» طول ما الحجز «قيد الانتظار» بس؛ بعد كده الأصناف بتتقفل للتعديل.\n• وفي الصفحة كمان لوحة بالمخزون الحالي لكل صنف في الفروع.',
-                 'Each item with its code and quantity. You can add an item with "+ Add item" only while the reservation is "Pending"; after that the items are locked.\n• The page also has a panel with the current stock of each item across branches.')},
+                 'كل صنف بكوده وكميته. تقدر تضيف صنف بـ«+ إضافة صنف» طول ما الحجز «قيد الانتظار» بس؛ بعد كده الأصناف بتتقفل للتعديل.\n• وفي الصفحة كمان لوحة بالمخزون الحالي لكل صنف في الفروع.\n'
+                 '• شارة كل صنف: «متوفر»، «كمية غير كافية»، «غير متوفر» أو «صنف يدوي» — من الرصيد القابل للبيع في فرع الحجز. وفوق القائمة الحكم العام: «كل الأصناف متوفرة» أو «بعض الأصناف ناقصة».\n'
+                 '• الحجز بيتحوّل «المخزون متاح» لوحده بس لما كل الأصناف تبقى متوفرة؛ صنف ناقص أو يدوي بيسيبه «قيد الانتظار».',
+                 'Each item with its code and quantity. You can add an item with "+ Add item" only while the reservation is "Pending"; after that the items are locked.\n• The page also has a panel with the current stock of each item across branches.\n'
+                 '• Each item\'s badge: "Available", "Not enough", "Out of stock" or "Manual item" — from sellable stock at the reservation\'s branch. Above the list, the overall verdict: "All items available" or "Some items short".\n'
+                 '• A reservation moves to "Stock available" by itself only when every item is available; one short or manual item keeps it "Pending".')},
             {'target': 'reservations-detail-actions', 'label': T('🔒 داخلي: طباعة · واتساب', '🔒 Internal: print · WhatsApp'),
              'text': T('«طباعة» إيصال داخلي، وزر واتساب يبعت تفاصيل الحجز للعميل.', '"Print" an internal slip; the WhatsApp button sends the reservation details to the customer.'),
              'when': T('الأزرار الملونة جنبهم بتنقل الحجز للمرحلة الجاية حسب دورك.', 'The coloured buttons next to them move the reservation to its next stage, by your role.'),
@@ -705,6 +709,14 @@ SCREENS = [
                  'Every status change is logged here automatically (who and when). Write everything that happened: a call, the customer\'s reply, a stock check.\n• You can attach a photo, and Ctrl+Enter or "Send" saves the note.\n• Colleagues on any shift see the same log, so write clearly.')},
         ],
         'hints': [
+            {'target': 'reservations-detail-stock-overall', 'label': T('الحكم العام للمخزون', 'Overall stock verdict'),
+             'text': T('هل كل أصناف الحجز متوفرة في فرعه؟ «بعض الأصناف ناقصة» = العميل هيلاقي طلب ناقص لو جه دلوقتي.',
+                       'Are all the reservation\'s items in stock at its branch? "Some items short" = the customer would find a partial order now.'),
+             'open_hint': T('للحجز المفتوح بس.', 'For an open reservation only.')},
+            {'target': 'reservations-detail-line-stock', 'label': T('شارة رصيد الصنف', 'Item stock badge'),
+             'text': T('رصيد الصنف القابل للبيع في فرع الحجز مقابل الكمية المطلوبة.', 'The item\'s sellable stock at the reservation\'s branch against the quantity asked.'),
+             'when': T('«كمية غير كافية» أو «غير متوفر»؟ اطلب تحويل أو بلّغ العميل قبل ما ييجي.', '"Not enough" or "Out of stock"? Request a transfer or tell the customer before they come.'),
+             'open_hint': T('للحجز المفتوح بس.', 'For an open reservation only.')},
             {'target': 'reservations-detail-quick-status', 'label': T('أزرار المرحلة (تم التواصل 📞 …)', 'Stage buttons (Contacted 📞 …)'),
              'text': T('تنقل الحجز للمرحلة دي فوراً. التغيير بيتسجّل باسمك ويوصل إشعار للكول سنتر.', 'Moves the reservation to that stage at once; logged under your name, and the call center is notified.'),
              'warn': T('«إلغاء ✕» بيطلب سبب الإلغاء الأول (قائمة + تفاصيل اختيارية)، والإلغاء نهائي.', '"Cancel ✕" asks for the reason first (a list + optional detail); a cancel is final.'),
@@ -795,9 +807,9 @@ SCREENS = [
              'warn': T('الإلغاء نهائي — الحجز مايرجعش.', 'A cancel is final — the reservation cannot come back.'),
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('مطابقة SOFTECH بقت بالفرع ونوع المستند: فاتورة بنفس الرقم في فرع تاني بقت «جزئي» مش «متطابق». صنف إضافي ما اتحفظش وقت الإنشاء بيظهر في تنبيه بدل ما يختفي.',
-                         'The SOFTECH match now uses branch and document type: an invoice with the same number at another branch is "Partial", not "Matched". An extra item that failed to save at creation now shows in a notice instead of vanishing.'),
+        'updated': '2026-11-20',
+        'change_note': T('فحص المخزون بقى لكل صنف في الحجز مش الصنف الأول بس: شارة جنب كل صنف، و«المخزون متاح» التلقائي محتاج كل الأصناف.',
+                         'The stock check now covers every item in the reservation, not just the first: a badge beside each item, and the automatic "Stock available" needs all of them.'),
     },
     {
         'key': 'reservations.mobile_list',

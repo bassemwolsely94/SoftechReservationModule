@@ -23,6 +23,7 @@ from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.decorators import api_view, permission_classes
 
 from .access import PURCHASING, CanReadRunStatus
+from . import pivot_sheets as _pivot_sheets
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -581,6 +582,27 @@ _AGG_COLUMNS = [
     ('فروع بمبيعات',            lambda r: r.branches_with_sales or 0,         '#,##0'),
     ('فروع بفجوات',             lambda r: r.branches_with_gap or 0,           '#,##0'),
 ]
+
+
+def _agg_columns_with_cover(columns=None, limit=None):
+    """C16: the network export with «تغطية الشبكة (شهور)» + the «شراء رغم تغطية» warning after the stock
+    column. The P-31 limit is read once, not per row."""
+    limit = _pivot_sheets.buy_cover_limit() if limit is None else limit
+
+    def _months(r):
+        m = _pivot_sheets.buy_cover_flag(r.total_current_stock, r.total_monthly_avg, limit)['months']
+        return float(m) if m is not None else ''
+
+    def _warn(r):
+        return _pivot_sheets.buy_cover_flag(r.total_current_stock, r.total_monthly_avg, limit)['label']
+
+    out = []
+    for col in (columns or _AGG_COLUMNS):
+        out.append(col)
+        if col[0] == 'إجمالي المخزون':
+            out += [('تغطية الشبكة (شهور)', _months, '#,##0.0'),
+                    (_pivot_sheets.BUY_COVER_LABEL, _warn, None)]
+    return out
 
 
 def _build_metrics_qs(request, run):
@@ -1231,7 +1253,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         #   supp_code, supp_name, prod_code, prod_name, fam_code, fam_name,
         #   itemcode, itemname, price, cost
         [7, 14, 12, 16, 12, 9, 8, 16, 10, 18, 8, 14, 9, 34, 9, 9]
-        + [12, 26, 22, 20, 34, 34]                   # 6 flags: shortage, match, phantom, spike, cheaper, bonus
+        + [12, 26, 22, 20, 26, 34, 34]               # 7 flags: shortage, match, phantom, spike, cover (C16), cheaper, bonus
         + [10, 10, 10, 10, 60]                       # 5 seasonality
         + ([10, 10, 10, 9, 10, 9] if branch_100 else [])   # 6 HQ cols (+in-transit)
         + [10, 10, 10, 9, 9, 10, 10, 9] * n_retail   # 8 cols × each retail branch
@@ -1270,7 +1292,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
 
     # ── 5. Row 1 — Group headers ──────────────────────────────────────────────
     row1 = (
-        [_hdr('بيانات الصنف', HDR_FILL)] * 22
+        [_hdr('بيانات الصنف', HDR_FILL)] * 23
         + [_hdr('الموسمية', SEA_HFILL)] * 5
         + ([_hdr(BL(hq_sid),    B100_HFILL)] * 6 if branch_100 else [])
     )
@@ -1309,6 +1331,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         'المنتج البديل (والتوفر)',    # matching product(s) + all-branch availability warning
         'مبيعات وهمية (النسبة الموصى بطلبها)',  # phantom substitution → recommended order %
         'ذروة طلب غير مؤكدة',        # demand-spike over-purchase (Jutoxib pattern)
+        _pivot_sheets.BUY_COVER_LABEL,  # C16: ≥ 6 months of network cover / stock with no sales (P-31 rule)
         'يوجد أرخص (المورد الأفضل)',  # 💲 a recent accredited supplier beats what we paid (buy_flags)
         'بونص زائد عن 6 شهور',        # 🎁 bonus deal bought > 6 months of sales (buy_flags)
     ]
@@ -1441,9 +1464,10 @@ def _export_xlsx_pivot_v2(run, request, filename):
         logger.warning('[PIVOT-V2] bonus over-buy flags skipped: %s', exc)
         _focx = {}
     CHEAPER_FILL = _f('DCFCE7')   # light green — a cheaper supplier exists
+    COVER_FILL   = _f('FED7AA')   # orange — C16: buying despite ≥ 6 months of network cover
+    _cover_limit = _pivot_sheets.buy_cover_limit()
     FOC_FILL     = _f('FEF9C3')   # light yellow — bonus bought beyond 6 months of sales
 
-    from . import pivot_sheets as _pivot_sheets
     sheet_lines = []                      # P-31: what this file asks for (positive Total gap)
     sheet_covers = {}                     # P-31: items already well covered on this sheet
     for iid in item_order:
@@ -1600,6 +1624,9 @@ def _export_xlsx_pivot_v2(run, request, filename):
             row.append(_cell(f'{_lbl} {_rt}{_conf}', SPIKE_FILL))
         else:
             row.append(_cell('', item_fill))
+        # C16 — تغطية الشبكة: the P-31 «شراء رغم تغطية عالية» rule, shown before the buy (advisory)
+        _bc = _pivot_sheets.buy_cover_flag(total_stock, total_rate, _cover_limit)
+        row.append(_cell(_bc['label'], COVER_FILL) if _bc['warn'] else _cell('', item_fill))
         # يوجد أرخص + بونص زائد (advisory)
         _ch = _cheaper.get(iid)
         row.append(_cell(_bf.cheaper_label(_ch), CHEAPER_FILL) if _ch else _cell('', item_fill))
@@ -1656,7 +1683,7 @@ def _export_xlsx_pivot_v2(run, request, filename):
         row.append(_cell(total_stock,      TOT_DFILL, '#,##0.00'))
         row.append(_cell(total_in_transit, TOT_DFILL, '#,##0.00'))
         row.append(_cell(total_rate,       TOT_DFILL, '#,##0.00'))
-        row.append(_cell(total_coverage,   TOT_DFILL, '#,##0.0'))
+        row.append(_cell(total_coverage,   COVER_FILL if _bc['warn'] else TOT_DFILL, '#,##0.0'))
         row.append(_cell(total_gap,        TOT_DFILL, '#,##0.00'))
         row.append(_cell(total_priority,   TOT_DFILL, '#,##0.000'))
 
@@ -1761,7 +1788,7 @@ def export_purchasing_response(request):
         # ── Flat views ────────────────────────────────────────────────────────
         if view == 'aggregated':
             qs       = _build_agg_qs(request, run)
-            columns  = _AGG_COLUMNS
+            columns  = _agg_columns_with_cover()
             sheet    = 'الشبكة'
             filename = f'purchasing_network_{date}'
         else:

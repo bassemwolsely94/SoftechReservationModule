@@ -24,7 +24,8 @@ reuses it (drop it after migrations change).
 |---|---|---|
 | Harness self-tests (baseline, pending, tripwire, role fixtures) | `test_harness.py` | ~20 s |
 | Static guards (no DB) | `test_static_guards.py` | ~25–50 s |
-| Role × route sweep, both modes | `test_role_sweep.py` | ~8–9 min (5 methods since Z-12; methods a view lacks are skipped) |
+| Role × route sweep, enforce mode | `test_role_sweep.py` | ~6–7 min in CI (5 methods since Z-12; methods a view lacks are skipped) |
+| Role × route sweep, log mode | `test_role_sweep_log.py` | ~6–7 min in CI; split from the enforce module 2026-11-20 so the two run on different CI shards; crashes now have one baseline per mode (`role_crashes_enforce` / `role_crashes_log`) |
 | Authentication (Batch 3) | `test_auth_*.py`, `test_client_ip.py` | ~2 min |
 
 ## Baselines — the ratchet

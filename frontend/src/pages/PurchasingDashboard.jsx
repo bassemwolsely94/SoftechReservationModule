@@ -515,6 +515,13 @@ function AggregatedTab({ abcFilter, search, ordering, onSort, runId, itemFilters
               <td className="px-3 py-2 text-center font-semibold">{fmt(row.total_monthly_avg)}</td>
               <td className={`px-3 py-2 text-center font-bold ${Number(row.total_gap) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {fmt(row.total_current_stock)}
+                {row.network_cover?.warn && (
+                  <div data-tour="purchasing-cover-warning"
+                    className="mt-0.5 inline-block rounded bg-orange-100 px-1.5 text-[11px] font-semibold text-orange-800"
+                    title={row.network_cover.label}>
+                    ⚠ {row.network_cover.months != null ? `${fmt(row.network_cover.months, 1)} شهر` : 'بلا مبيعات'}
+                  </div>
+                )}
               </td>
               <td className={`px-3 py-2 text-center font-bold ${Number(row.total_gap) > 0 ? 'text-red-600' : 'text-gray-400'}`}>
                 {Number(row.total_gap) > 0 ? `+${fmt(row.total_gap)}` : '—'}
