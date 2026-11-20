@@ -3318,6 +3318,7 @@ export const stockAuditApi = {
   candidates:   (q)             => api.get('/stock-audit/access/candidates/', { params: { q } }),
   refresh:      ()              => api.post('/stock-audit/refresh/'),
   runs:         ()              => api.get('/stock-audit/runs/'),
+  discountPolicy: (params = {}) => api.get('/stock-audit/discount-policy/', { params }),   // C07 unvalidated preview
 }
 
 // HR attendance (stage 1) — fingerprint machines → days. Every route is gated on the server by level

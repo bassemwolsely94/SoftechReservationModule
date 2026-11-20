@@ -133,3 +133,31 @@ class FridgeLogBudgets(TestCase):
                                                         defaults={'temp_c': Decimal('5'), 'initials': 'x'})
         assert_budget(self, 'qa/fridges/<id>/month', self.client_,
                       f'/api/qa/fridges/{self.fridge.pk}/month/?month={self.day:%Y-%m}', grow=grow, min_rows=0)
+
+
+class DiscountPolicyPreviewBudget(TestCase):
+    """C07: the unvalidated discount-policy preview computes check 12 live; its queries stay flat as lines grow."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_dp_admin')
+        from apps.stock_audit.params import ensure_rules
+        ensure_rules()   # the first call would otherwise seed the rule rows and skew the count
+        self.n = 0
+
+    def _lines(self, n=30):
+        from apps.stock_audit.models import StockLedgerLine
+        today = timezone.localdate()
+        for _ in range(n):
+            self.n += 1
+            StockLedgerLine.objects.create(branchcode=self.branch.softech_branch_id, doccode='115', docnumber=self.n,
+                                           docdate=today, itemcode=f'D{self.n:05d}', transqty=Decimal('1'),
+                                           transprice=Decimal('70'), itemsaleprice=Decimal('100'),
+                                           custdiscp=Decimal('30'), usercode=str(100 + self.n % 7))
+
+    def test_discount_policy_preview(self):
+        self._lines(2)
+        # warm once: the first request fills per-process caches (2 queries) that are not per-row work
+        self.client_.get('/api/stock-audit/discount-policy/')
+        assert_budget(self, 'stock-audit/discount-policy', self.client_, '/api/stock-audit/discount-policy/',
+                      grow=self._lines, min_rows=20, rows_of=lambda r: r.data['breach_lines'])
