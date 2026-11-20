@@ -50,10 +50,14 @@ BUDGETS: dict[str, Budget] = {
                                                'the cover limit is read once per response, not per row'),
     'delivery/stuck-orders': Budget('list', 14, 'C21, 2026-11-20: 3 settings + count + one joined page '
                                                 '(+ auth); first measured in CI'),
+    'qa/fridge-readings': Budget('list', 12, 'C31, 2026-11-20: page + count, fridge/recorder joined (+ auth); '
+                                             'first measured in CI'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'stockcount/variance-report': Budget('report', 10, 'C14, 2026-11-20: session + snapshots + item costs + one '
                                                        'grouped sales query (+ auth); CI is the first run'),
+    'qa/fridges/<id>/month': Budget('report', 10, 'C31, 2026-11-20: fridge + one month of readings (+ auth); '
+                                                  'first measured in CI'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '
                                                '(one KpiResolver + one grouped query per metric and period)'),
     # ── export jobs (Stage 4): the start answers ≤ 1 s, the status is polled every 1.5 s ─────
