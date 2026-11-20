@@ -177,7 +177,6 @@ def to_excel(rep) -> bytes:
           [[r['day'], label(r['branch_code'], r['branch_name']), r['docnumber'], r['customer'], r['pic'], r['goods'],
             r['fee'], r['margin'], r['rider_cost'], yes(r['small']), yes(r['below_rider']),
             yes(r['feeless_unexplained'])] for r in rep['orders']])
-    neutralise_formulas(wb)
     buf = io.BytesIO()
-    wb.save(buf)
+    neutralise_formulas(wb).save(buf)
     return buf.getvalue()
