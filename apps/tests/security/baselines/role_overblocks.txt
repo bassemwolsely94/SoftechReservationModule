@@ -830,8 +830,52 @@ salesperson GET /api/delivery/small-orders/
 delivery GET /api/delivery/small-orders/export/
 salesperson GET /api/delivery/small-orders/export/
 
+# reason: C17 — «اشترينا أغلى» (/api/supply/bought-dearer/) is HQ purchasing money across every
+#   branch, per buyer and supplier: company-level data, so on top of the purchasing view grant only an
+#   all-branch user may read it (core.branch_scope.sees_everything). Branch-bound viewer keeps /supply.
+viewer GET /api/supply/bought-dearer/
+viewer GET /api/supply/bought-dearer/export/
+
 # reason: W4-F3 (Wave 4, 2026-11-20, builder record) — posting a replacement leg needs replacement finalize
 #   (authz post) and deciding a reversal needs approve; pharmacist holds only create, which the matrix maps POST
 #   to. Same Z-11c pattern as the case decisions above: replacement managers only.
 pharmacist POST /api/replacement/cases/987654321/operations/00000000-0000-0000-0000-000000000000/post/
 pharmacist POST /api/replacement/cases/987654321/reversals/987654321/approve/
+
+# reason: C31 — the fridge temperature log rides the QA gate (apps/qa/views.py QA): only roles the
+#   registry marks qa_inspections (admin, pharmacist, supervisor, quality manager) read or record it,
+#   as for the inspections; every role's hr grant is self-service, not QA.
+accountant GET /api/qa/fridge-readings/
+accountant GET /api/qa/fridges/
+accountant GET /api/qa/fridges/987654321/
+accountant GET /api/qa/fridges/987654321/month/
+accountant POST /api/qa/fridge-readings/
+accountant POST /api/qa/fridges/
+call_center GET /api/qa/fridge-readings/
+call_center GET /api/qa/fridges/
+call_center GET /api/qa/fridges/987654321/
+call_center GET /api/qa/fridges/987654321/month/
+call_center POST /api/qa/fridge-readings/
+call_center POST /api/qa/fridges/
+delivery GET /api/qa/fridge-readings/
+delivery GET /api/qa/fridges/
+delivery GET /api/qa/fridges/987654321/
+delivery GET /api/qa/fridges/987654321/month/
+delivery POST /api/qa/fridge-readings/
+delivery POST /api/qa/fridges/
+purchasing GET /api/qa/fridge-readings/
+purchasing GET /api/qa/fridges/
+purchasing GET /api/qa/fridges/987654321/
+purchasing GET /api/qa/fridges/987654321/month/
+purchasing POST /api/qa/fridge-readings/
+purchasing POST /api/qa/fridges/
+salesperson GET /api/qa/fridge-readings/
+salesperson GET /api/qa/fridges/
+salesperson GET /api/qa/fridges/987654321/
+salesperson GET /api/qa/fridges/987654321/month/
+salesperson POST /api/qa/fridge-readings/
+salesperson POST /api/qa/fridges/
+viewer GET /api/qa/fridge-readings/
+viewer GET /api/qa/fridges/
+viewer GET /api/qa/fridges/987654321/
+viewer GET /api/qa/fridges/987654321/month/

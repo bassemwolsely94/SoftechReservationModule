@@ -24,6 +24,7 @@ import IsrFulfilmentTab from './supply/IsrFulfilmentTab'
 import BranchRequestsTab from './supply/BranchRequestsTab'
 import SupplierComparisonTab from './supply/SupplierComparisonTab'
 import PurchasePricesTab from './supply/PurchasePricesTab'
+import BoughtDearerTab from './supply/BoughtDearerTab'
 import ReceiptCheckTab from './supply/ReceiptCheckTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
@@ -54,7 +55,7 @@ function fmtDate(d) {
 const n = (v, d = 1) => (v === null || v === undefined || v === '' ? '—' : Number(v).toFixed(d))
 
 const SUPPLY_TABS = [
-  ['inbox', 'صندوق الإتاحة'], ['compare', 'مقارنة الموردين'], ['prices', 'مقارنة أسعار الشراء'], ['cases', 'متابعة النواقص'],
+  ['inbox', 'صندوق الإتاحة'], ['compare', 'مقارنة الموردين'], ['prices', 'مقارنة أسعار الشراء'], ['dearer', 'اشترينا أغلى'], ['cases', 'متابعة النواقص'],
   ['rates', 'معدلات البيع'], ['isr', 'طلبات التوريد / ISR'], ['isrfill', 'تلبية طلبات الفروع'],
   ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'], ['receipts', 'شراء رغم تغطية عالية'],
 ]
@@ -100,6 +101,7 @@ export default function SupplyPage() {
       {tab === 'inbox' ? <AvailabilityInboxTab />
         : tab === 'compare' ? <SupplierComparisonTab />
         : tab === 'prices' ? <PurchasePricesTab />
+        : tab === 'dearer' ? <BoughtDearerTab />
         : tab === 'cases' ? <SupplyCasesTab />
         : tab === 'rates' ? <RatesTab />
         : tab === 'isr' ? <IsrTab />
