@@ -8,15 +8,16 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { supplyApi } from '../../api/client'
+import { exportJobsApi, supplyApi } from '../../api/client'
 import useBranchLabels from '../../hooks/useBranchLabels'
-import { Chip, q, money, errText, inputCls, btnGhost, SortTh, useSort, txt, downloadBlob } from './supplyUi'
+import useExportJob from '../../hooks/useExportJob'
+import ExportJobStatus from '../../components/ExportJobStatus'
+import { Chip, q, money, errText, inputCls, btnGhost, SortTh, useSort, txt } from './supplyUi'
 
 export default function OutHereTab() {
   const bl = useBranchLabels()
   const [branch, setBranch] = useState('')
   const [abc, setAbc] = useState('A,B')
-  const [msg, setMsg] = useState('')
   const params = { abc, ...(branch ? { branch } : {}) }
 
   const { data, isLoading, error } = useQuery({
@@ -29,9 +30,11 @@ export default function OutHereTab() {
     rate: r => r.monthly_avg, need: r => r.need, qty: r => r.transfer_qty, value: r => r.value,
   })
   const totals = useMemo(() => ({ n: rows.length, value: rows.reduce((s, r) => s + r.value, 0) }), [rows])
-  const exportXlsx = () => supplyApi.outHereExport(params)
-    .then(r => downloadBlob(r.data, `out-here-${new Date().toISOString().slice(0, 10)}.xlsx`))
-    .catch(e => setMsg(errText(e)))
+  // Stage 4: built as a background job (start → progress → download)
+  const exp = useExportJob({
+    storageKey: 'export-job:supply-out-here',
+    start: () => exportJobsApi.start('/supply/out-here/export/', params),
+  })
 
   return (
     <div className="space-y-3">
@@ -54,9 +57,12 @@ export default function OutHereTab() {
         </select>
         <span className="text-content/70">{totals.n} صنف · {money(totals.value)}</span>
         <span className="flex-1" />
-        <button data-tour="purchasing-supply-outhere-export" onClick={exportXlsx} className={btnGhost}>⬇ Excel</button>
+        <button data-tour="purchasing-supply-outhere-export" onClick={() => exp.run()} disabled={exp.busy} className={btnGhost}>
+          {exp.busy ? '… جارٍ تجهيز الملف' : '⬇ Excel'}
+        </button>
       </div>
-      {(msg || error) && <div className="text-sm bg-surface-2 border border-line rounded px-3 py-2">{msg || errText(error)}</div>}
+      <div className="flex justify-end"><ExportJobStatus exp={exp} /></div>
+      {error && <div className="text-sm bg-surface-2 border border-line rounded px-3 py-2">{errText(error)}</div>}
 
       {!branch && (data?.branches || []).length > 0 && (
         <div className="flex flex-wrap gap-2 text-xs">

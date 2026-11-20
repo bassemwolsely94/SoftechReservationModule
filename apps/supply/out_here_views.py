@@ -5,7 +5,11 @@ C06: /supply «ناقص هنا · موجود هناك» — A/B items at zero at
 stock above its safety level (apps/purchasing/out_here.py). Read-only: no transfer, ISR or SOFTECH call is made here;
 the transfer itself is made on the transfers screen.
 
-  GET /api/supply/out-here/?branch=130,140&abc=A,B[&format=xlsx]
+  GET  /api/supply/out-here/?branch=130,140&abc=A,B      the list (JSON)
+  GET  /api/supply/out-here/export/?…                     the same list as Excel
+  POST /api/supply/out-here/export/jobs/?…                that Excel as a background job (performance Stage 4,
+                                                          export_jobs.view_kinds 'v:supply_out_here') — the screen
+                                                          uses this one
 
 Supply view rights (CanOperateSupply = purchasing/view). Destinations are narrowed to the user's branches
 (core.branch_scope); the sources shown may be any live branch — that is the point of the list.
@@ -24,26 +28,43 @@ from core.multi_filter import multi_values
 
 from .permissions import CanOperateSupply
 
+XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def _report(request):
+    from apps.purchasing import out_here as oh
+    qp = request.query_params
+    codes = branch_scope.narrow_codes(request.user, multi_values(qp, 'branch'))
+    asked = [c.upper() for c in multi_values(qp, 'abc')]
+    classes = tuple(c for c in oh.CLASSES if c in asked) or oh.CLASSES
+    report = oh.build(dest_codes=codes, classes=classes)
+    report['classes'] = list(classes)
+    return report
+
+
+def branch_labeller():
+    """code → «code · name» from the live table (never a bare code when the branch has a name)."""
+    from apps.branches.models import Branch
+    names = {b.softech_branch_id: (b.name_ar or b.name or '')
+             for b in Branch.objects.only('softech_branch_id', 'name', 'name_ar')}
+
+    def label(code):
+        return f'{code} · {names[code]}' if names.get(code) else code
+    return label
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, CanOperateSupply])
 def out_here(request):
-    from apps.branches.models import Branch
+    return Response(_report(request))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanOperateSupply])
+def out_here_export(request):
     from apps.purchasing import out_here as oh
-    requested = multi_values(request.query_params, 'branch')
-    codes = branch_scope.narrow_codes(request.user, requested)
-    asked = [c.upper() for c in multi_values(request.query_params, 'abc')]
-    classes = tuple(c for c in oh.CLASSES if c in asked) or oh.CLASSES
-    report = oh.build(dest_codes=codes, classes=classes)
-    if (request.query_params.get('format') or '').lower() == 'xlsx':
-        names = {b.softech_branch_id: (b.name_ar or b.name or '') for b in Branch.objects.only(
-            'softech_branch_id', 'name', 'name_ar')}
-        label = lambda c: f'{c} · {names[c]}' if names.get(c) else c          # never a bare code when named
-        buf = io.BytesIO()
-        neutralise_formulas(oh.workbook(report, label=label)).save(buf)
-        resp = HttpResponse(buf.getvalue(),
-                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        resp['Content-Disposition'] = f'attachment; filename="out-here-in-stock-there-{timezone.localdate()}.xlsx"'
-        return resp
-    report['classes'] = list(classes)
-    return Response(report)
+    buf = io.BytesIO()
+    neutralise_formulas(oh.workbook(_report(request), label=branch_labeller())).save(buf)
+    resp = HttpResponse(buf.getvalue(), content_type=XLSX)
+    resp['Content-Disposition'] = f'attachment; filename="out-here-in-stock-there-{timezone.localdate()}.xlsx"'
+    return resp

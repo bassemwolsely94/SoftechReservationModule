@@ -202,10 +202,43 @@ class ApiTests(_Net):
     def test_excel_shows_branch_names(self):
         from openpyxl import load_workbook
         _u, _s, client = make_admin('c06_admin3')
-        r = client.get(URL, {'format': 'xlsx'})
+        r = client.get(f'{URL}export/')
         self.assertEqual(r.status_code, 200)
         wb = load_workbook(io.BytesIO(r.content))
         self.assertEqual(wb.sheetnames, ['ملخص الفروع', 'الأصناف'])
         lines = [row for row in wb['الأصناف'].iter_rows(min_row=2, values_only=True)]
         self.assertEqual(len(lines), 2)
         self.assertTrue(all(' · ' in row[0] for row in lines))       # «130 · name», never a bare code
+
+
+class ExportJobTests(_Net):
+    """Performance Stage 4: the screen starts the Excel as a background job; same file as the direct export."""
+
+    def setUp(self):
+        super().setUp()
+        self.metric(self.b130, gap=10)
+        self.metric(self.hq)
+        self.stock(self.hq, 100)
+
+    def test_job_builds_the_same_file(self):
+        from unittest import mock
+        from apps.export_jobs.models import ExportJob
+        from apps.tests.test_export_jobs import JOBS, _cells, _inline
+        _u, _s, client = make_admin('c06_admin_job')
+        with mock.patch('core.threads.start_thread', side_effect=_inline):
+            r = client.post(f'{URL}export/jobs/?abc=A')
+        self.assertEqual(r.status_code, 202, r.content[:300])
+        job = ExportJob.objects.get(pk=r.json()['id'])
+        self.assertEqual((job.kind, job.status), ('v:supply_out_here', 'done'))
+        via = client.get(f'{JOBS}{job.pk}/download/')
+        direct = client.get(f'{URL}export/?abc=A')
+        self.assertEqual(_cells(via.content), _cells(direct.content))
+
+    def test_job_refused_without_rights(self):
+        from apps.tests.security.fixtures import seed_code_matrix
+        from core.middleware import module_access
+        seed_code_matrix()
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        _u, _s, client = make_user('c06_pharm_job', role='pharmacist', branch=self.b130)
+        self.assertEqual(client.post(f'{URL}export/jobs/').status_code, 403)

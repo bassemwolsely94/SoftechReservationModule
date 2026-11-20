@@ -148,12 +148,12 @@ def _branch_summary(b, rows) -> dict:
 
 
 def workbook(report, label=lambda c: c):
-    """The list as a workbook (summary + lines), formulas neutralised by the caller's save."""
+    """The list as a streaming (write-only) workbook: summary + lines. The caller saves it through
+    core.export_safety.neutralise_formulas."""
     from openpyxl import Workbook
     from core.export_safety import safe_sheet
-    wb = Workbook()
-    ws = safe_sheet(wb.active)
-    ws.title = 'ملخص الفروع'
+    wb = Workbook(write_only=True)
+    ws = safe_sheet(wb.create_sheet('ملخص الفروع'))
     ws.sheet_view.rightToLeft = True
     ws.append(['الفرع', 'أصناف ناقصة وموجودة بفرع آخر', 'منها فئة A', 'القيمة (سعر الجمهور)'])
     for b in report['branches']:

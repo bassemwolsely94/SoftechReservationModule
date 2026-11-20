@@ -131,7 +131,7 @@ def cover_tiers_export():
 def out_here_export():
     """C06 /supply «ناقص هنا · موجود هناك» workbook: its summary lists every live retail branch in view (HQ is a
     source, never a destination); pending / closed / call center never show."""
-    return _get('/api/supply/out-here/?format=xlsx')
+    return _get('/api/supply/out-here/export/')
 
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
