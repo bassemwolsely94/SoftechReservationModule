@@ -16,6 +16,17 @@ An 'add' becomes a MissedSaleSuggestion when ALL hold:
 
 Pure Postgres; never touches SOFTECH. Idempotent: (cart_token, item_code) is unique and every
 re-run skips what already exists. Nothing here creates a Reservation — a person confirms.
+
+C28 — second source, the call centre (own switch MISSED_SALES_CALLCENTER_ENABLED, default OFF;
+the owner's earlier decision was "our POS only", so this waits for their yes). A catalog item an
+agent recorded on a call (CallItem) becomes a suggestion when ALL hold:
+  * the call is at least MISSED_SALES_CALL_WAIT_DAYS old (time to buy) and inside the window;
+  * the item was not converted on the call (no reservation / transfer made from it);
+  * the caller is a known, real customer (same rule as the POS source);
+  * the customer has not bought the item in SOFTECH on or after the call day;
+  * no open suggestion (either source) and no open reservation for that customer + item.
+Idempotent: CallItem is UNIQUE on the suggestion (call_item). Branch = the call's branch, else the
+customer's branch; a call with neither is skipped (suggestions are branch-scoped).
 """
 import logging
 from datetime import timedelta
@@ -31,6 +42,11 @@ OPEN_RESERVATION_STATUSES = ('pending', 'available', 'contacted', 'confirmed')
 
 def enabled():
     return bool(getattr(settings, 'MISSED_SALES_ENABLED', False))
+
+
+def call_center_enabled():
+    """C28: the call-centre source runs only when the inbox is on AND its own switch is on."""
+    return enabled() and bool(getattr(settings, 'MISSED_SALES_CALLCENTER_ENABLED', False))
 
 
 def _real_customer_ids(ids):
@@ -51,11 +67,107 @@ def _real_customer_ids(ids):
     return out
 
 
+def _bought_since(cust_ids, codes, since):
+    """{(customer_id, item_code): [invoice datetimes]} — SOFTECH sales (doc 115) since `since`."""
+    from apps.customers.models import PurchaseHistoryLine
+    bought = {}
+    for cid, code, at in (PurchaseHistoryLine.objects
+                          .filter(purchase__customer_id__in=cust_ids, item__softech_id__in=codes,
+                                  purchase__doc_code='115', purchase__invoice_date__gte=since)
+                          .values_list('purchase__customer_id', 'item__softech_id', 'purchase__invoice_date')):
+        bought.setdefault((cid, str(code).strip()), []).append(at)
+    return bought
+
+
+def _open_pairs(cust_ids, codes):
+    """(customer_id, item_code) pairs that already have an open suggestion (any source) or an
+    open reservation — never suggest those again."""
+    from apps.reservations.models import Reservation
+    from .models import MissedSaleSuggestion
+    pairs = set(MissedSaleSuggestion.objects
+                .filter(status=MissedSaleSuggestion.STATUS_NEW, customer_id__in=cust_ids)
+                .values_list('customer_id', 'item_code'))
+    pairs |= {(cid, str(code).strip()) for cid, code in Reservation.objects
+              .filter(customer_id__in=cust_ids, status__in=OPEN_RESERVATION_STATUSES,
+                      item__softech_id__in=codes)
+              .values_list('customer_id', 'item__softech_id')}
+    return pairs
+
+
+def detect_call_center_missed_sales(now=None):
+    """C28: call items asked for by a known customer and not bought → suggestions.
+    Returns a summary dict. Caller checks call_center_enabled()."""
+    from apps.callcenter.models import CallItem
+    from .models import MissedSaleSuggestion
+
+    now = now or timezone.now()
+    wait = timedelta(days=int(getattr(settings, 'MISSED_SALES_CALL_WAIT_DAYS', 2)))
+    keep = timedelta(days=int(getattr(settings, 'MISSED_SALES_EXPIRE_DAYS', 14)))
+    summary = {'created': 0, 'skipped_sold': 0, 'skipped_open': 0, 'skipped_customer': 0,
+               'skipped_branch': 0}
+
+    items = list(CallItem.objects
+                 .filter(item__isnull=False, converted_to='none', missed_sale__isnull=True,
+                         call_log__customer__isnull=False,
+                         call_log__called_at__gte=now - keep, call_log__called_at__lte=now - wait)
+                 .select_related('item', 'call_log__customer')
+                 .order_by('call_log__called_at', 'id'))
+    if not items:
+        return summary
+
+    real = _real_customer_ids({ci.call_log.customer_id for ci in items})
+    cust_ids = {ci.call_log.customer_id for ci in items} & real
+    codes = {str(ci.item.softech_id).strip() for ci in items}
+    since = (now - keep).replace(hour=0, minute=0, second=0, microsecond=0)
+    bought = _bought_since(cust_ids, codes, since)
+    open_pairs = _open_pairs(cust_ids, codes)
+
+    created = []
+    for ci in items:
+        log, cid = ci.call_log, ci.call_log.customer_id
+        code = str(ci.item.softech_id).strip()
+        if cid not in real:
+            summary['skipped_customer'] += 1
+            continue
+        branch_id = log.branch_id or log.customer.preferred_branch_id
+        if not branch_id:
+            summary['skipped_branch'] += 1
+            continue
+        call_day = timezone.localtime(log.called_at).date()
+        if any(at and timezone.localtime(at).date() >= call_day for at in bought.get((cid, code), ())):
+            summary['skipped_sold'] += 1
+            continue
+        if (cid, code) in open_pairs:
+            summary['skipped_open'] += 1
+            continue
+        open_pairs.add((cid, code))
+        qty = ci.quantity or Decimal('1')
+        price = ci.item.pack_price or Decimal('0')
+        created.append(MissedSaleSuggestion(
+            branch_id=branch_id, customer_id=cid, item_id=ci.item_id, item_code=code,
+            item_name=ci.item.name or code, qty=qty,
+            value=(Decimal(str(price)) * qty).quantize(Decimal('0.01')),
+            cart_token=None, selected_by_id=log.handled_by_id, seen_at=log.called_at,
+            source=MissedSaleSuggestion.SOURCE_CALL_CENTER, call_item=ci,
+        ))
+    if created:
+        MissedSaleSuggestion.objects.bulk_create(created, ignore_conflicts=True)
+    summary['created'] = len(created)
+    logger.info('[missed_sales:call_center] %s', summary)
+    return summary
+
+
 def detect_missed_sales(now=None):
     """Scan finished POS carts → create new MissedSaleSuggestion rows; expire stale ones.
-    Returns a summary dict."""
-    from apps.customers.models import PurchaseHistoryLine
-    from apps.reservations.models import Reservation
+    With the call-centre switch on, also scans call items (C28). Returns a summary dict."""
+    summary = _detect_pos_missed_sales(now)
+    if call_center_enabled():
+        summary['call_center'] = detect_call_center_missed_sales(now)
+    return summary
+
+
+def _detect_pos_missed_sales(now=None):
+    """The POS source (Project 3)."""
     from .models import MissedSaleSuggestion, PosSelectionEvent, SoftechSalesOrder
 
     now = now or timezone.now()
@@ -121,22 +233,9 @@ def detect_missed_sales(now=None):
     codes = {e.item_code.strip() for e, _ in candidates}
 
     # bought later in SOFTECH (any branch): {(customer, item_code): [invoice datetimes]}
-    bought = {}
-    for cid, code, at in (PurchaseHistoryLine.objects
-                          .filter(purchase__customer_id__in=cust_ids, item__softech_id__in=codes,
-                                  purchase__doc_code='115',
-                                  purchase__invoice_date__gte=(now - keep).replace(hour=0, minute=0,
-                                                                                   second=0, microsecond=0))
-                          .values_list('purchase__customer_id', 'item__softech_id', 'purchase__invoice_date')):
-        bought.setdefault((cid, str(code).strip()), []).append(at)
-
-    open_pairs = set(MissedSaleSuggestion.objects
-                     .filter(status=MissedSaleSuggestion.STATUS_NEW, customer_id__in=cust_ids)
-                     .values_list('customer_id', 'item_code'))
-    open_pairs |= {(cid, str(code).strip()) for cid, code in Reservation.objects
-                   .filter(customer_id__in=cust_ids, status__in=OPEN_RESERVATION_STATUSES,
-                           item__softech_id__in=codes)
-                   .values_list('customer_id', 'item__softech_id')}
+    bought = _bought_since(cust_ids, codes,
+                           (now - keep).replace(hour=0, minute=0, second=0, microsecond=0))
+    open_pairs = _open_pairs(cust_ids, codes)
 
     created = []
     for e, cid in candidates:

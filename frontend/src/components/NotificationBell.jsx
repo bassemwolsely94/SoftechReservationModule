@@ -141,6 +141,8 @@ export default function NotificationBell() {
     deleteNotif,
     snooze,
     refresh,
+    view,
+    setView,
   } = useNotificationSocket()
   const [prefsOpen, setPrefsOpen] = useState(false)
 
@@ -218,7 +220,7 @@ export default function NotificationBell() {
               ? 'bg-orange-100 text-orange-600 animate-pulse'
               : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
             }`}
-          title={isConnected ? 'الإشعارات (متصل)' : 'الإشعارات (غير متصل)'}
+          title={`${view === 'action' ? 'الإشعارات — يحتاج إجراء' : 'الإشعارات — الكل'}${isConnected ? '' : ' (غير متصل)'}`}
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -265,6 +267,8 @@ export default function NotificationBell() {
                 onClearAll={handleClearAll}
                 onOpenPrefs={() => { setOpen(false); setPrefsOpen(true) }}
                 onOpenInbox={() => { setOpen(false); navigate('/notifications') }}
+                view={view}
+                onViewChange={setView}
               />
             </div>
           </>

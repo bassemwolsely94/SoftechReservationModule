@@ -359,6 +359,8 @@ class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Rec
 
     # Live stock at all branches for this item
     stock_by_branch      = serializers.SerializerMethodField()
+    # C33: every line (header + extra lines) checked against sellable stock at the reservation's branch
+    line_stock           = serializers.SerializerMethodField()
     item_sale_price      = serializers.SerializerMethodField()
     customer_softech_pic = serializers.SerializerMethodField()
     channel_label        = serializers.SerializerMethodField()
@@ -434,6 +436,10 @@ class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Rec
                 return request.build_absolute_uri(obj.image.url)
         return None
 
+    def get_line_stock(self, obj):
+        from .stock_check import check
+        return check(obj, lines=list(obj.lines.all()))
+
     def get_stock_by_branch(self, obj):
         if not obj.item_id:
             return []
@@ -483,7 +489,7 @@ class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Rec
             'expected_arrival_date', 'follow_up_date',
             'softech_reserve_id', 'status_color', 'priority_color',
             'image_url', 'images',
-            'stock_by_branch',
+            'stock_by_branch', 'line_stock',
             'status_logs',
             'activities',
             'created_at', 'updated_at',

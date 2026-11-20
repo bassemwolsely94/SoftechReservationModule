@@ -25,6 +25,8 @@ BUDGETS: dict[str, Budget] = {
     # ── polled by every open screen ──────────────────────────────────────────────
     'notifications/': Budget('poll', 4, 'measured 2 on 2026-11-19'),
     'notifications/category-counts': Budget('poll', 4, 'measured 2 on 2026-11-19'),
+    'notifications/?view=action': Budget('poll', 4, 'C26 2026-11-20: the bell default; same scan as the '
+                                                    'list + a type filter (+ auth)'),
     'sync/status': Budget('poll', 5, 'measured 3 on 2026-11-19'),
     'sync/freshness': Budget('poll', 8, 'measured 47 on 2026-11-19; 5 core queries after Stage 3 (+ auth)'),
     'dashboard/summary': Budget('poll', 12, 'measured 34 on 2026-11-19; 8 core queries after Stage 3 (+ auth)'),
@@ -36,13 +38,24 @@ BUDGETS: dict[str, Budget] = {
     'search/universal': Budget('list', 20, 'measured 18 on 2026-11-19'),
     'supply/cases': Budget('list', 7, 'measured 5 on 2026-11-19'),
     'pos-orders': Budget('list', 9, 'measured 7 on 2026-11-19'),
+    'pos-orders/missed-sales': Budget('list', 12, 'C28, 2026-11-20: first ceiling (pos-orders 9 + the '
+                                                  'bought-in-cart order + its lines prefetch + the matrix '
+                                                  'check); lower it to CI\'s measure + 2'),
     'insurance/claims': Budget('list', 10, 'measured 8 on 2026-11-19'),
     'purchasing/metrics': Budget('list', 7, 'measured 5 on 2026-11-19'),
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
+    'purchasing/phantom/monthly': Budget('list', 8, 'C30, 2026-11-20: one item query (+ auth); not measured '
+                                                    'locally (shared PC), CI is the first run'),
+    'purchasing/aggregated': Budget('list', 9, 'C16 2026-11-20: not measured yet (CI first run); '
+                                               'the cover limit is read once per response, not per row'),
+    'delivery/stuck-orders': Budget('list', 14, 'C21, 2026-11-20: 3 settings + count + one joined page '
+                                                '(+ auth); first measured in CI'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'supply/bought-dearer': Budget('report', 14, 'C17, 2026-11-20: lines + suppliers + items + buyers + branches + '
                                                  'refresh marker (+ auth); not measured locally, CI is the first run'),
+    'stockcount/variance-report': Budget('report', 10, 'C14, 2026-11-20: session + snapshots + item costs + one '
+                                                       'grouped sales query (+ auth); CI is the first run'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '
                                                '(one KpiResolver + one grouped query per metric and period)'),
     # ── export jobs (Stage 4): the start answers ≤ 1 s, the status is polled every 1.5 s ─────
