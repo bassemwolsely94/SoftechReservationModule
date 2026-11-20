@@ -41,6 +41,8 @@ BUDGETS: dict[str, Budget] = {
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
+    'supply/bought-dearer': Budget('report', 14, 'C17, 2026-11-20: lines + suppliers + items + buyers + branches + '
+                                                 'refresh marker (+ auth); not measured locally, CI is the first run'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '
                                                '(one KpiResolver + one grouped query per metric and period)'),
     # ── export jobs (Stage 4): the start answers ≤ 1 s, the status is polled every 1.5 s ─────

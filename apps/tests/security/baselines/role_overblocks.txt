@@ -819,3 +819,8 @@ pharmacist POST /api/pos-orders/live-check-gaps/987654321/review/
 salesperson GET /api/pos-orders/live-check-gaps/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/credit-points/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/review/
+
+# reason: C17 — «اشترينا أغلى» (/api/supply/bought-dearer/) is HQ purchasing money across every
+#   branch, per buyer and supplier: company-level data, so on top of the purchasing view grant only an
+#   all-branch user may read it (core.branch_scope.sees_everything). Branch-bound viewer keeps /supply.
+viewer GET /api/supply/bought-dearer/
