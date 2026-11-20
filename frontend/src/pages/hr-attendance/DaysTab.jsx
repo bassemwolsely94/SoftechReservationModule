@@ -79,6 +79,8 @@ export default function DaysTab({ employeeId, month, setMonth, employees, onPick
             <span className="font-bold text-gray-900">{emp.name_ar}</span>
             <span className="text-gray-500">{emp.hr_number}</span>
             {emp.branch_name && <span className="text-gray-500">{emp.branch_name}</span>}
+            <span className="text-gray-500 text-xs">
+              {emp.day_boundary ? `اليوم يبدأ ${String(emp.day_boundary).slice(0, 5)}` : 'جلسات عمل'}</span>
             {emp.hold_resolution && <span className="text-amber-700 text-xs">بصماته معلّقة: {emp.hold_reason}</span>}
             <span className="ms-auto text-xs text-gray-600">
               أيام بها بصمات {totals.days_with_punches} · ساعات {hours(totals.worked_hours)}

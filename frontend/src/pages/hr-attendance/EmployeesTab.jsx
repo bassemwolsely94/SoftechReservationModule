@@ -223,7 +223,7 @@ function EmployeeRow({ r, canManage, m, rowProps, isAsking, asking, setAsking, o
 
 const EDIT_FIELDS = ['name_ar', 'department', 'section', 'job_title', 'work_location', 'branch', 'daily_hours',
                      'status', 'employee_type', 'start_date', 'end_date', 'day_boundary']
-const NULLABLE = ['branch', 'daily_hours', 'start_date', 'end_date']
+const NULLABLE = ['branch', 'daily_hours', 'start_date', 'end_date', 'day_boundary']   // empty day start = work sessions
 
 /** Inline edit of one employee (Manage). Only changed fields are sent; the server validates. */
 function EmployeeEdit({ r, onClose }) {
@@ -259,8 +259,15 @@ function EmployeeEdit({ r, onClose }) {
             onChange={e => set('daily_hours', e.target.value)} className={inputCls} />
         </Field>
         <Field label="بداية يوم العمل">
-          <input type="time" value={String(f.day_boundary).slice(0, 5)}
-            onChange={e => set('day_boundary', e.target.value)} className={inputCls} />
+          <div className="flex items-center gap-1">
+            <input type="time" value={String(f.day_boundary).slice(0, 5)}
+              onChange={e => set('day_boundary', e.target.value)} className={inputCls} />
+            {f.day_boundary
+              ? <button type="button" onClick={() => set('day_boundary', '')} title="مسح = جلسات عمل"
+                  className="px-1.5 py-1 rounded-md text-gray-500 hover:bg-gray-100">✕</button>
+              : null}
+          </div>
+          {!f.day_boundary && <span className="text-[11px] text-gray-400">جلسات عمل (بلا موعد ثابت)</span>}
         </Field>
         <Field label="الحالة">
           <select value={f.status} onChange={e => set('status', e.target.value)} className={inputCls}>

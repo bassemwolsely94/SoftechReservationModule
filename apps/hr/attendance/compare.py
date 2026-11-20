@@ -19,15 +19,59 @@ ours only -> ``not_yet_in_lg`` (under 24 h old at ``now``) or ``missing_in_lg``.
 import bisect
 import calendar
 import datetime
+from decimal import ROUND_HALF_UP, Decimal
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.hr.attendance import lg_rules
 from apps.hr.attendance.days import MANUAL_MACHINE, build_days, punches_for_month
 
+_TWO_PLACES = Decimal('0.01')
 CATEGORIES = ('matched', 'lg_manual', 'missing_from_pull', 'not_yet_in_lg', 'missing_in_lg')
 NOT_YET_HOURS = 24
+
+# Plain words for the screen and the file (the codes themselves stay as the engine's contract).
+CATEGORY_LABELS = {
+    'matched': {'ar': 'متطابقة', 'en': 'Matched'},
+    'lg_manual': {'ar': 'يدوي في لينكد جيتس (بلا ماكينة)', 'en': 'Typed in Linked Gates (no machine)'},
+    'missing_from_pull': {'ar': 'ناقصة من سحبنا', 'en': 'Missing from our pull'},
+    'not_yet_in_lg': {'ar': 'لم تصل لينكد جيتس بعد', 'en': 'Not yet in Linked Gates'},
+    'missing_in_lg': {'ar': 'ناقصة في لينكد جيتس', 'en': 'Missing in Linked Gates'},
+}
+REASON_LABELS = {
+    'lg_night_split': {'ar': 'لينكد جيتس قسم وردية ليلية على يومين',
+                       'en': 'Linked Gates split a night shift across two days'},
+    'lg_window_ignored': {'ar': 'بصمة خارج مواعيد لينكد جيتس فتجاهلها',
+                          'en': "A punch outside Linked Gates' time windows was ignored"},
+    'lg_out_hidden': {'ar': 'بصمة بعد الظهر أخفت انصرافاً بعد منتصف الليل',
+                      'en': 'An afternoon punch hid an after-midnight out'},
+    'lg_no_shifttype': {'ar': 'الموظف بلا نوع وردية في لينكد جيتس فلا أيام له هناك',
+                        'en': 'No shift type in Linked Gates, so it shows no days'},
+    'lg_multi_in': {'ar': 'لينكد جيتس أظهر أكثر من حضور في نفس اليوم',
+                    'en': 'Linked Gates shows several ins on one day'},
+    'missing_punch': {'ar': 'بصمة ناقصة (في مصدر واحد فقط أو بلا انصراف)',
+                      'en': 'A punch is missing (in one source only, or no out)'},
+}
+NO_REASON_LABEL = {
+    'ar': 'راجع البصمات (مثل فترات الراحة: نحن نجمع الفترات، ولينكد جيتس يأخذ من أول حضور لآخر انصراف)',
+    'en': 'See the punches (e.g. breaks: we add up the pairs, Linked Gates takes first in to last out)',
+}
 _ONE_DAY = datetime.timedelta(days=1)
+
+
+def lg_enabled() -> bool:
+    """The Linked Gates switch: off = no comparison, no Linked Gates column, machine punches only."""
+    return bool(getattr(settings, 'HR_ATTENDANCE_LINKEDGATES_ENABLED', False))
+
+
+def official_source() -> str:
+    """Which column is «المعتمد» (and comes first): 'lg' while Linked Gates counts, 'ours' once the
+    owner sets HR_ATTENDANCE_DAY_SOURCE to 'sessions'. With the Linked Gates switch off there is no
+    Linked Gates column, so ours is the only one."""
+    if not lg_enabled():
+        return 'ours'
+    return 'ours' if getattr(settings, 'HR_ATTENDANCE_DAY_SOURCE', 'linkedgates') == 'sessions' else 'lg'
 
 
 def _month_bounds(year, month):
@@ -178,23 +222,51 @@ def _figures(first_in, last_out, minutes):
     return {'in': first_in, 'out': last_out, 'minutes': minutes}
 
 
+def _lg_punches_by_employee(ids, year, month) -> dict:
+    """{employee_id: [current LinkedGatesPunch]} from the month's 1st through the 1st of next month
+    (an out on the 1st of next month moves back onto the month's last day)."""
+    from apps.hr.models import LinkedGatesPunch
+
+    first, last = _month_bounds(year, month)
+    start, end = _aware_range(first, last + _ONE_DAY)
+    out: dict = {pk: [] for pk in ids}
+    for p in _current_lg(LinkedGatesPunch.objects.filter(employee_id__in=ids, check_time__gte=start,
+                                                         check_time__lt=end)):
+        out[p.employee_id].append(p)
+    return out
+
+
+def lg_month_totals(employees, year, month) -> dict:
+    """{employee_id: {'days_with_punches', 'worked_hours'}}: Linked Gates' own month figures (its
+    rules on its current punches only), for the month screen and file next to ours. Display only."""
+    employees = list(employees)
+    if not employees:
+        return {}
+    first, last = _month_bounds(year, month)
+    by_emp = _lg_punches_by_employee([e.pk for e in employees], year, month)
+    shifts = shift_types(employees)
+    out = {}
+    for e in employees:
+        days = [d for d in lg_rules.lg_days(by_emp[e.pk], shifts.get(e.pk)).values()
+                if first <= d.work_date <= last and (d.in_times or d.out_time is not None)]
+        minutes = sum(d.minutes for d in days)
+        out[e.pk] = {
+            'days_with_punches': len(days),
+            'worked_hours': (Decimal(minutes) / Decimal(60)).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP),
+        }
+    return out
+
+
 def compare_month(employees, year, month) -> list:
     """Employee-days of the month where Linked Gates' own figures differ from ours, oldest first per
     employee. Ours = session rules on machine + Linked Gates punches (whatever the switch says);
     Linked Gates' = its own rules on its punches only."""
-    from apps.hr.models import LinkedGatesPunch
-
     employees = list(employees)
     if not employees:
         return []
     ids = [e.pk for e in employees]
-    first, last = _month_bounds(year, month)
     stamps = punches_for_month(ids, year, month, lead_days=1, sources=('machine', 'lg'))
-    start, end = _aware_range(first, last + _ONE_DAY)       # an out on the 1st of next month moves back
-    lg_by_emp: dict = {pk: [] for pk in ids}
-    for p in _current_lg(LinkedGatesPunch.objects.filter(employee_id__in=ids, check_time__gte=start,
-                                                         check_time__lt=end)):
-        lg_by_emp[p.employee_id].append(p)
+    lg_by_emp = _lg_punches_by_employee(ids, year, month)
     shifts = shift_types(employees)
 
     out = []

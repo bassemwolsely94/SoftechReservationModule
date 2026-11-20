@@ -59,7 +59,12 @@ BUDGETS: dict[str, Budget] = {
     'qa/fridge-readings': Budget('list', 12, 'C31, 2026-11-20: page + count, fridge/recorder joined (+ auth); '
                                              'first measured in CI'),
     'finance/gl/exceptions/mixed-patterns': Budget('list', 9, 'measured 7 on 2026-11-20'),
+    'hr-attendance-lg-devices': Budget('list', 5, 'HR Linked Gates task 7, 2026-11-20: measured 3 (access + one joined '
+                                                  'device query); CI confirms'),
     # ── reports on screen ────────────────────────────────────────────────────────
+    'hr-attendance-lg-compare': Budget('report', 13, 'HR Linked Gates task 7, 2026-11-20: measured 11 (access + employees + '
+                                                     'compare_month 5 + machine_day_counts 3); CI '
+                                                     'confirms'),
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'delivery/small-orders': Budget('report', 8, 'C20, 2026-11-20: invoice heads + one grouped line query '
                                                   '(+ auth); not measured locally, CI is the first run'),

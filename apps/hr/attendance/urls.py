@@ -12,6 +12,9 @@ urlpatterns = [
     path('issues/', views.issues_view, name='hr-attendance-issues'),
     path('unknown-ids/', views.unknown_ids, name='hr-attendance-unknown-ids'),
     path('devices/', views.devices, name='hr-attendance-devices'),
+    path('linkedgates/compare/', views.lg_compare, name='hr-attendance-lg-compare'),
+    path('linkedgates/compare/export/', views.lg_compare_export, name='hr-attendance-lg-compare-export'),
+    path('linkedgates/devices/', views.lg_devices, name='hr-attendance-lg-devices'),
     # manage level
     path('employees/<int:pk>/', views.employee_edit, name='hr-attendance-employee-edit'),
     path('employees/<int:pk>/link/', views.employee_link, name='hr-attendance-employee-link'),
@@ -26,6 +29,8 @@ urlpatterns = [
     path('unknown-ids/<str:code>/unignore/', views.unknown_unignore, name='hr-attendance-unknown-unignore'),
     path('conflicts/<str:code>/confirm/', views.conflict_confirm, name='hr-attendance-conflict-confirm'),
     path('collect-now/', views.collect_now, name='hr-attendance-collect-now'),
+    path('linkedgates/devices/<int:lg_device_id>/map/', views.lg_device_map,
+         name='hr-attendance-lg-device-map'),
     # admin only
     path('devices/<int:pk>/', views.device_edit, name='hr-attendance-device-edit'),
     path('agents/', views.agents, name='hr-attendance-agents'),
