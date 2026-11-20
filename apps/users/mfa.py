@@ -260,10 +260,15 @@ def build_login_response(user, request=None, device=None, zone=None, mfa=False) 
     without a request or device there is no enrollment and no claim. Every token gets the `zone`
     (worked out from the request when not given), `auth_at` and `mfa` (this sign-in passed 2FA)
     claims (N3)."""
+    from django.contrib.auth.models import update_last_login
     from rest_framework_simplejwt.tokens import RefreshToken
     from apps.access import session_policy
     from .views import _MeSerializer
     profile = getattr(user, 'staff_profile', None)
+    # UAT B-04: tokens are built here, not by simplejwt's TokenObtainPairView, so its
+    # UPDATE_LAST_LOGIN never ran and last_login stopped in 2026-07. Every completed sign-in
+    # (password, 2FA verify, 2FA set-up during login) passes through here.
+    update_last_login(None, user)
     refresh = RefreshToken.for_user(user)
     if device is not None:
         refresh['dev'] = str(device.public_id)   # before .access_token: the access token copies it

@@ -106,6 +106,17 @@ def _to_decimal(val):
         return Decimal('0')
 
 
+_STOCK_QTY_STEP = Decimal('0.001')   # ItemStock quantity columns: decimal_places=3
+
+
+def _to_stock_qty(val):
+    """A SOFTECH stock quantity rounded the way it is stored (3 decimals, half-up), so comparing it with
+    the stored value is like for like. SOFTECH keeps strip quantities with up to 5 decimals; compared raw,
+    ~2,785 rows looked changed on every 5-minute run (doc 40 §10.1). Column precision itself = S10."""
+    from decimal import ROUND_HALF_UP
+    return _to_decimal(val).quantize(_STOCK_QTY_STEP, rounding=ROUND_HALF_UP)
+
+
 def _to_date(val):
     if val is None:
         return None
@@ -1066,9 +1077,10 @@ def sync_stock(conn, sync_run):
                 item_id=item_id,
                 branch_id=branch_id,
                 softech_store_code=str(row[2]),
-                quantity_on_hand=_to_decimal(row[3]),
-                monthly_qty=_to_decimal(row[4]),
-                on_order_qty=_to_decimal(row[5]),
+                # rounded to the stored 3 decimals, so the change check below compares like for like
+                quantity_on_hand=_to_stock_qty(row[3]),
+                monthly_qty=_to_stock_qty(row[4]),
+                on_order_qty=_to_stock_qty(row[5]),
             ))
         except Exception as e:
             logger.warning(f"Stock build error itemcode={row[0]}: {e}")

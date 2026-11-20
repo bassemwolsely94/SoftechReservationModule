@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import api, { demandApi } from '../api/client'
+import { cachedGet, suggestItemsKey, SUGGEST_DEBOUNCE_MS } from '../api/posReadCache'
 import useHelpTab from '../help/useHelpTab'
 
 // stable cart id — correlates selection telemetry with the eventual order (client_token)
@@ -231,6 +232,29 @@ export const LIVE_ARM_MSG = '⚠ اضغط F10 (أو «إرسال») مرة ثا�
 export const twoStepGate = (armed, key, now, ms = POS_ARM_MS) =>
   !!armed && armed.key === key && now - armed.at <= ms
 
+// Reconcile EVERY non-manual line's discount with the CURRENT channel (never a hand-set %):
+//   • contract/insurance → the contracted rate (server-capped)
+//   • retail (cash/delivery/permanent/…) → 0. Cap-only: NOTHING auto-applies, and the
+//     point/loyalty system NEVER discounts the line. Resetting to 0 also clears any stale
+//     discount left over from a previous channel/customer — that was the "conflict".
+// (Moved verbatim out of the discount-suggest effect for C27 so it can be tested; same rules.)
+export function reconcileSuggestedLines(prev, data) {
+  const supplied = data.suggestions || {}
+  const perItemCap = code => {
+    const c = data.caps?.[code]
+    if (c != null) return Number(c)
+    return data.ceiling != null ? Number(data.ceiling) : 100
+  }
+  return prev.map(l => {
+    const cv = perItemCap(l.softech_itemcode)
+    if (l.disc_manual)   // keep the hand-set %, but never above the current cap
+      return Number(l.cust_discp) > cv ? { ...l, cust_discp: cv } : l
+    const r = supplied[l.softech_itemcode]
+    const val = (r != null) ? Math.min(Number(r), cv) : 0
+    return Number(l.cust_discp) !== val ? { ...l, cust_discp: val } : l
+  })
+}
+
 // allowServerCheckout: only the desktop POS screen opts in to D-18 (doc 39). The mobile POS keeps the
 // old endpoints until a separate decision, whatever the server switch says.
 export default function usePosOrder({ allowServerCheckout = false } = {}) {
@@ -346,7 +370,10 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
     // POS lists branches you can transact on (active + operational) AND may sell for: the server
     // sends `pos_branch_ids` (null = every branch, owner decision D2). HQ stays in for all-branch
     // users (used for testing); cancelled/suspended/CC nodes drop out (can_transact=False).
-    api.get('/branches/').then(({ data }) => {
+    // C27: branches / customer types / a branch's stores come from a 5-minute per-user cache
+    // (api/posReadCache.js). The seller reference (pos_branch_ids, server-checkout switch) is
+    // NOT cached — it is read fresh on every visit.
+    cachedGet('/branches/').then(({ data }) => {
       setAllBranches((data.results || data).filter(b => b.can_transact))
     }).catch(() => {})
     api.get('/pos-orders/reference/').then(({ data }) => {
@@ -379,7 +406,7 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
 
   // نوع العميل catalog — once
   useEffect(() => {
-    api.get('/pos-orders/customer-types/').then(({ data }) => setCustTypes(data.types || [])).catch(() => {})
+    cachedGet('/pos-orders/customer-types/').then(({ data }) => setCustTypes(data.types || [])).catch(() => {})
   }, [])
 
   // channel RBAC: if the (server-filtered) type list doesn't include the current نوع العميل,
@@ -397,7 +424,7 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
     const b = branches.find(x => String(x.id) === String(branch))
     const fallback = (b?.softech_branch_id || '').slice(0, 3)
     if (fallback) setStoreCode(prev => prev || fallback)
-    api.get('/pos-orders/branch-stores/', { params: { branch: Number(branch) } })
+    cachedGet('/pos-orders/branch-stores/', { params: { branch: Number(branch) }, keep: d => !d?.note })
       .then(({ data }) => {
         const st = data.stores || []
         setStores(st)
@@ -466,35 +493,35 @@ export default function usePosOrder({ allowServerCheckout = false } = {}) {
     setCustomer(e ? { softech_pic: e.pic, name: e.name, personcode: e.personcode } : null)
   }
 
-  // SOFTECH-style suggested discounts (re-fetch when the item set / channel / branch changes)
+  // SOFTECH-style suggested discounts (re-fetch when the item set / channel / branch changes).
+  // C27 / P-06: the request is debounced and an older answer never overwrites a newer one; when the
+  // item SET is unchanged (a duplicate line, a removed duplicate, a re-order) the last answer for the
+  // same branch/channel/customer is reused instead of asking again. The reconcile itself
+  // (reconcileSuggestedLines) is unchanged — the same server answer gives the same line discounts.
   const _codes = lines.map(l => l.softech_itemcode).filter(Boolean).join(',')
   const _personcode = customer?.personcode || ''
+  const suggestCacheRef = useRef(null)            // { key, data } — the last successful answer
   useEffect(() => {
-    if (!branch || !_codes) { setSuggest({ map: {}, caps: {}, ceiling: null }); return }
-    api.get('/pos-orders/discount-suggest/',
-      { params: { branch: Number(branch), channel, items: _codes, personcode: _personcode || undefined } })
-      .then(({ data }) => {
-        setSuggest({ map: data.suggestions || {}, caps: data.caps || {}, ceiling: data.ceiling })
-        // Reconcile EVERY non-manual line's discount with the CURRENT channel (never a hand-set %):
-        //   • contract/insurance → the contracted rate (server-capped)
-        //   • retail (cash/delivery/permanent/…) → 0. Cap-only: NOTHING auto-applies, and the
-        //     point/loyalty system NEVER discounts the line. Resetting to 0 also clears any stale
-        //     discount left over from a previous channel/customer — that was the "conflict".
-        const supplied = data.suggestions || {}
-        const perItemCap = code => {
-          const c = data.caps?.[code]
-          if (c != null) return Number(c)
-          return data.ceiling != null ? Number(data.ceiling) : 100
-        }
-        setLines(prev => prev.map(l => {
-          const cv = perItemCap(l.softech_itemcode)
-          if (l.disc_manual)   // keep the hand-set %, but never above the current cap
-            return Number(l.cust_discp) > cv ? { ...l, cust_discp: cv } : l
-          const r = supplied[l.softech_itemcode]
-          const val = (r != null) ? Math.min(Number(r), cv) : 0
-          return Number(l.cust_discp) !== val ? { ...l, cust_discp: val } : l
-        }))
-      }).catch(() => {})
+    if (!branch || !_codes) { setSuggest({ map: {}, caps: {}, ceiling: null }); return undefined }
+    const key = JSON.stringify([String(branch), channel, _personcode, suggestItemsKey(lines)])
+    const apply = (data) => {
+      setSuggest({ map: data.suggestions || {}, caps: data.caps || {}, ceiling: data.ceiling })
+      setLines(prev => reconcileSuggestedLines(prev, data))
+    }
+    if (suggestCacheRef.current?.key === key) { apply(suggestCacheRef.current.data); return undefined }
+    const ctl = new AbortController()
+    const t = setTimeout(() => {
+      api.get('/pos-orders/discount-suggest/',
+        { params: { branch: Number(branch), channel, items: _codes, personcode: _personcode || undefined },
+          signal: ctl.signal })
+        .then(({ data }) => {
+          if (ctl.signal.aborted) return
+          // a "could not read" answer (note, empty maps) is applied as before but never reused
+          if (!data?.note) suggestCacheRef.current = { key, data }
+          apply(data)
+        }).catch(() => {})
+    }, SUGGEST_DEBOUNCE_MS)
+    return () => { clearTimeout(t); ctl.abort() }
   }, [branch, channel, _codes, _personcode])  // eslint-disable-line
 
   // ── Offers preview (READ-ONLY): evaluate the live basket against the offers engine.
