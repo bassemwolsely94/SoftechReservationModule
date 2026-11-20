@@ -214,6 +214,8 @@ def seed_detail_paths(admin_client, planter, routes) -> dict:
 
 def _seed_detail_paths(admin_client, planter, routes) -> dict:
     from django.urls import Resolver404, resolve
+
+    from .state_builders import BUILDERS, build
     seeded = {}
     for path in routes:
         if not any(seg in _PLACEHOLDERS for seg in path.split('/')):
@@ -221,6 +223,13 @@ def _seed_detail_paths(admin_client, planter, routes) -> dict:
         methods = [m for m in METHODS if required(path, m) is not None and handles(path, m)]
         if not methods:
             continue
+        # Wave 4: a route with a state-aware builder gets its record from the builder, before the
+        # generic checks below (which skip a route whose PUT answers 405 before any lookup)
+        if path in BUILDERS:
+            real = build(path, planter)
+            if real and any(_call(admin_client, m, real) != 404 for m in methods):
+                seeded[path] = real
+                continue
         if any(_call(admin_client, m, path) != 404 for m in methods):
             continue
         try:

@@ -77,6 +77,7 @@ urlpatterns = [
     path('phantom/excluded/',   phantom_views.phantom_excluded,   name='phantom-excluded'),
     path('phantom/summary/',    phantom_views.phantom_summary,    name='phantom-summary'),
     path('phantom/med-types/',  phantom_views.phantom_med_types,  name='phantom-med-types'),
+    path('phantom/monthly/',    phantom_views.phantom_monthly,    name='phantom-monthly'),
     path('phantom/confirm/',    phantom_views.phantom_confirm,    name='phantom-confirm'),
     path('phantom/exclude/',    phantom_views.phantom_exclude,    name='phantom-exclude'),
     path('phantom/reset/',      phantom_views.phantom_reset,      name='phantom-reset'),

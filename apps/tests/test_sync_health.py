@@ -196,6 +196,37 @@ class StockChangeOnlyTests(TestCase):
                   if 'catalog_itemstock' in q['sql'] and q['sql'].lstrip().upper().startswith(('INSERT', 'UPDATE'))]
         self.assertEqual(writes, [])
 
+    def _writes(self, snapshot):
+        with CaptureQueriesContext(connection) as ctx:
+            tasks.sync_stock(_Conn(snapshot), SyncRun.objects.create(status='running'))
+        return [q['sql'] for q in ctx.captured_queries
+                if 'catalog_itemstock' in q['sql'] and q['sql'].lstrip().upper().startswith(('INSERT', 'UPDATE'))]
+
+    def test_more_decimals_than_stored_is_not_a_change(self):
+        # doc 40 §10.1: SOFTECH keeps strip quantities with 5 decimals, ItemStock stores 3. Comparing the raw
+        # value with the stored one made ~2,785 rows "change" every 5 minutes (and would break SHADOW).
+        from decimal import Decimal
+        snap = [('IT001', '100', '100', Decimal('1.23456'), Decimal('0.33333'), Decimal('0.00049'))]
+        tasks.sync_stock(_Conn(snap), SyncRun.objects.create(status='running'))
+        row = ItemStock.objects.get()
+        self.assertEqual((row.quantity_on_hand, row.monthly_qty, row.on_order_qty),
+                         (Decimal('1.235'), Decimal('0.333'), Decimal('0.000')))
+        self.assertEqual(self._writes(snap), [])
+
+    def test_rounding_is_half_up_like_the_stored_value(self):
+        from decimal import Decimal
+        tasks.sync_stock(_Conn([('IT001', '100', '100', Decimal('2.0005'), 0, 0)]),
+                         SyncRun.objects.create(status='running'))
+        self.assertEqual(ItemStock.objects.get().quantity_on_hand, Decimal('2.001'))
+        self.assertEqual(self._writes([('IT001', '100', '100', Decimal('2.0005'), 0, 0)]), [])
+
+    def test_a_real_change_below_the_old_precision_still_writes(self):
+        from decimal import Decimal
+        tasks.sync_stock(_Conn([('IT001', '100', '100', Decimal('1.23456'), 0, 0)]),
+                         SyncRun.objects.create(status='running'))
+        self.assertTrue(self._writes([('IT001', '100', '100', Decimal('1.23656'), 0, 0)]))   # 1.235 → 1.237
+        self.assertEqual(ItemStock.objects.get().quantity_on_hand, Decimal('1.237'))
+
     def test_changed_row_is_written(self):
         tasks.sync_stock(_Conn(self.snapshot), SyncRun.objects.create(status='running'))
         tasks.sync_stock(_Conn([('IT001', '100', '100', 7, 2, 0)]), SyncRun.objects.create(status='running'))

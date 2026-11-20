@@ -50,7 +50,45 @@ const PURPOSE_OPTIONS = [
   { value: 'followup',     label: '🔔 متابعة مزمن' },
   { value: 'demand',       label: '🔍 صنف غير متوفر' },
   { value: 'general',      label: '💬 استفسار عام' },
+  { value: 'pending',      label: '⏳ لم يُحدَّد السبب' },
 ]
+
+// C12 (P-49): the four owner-approved reasons as one-tap chips; the rest sit under «المزيد»
+const PRIMARY_PURPOSES = [
+  { value: 'new_order', label: '🛒 طلب' },
+  { value: 'demand',    label: '🔍 توفر صنف' },
+  { value: 'refill',    label: '💊 إعادة صرف' },
+  { value: 'complaint', label: '⚠️ شكوى' },
+]
+const MORE_PURPOSES = PURPOSE_OPTIONS.filter(
+  o => o.value !== 'pending' && !PRIMARY_PURPOSES.some(p => p.value === o.value))
+
+const OUTCOME_OPTIONS = [
+  { value: 'ordered',       label: '🛒 تم الطلب' },
+  { value: 'reserved',      label: '📋 حجز / تحويل' },
+  { value: 'informed',      label: '✅ تمت الإجابة' },
+  { value: 'not_available', label: '❌ غير متوفر' },
+  { value: 'follow_up',     label: '🔔 يحتاج متابعة' },
+]
+
+function ChipRow({ options, value, onChange, dataTour, allowClear = false }) {
+  return (
+    <div className="flex flex-wrap gap-1.5" data-tour={dataTour} role="group">
+      {options.map(o => {
+        const on = value === o.value
+        return (
+          <button key={o.value} type="button" aria-pressed={on}
+            onClick={() => onChange(on && allowClear ? '' : o.value)}
+            className={`text-xs rounded-full px-3 py-1.5 border transition-colors ${on
+              ? 'bg-brand-600 text-white border-brand-600'
+              : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-brand-400'}`}>
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 const CASE_CATEGORY_OPTIONS = [
   { value: 'complaint',  label: '⚠️ شكوى' },
@@ -324,6 +362,31 @@ function ManagerDashboard() {
               <div className="text-xs text-red-600">سلبي 😟</div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* C12: how many calls carry a real reason, and how they ended */}
+      {d.total_calls > 0 && (
+        <div className="card" data-tour="callcenter-dash-reasons">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
+            🏷️ سبب ونتيجة المكالمة
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-2xl font-black text-gray-900 dark:text-gray-100">{d.reason_tagged_pct ?? 0}%</span>
+            <span className="text-xs text-gray-500">من المكالمات لها سبب محدد</span>
+            {d.reason_pending > 0 && (
+              <span className="text-xs text-amber-700 mr-auto">⏳ {d.reason_pending} بدون سبب</span>
+            )}
+          </div>
+          {d.by_outcome?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {d.by_outcome.map(r => (
+                <span key={r.outcome} className="text-xs rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-1 text-gray-700 dark:text-gray-200">
+                  {OUTCOME_OPTIONS.find(o => o.value === r.outcome)?.label || r.outcome} · <b>{r.count}</b>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1366,7 +1429,7 @@ export default function CallCenterPage() {
   const [searchPhone, setSearchPhone]         = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState(null)
   const [logForm, setLogForm]   = useState({
-    purpose: 'general', direction: 'inbound',
+    purpose: '', outcome: '', direction: 'inbound',
     status: 'answered', duration_seconds: 0,
     notes: '', summary: '', payment_method: '',
   })
@@ -1455,9 +1518,15 @@ export default function CallCenterPage() {
     return p
   }
 
+  // C12: a new caller starts with no reason chosen (the server's suggestion fills it below)
+  function resetReason() {
+    setLogForm(f => ({ ...f, purpose: '', outcome: '' }))
+  }
+
   function handleSearch() {
     const clean = normalizePhone(phone)
     if (clean === searchPhone) return
+    resetReason()
     setSearchPhone(clean)
     setSelectedCustomerId(null)
     setSavedCallId(null)
@@ -1504,6 +1573,28 @@ export default function CallCenterPage() {
 
   const data     = lookupData
   const customer = data?.customer
+
+  // C12: preselect the reason chip the server suggests (open case → complaint, due refill →
+  // refill, open order → order). Only fills an empty choice; the agent's tap always wins.
+  const suggestedPurpose = data?.suggested_purpose
+  useEffect(() => {
+    if (suggestedPurpose && !savedCallId) {
+      setLogForm(f => (f.purpose ? f : { ...f, purpose: suggestedPurpose }))
+    }
+  }, [suggestedPurpose, savedCallId])
+
+  async function handleOutcomeAfterSave(outcome) {
+    if (!savedCallId) return
+    const prev = logForm.outcome
+    setLogForm(f => ({ ...f, outcome }))
+    try {
+      await callCenterApi.update(savedCallId, { outcome })
+      qc.invalidateQueries({ queryKey: ['cc-calls'] })
+    } catch (e) {
+      setLogForm(f => ({ ...f, outcome: prev }))
+      toast.error('تعذّر حفظ النتيجة: ' + (e.response?.data?.detail || e.message))
+    }
+  }
 
   // Show picker when multiple customers found and agent hasn't picked one yet.
   // '__unknown__' means agent explicitly chose to log without a customer — skip picker.
@@ -2069,6 +2160,12 @@ export default function CallCenterPage() {
                         <div className="text-xs text-gray-400 mt-1">رقم المكالمة: #{savedCallId}</div>
                       </div>
 
+                      <div>
+                        <label className="label text-xs">نتيجة المكالمة</label>
+                        <ChipRow dataTour="callcenter-operator-postsave-result" options={OUTCOME_OPTIONS}
+                          value={logForm.outcome} onChange={handleOutcomeAfterSave} />
+                      </div>
+
                       {/* Post-save actions */}
                       <div className="space-y-2" data-tour="callcenter-operator-postsave">
                         {customer && (
@@ -2114,7 +2211,7 @@ export default function CallCenterPage() {
                         </div>
                       )}
 
-                      <button data-tour="callcenter-operator-new-call" onClick={() => { setSavedCallId(null); setAiDone(false); setFlashCase(null) }}
+                      <button data-tour="callcenter-operator-new-call" onClick={() => { setSavedCallId(null); setAiDone(false); setFlashCase(null); resetReason() }}
                         className="btn-secondary text-sm w-full mt-1">
                         📞 تسجيل مكالمة أخرى
                       </button>
@@ -2122,13 +2219,24 @@ export default function CallCenterPage() {
                   ) : (
                     <div className="space-y-3">
                       <div>
-                        <label className="label text-xs">الغرض</label>
-                        <select data-tour="callcenter-operator-purpose" className="input-field text-sm" value={logForm.purpose}
+                        <label className="label text-xs">سبب المكالمة</label>
+                        <ChipRow dataTour="callcenter-operator-purpose" options={PRIMARY_PURPOSES}
+                          value={logForm.purpose}
+                          onChange={v => setLogForm(p => ({ ...p, purpose: v }))} />
+                        <select aria-label="أسباب أخرى" className="input-field text-xs mt-1.5 py-1"
+                          value={MORE_PURPOSES.some(o => o.value === logForm.purpose) ? logForm.purpose : ''}
                           onChange={e => setLogForm(p => ({ ...p, purpose: e.target.value }))}>
-                          {PURPOSE_OPTIONS.map(o => (
+                          <option value="">المزيد…</option>
+                          {MORE_PURPOSES.map(o => (
                             <option key={o.value} value={o.value}>{o.label}</option>
                           ))}
                         </select>
+                      </div>
+                      <div>
+                        <label className="label text-xs">النتيجة <span className="text-gray-400">(اختياري)</span></label>
+                        <ChipRow dataTour="callcenter-operator-result" options={OUTCOME_OPTIONS} allowClear
+                          value={logForm.outcome}
+                          onChange={v => setLogForm(p => ({ ...p, outcome: v }))} />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -2164,7 +2272,9 @@ export default function CallCenterPage() {
                           value={logForm.notes}
                           onChange={e => setLogForm(p => ({ ...p, notes: e.target.value }))} />
                       </div>
-                      <button data-tour="callcenter-operator-save" onClick={handleSaveLog} disabled={!searchPhone}
+                      <button data-tour="callcenter-operator-save" onClick={handleSaveLog}
+                        disabled={!searchPhone || !logForm.purpose}
+                        title={!logForm.purpose ? 'اختر سبب المكالمة أولاً' : undefined}
                         className="btn-primary w-full text-sm disabled:opacity-50">
                         💾 حفظ المكالمة
                       </button>

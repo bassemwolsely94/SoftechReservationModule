@@ -24,7 +24,8 @@ reuses it (drop it after migrations change).
 |---|---|---|
 | Harness self-tests (baseline, pending, tripwire, role fixtures) | `test_harness.py` | ~20 s |
 | Static guards (no DB) | `test_static_guards.py` | ~25–50 s |
-| Role × route sweep, both modes | `test_role_sweep.py` | ~8–9 min (5 methods since Z-12; methods a view lacks are skipped) |
+| Role × route sweep, enforce mode | `test_role_sweep.py` | ~6–7 min in CI (5 methods since Z-12; methods a view lacks are skipped) |
+| Role × route sweep, log mode | `test_role_sweep_log.py` | ~6–7 min in CI; split from the enforce module 2026-11-20 so the two run on different CI shards; crashes now have one baseline per mode (`role_crashes_enforce` / `role_crashes_log`) |
 | Authentication (Batch 3) | `test_auth_*.py`, `test_client_ip.py` | ~2 min |
 
 ## Baselines — the ratchet
@@ -48,9 +49,9 @@ A batch is done when its baselines are empty (or only hold reviewed `# reason:` 
 | `role_leaks_enforce` | 0 | 4 | matrix-denied request that got through with `RBAC_ENFORCEMENT=enforce` — must stay empty |
 | `role_leaks_log` | 1391 | 4 | matrix-denied request the **view** let through (`log` mode = today's production) |
 | `role_overblocks` | 683 | 4 (owner review) | matrix grants the role, the request answered 403 |
-| `role_softech_reach` | 6 | 4 | matrix-denied request that still reached a SOFTECH connection attempt |
+| `role_softech_reach_enforce` / `_log` | 6 | 4 | matrix-denied request that still reached a SOFTECH connection attempt |
 | `role_crashes` | 29 | 7 | 500 / exception for some role (admin included) with SOFTECH and the internet offline |
-| `role_outside_reach` | 18 | 4 | matrix-denied request that still started a thread / pool job / HTTP / socket / subprocess |
+| `role_outside_reach_enforce` / `_log` | 18 | 4 | matrix-denied request that still started a thread / pool job / HTTP / socket / subprocess |
 | `role_unproven` | 1220 | 4/5 | denied role and admin both got 404 — the check behind the route was never reached |
 | `unclassified_api_prefixes` | 3 | 4 | `/api/<prefix>/` the RBAC middleware never checks (`tasks`, `recommendations`, `stock-audit`) |
 | `sql_from_text` | 218 | 1 → 2 | SQL built from text reaching an execute-style call. Batch 1 fixed every user-reachable read; what is left is explained in blocks: 26 SOFTECH write paths reviewed in Batch 2 (the 2 HIGH ones — user value unescaped — fixed by P-1 via `_dt_literal`; the rest bind or escape their values), 73 internal-only (with reasons), 119 management commands. A new line needs a `# reason:` or `# Owner: Batch 2` header (guarded) |

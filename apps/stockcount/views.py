@@ -450,8 +450,17 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
             reverse=True,
         )
 
+        # C14 / P-08: value at cost + net the sales made between the snapshot and the count
+        from .valuation import value_session
+        all_snaps = list(session.snapshots.all())
+        valued, value_summary = value_session(session, all_snaps)
+
+        def _f(v):
+            return float(v) if v is not None else None
+
         rows = []
         for s in snapshots:
+            v = valued.get(s.item_code, {})
             rows.append({
                 'item_code':      s.item_code,
                 'item_name':      s.item_name,
@@ -462,10 +471,15 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
                 'difference':     float(s.difference)  if s.difference  is not None else None,
                 'variance_type':  s.variance_type,
                 'erp_doccode':    '50' if s.variance_type == 'surplus' else ('150' if s.variance_type == 'deficit' else ''),
+                'unit_cost':      _f(v.get('unit_cost')),
+                'moved_qty':      _f(v.get('moved_qty')),
+                'net_difference': _f(v.get('net_difference')),
+                'net_type':       v.get('net_type', ''),
+                'raw_value':      _f(v.get('raw_value')),
+                'net_value':      _f(v.get('net_value')),
             })
 
         # Summary
-        all_snaps = list(session.snapshots.all())
         total_surplus_qty = sum(
             float(s.difference) for s in all_snaps
             if s.variance_type == 'surplus' and s.difference
@@ -490,6 +504,7 @@ class StockCountSessionViewSet(viewsets.ModelViewSet):
                 'total_surplus_qty': round(total_surplus_qty, 3),
                 'total_deficit_qty': round(total_deficit_qty, 3),
             },
+            'valuation':      value_summary,
             'items':          rows,       # named 'items' to match frontend
             'filter_applied': vtype,
         })

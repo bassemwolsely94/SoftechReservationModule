@@ -11,7 +11,8 @@
  *   - Applies the server-pushed `category_counts` (unread counts) and `freshness_changed` events
  *     (perf Stage 5) — no periodic reconcile while the socket is up
  *   - Falls back to a 120 s REST poll only while WS is unavailable (paused in hidden tabs)
- *   - Exposes:  unreadCount, notifications, isConnected, markRead, markAllRead
+ *   - Exposes:  unreadCount, notifications, isConnected, markRead, markAllRead,
+ *               view + setView (C26: 'action' default | 'all', saved per user)
  *
  * Usage:
  *   const { unreadCount, notifications, isConnected, markRead, markAllRead }
@@ -32,6 +33,25 @@ import useLiveStore, { FRESHNESS_JITTER_MS } from '../store/liveStore'
 // The bell keeps the ACTIONABLE tiers (delivery, reservations = critical;
 // transfers + churn = high) plus 'global', and those fire the sound + visual alarm.
 const MODULE_CATEGORIES = ['demand', 'followups', 'monitoring', 'settings', 'reports', 'mentions']
+
+// C26 / D-19: the bell opens on the ACTION items (the server's fixed type list,
+// apps/notifications/action_items.py, sent as `is_action` on each row and `action` in the counts).
+// «الكل» is one click away; the choice is saved per user (preferences.bell_view).
+export const BELL_VIEWS = ['action', 'all']
+export const DEFAULT_BELL_VIEW = 'action'
+
+/** Does a notification belong in the bell list for this view? */
+export function inBellView(n, view) {
+  if (!n) return false
+  if (view === 'action') return !!n.is_action
+  return !MODULE_CATEGORIES.includes(n.category)
+}
+
+/** The badge number for this view from a category-counts payload. */
+export function bellCountFor(counts, view) {
+  if (!counts) return 0
+  return Number(view === 'action' ? counts.action : counts.bell) || 0
+}
 
 // ── Alarm sound (Web Audio — no asset). Distinct tone per tier, mute-aware. ──
 let _audioCtx = null
@@ -130,6 +150,8 @@ export function useNotificationSocket() {
   const [isConnected,   setIsConnected]     = useState(false)
   const [toast,         setToast]           = useState(null)  // { id, title, body, type_icon }
   const [banner,        setBanner]          = useState(null)  // critical-tier in-app banner
+  const [view,          setViewState]       = useState(DEFAULT_BELL_VIEW)
+  const viewRef       = useRef(DEFAULT_BELL_VIEW)  // read by the socket handlers (no stale closure)
 
   const wsRef         = useRef(null)
   const reconnectRef  = useRef(null)
@@ -143,17 +165,11 @@ export function useNotificationSocket() {
 
   // ── REST fallback helpers ─────────────────────────────────────────────────
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const { data } = await notificationsApi.unreadCount()
-      if (mountedRef.current) setUnreadCount(data.count ?? 0)
-    } catch { /* silent */ }
-  }, [])
-
   const fetchNotifications = useCallback(async () => {
+    const asked = viewRef.current
     try {
-      const { data } = await notificationsApi.list({ limit: MAX_NOTIFICATIONS })
-      if (!mountedRef.current) return
+      const { data } = await notificationsApi.list({ limit: MAX_NOTIFICATIONS, view: asked })
+      if (!mountedRef.current || asked !== viewRef.current) return   // the view changed meanwhile
       const list = Array.isArray(data) ? data : []
       setNotifications(list)
       // A capped (full) list cannot count beyond its cap — then the pushed/REST `bell` count rules.
@@ -248,7 +264,7 @@ export function useNotificationSocket() {
     // Unread counts changed (a new notification, a read / snooze / delete on any tab). Integers only.
     if (event === 'category_counts') {
       useNotificationStore.getState().applyCounts(msg)
-      const bell = Number(msg.bell) || 0
+      const bell = bellCountFor(msg, viewRef.current)
       // The list in memory no longer matches (read or removed on another tab) → reload it once.
       if (bell !== unreadRef.current) fetchNotifications()
       setUnreadCount(bell)
@@ -270,11 +286,19 @@ export function useNotificationSocket() {
       const visible = useNotificationStore.getState().visible
       if (visible && msg.category && !visible.has(msg.category)) return
 
-      // Quiet-feed notifications never enter the main bell — they bump their feed
-      // count only (demand/followups sidebar hint, monitoring 📡, settings ⚙️,
-      // reports 📊, mentions 💬). A quiet feed can still ALARM if its type carries
-      // an alarm_tier (e.g. @-mentions): fire the sound + visual toast, but keep
-      // it out of the bell list / bell unread count.
+      // The bell list takes the row when it fits the current view (C26): «الكل» = the bell's own
+      // categories, «يحتاج إجراء» = any action item, even from a quiet feed (an @-mention).
+      if (inBellView(msg, viewRef.current)) {
+        setNotifications(prev => {
+          if (prev.some(n => n.id === msg.id)) return prev
+          return [msg, ...prev].slice(0, MAX_NOTIFICATIONS)
+        })
+        if (!msg.is_read) setUnreadCount(prev => prev + 1)
+      }
+
+      // Quiet-feed notifications bump their feed count (demand/followups sidebar hint,
+      // monitoring 📡, settings ⚙️, reports 📊, mentions 💬). A quiet feed can still ALARM if its
+      // type carries an alarm_tier (e.g. @-mentions): sound + visual toast, no banner.
       if (MODULE_CATEGORIES.includes(msg.category)) {
         if (!msg.is_read) useNotificationStore.getState().bumpCategory(msg.category, 1)
         const tier = msg.alarm_tier || ''
@@ -286,11 +310,6 @@ export function useNotificationSocket() {
         }
         return
       }
-      setNotifications(prev => {
-        if (prev.some(n => n.id === msg.id)) return prev
-        return [msg, ...prev].slice(0, MAX_NOTIFICATIONS)
-      })
-      if (!msg.is_read) setUnreadCount(prev => prev + 1)
       // Actionable tiers (critical/high) sound the alarm; visual alarm toast
       // lingers longer than a routine one.
       const tier = msg.alarm_tier || ''
@@ -315,7 +334,7 @@ export function useNotificationSocket() {
       if (msg.notifications.some(n => MODULE_CATEGORIES.includes(n.category))) {
         useNotificationStore.getState().refresh()
       }
-      const globalBatch = msg.notifications.filter(n => !MODULE_CATEGORIES.includes(n.category))
+      const globalBatch = msg.notifications.filter(n => inBellView(n, viewRef.current))
       setNotifications(prev => {
         const existingIds = new Set(prev.map(n => n.id))
         const fresh = globalBatch.filter(n => !existingIds.has(n.id))
@@ -330,10 +349,11 @@ export function useNotificationSocket() {
     }
 
     if (event === 'marked_read') {
+      // markRead() already took the 1 off optimistically; the counts push that follows is the truth.
+      // (It used to subtract `updated` a second time, so one click dropped the badge by 2.)
       setNotifications(prev =>
         prev.map(n => n.id === msg.id ? { ...n, is_read: true } : n)
       )
-      setUnreadCount(prev => Math.max(0, prev - (msg.updated || 0)))
     }
 
     if (event === 'all_marked_read') {
@@ -369,13 +389,21 @@ export function useNotificationSocket() {
 
   useEffect(() => {
     mountedRef.current = true
+    // The saved bell view (C26). The first list load waits for it so the bell never flashes the
+    // wrong list; on any error it opens on the default (action items).
+    const loadView = notificationsApi.getPreferences()
+      .then(({ data }) => {
+        const saved = data?.bell_view
+        if (mountedRef.current && BELL_VIEWS.includes(saved)) { viewRef.current = saved; setViewState(saved) }
+      })
+      .catch(() => {})
     // Prime the AudioContext on the first user gesture so alarms can sound
     // (browsers block audio until the page has been interacted with).
     const prime = () => { _ctx() }
     window.addEventListener('pointerdown', prime, { once: true })
     window.addEventListener('keydown', prime, { once: true })
-    // Initial notification load (global bell) + per-module counts
-    fetchNotifications()
+    // Initial notification load (the bell in its saved view) + per-module counts
+    loadView.finally(() => { if (mountedRef.current) fetchNotifications() })
     useNotificationStore.getState().refresh()
     // Try to connect via WebSocket; falls back to the slow poll if unavailable. While it is up, the
     // server pushes new notifications and every count change — no periodic reconcile (perf Stage 5).
@@ -414,13 +442,25 @@ export function useNotificationSocket() {
   const markAllRead = useCallback(async () => {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
     setUnreadCount(0)
+    const v = viewRef.current   // marks only what this view shows (server scope, C26)
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: 'mark_all_read' }))
+      wsRef.current.send(JSON.stringify({ action: 'mark_all_read', view: v }))
     } else {
-      try { await notificationsApi.markAllRead() } catch { /* silent */ }
+      try { await notificationsApi.markAllRead({ view: v }) } catch { /* silent */ }
     }
   }, [])
+
+  // Switch «يحتاج إجراء» ⇄ «الكل»: badge from the last counts at once, list reloaded, choice saved.
+  const setView = useCallback((next) => {
+    if (!BELL_VIEWS.includes(next) || next === viewRef.current) return
+    viewRef.current = next
+    setViewState(next)
+    setNotifications([])
+    setUnreadCount(bellCountFor(useNotificationStore.getState().bellCounts, next))
+    fetchNotifications()
+    notificationsApi.updatePreferences({ bell_view: next }).catch(() => {})
+  }, [fetchNotifications])
 
   const deleteNotif = useCallback(async (id) => {
     // Use functional update to read current state — avoids stale closure bug
@@ -464,6 +504,8 @@ export function useNotificationSocket() {
     deleteNotif,
     snooze,
     refresh,
+    view,
+    setView,
   }
 }
 
