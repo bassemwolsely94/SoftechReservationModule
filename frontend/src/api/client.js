@@ -852,6 +852,7 @@ export const purchasingApi = {
   phantomExcluded:    (params)      => api.get('/purchasing/phantom/excluded/', { params }),
   phantomSummary:     ()            => api.get('/purchasing/phantom/summary/'),
   phantomMedTypes:    ()            => api.get('/purchasing/phantom/med-types/'),
+  phantomMonthly:     (params)      => api.get('/purchasing/phantom/monthly/', { params }),
   phantomConfirm:     (data)        => api.post('/purchasing/phantom/confirm/', data),
   phantomExclude:     (data)        => api.post('/purchasing/phantom/exclude/', data),
   phantomReset:       (itemId)      => api.post('/purchasing/phantom/reset/', { item_id: itemId }),

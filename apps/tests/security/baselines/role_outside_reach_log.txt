@@ -1,0 +1,2 @@
+# Owner: Batch 4. Requests by a role the code matrix DENIES that still started a background thread / thread-pool job, HTTP call, socket or subprocess (blocked by the Tripwire). Must reach empty. — log mode (test_role_sweep_log.py). Split from role_outside_reach.txt on 2026-11-20; role_outside_reach_enforce.txt holds the enforce-mode sweep.
+

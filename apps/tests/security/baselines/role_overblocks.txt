@@ -684,6 +684,7 @@ supervisor GET /api/purchasing/isr/fulfilment/recent/
 viewer GET /api/purchasing/phantom/candidates/
 viewer GET /api/purchasing/phantom/excluded/
 viewer GET /api/purchasing/phantom/med-types/
+viewer GET /api/purchasing/phantom/monthly/
 viewer GET /api/purchasing/phantom/summary/
 viewer GET /api/purchasing/spike/candidates/
 viewer GET /api/purchasing/spike/med-types/

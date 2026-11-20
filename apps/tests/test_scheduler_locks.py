@@ -202,6 +202,8 @@ SCHEDULER_JOB_GUARDS = {
         'C15: one in-app A/P review digest per recipient per ISO week (dedup_key ap_review_<year>_<week>, check-then-create, racy); read-only on the recon mirror, no sends, no SOFTECH'),
     'return_window_digest': ('once_per_period_check', 'apps.batches.return_calendar.monthly_digest', 'dedup_once=True',
         'snapshot get_or_create (unique) + per-month dedup_once digest, check-then-create (racy); web push'),
+    'phantom_review_monthly': ('once_per_period_check', 'apps.purchasing.phantom_review.send_monthly', "dedup_key=f\"phantom_review_{data['month']}\", dedup_once=True",
+        'C30: reads the local phantom flag only; per-month dedup_once digest, check-then-create (racy); in-app + web push; no stock reduction, no SOFTECH'),
     'hq_exception_digest': ('once_per_period_check', 'apps.insights.hq_exceptions.send_weekly', "dedup_key=f'hq_exception_digest_{week.isoformat()}', dedup_once=True",
         'reads stored engine output only; per-week (Sunday start) dedup_once digest, check-then-create (racy); in-app + web push'),
     'receipt_check_daily': ('once_per_period_check', 'apps.procurement.receipt_check.send_digest', "dedup_key=f'receipt_check_{today.isoformat()}', dedup_once=True",
