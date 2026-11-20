@@ -26,6 +26,7 @@ import SupplierComparisonTab from './supply/SupplierComparisonTab'
 import PurchasePricesTab from './supply/PurchasePricesTab'
 import BoughtDearerTab from './supply/BoughtDearerTab'
 import ReceiptCheckTab from './supply/ReceiptCheckTab'
+import MissingBonusTab from './supply/MissingBonusTab'
 import OutHereTab from './supply/OutHereTab'
 import { wildcardMatch } from '../utils/wildcard'
 import useBranchLabels from '../hooks/useBranchLabels'
@@ -59,6 +60,7 @@ const SUPPLY_TABS = [
   ['inbox', 'صندوق الإتاحة'], ['compare', 'مقارنة الموردين'], ['prices', 'مقارنة أسعار الشراء'], ['dearer', 'اشترينا أغلى'], ['cases', 'متابعة النواقص'],
   ['rates', 'معدلات البيع'], ['isr', 'طلبات التوريد / ISR'], ['isrfill', 'تلبية طلبات الفروع'],
   ['wa', 'طلبات واتساب'], ['dist', 'التوزيعة'], ['receipts', 'شراء رغم تغطية عالية'],
+  ['bonus', 'بونص ناقص'],
   ['outhere', 'ناقص هنا · موجود هناك'],
 ]
 const TAB_KEY = 'supply_last_tab'
@@ -110,6 +112,7 @@ export default function SupplyPage() {
         : tab === 'isrfill' ? <IsrFulfilmentTab />
         : tab === 'wa' ? <BranchRequestsTab />
         : tab === 'receipts' ? <ReceiptCheckTab />
+        : tab === 'bonus' ? <MissingBonusTab />
         : tab === 'outhere' ? <OutHereTab /> : <DistributionTab />}
     </div>
   )

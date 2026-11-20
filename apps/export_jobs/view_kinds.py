@@ -31,6 +31,10 @@ VIEW_EXPORTS = {
                             False, ''),
     'v:rider_payouts': ('apps.rider_payouts.views:periods_export', 'أجور الطيارين', 'GET', False,
                         'apps.rider_payouts.access:export_allowed'),
+    'v:delivery_small_orders': ('apps.delivery.report_views:small_orders_export', 'طلبات توصيل صغيرة وبدون رسوم',
+                                'GET', False, ''),                         # C20
+    'v:supply_missing_bonus': ('apps.supply.missing_bonus_views:missing_bonus_export', 'بونص ناقص', 'GET', False,
+                               ''),
     'v:supply_out_here': ('apps.supply.out_here_views:out_here_export', 'ناقص هنا · موجود هناك', 'GET', False, ''),
     'v:bought_dearer': ('apps.supply.dearer_views:bought_dearer_export', 'اشترينا أغلى', 'GET', False,
                         'apps.supply.dearer_views:export_gate'),         # C17: company-level, all-branch users

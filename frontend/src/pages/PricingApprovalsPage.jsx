@@ -470,6 +470,7 @@ export default function PricingApprovalsPage() {
   })
 
   const { user } = useAuthStore()
+  // role review decision 2: approving a price change is a money action; stays with the approver, not every pricing viewer
   const isAdmin = user?.role === 'admin' || user?.is_staff
 
   // Load approver's Softech info (only relevant for admins)

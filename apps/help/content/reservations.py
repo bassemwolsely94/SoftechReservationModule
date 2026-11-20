@@ -517,8 +517,8 @@ SCREENS = [
                  'ابحث بالاسم أو الكود أو الباركود (الماسح شغّال). بعد الاختيار بيظهر المخزون في الفرع وفي الفروع التانية — يمكن الأسرع تحويل من فرع قريب.\n• لو الصنف مش في SOFTECH اكتب اسمه يدوي ويتسجّل «صنف غير مكوَّد».\n• «أصناف إضافية» لأكتر من صنف لنفس العميل.',
                  'Search by name, code or barcode (the scanner works). Once chosen, stock at the branch and other branches shows — a transfer from a nearby branch may be fastest.\n• If the item is not in SOFTECH, type its name manually and it is saved as an "uncoded item".\n• "Additional items" for more than one item for the same customer.')},
             {'target': 'reservations-new-details', 'label': T('📋 تفاصيل الحجز', '📋 Reservation details'),
-             'text': T('الفرع اللي العميل هيستلم منه. الكول سنتر والمدير بيختاروه، والفرع ثابت لباقي الأدوار.',
-                       'The branch the customer collects from. Call center and admins choose it; for other roles it is fixed.'),
+             'text': T('الفرع اللي العميل هيستلم منه. أي دور له صلاحية كل الفروع (الإدارة والكول سنتر والمشرف) بيختاره، وباقي الأدوار فرعها ثابت.',
+                       'The branch the customer collects from. Any role with all-branch access (admin, call center, supervisor) chooses it; for other roles it is fixed.'),
              'more': T(
                  'الفرع (إجباري)، الأولوية («مزمن» لمرضى العلاج المستمر و«عاجل» للي محتاجه النهارده)، تاريخ المتابعة، موعد الوصول المتوقع، مصدر الطلب، طريقة التسليم، وملاحظات.\n• «تاريخ المتابعة» بيطلّع الحجز في «متابعة اليوم» على الرئيسية في يومه.',
                  'The branch (required), priority ("Chronic" for long-term therapy patients, "Urgent" for what is needed today), follow-up date, expected arrival, order source, fulfilment method, and notes.\n• The "Follow-up date" puts the reservation in "Today\'s follow-ups" on the home page on that day.')},
@@ -598,8 +598,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('خانة الصنف: صنف واحد أو صنف ورا صنف أو أكتر من صنف، وCtrl+F1 للخانة اللي كنت فيها', 'Item box: pick one, one after another or several; Ctrl+F1 opens for the box you were in'),
+        'updated': '2026-11-20',
+        'change_note': T('اختيار الفرع لأي دور له صلاحية كل الفروع، لا للكول سنتر والمدير فقط', 'Any role with all-branch access picks the branch, not only call center and admin'),
     },
     {
         'key': 'reservations.detail',

@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { transfersApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
+import { canPickAnyBranch } from '../../utils/branchAccess'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import PhoneAlertToggle from '../../components/PhoneAlertToggle'
 import useTransferPrefill from '../../hooks/useTransferPrefill'
@@ -18,7 +19,7 @@ export default function MobileNewTransferPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickRequesting = ['admin', 'purchasing', 'call_center'].includes(user?.role)
+  const canPickRequesting = canPickAnyBranch(user)
 
   const [requesting, setRequesting] = useState(user?.branch_id ? String(user.branch_id) : '')
   const [supplying, setSupplying]   = useState('')

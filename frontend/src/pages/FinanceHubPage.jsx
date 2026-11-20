@@ -56,6 +56,7 @@ const TABS = [
 export default function FinanceHubPage() {
   const { user } = useAuthStore()
   const role = user?.role || ''
+  // role review decision 2: admin-only finance actions (not a screen grant; the ledger matrix grant decides the tiles)
   const isAdmin = ['admin'].includes(role)
 
   const ledger = usePermissions('ledger')

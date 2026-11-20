@@ -23,7 +23,6 @@ from .models import CallList, FollowUpTask, FollowUpTaskAssignment
 logger = logging.getLogger('elrezeiky.followups')
 
 OPEN_STATUSES = ('pending', 'called')
-CREATOR_ROLES = ('admin', 'supervisor', 'call_center')   # owner decision 2026-11-09
 
 
 def _base(criteria: dict, user):

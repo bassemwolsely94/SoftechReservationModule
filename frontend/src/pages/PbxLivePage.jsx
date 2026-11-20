@@ -12,7 +12,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { pbxApi, refreshSession } from '../api/client'
-import useAuthStore from '../store/authStore'
+import { usePermission } from '../hooks/usePermission'
 import useHelpTab from '../help/useHelpTab'
 import PbxConfigTab, { PbxStatusBadge } from '../components/pbx/PbxConfigTab'
 import useSortableRows from '../hooks/useSortableRows'
@@ -202,8 +202,7 @@ export default function PbxLivePage() {
   const [customerCard, setCustomerCard] = useState(null)  // { customer, session_id }
   const wsRef = useRef(null)
   const qc = useQueryClient()
-  const { user } = useAuthStore()
-  const canConfigure = ['admin', 'supervisor'].includes(user?.role)
+  const canConfigure = usePermission('callcenter', 'edit')   // server: PBX settings follow the matrix
   const [tab, setTab] = useState('live')
   useHelpTab(tab)
 

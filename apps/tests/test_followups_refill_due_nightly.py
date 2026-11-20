@@ -24,7 +24,7 @@ from apps.customers.models import Customer, PurchaseHistory, PurchaseHistoryLine
 from apps.followups import call_lists, nightly, refill_due, services
 from apps.followups.models import CallList, ChronicMedicationProfile, FollowUpTask
 
-from .factories import make_admin, make_branch, make_call_center, make_customer, make_item, make_pharmacist
+from .factories import make_admin, make_branch, make_call_center, make_customer, make_item
 
 URL = '/api/followups/call-lists/'
 TODAY = dt.date(2026, 11, 19)
@@ -200,8 +200,15 @@ class RefillDueListTests(_Sales, TestCase):
         self.assertEqual((p['matching'], p['due_in_scope']), (0, 0))
 
     def test_permissions(self):
-        _, _, pharm = make_pharmacist('rd_ph')
-        self.assertEqual(pharm.post(URL, self._body(), format='json').status_code, 403)
+        # creating follows the matrix's followups create since the role review (owner decision 6,
+        # pharmacists may create); a role without it is refused once the matrix is seeded
+        from core.middleware import module_access
+        from .factories import make_user
+        from .security.fixtures import seed_code_matrix
+        seed_code_matrix()
+        self.addCleanup(module_access.clear_cache)
+        _, _, viewer = make_user('rd_viewer', role='viewer')
+        self.assertEqual(viewer.post(URL, self._body(), format='json').status_code, 403)
         from rest_framework.test import APIClient
         self.assertIn(APIClient().post(f'{URL}preview/', {'criteria': {'refill_due': True}},
                                        format='json').status_code, (401, 403))

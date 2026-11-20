@@ -77,9 +77,11 @@ class ShortageForecastingTests(TestCase):
         r = self._client('viewer').post('/api/forecasting/seasonality/', {}, format='json')
         self.assertEqual(r.status_code, 403)
 
-    def test_pharmacist_still_reads_market_shortage_and_forecasting(self):
+    def test_pharmacist_still_reads_market_shortage_not_forecast_runs(self):
         self.assertEqual(self._get('pharmacist', '/api/purchasing/shortage/candidates/').status_code, 200)
-        self.assertEqual(self._get('pharmacist', '/api/forecasting/runs/').status_code, 200)
+        # role review 2026-11-20: forecast runs are the `forecast` module, which the pharmacist does not hold
+        self.assertEqual(self._get('pharmacist', '/api/forecasting/runs/').status_code, 403)
+        self.assertEqual(self._get('supervisor', '/api/forecasting/runs/').status_code, 200)
 
     def test_supervisor_still_reads_scenarios_and_kpi_board(self):
         self.assertEqual(self._get('supervisor', '/api/forecasting/scenarios/').status_code, 200)

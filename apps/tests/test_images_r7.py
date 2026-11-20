@@ -7,8 +7,9 @@ Route groups (apps/images/urls.py), one view test each:
   products/search/  products/<item>/gallery|candidates|upload|set-primary|reorder|images/<pk>/
   report/  review-queue/  filter-meta/  insights/
 
-Permission: the views sit under the `catalog` matrix module; viewer (catalog view only) may read
-but not start jobs / review.
+Permission: the views sit under the `catalog_tools` matrix module (role review 2026-11-20; was
+catalog); supervisor (catalog_tools view only) may read but not start jobs / review; the editing user
+is purchasing (catalog_tools edit / approve).
 Business rules: the name normaliser, scorer helpers (file size, text match, duplicates), the
 learned source weight, job de-duplication and the run_job pipeline (search / download / score
 all mocked — no network, no thread).
@@ -57,7 +58,7 @@ class _Base(TestCase):
         ov = override_settings(MEDIA_ROOT=self.media)
         ov.enable()
         self.addCleanup(ov.disable)
-        self.user, self.pharm, self.client_ = make_user('r7img_pharm', role='pharmacist')
+        self.user, self.pharm, self.client_ = make_user('r7img_pharm', role='purchasing')
         self.item = make_item('ARCOXIA 90mg 7 tabs', 'R7M1')
         self.item.producer_name = 'MSD Egypt'
         self.item.save()
@@ -90,8 +91,13 @@ class _Base(TestCase):
 
 class ImagesPermissionTests(_Base):
 
+    def test_pharmacist_no_longer_reads(self):
+        # role review 2026-11-20: pharmacist holds catalog but not catalog_tools
+        u, _, _ = make_user('r7img_pharmacist', role='pharmacist')
+        self.assertEqual(bearer_client(u).get(API + 'jobs/').status_code, 403)
+
     def test_viewer_reads_but_cannot_start_or_review(self):
-        viewer, _, _ = make_user('r7img_viewer', role='viewer')
+        viewer, _, _ = make_user('r7img_viewer', role='supervisor')
         c = bearer_client(viewer)
         self.assertEqual(c.get(API + 'jobs/').status_code, 200)
         r = c.post(API + 'jobs/', {'item_id': self.item.id}, format='json')

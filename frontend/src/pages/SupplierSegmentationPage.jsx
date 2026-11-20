@@ -93,6 +93,7 @@ const SEG_SORT_KEYS = SEG_COLS.map(c => c[1])
 
 export default function SupplierSegmentationPage() {
   const { user } = useAuthStore()
+  // role review decision 2: re-running the segmentation overwrites supplier classes; admin action
   const isAdmin = user?.role === 'admin'
   const qc = useQueryClient()
   const { params, options } = useProcurementFilters()

@@ -120,8 +120,10 @@ class ZonePolicySerializer(serializers.ModelSerializer):
         return obj.updated_by.full_name if obj.updated_by_id else None
 
     def validate_modules(self, value):
-        from core.middleware.module_access import MODULE_BY_PREFIX
-        known = set(MODULE_BY_PREFIX.values())
+        # every matrix module (role review 2026-11-20: rule-only modules such as stock / rider are not
+        # MODULE_BY_PREFIX values, but module_access.required() maps paths to them)
+        from apps.users.models import MODULE_CHOICES
+        known = {v for v, _ in MODULE_CHOICES}
         if not isinstance(value, list) or not all(isinstance(m, str) for m in value):
             raise serializers.ValidationError('الشاشات يجب أن تكون قائمة')
         bad = [m for m in value if m not in known]

@@ -53,10 +53,8 @@ apps/demand/service.py::escalate_breached_demand_sla::supervisor x2
 apps/demand/service.py::escalate_stale_recoveries::admin,supervisor x1
 apps/demand/service.py::escalate_stale_recoveries::supervisor x1
 apps/demand/views.py::push_purchase_suggestions::admin,purchasing x1
-apps/finance/recon_views.py::_can_read_recon_reports::accountant x1
 apps/finance/views.py::_is_admin_or_pharmacist::admin,pharmacist x1
 apps/followups/call_list_views.py::CallListAgentsView.get::admin,call_center,supervisor x1
-apps/followups/call_lists.py::<module>::admin,call_center,supervisor x1
 apps/followups/reminder_views.py::<module>::admin,supervisor x1
 apps/followups/reminder_views.py::CanViewReminders.has_permission::admin,call_center,quality_manager,supervisor x1
 apps/forecasting/views.py::<module>::admin,purchasing,supervisor x1
@@ -131,8 +129,7 @@ apps/omni/views.py::WallboardView.get::admin,call_center,quality_manager,supervi
 apps/omni/views.py::_AccountWrite.has_permission::admin,supervisor x1
 apps/payments/audit_views.py::<module>::admin,purchasing,supervisor x1
 apps/pbx/cdr.py::notify_bridge_silence::admin,supervisor x1
-apps/pbx/views.py::IsAdminOrSupervisor.has_permission::admin,supervisor x1
-apps/pbx/views.py::ReadOrAdminSupervisorWrite.has_permission::admin,supervisor x1
+apps/pbx/access.py::<module>::admin,supervisor x1
 apps/personal/views.py::persons_search::delivery x1
 apps/pos_orders/permissions.py::<module>::admin,call_center,pharmacist,salesperson,supervisor x1
 apps/pos_orders/views.py::<module>::admin,pharmacist,supervisor x1
@@ -172,6 +169,17 @@ apps/transits/views.py::InTransitTransferViewSet.force_close::admin,purchasing x
 apps/transits/views.py::InTransitTransferViewSet.trigger_sync::admin,purchasing x1
 apps/transits/views.py::PickZoneManagePermission.has_permission::admin,purchasing x1
 apps/transits/views.py::_is_hq::admin,call_center,purchasing x1
+# reason: role review 2026-11-20 (task 1) — ROLE_REVIEW_MODULES in seed_permissions is the matrix seed itself:
+#   the owner's starting view roles for the ten tool modules (spec docs/superpowers/specs/2026-11-20-role-review-design.md,
+#   "New modules" table). Seed data that becomes RoleModuleAccess rows editable on the matrix screen — not an access check.
+apps/users/management/commands/seed_permissions.py::<module>::accountant,admin,purchasing,quality_manager,supervisor x1
+apps/users/management/commands/seed_permissions.py::<module>::admin,call_center,delivery,supervisor x1
+apps/users/management/commands/seed_permissions.py::<module>::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor x1
+apps/users/management/commands/seed_permissions.py::<module>::admin,call_center,pharmacist,purchasing,quality_manager,supervisor x1
+apps/users/management/commands/seed_permissions.py::<module>::admin,call_center,pharmacist,quality_manager,salesperson,supervisor x2
+apps/users/management/commands/seed_permissions.py::<module>::admin,call_center,purchasing,supervisor x1
+apps/users/management/commands/seed_permissions.py::<module>::admin,purchasing,quality_manager,supervisor x1
+apps/users/management/commands/seed_permissions.py::<module>::admin,purchasing,supervisor x1
 apps/users/management/commands/seed_permissions.py::<module>::call_center,pharmacist,quality_manager,salesperson,supervisor x1
 apps/users/management/commands/seed_permissions.py::<module>::pharmacist x1
 apps/users/management/commands/seed_permissions.py::<module>::quality_manager,supervisor x1
@@ -180,8 +188,9 @@ apps/users/models.py::StaffProfile.is_call_center::call_center x1
 apps/users/models.py::StaffProfile.pos_channels::admin,supervisor x1
 apps/users/permissions.py::CanSeeCustomerPII.has_permission::purchasing x1
 apps/users/permissions.py::IsAdminOrCallCenter.has_permission::admin,call_center x1
-apps/vision/views.py::corpus_accuracy::admin,pharmacist,purchasing,supervisor x1
-apps/vision/views.py::corpus_stats::admin,pharmacist,purchasing,supervisor x1
+# reason: CI 283 fix (2026-11-20) — the vision corpus readers before the role review, kept ONLY for a database with no
+#   catalog_tools rows (spec: "Unseeded databases behave as today"); once seeded the matrix alone decides.
+apps/vision/views.py::<module>::admin,pharmacist,purchasing,supervisor x1
 apps/vouchers/coupon_dashboard.py::digest_roles::admin,supervisor x1
 apps/vouchers/coupon_views.py::<module>::admin,purchasing,quality_manager,supervisor x1
 config/settings.py::<module>::admin,call_center,supervisor x1

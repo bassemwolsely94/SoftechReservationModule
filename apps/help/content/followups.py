@@ -179,7 +179,8 @@ SCREENS = [
             'تاريخ آخر صرف وموعد الاستحقاق، والمكملات المقترحة. منها تتصل أو ترسل واتساب وتسجّل النتيجة.',
             'The list of chronic patient follow-up tasks: who is due or overdue, with the customer\'s value and churn risk, the medicine, '
             'last dispense and due date, and suggested complementary items. From here you call or WhatsApp and record the outcome.'),
-        'audience': T('مركز الاتصال والصيادلة والمندوبون والمشرفون.', 'Call center, pharmacists, salespeople and supervisors.'),
+        'audience': T('مركز الاتصال والصيادلة والمندوبون والمشرفون — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Call center, pharmacists, salespeople and supervisors — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'all', 'title': T('كل المهام', 'All tasks'), 'body': T('كل المهام حسب الفلاتر المختارة.', 'All tasks matching the filters.')},
             {'key': 'mine', 'title': T('👤 معينة لي', '👤 Assigned to me'), 'body': T('المهام المسندة لك أنت (أو لدورك/فرعك). ابدأ يومك من هنا.', 'Tasks assigned to you (or your role/branch). Start your day here.')},
@@ -191,7 +192,7 @@ SCREENS = [
                        'اكتب نص المكالمة واختر الموظفين — تُنشأ مهمة لكل عميل (حتى 500) وتوزَّع عليهم بالتساوي، ويصل كل موظف إشعار واحد. '
                        'يُستبعد من ليس له رقم، ومن طلب إيقاف التذكيرات، ومن لديه مهمة مفتوحة. اضغط على قائمة لترى عملاءها أدناه، '
                        'واتصل بزر «📞» بجانب الرقم ثم سجّل النتيجة كالمعتاد. «إغلاق القائمة» يلغي ما لم يتم الاتصال به. '
-                       'الإنشاء للمدير والمشرف وموظفي الكول سنتر. '
+                       'الإنشاء والإغلاق لمن يملك صلاحية «إنشاء» في موديول المتابعات (شاشة «الصلاحيات»)؛ وزر «إغلاق القائمة» يظهر فقط لمنشئ القائمة، أو لمن يرى كل الفروع، أو لمن تغطي فروعه كل فروع القائمة. '
                        'نوع «💊 موعد إعادة الصرف (من سلوك الشراء)»: النظام يدوّر على العملاء اللي بيشتروا نفس الصنف بانتظام '
                        '(3 مرات على الأقل في آخر سنة، كاش أو توصيل)، ويحسب «كل كم يوم» من وسيط الفترات بين آخر مشترياتهم، '
                        'ويطلّع اللي ميعاده جه أو عدّى (ولسه آخر شراء خلال 180 يوم). الترتيب بالقيمة المتوقعة (متوسط اللي بيدفعه في المرة '
@@ -203,7 +204,7 @@ SCREENS = [
                        'write the call script and pick the staff — one task per customer is created (up to 500) and split evenly, with one notification per staff member. '
                        'Customers without a phone, who asked to stop reminders, or with an open task are skipped. Click a list to see its customers below, '
                        'call with the "📞" button next to the number, then record the outcome as usual. "Close list" cancels what was not called. '
-                       'Admins, supervisors and call-center staff can create lists. '
+                       'Creating and closing need the "create" grant of the Follow-ups module (Permissions screen); "Close list" shows only for the creator of the list, a user who sees all branches, or one whose branches cover every branch of the list. '
                        'Type "💊 Refill due (from buying behaviour)": the system finds customers who buy the same item regularly '
                        '(at least 3 times in the last year, cash or delivery), works out "every how many days" from the median gap between '
                        'their latest purchases, and lists those whose date has come or passed (last purchase still within 180 days). '
@@ -469,9 +470,8 @@ SCREENS = [
              'when': T('بعد ما تراجعها — بعدها مش هتظهر كجديدة.', 'After you have gone through them — they will no longer show as new.'),
              'open_hint': T('جوه قائمة جرس الإشعارات، لما يكون فيه غير مقروء.', 'Inside the bell list, when there are unread ones.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('المهام بتتولد وتتقفل لوحدها كل ليلة (بعد تشغيله)؛ وقائمة اتصال جديدة «💊 موعد إعادة الصرف» من سلوك الشراء؛ رقم العميل بيتخفي للمشاهد ولأي حد مقفول عنده رقم العميل، مهما كان دوره',
-                         'Tasks are generated and closed by themselves every night (once switched on); new call list type "💊 Refill due" from buying behaviour; The customer number is hidden from viewers and from anyone whose customer numbers are hidden, whatever their role'),
+        'updated': '2026-11-20',
+        'change_note': T('قوائم الاتصال تتبع صلاحية «إنشاء» في المتابعات، والإغلاق لمنشئ القائمة أو من تغطي فروعه فروعها', 'Call lists follow the Follow-ups "create" grant; closing is for the creator of the list or whoever covers its branches'),
     },
     {
         'key': 'followups.reminders',

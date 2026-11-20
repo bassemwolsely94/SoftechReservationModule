@@ -5,13 +5,13 @@
  * Shows the core reservation info, branch stock availability, and a status
  * timeline. Status actions mirror the server-side transition graph
  * (ReservationViewSet._VALID_TRANSITIONS) so only valid next states are offered;
- * privileged roles (admin/call_center) also get a cancel escape hatch.
+ * anyone holding reservations:edit also gets a cancel escape hatch.
  */
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi } from '../../api/client'
-import useAuthStore from '../../store/authStore'
+import { usePermission } from '../../hooks/usePermission'
 import { StatusBadge, PriorityBadge } from '../../components/StatusBadge'
 import PhoneAlertStatusChip from '../../components/PhoneAlertStatusChip'
 import MobileChatter from '../../components/MobileChatter'
@@ -30,7 +30,6 @@ const TRANSITIONS = {
   fulfilled: [],
   cancelled: [],
 }
-const PRIVILEGED = new Set(['admin', 'call_center', 'manager'])
 
 const ACTION_STYLE = {
   available: 'bg-orange-500',
@@ -63,7 +62,7 @@ export default function MobileReservationDetailPage() {
   const { id }   = useParams()
   const navigate = useNavigate()
   const qc       = useQueryClient()
-  const { user } = useAuthStore()
+  const canCancel = usePermission('reservations', 'edit')   // role review decision 6: same as desktop
 
   const { data: r, isLoading, isError, refetch } = useQuery({
     queryKey: ['m-reservation', id],
@@ -105,7 +104,7 @@ export default function MobileReservationDetailPage() {
     .map(a => ({ id: a.id, text: a.message, who: a.created_by_name, when: a.created_at }))
 
   let allowed = [...(TRANSITIONS[r.status] || [])]
-  if (PRIVILEGED.has(user?.role) && !['fulfilled', 'cancelled'].includes(r.status) && !allowed.includes('cancelled')) {
+  if (canCancel && !['fulfilled', 'cancelled'].includes(r.status) && !allowed.includes('cancelled')) {
     allowed.push('cancelled')
   }
 

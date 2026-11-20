@@ -141,7 +141,38 @@ def rider_payouts_export():
     ledger.add_ride(driver=driver, branch=branch, ride_date=dt.date(2026, 10, 5), deliveries=1)
     return _get('/api/delivery/payouts/periods/export/?month=2026-10')
 
+def delivery_small_orders_export():
+    """C20 delivery small-order / fee-less invoice workbook (/delivery/analytics → 💸 طلبات صغيرة): one small
+    channel-90 sale planted per branch; live branches only, so pending / closed / call center never show."""
+    import datetime as dt
+    from decimal import Decimal
 
+    from django.utils import timezone
+
+    from apps.branches.models import Branch
+    from apps.customers.models import PurchaseHistory, PurchaseHistoryLine
+    from apps.tests.factories import make_customer, make_item
+
+    day = dt.date(2026, 11, 10)
+    item, customer = make_item(softech_id='NVC20'), make_customer()
+    for b in Branch.objects.all():
+        inv = PurchaseHistory.objects.create(
+            customer=customer, softech_invoice_id=f'NV-C20-{b.softech_branch_id}', branch=b, doc_code='115',
+            docnumber='1', sales_channel='90', total_amount=Decimal('50'),
+            invoice_date=timezone.make_aware(dt.datetime.combine(day, dt.time(12, 0))))
+        PurchaseHistoryLine.objects.create(purchase=inv, item=item, quantity=Decimal('1'), unit_price=Decimal('50'),
+                                           line_total=Decimal('50'), cost_at_sale=Decimal('40'))
+    return _get(f'/api/delivery/small-orders/export/?date_from={day}&date_to={day}')
+
+
+def margin_board():
+    """C19 analytics «💹 الهامش: قناة × فرع» (JSON): one column per live branch in view; sales of a closed / pending
+    branch are folded into one code-less «فروع أخرى» column, so those branches never show."""
+    return _get('/api/analytics/margin-board/')
+def missing_bonus_export():
+    """C18 /supply «بونص ناقص» workbook: its summary lists every live receiving branch in view (HQ included);
+    pending / closed / call center never show."""
+    return _get('/api/supply/missing-bonus/export/')
 def out_here_export():
     """C06 /supply «ناقص هنا · موجود هناك» workbook: its summary lists every live retail branch in view (HQ is a
     source, never a destination); pending / closed / call center never show."""
@@ -165,5 +196,8 @@ EXPORTS = [
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
     # its branches come from the riders' periods (one ride planted, into '230'): presence only
     ('rider_payouts_export', rider_payouts_export, frozenset()),
+    ('delivery_small_orders_export', delivery_small_orders_export, ABSENT_ALL),
+    ('margin_board', margin_board, ABSENT_ALL),
+    ('missing_bonus_export', missing_bonus_export, ABSENT_ALL),
     ('out_here_export', out_here_export, ABSENT_ALL),
 ]

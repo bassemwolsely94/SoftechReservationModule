@@ -693,8 +693,8 @@ SCREENS = [
         'related': ['transfers.list', 'demand.list', 'shortage.list'],
         'tour': [
             {'target': 'transfers-new-branches', 'label': T('الفرع الطالب * · الفرع المصدر *', 'Requesting branch * · Supplying branch *'),
-             'text': T('الفرع الطالب هو اللي محتاج الصنف (فرعك عادةً)، والمصدر هو اللي عنده المخزون.',
-                       'The requesting branch needs the item (usually yours); the supplying branch has the stock.'),
+             'text': T('الفرع الطالب هو اللي محتاج الصنف (فرعك عادةً؛ وصلاحية كل الفروع تختار أي فرع)، والمصدر عنده المخزون.',
+                       'The requesting branch needs the item (usually yours; all-branch access picks any); the supplying branch has the stock.'),
              'warn': T('ماينفعش الفرعين يبقوا نفس الفرع. راجع الاختيار — الطلب بيروح للفرع المصدر اللي اخترته.',
                        'The two branches cannot be the same. Check your choice — the request goes to the supplier you pick.'),
              'more': T(
@@ -746,9 +746,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('«حفظ وتقديم» متعلّم من الأول ويتم في خطوة واحدة؛ المؤشر بيروح للكمية بعد كل صنف، وEnter يرجع للبحث',
-                         '"Save & submit" is ticked by default and done in one step; the cursor goes to the quantity after each item, and Enter returns to the search'),
+        'updated': '2026-11-20',
+        'change_note': T('اختيار الفرع الطالب لأي دور له صلاحية كل الفروع', 'Any role with all-branch access picks the requesting branch'),
     },
     {
         'key': 'transfers.detail',

@@ -21,7 +21,7 @@ from apps.config.models import MedicineTypeMap
 from apps.customers.models import Customer, PurchaseHistory
 from apps.forecasting import channels
 from apps.forecasting.models import ChannelBucketMap
-from apps.tests.factories import make_admin, make_branch, make_pharmacist, make_salesperson
+from apps.tests.factories import make_admin, make_branch, make_pharmacist, make_salesperson, make_user
 
 CH_URL = '/api/config/code-maps/channels/'
 IT_URL = '/api/config/code-maps/item-types/'
@@ -174,10 +174,14 @@ class ChannelsApiTests(_CodeMapsBase):
 
     def test_view_only_role_reads_but_cannot_patch(self):
         row = self._row('99')
+        # code_maps view only (role review 2026-11-20: purchasing + supervisor gain the screen)
+        _, _, sup = make_user('cm_api_sup', role='supervisor', branch=self.branch)
+        self.assertEqual(sup.get(CH_URL).status_code, 200)
+        self.assertEqual(sup.patch(f'{CH_URL}{row.pk}/', {'group': 'cash'},
+                                   format='json').status_code, 403)
+        # the pharmacist holds settings view but not code_maps
         _, _, pharma = make_pharmacist('cm_api_pharma', branch=self.branch)
-        self.assertEqual(pharma.get(CH_URL).status_code, 200)
-        self.assertEqual(pharma.patch(f'{CH_URL}{row.pk}/', {'group': 'cash'},
-                                      format='json').status_code, 403)
+        self.assertEqual(pharma.get(CH_URL).status_code, 403)
 
     def test_patch_schedules_cache_drop_on_commit(self):
         row, t = self._row('99'), self._type('70')

@@ -9,6 +9,8 @@ import re
 
 from django.conf import settings
 
+from core.errors import public_error
+
 _RTT = re.compile(r'\((\d+)\s*ms\)')
 
 
@@ -71,7 +73,7 @@ def extension_status() -> dict:
     try:
         regs, tech = fetch_registrations()
     except Exception as exc:
-        error = f'{type(exc).__name__}: {exc}'
+        error = public_error(None, exc)      # technical detail goes to the log only
 
     on_call = set(CallSession.objects.filter(
         state__in=['ringing', 'answered', 'queued', 'on_hold', 'transferred'],

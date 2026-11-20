@@ -1445,7 +1445,7 @@ SCREENS = [
         'title': T('سداد فواتير الموردين (المطابقة)', 'Supplier invoice payments (reconciliation)'),
         'summary': T('ربط سندات الصرف للموردين بالفواتير التي تسددها: النظام يقترح الربط بدرجة ثقة، والمسؤول يعتمد أو يرفض. الاعتماد يُكتب في المرآة لدينا فقط؛ الكتابة في SOFTECH خطوة منفصلة («🖊 كتابة في SOFTECH») للمدير فقط وتعمل فقط حين يُفعَّل مفتاح الكتابة. «المتبقي» حقل محسوب (قيمة الفاتورة − المسدد في SOFTECH − المعتمد بانتظار الكتابة).',
                      'Link supplier payment vouchers to the invoices they pay: the system proposes links with a confidence level, and the responsible person approves or rejects. Approval is written only to our mirror; writing to SOFTECH is a separate admin-only step ("🖊 Write to SOFTECH") that works only when the write switch is on. "Remaining" is computed (invoice value − paid in SOFTECH − approved awaiting write).'),
-        'audience': T('المالية والمشتريات (الإدارة فقط — تسوية الموردين بيانات على مستوى الشركة). المحاسب يفتح تقارير «غير المسددة» و«المسدد جزئياً» و«المرتجعات» وملفات الإكسل الخاصة بها للقراءة فقط، ولا يعتمد ولا يربط ولا يكتب في SOFTECH.', 'Finance and purchasing (management only — supplier reconciliation is company-level data). An accountant may open the unpaid, part-paid and returns reports and their Excel exports, read-only; they cannot approve, link or write to SOFTECH.'),
+        'audience': T('من يملك موديول «المطابقة المالية» (شاشة «الصلاحيات») — افتراضياً المحاسب والمشتريات والمشرف ومدير الجودة (بيانات على مستوى الشركة). التقارير («غير المسددة» و«المسدد جزئياً») تتبع صلاحية «عرض» فيه، وملفات الإكسل صلاحية «تصدير»، والاعتماد صلاحية «اعتماد»؛ الكتابة في SOFTECH للمدير فقط.', 'Whoever holds the "Financial reconciliation" module (Permissions screen) — by default accountant, purchasing, supervisor and quality manager (company-level data). The reports (unpaid, part-paid) follow its "view" grant, the Excel files its "export" grant, approving its "approve" grant; writing to SOFTECH is for the admin only.'),
         'tabs': [
             {'key': 'candidates', 'title': T('المقترحات', 'Proposals'), 'body': T('مقترحات الربط (ثقة عالية/متوسطة/منخفضة/تعارض) مع الفاتورة وتاريخها وقيمتها والسند ومبلغه والمتبقي. افتح الصف لترى أصناف الفاتورة والمرتجعات المرتبطة، ثم اعتمد أو ارفض.', 'Link proposals (high/medium/low confidence/conflict) with the invoice, date, value, voucher, amount and remaining. Open a row to see the invoice items and linked returns, then approve or reject.')},
             {'key': 'exceptions علّم الحالات (المربع أو مسافة أو Ctrl+A) وقرّر لها مرة واحدة: «قيد التحقيق»، «تم الحل»، «ليس خطأ» (الأخيران بسبب مكتوب)، أو «إعادة فتح». يقرّر المدير والصيدلي المسؤول والمحاسب. القرار يتسجّل باسمك ولا يُعاد رفعه في الفحص التالي، ولا يُفرج وحده عن مطابقة موقوفة — اعتمدها يدوياً من «المقترحات».', 'title': T('الاستثناءات', 'Exceptions'), 'body': T('حالات تحتاج مراجعة: سند مكرر محتمل، سند يسمي فاتورة أخرى، مقبوضات تحتاج تحديد (استرداد أم خصم)، وغيرها.', 'Cases needing review: possible duplicate voucher, voucher naming another invoice, receipts needing a decision (refund or deduction), and others. Tick cases (the box, Space or Ctrl+A) and decide them at once: "Investigating", "Resolved", "Not an error" (the last two with a written reason), or "Reopen". Admins, the responsible pharmacist and the accountant decide. The decision is recorded under your name, is not raised again by the next scan, and never releases a held match by itself — approve that by hand in "Proposals".')},
@@ -1521,10 +1521,10 @@ SCREENS = [
                                               'Proposals with confidence, invoice, voucher and remaining; open a row for details — approving or rejecting depends on permission.'),
              'more': T('افتح الصف عشان تشوف أصناف الفاتورة والمرتجعات المرتبطة، وبعدين «✓ اعتماد» أو «✕ رفض» (أو للمجموعة كاملة).\n'
                        '• «المتبقي» محسوب: قيمة الفاتورة − المسدد في SOFTECH − المعتمد بانتظار الكتابة.\n'
-                       '• الاعتماد للمدير والصيدلي، والكتابة في SOFTECH للمدير بس.',
+                       '• الاعتماد حسب صلاحية «اعتماد» في موديول «المطابقة المالية»، والكتابة في SOFTECH للمدير بس.',
                        'Open the row to see the invoice items and linked returns, then "✓ Approve" or "✕ Reject" (or the whole group).\n'
                        '• "Remaining" is computed: invoice value − paid in SOFTECH − approved awaiting write.\n'
-                       '• Approving is for the admin and pharmacist; writing to SOFTECH is for the admin only.')},
+                       '• Approving follows the "approve" grant of the "Financial reconciliation" module; writing to SOFTECH is for the admin only.')},
             {'target': 'finance-reconciliation-confidence',
              'label': T('الثقة', 'Confidence'),
              'text': T('عالية، متوسطة، منخفضة، أو تعارض بين أكثر من فاتورة.', 'High, medium, low, or a conflict between several invoices.'),
@@ -1648,8 +1648,8 @@ SCREENS = [
              'when': T('قبل مطالبة المورد بمرتجع أو مراجعة سند اتصحّح.', 'Before claiming a return from a supplier or reviewing a corrected voucher.'),
              'open_hint': T('تبويب «غير المسددة (للمالية)».', 'The "Unpaid (for finance)" tab.')},
         ],
-        'updated': '2026-11-19',
-        'change_note': T('«الاستثناءات»: قرار جماعي (قيد التحقيق / تم الحل / ليس خطأ / إعادة فتح) بملاحظة، وملخص أسبوعي للمالية كل أحد.', '"Exceptions": bulk decisions (investigating / resolved / not an error / reopen) with a note, and a weekly finance digest every Sunday.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «المطابقة المالية» في «الصلاحيات»: التقارير بالعرض والإكسل بالتصدير والاعتماد بالاعتماد؛ المشرف يفتحها الآن', 'The screen follows the "Financial reconciliation" module on Permissions: reports by view, Excel by export, approving by approve; the supervisor now opens it'),
     },
     {
         'key': 'finance.gl_close',

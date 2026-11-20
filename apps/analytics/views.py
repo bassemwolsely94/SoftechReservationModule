@@ -39,6 +39,9 @@ from rest_framework.decorators import api_view, permission_classes
 from core.permissions import matrix_permission
 
 ANALYTICS = matrix_permission('analytics')     # Batch 4, Z-9a — was any logged-in user
+# The inventory dashboard's own reports (role review 2026-11-20): the stock module, not analytics.
+# filter-options stays on analytics — the sales / performance dashboards read it too.
+STOCK = matrix_permission('stock')
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -781,7 +784,13 @@ def sales_overview(request):
     # net_cogs   = Σ(cogs   on sales lines) − Σ(cogs   on return lines)
     #
     # Using conditional Sum in a single aggregate query (one DB round-trip).
+    from . import margin as _M                       # C19: the one VAT-aligned margin basis (additive fields)
+    _rev, _rev_ex, _cogs_x, _pex = _M.line_expressions()
     lines_agg = line_qs.aggregate(
+        rev_ex_s     = Sum(_rev_ex,   filter=Q(purchase__doc_code='115')),
+        rev_ex_r     = Sum(_rev_ex,   filter=Q(purchase__doc_code='30')),
+        cogs_x_s     = Sum(_cogs_x,   filter=Q(purchase__doc_code='115')),
+        cogs_x_r     = Sum(_cogs_x,   filter=Q(purchase__doc_code='30')),
         profit_s     = Sum(_PROFIT,   filter=Q(purchase__doc_code='115')),
         profit_r     = Sum(_PROFIT,   filter=Q(purchase__doc_code='30')),
         cogs_s       = Sum(_COGS,     filter=Q(purchase__doc_code='115')),
@@ -798,6 +807,8 @@ def sales_overview(request):
     total_qty      = float(lines_agg['total_qty']       or 0)
     total_line_count = lines_agg['total_line_count']    or 0
     distinct_items   = lines_agg['distinct_items']      or 0
+    rev_ex_vat    = (lines_agg['rev_ex_s'] or 0) - (lines_agg['rev_ex_r'] or 0)
+    profit_ex_vat = rev_ex_vat - ((lines_agg['cogs_x_s'] or 0) - (lines_agg['cogs_x_r'] or 0))
 
     # Use net_revenue (sales - returns) everywhere as the primary revenue metric.
     avg_basket    = round(net_rev / total_transactions, 2) if total_transactions else 0.0
@@ -1123,6 +1134,11 @@ def sales_overview(request):
             'total_profit':       total_profit,
             'total_cogs':         total_cogs,        # cost of goods sold = Σ(cost_price × qty)
             'profit_margin_pct':  profit_margin,
+            # C19: the same lines on the VAT-aligned basis (apps/analytics/margin.py); the fields above unchanged
+            'margin_basis':       _M.BASIS,
+            'revenue_ex_vat':     _M.money(rev_ex_vat),
+            'profit_ex_vat':      _M.money(profit_ex_vat),
+            'margin_ex_vat_pct':  _M.margin_pct(profit_ex_vat, rev_ex_vat),
             'total_discount':     total_discount,
             'avg_basket':         avg_basket,
             'total_qty':          total_qty,
@@ -1455,7 +1471,7 @@ def performance_analytics(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, ANALYTICS])
+@permission_classes([IsAuthenticated, STOCK])
 def inventory_analytics(request):
     """
     GET /api/analytics/inventory/
@@ -1984,7 +2000,7 @@ def branch_contribution(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, ANALYTICS])
+@permission_classes([IsAuthenticated, STOCK])
 def inventory_investment(request):
     """
     GET /api/analytics/inventory-investment/

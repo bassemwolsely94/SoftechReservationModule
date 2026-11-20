@@ -41,9 +41,10 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import matrix_permission
 
-# Product images = the catalog module (Batch 4, Z-9b): reads need view, jobs / uploads / review
-# need catalog edit / approve (any logged-in user could start bulk image jobs).
-CATALOG_EDIT = matrix_permission('catalog', post=('edit', 'approve'), edit=('edit', 'approve'),
+# Product images (Batch 4, Z-9b): reads need view, jobs / uploads / review need edit / approve (any
+# logged-in user could start bulk image jobs). Module: catalog_tools since the role review
+# 2026-11-20 — /image-enrichment is the only screen that calls this API (was: catalog).
+CATALOG_EDIT = matrix_permission('catalog_tools', post=('edit', 'approve'), edit=('edit', 'approve'),
                                  delete=('edit', 'delete'))
 from rest_framework.response import Response
 from rest_framework.views import APIView

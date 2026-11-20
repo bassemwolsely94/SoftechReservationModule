@@ -45,12 +45,14 @@ MODULE_BY_PREFIX = {
     'transfers': 'transfers', 'transits': 'transfers',
     'followups': 'followups',
     'delivery': 'delivery',
-    'customers': 'customers', 'loyalty': 'customers', 'referral': 'customers',
+    'customers': 'customers', 'loyalty': 'customers',
+    'referral': 'loyalty',    # role review 2026-11-20: /referral is the loyalty tool screen's only API
     'chronic': 'chronic', 'composition': 'chronic',
     'campaigns': 'campaigns', 'whatsapp': 'callcenter',    # WhatsApp inbox: call center screens (Z-8b)
     'vouchers': 'vouchers',
-    'products': 'catalog', 'images': 'catalog', 'enrichment': 'catalog',
-    'batches': 'catalog', 'vision': 'catalog',
+    'products': 'catalog', 'enrichment': 'catalog', 'batches': 'catalog',
+    # role review 2026-11-20: only /image-enrichment and /vision-corpus call these (catalog_tools)
+    'images': 'catalog_tools', 'vision': 'catalog_tools',
     'stockcount': 'stockcount',
     'shortage': 'shortage',
     'purchasing': 'purchasing', 'procurement': 'purchasing',
@@ -70,7 +72,7 @@ MODULE_BY_PREFIX = {
     'audit': 'audit',
     'sync': 'sync',
     'users': 'users',
-    'access': 'settings',     # trusted networks (admin only in the view); whoami is open below
+    'access': 'access_control',   # networks / devices / zone policies (role review 2026-11-20); whoami is open below
     'tasks': 'tasks',         # own module since 2026-11-03 (owner); views check it too
     'counselling': 'counselling',   # Project 4 sheets; assistant + cards are POS (see required_access)
     'data-health': 'data_health',   # Stage 5 /data-health; rules, held files, restore = IsAdminRole in the views
@@ -262,6 +264,26 @@ def _export_method(path):
         return 'GET'
     cls = getattr(func, 'cls', None) or getattr(func, 'view_class', None)
     return 'GET' if cls is None or hasattr(cls, 'get') else 'POST'
+
+
+def _by_method(module, method):
+    """(module, actions) a plain request on `module` needs: GET view, PUT / PATCH edit, DELETE delete,
+    POST a write grant (analytics: export too, Z-11a)."""
+    if method in ('GET', 'HEAD', 'OPTIONS'):
+        return module, ('view',)
+    if method in ('PUT', 'PATCH'):
+        return module, ('edit',)
+    if method == 'DELETE':
+        return module, ('delete',)
+    return module, (_EXPORT_POST if module == 'analytics' else _POST_ACTIONS)
+
+
+# Role review 2026-11-20 (spec docs/superpowers/specs/2026-11-20-role-review-design.md, decision 7):
+# sub-paths that only one tool screen calls ask that screen's own module. Shared sub-paths of the
+# same prefixes (forecasting scenarios / plan / kpi-board, analytics filter-options, the delivery list
+# and dispatch, loyalty, batches) stay on the parent.
+_FORECAST_TOOLS = ('runs', 'seasonality', 'accuracy', 'salesperson-board')
+_STOCK_ANALYTICS = ('inventory', 'inventory-investment')
 
 
 def required(path, method):
@@ -498,6 +520,21 @@ def required(path, method):
         return MODULE_BY_PREFIX[prefix], ('view',)
     if method == 'POST' and prefix == 'hr' and parts[5:6] == ['cancel']:
         return 'hr', ('view',)
+    # Role review 2026-11-20 — tool screens' own modules (see _FORECAST_TOOLS above). Forecast runs /
+    # seasonality / accuracy and the salesperson board = forecast (writes as analytics: a POST computes,
+    # the views keep the analyst-role rule); the inventory dashboard's two reports = stock; the rider app
+    # = rider (delivery/{id}/complete stays delivery: it shares the order routes with dispatch); supplier
+    # A/P reconciliation = reconciliation; the code maps screen = code_maps, reads too (the view asks it).
+    if prefix == 'forecasting' and parts[3:4] and parts[3] in _FORECAST_TOOLS:
+        return 'forecast', _analytics_write(method)
+    if prefix == 'analytics' and parts[3:4] and parts[3] in _STOCK_ANALYTICS:
+        return _by_method('stock', method)
+    if prefix == 'delivery' and parts[3:4] == ['app']:
+        return _by_method('rider', method)
+    if prefix == 'finance' and parts[3:4] == ['reconciliation']:
+        return _by_method('reconciliation', method)
+    if prefix == 'config' and parts[3:4] == ['code-maps']:
+        return _by_method('code_maps', method)
     # Forecasting writes (PUT / PATCH / DELETE too): the views' analyst-role checks decide (Z-7b)
     if prefix == 'forecasting' and not safe:
         return 'analytics', _analytics_write(method)
@@ -511,13 +548,7 @@ def required(path, method):
         module = MODULE_BY_PREFIX.get(prefix)
         if module is None:
             return None
-    if safe:
-        return module, ('view',)
-    if method in ('PUT', 'PATCH'):
-        return module, ('edit',)
-    if method == 'DELETE':
-        return module, ('delete',)
-    return module, (_EXPORT_POST if module == 'analytics' else _POST_ACTIONS)
+    return _by_method(module, method)
 
 
 def _staff_profile(request):

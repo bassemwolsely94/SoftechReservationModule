@@ -386,8 +386,8 @@ SCREENS = [
         'title': T('جرد المخزون', 'Stock count'),
         'summary': T('إنشاء جلسات الجرد ومتابعتها خطوة بخطوة عبر أربعة تبويبات: الجلسات ← اللقطة ← العد ← الفروق.',
                      'Create count sessions and run them step by step through four tabs: sessions → snapshot → count → variance.'),
-        'audience': T('الصيادلة والمشرفون يفتحون الجرد ويعدّون؛ الجودة والمشتريات يتابعون ويصدّرون.',
-                      'Pharmacists and supervisors open and count; quality and purchasing follow and export.'),
+        'audience': T('الصيادلة والمشرفون يفتحون الجرد ويعدّون؛ الجودة والمشتريات يتابعون ويصدّرون — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Pharmacists and supervisors open and count; quality and purchasing follow and export — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'sessions', 'title': T('📋 الجلسات', '📋 Sessions'),
              'body': T('كل جلسات الجرد بحالتها وعدد الأصناف والزيادة والنقص والمطابق. «جلسة جديدة»: اسم، كود الفرع، النوع، الفترة، أكواد المستندات، وفلاتر المستخدم والتصنيف. '
@@ -542,8 +542,8 @@ SCREENS = [
              'open_hint': T('في «📉 الفروق» لجلسة فيها عدّ.', 'In "📉 Variance" for a session with counts.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('«الفروق»: قيمة النقص والزيادة بالجنيه، والبيع أثناء الجرد بيتخصم من الفارق الصافي.',
-                         '"Variance": deficit and surplus in EGP, and sales during the count are netted out of the net difference.'),
+        'change_note': T('«الفروق»: قيمة النقص والزيادة بالجنيه، والبيع أثناء الجرد بيتخصم من الفارق الصافي. · الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»',
+                         '"Variance": deficit and surplus in EGP, and sales during the count are netted out of the net difference. · The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'stockcount.mobile',

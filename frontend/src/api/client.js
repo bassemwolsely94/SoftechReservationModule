@@ -1009,6 +1009,7 @@ export const supplyApi = {
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
   // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
   receipts:            (params)      => api.get('/supply/receipts/', { params }),
+  missingBonus:        (params)      => api.get('/supply/missing-bonus/', { params }),
   outHere:             (params)      => api.get('/supply/out-here/', { params }),
   receiptDecide:       (id, body)    => api.post(`/supply/receipts/${id}/decide/`, body),
   supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
@@ -1599,6 +1600,9 @@ export const deliveryApi = {
   // F14 — CSAT report
   csatReport: (params) => api.get('/delivery/csat-report/', { params }),
 
+  // C20 — small orders + fee-less invoices (report only)
+  smallOrders:      (params) => api.get('/delivery/small-orders/', { params }),
+
   // F6 — Driver App
   myOrders:    () => api.get('/delivery/app/my-orders/'),
   myRoute:     () => api.get('/delivery/app/my-route/'),
@@ -1662,6 +1666,7 @@ export const analyticsApi = {
   churn:               (params = {}) => api.get('/analytics/churn/',               { params }),
   branchContribution:  (params = {}) => api.get('/analytics/branch-contribution/',  { params }),
   inventoryInvestment: (params = {}) => api.get('/analytics/inventory-investment/', { params }),
+  marginBoard:         (params = {}) => api.get('/analytics/margin-board/',         { params }),
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────

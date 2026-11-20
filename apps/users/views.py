@@ -61,6 +61,8 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     # the frontend only uses these to show menus/buttons — the views enforce them.
     can_supply_write = drf_serializers.SerializerMethodField()
     can_run_engine   = drf_serializers.SerializerMethodField()
+    can_set_webrtc = drf_serializers.SerializerMethodField()        # the PBX manager rule (apps/pbx/access.py)
+    can_pick_any_branch = drf_serializers.SerializerMethodField()   # role review: the server's own branch rule
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
     can_usage_print  = drf_serializers.SerializerMethodField()   # Project 5: flag ON + RBAC usage_print view
@@ -91,6 +93,15 @@ class _MeSerializer(drf_serializers.ModelSerializer):
         from apps.purchasing.access import can_run_engine
         return can_run_engine(obj.user)
 
+    def get_can_set_webrtc(self, obj):
+        from apps.pbx.access import is_pbx_manager
+        return is_pbx_manager(obj)
+
+    def get_can_pick_any_branch(self, obj):
+        # same test as core.branch_scope.allows(profile, None): all-branch role or access flag
+        from core import branch_scope
+        return branch_scope.branch_ids(obj) is None
+
     def get_can_stock_audit(self, obj):
         from apps.stock_audit.access import can_open
         return can_open(obj.user)
@@ -120,7 +131,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_pick_any_branch', 'can_set_webrtc', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
             'features', 'sees_all_branches',
         ]
 
@@ -843,9 +854,14 @@ def my_permissions_view(request):
     Admins receive all-true for every module/action.
     Non-admins receive only their role's RoleModuleAccess grants;
     missing entries default to False.
+
+    `seeded` lists the modules the matrix has rows for (module_access.seeded_modules). The server
+    fails open on any other module for the legacy roles (core.permissions.matrix_allows), so the
+    menu and route guards decide such a module by the item's old role list (role review C1).
     """
+    from core.middleware.module_access import seeded_modules
     role, perms = effective_permissions(request.user)
-    return Response({'role': role, 'permissions': perms})
+    return Response({'role': role, 'permissions': perms, 'seeded': sorted(seeded_modules())})
 
 
 def effective_permissions(user):

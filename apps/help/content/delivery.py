@@ -281,7 +281,8 @@ SCREENS = [
             'إنشاء طلب جديد، وتفاصيل كل طلب (العميل والعنوان على خرائط جوجل، المالية، مراجع SOFTECH، الأصناف، سجل الحالات) مع أزرار الإجراء حسب الحالة.',
             'Manage every delivery order through its whole life: today\'s numbers (total, waiting, assigned, on the way, delivered, failed), status filters, '
             'creating a new order, and each order\'s details (customer and address on Google Maps, money, SOFTECH references, items, status log) with actions by status.'),
-        'audience': T('الكول سنتر، الصيادلة، المشرفون، مسؤول التوزيع.', 'Call center, pharmacists, supervisors, the dispatcher.'),
+        'audience': T('الكول سنتر، الصيادلة، المشرفون، مسؤول التوزيع — وتفتح الشاشة لكل دور يملك موديولها في «الصلاحيات».',
+                      'Call center, pharmacists, supervisors, the dispatcher — the screen opens for every role that holds its module on the Permissions screen.'),
         'tabs': [
             {'key': 'details', 'title': T('الأصناف 📦', 'Items 📦'),
              'body': T('أصناف الطلب من SOFTECH: الكمية، سعر الوحدة، الخصم، السعر الفعلي والإجمالي، وكم وفّر العميل.',
@@ -462,8 +463,8 @@ SCREENS = [
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('جديد: شريط «طلبات مفتوحة أقدم من 24 ساعة» بحالتها في SOFTECH، والإغلاق التلقائي للي SOFTECH خلّصها (مطفأ لحد قرار الإدارة)',
-                         'New: an "Orders open over 24 hours" bar with their SOFTECH status, and auto-close for those SOFTECH finished (off until management decides)'),
+        'change_note': T('جديد: شريط «طلبات مفتوحة أقدم من 24 ساعة» بحالتها في SOFTECH، والإغلاق التلقائي للي SOFTECH خلّصها (مطفأ لحد قرار الإدارة) · الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»',
+                         'New: an "Orders open over 24 hours" bar with their SOFTECH status, and auto-close for those SOFTECH finished (off until management decides) · The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'delivery.dispatch',
@@ -471,7 +472,7 @@ SCREENS = [
         'title': T('لوحة التوزيع (المسارات)', 'Dispatch board (routes)'),
         'summary': T('جمّع الطلبات الجاهزة في «مسار» لسائق واحد ثم أطلق المسار دفعة واحدة، وتابع حالة مسارات اليوم والنقد المتوقع لكل مسار.',
                      'Group ready orders into one driver\'s "route", launch the whole route at once, and watch today\'s routes and the cash expected per route.'),
-        'audience': T('مسؤول التوزيع، الكول سنتر، المشرفون.', 'The dispatcher, call center, supervisors.'),
+        'audience': T('من يملك موديول «توزيع التوصيل» (شاشة «الصلاحيات») — افتراضياً مسؤول التوزيع والكول سنتر والمشرف ومدير الجودة والصيدلي والبائع. إنشاء المسار وإطلاقه لمن يملك صلاحية «إسناد» في موديول التوصيل؛ غيرهم يتابع المسارات للعرض فقط.', 'Whoever holds the "Delivery dispatch" module (Permissions screen) — by default the dispatcher, call center, supervisor, quality manager, pharmacist and salesperson. Creating and launching a route needs the "assign" grant of the Delivery module; others watch the routes read-only.'),
         'tips': [T('لو القائمة ما اتحمّلتش بيظهر «تعذّر التحميل» وزر «إعادة المحاولة» — مش «لا توجد طلبات». ولو المسار ما اتنشأش بيظهر السبب تحت الزر.', 'If a list fails to load it says «failed to load» with "Retry", not «no orders». A route that is not created shows the reason under the button.'), T('المندوب بيشوف رقم المستلم في الطلبات المسندة له حتى لو من فرع تاني. البحث برقم العميل لازم يكون بالرقم كامل — رقم ناقص (أقل من 7 أرقام) بيرجع «اكتب الرقم كامل.» ومبيلاقيش أي عميل، والرقم بيتطابق بالضبط مهما كانت كتابته (+20، مسافات، شرط، أرقام عربية).', "A rider sees the recipient's number on orders assigned to them, even from another branch. Looking a customer up by phone needs the full number — a short number (under 7 digits) returns «اكتب الرقم كامل.» (type the full number) and finds no customer; the number matches exactly however it is written (+20, spaces, dashes, Arabic digits).")],
         'steps': [
             T('من «جاهزة للتكليف» حدد الطلبات المتقاربة جغرافياً.', 'From "Ready to assign" select orders that are close to each other.'),
@@ -525,8 +526,8 @@ SCREENS = [
                  'بيظهر على المسارات «المُخطّطة» بس. اضغطه لحظة خروج السائق من الفرع.\n• كل طلبات المسار بتتحول مرة واحدة لـ«في الطريق»، والمسار يبقى «في الطريق 🚚».\n• بعدها السائق بيسجّل التسليم لكل محطة من تطبيقه.',
                  'It shows only on "Planned" routes. Press it the moment the driver leaves the branch.\n• All the route\'s orders switch to "Out for delivery" at once and the route becomes "On the way 🚚".\n• The driver then records each stop\'s delivery from their app.')},
         ],
-        'updated': '2026-11-18',
-        'change_note': T('فشل التحميل أو إنشاء/إطلاق المسار بيظهر بسببه بدل ما يبان إن مفيش طلبات.', 'A failed load or route create/launch now shows its reason instead of looking like no orders.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «توزيع التوصيل» في «الصلاحيات»؛ الصيدلي والبائع يفتحانها الآن', 'The screen follows the "Delivery dispatch" module on Permissions; pharmacists and salespeople now open it'),
     },
     {
         'key': 'delivery.driver',
@@ -534,7 +535,7 @@ SCREENS = [
         'title': T('مهام السائق', "Driver's tasks"),
         'summary': T('شاشة السائق على الموبايل: طلبات اليوم بترتيب المسار، مع اتصال بالعميل وفتح الخريطة، وخطوات: قبول ← انطلقت ← تم التسليم مع إثبات التسليم.',
                      'The driver\'s phone screen: today\'s orders in route order, with a call button and map, and the steps: accept → out → delivered with proof of delivery.'),
-        'audience': T('السائقون (والمشرف للمتابعة).', 'Drivers (and supervisors to follow).'),
+        'audience': T('من يملك موديول «شاشة المندوب» (شاشة «الصلاحيات») — افتراضياً السائقون والمشرف والكول سنتر؛ ويلزم ملف سائق مربوط بالحساب.', 'Whoever holds the "Rider screen" module (Permissions screen) — by default drivers, supervisor and call center; a driver profile linked to the account is also required.'),
         'steps': [
             T('«قبول الطلب» لكل طلب مكلَّف به، وبعد الاستلام من الفرع «انطلقت 🚚» — ولو نطاق الفرع مفعّل، «انطلقت» محتاجة تفعيل الموقع وإنك تكون جنب الفرع.', '"Accept" each assigned order, then "Set off 🚚" after collecting from the branch — when the branch geofence is on, "Set off" needs your location on and you near the branch.'),
             T('«انطلقت» عند الخروج للعميل.', '"Out" when leaving for the customer.'),
@@ -609,9 +610,8 @@ SCREENS = [
                        'Final from the app. It may be refused if you are far from the recorded customer address.'),
              'open_hint': T('اضغط «تم التسليم ✅» على طلب في الطريق.', 'Press "Delivered ✅" on an order on the way.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('«تأكيد التسليم» بيسجّل التسليم والتحصيل النقدي مع بعض؛ مبلغ مكتوب غلط بيترفض برسالة والطلب يفضل «في الطريق»',
-                         '"Confirm delivery" records the delivery and the cash collection together; a wrongly typed amount is refused with a message and the order stays "On the way"'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «شاشة المندوب» في «الصلاحيات»؛ الكول سنتر يفتحها الآن', 'The screen follows the "Rider screen" module on Permissions; call center now opens it'),
     },
     {
         'key': 'delivery.analytics',
@@ -651,6 +651,9 @@ SCREENS = [
                  'unlocks it with a written reason. Every finalize, unlock, adjustment and void is logged (who, when, why, '
                  'before/after).\n'
                  '• A rider sees only their own rows and changes nothing; a manager sees their branches.')},
+            {'key': 'small', 'title': T('💸 طلبات صغيرة وبدون رسوم', '💸 Small and fee-less orders'),
+             'body': T('فواتير بيع قناة التوصيل (90) من مبيعات SOFTECH المتزامنة، الافتراضي آخر 7 أيام. «صغير» = الأصناف أقل من 100 ج. «أقل من أجر الطيار» = هامش الأصناف (البيع − التكلفة وقت البيع) + رسوم «D.L.V.» أقل من 10 ج لكل وحدة رسوم (وحدة واحدة على الأقل). «بدون رسوم» = مفيش سطر «D.L.V.» (كود 2)؛ و«غير مفسَّر» لو نفس العميل (الـ PIC) مالوش فاتورة توصيل برسوم في نفس اليوم أو يوم قبل أو بعد. ملخص لكل فرع وقائمة الطلبات المُعلَّمة وExcel. فروعك بس. للمتابعة فقط — أي حد أدنى للطلب أو تغيير في الرسوم قرار المالك.',
+                       'Sales invoices on the delivery channel (90) from the synced SOFTECH sales, last 7 days by default. "Small" = goods under 100 EGP. "Below the rider\'s pay" = goods margin (sale − cost at sale) + the «D.L.V.» fee under 10 EGP per fee unit (at least one unit). "Fee-less" = no «D.L.V.» line (code 2); "unexplained" when the same customer (PIC) has no fee-carrying delivery invoice the same day or the day before or after. A summary per branch, the flagged orders and Excel. Your branches only. For follow-up only — any minimum order or fee change is the owner\'s decision.')},
         ],
         'related': ['delivery.dashboard'],
         'tour': [
@@ -662,8 +665,8 @@ SCREENS = [
                  'بيقصر كل الأرقام على طلبات الفروع المعلّمة بس (مجموعهم معاً).\n• قارن الفروع ببعض بإنك تبدّل الفرع وتبص على نفس التبويب.',
                  "Limits every figure to the ticked branches' orders (added together).\n• Compare branches by switching the branch while looking at the same tab.")},
             {'target': 'delivery-analytics-tabs', 'label': T('السائقين · المناطق · الورديات · الأجور', 'Drivers · Areas · Shifts · Pay'),
-             'text': T('خمس تبويبات: أداء السائقين، المناطق، الساعات، رضا العملاء، وأجور الطيارين.',
-                       'Five tabs: driver performance, areas, hours, customer satisfaction and rider payouts.'),
+             'text': T('ست تبويبات: السائقين، المناطق، الساعات، رضا العملاء، الطلبات الصغيرة، وأجور الطيارين.',
+                       'Six tabs: drivers, areas, hours, customer satisfaction, small orders and rider payouts.'),
              'more': T(
                  '• «أداء السائقين»: الطلبات والمُسلَّم ومعدل النجاح ومتوسط الوقت والنقد المحصَّل لكل سائق.\n• «خريطة المناطق»: الطلبات حسب المحافظة وأكتر المناطق طلباً.\n• «تقرير الورديات»: الطلبات على ساعات اليوم وساعة الذروة.\n• «رضا العملاء»: متوسط التقييم والتقييمات المنخفضة لمتابعتها.',
                  '• "Driver performance": orders, delivered, success rate, average time and cash collected per driver.\n• "Area map": orders by governorate and the busiest areas.\n• "Shift report": orders by hour of day and the peak hour.\n• "Customer satisfaction": the average rating and low ratings to follow up.')},
@@ -672,6 +675,11 @@ SCREENS = [
                        'Per driver: total, delivered, failed, success rate, average time and cash collected.'),
              'when': T('النقدي هنا هو المسجَّل في النظام — مش بديل لعدّ الفلوس الفعلي.', 'The cash here is what was recorded in the system — not a substitute for counting the real money.'),
              'open_hint': T('في تبويب «أداء السائقين»، لو فيه طلبات في الفترة.', 'On the "Driver performance" tab, when the period has orders.')},
+            {'target': 'delivery-analytics-small-orders', 'label': T('💸 طلبات صغيرة وبدون رسوم', '💸 Small and fee-less orders'),
+             'text': T('عدد الطلبات الصغيرة، واللي هامشها أقل من أجر الطيار، واللي من غير رسوم ومالهاش طلب مرافق.',
+                       'How many orders were small, earned less than the rider\'s pay, or carried no fee with no companion order.'),
+             'when': T('في مراجعة الأسبوع، قبل أي نقاش عن حد أدنى للطلب.', 'In the weekly review, before any talk of a minimum order.'),
+             'open_hint': T('في تبويب «💸 طلبات صغيرة وبدون رسوم».', 'On the "💸 Small and fee-less orders" tab.')},
             {'target': 'delivery-analytics-content', 'label': T('محتوى التبويب', 'Tab content'),
              'text': T('محتوى التبويب المختار. في «الورديات» ساعة الذروة، وفي «الرضا» التقييمات المنخفضة (1-2) للمتابعة.',
                        'The chosen tab\'s content. "Shifts" shows the peak hour; "CSAT" lists low ratings (1-2) to follow up.'),
@@ -687,8 +695,8 @@ SCREENS = [
                  'A read-only screen — it changes nothing on the orders.\n• Use it in the weekly or monthly review: which drivers need follow-up, and which area or hour needs more drivers.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('تبويب جديد «أجور الطيارين»: أجر كل رحلة وفترات شهرية تُعتمد وتتقفل',
-                         'New "Rider payouts" tab: pay per ride and monthly periods that are finalized and locked'),
+        'change_note': T('تبويبان جديدان: «💸 طلبات صغيرة وبدون رسوم» و«💵 أجور الطيارين» (أجر كل رحلة وفترات شهرية تُعتمد وتتقفل).',
+                         'Two new tabs: "💸 Small and fee-less orders" and "💵 Rider payouts" (pay per ride, monthly periods finalized and locked).'),
     },
     {
         'key': 'delivery.mobile_board',

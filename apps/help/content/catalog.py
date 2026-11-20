@@ -656,7 +656,7 @@ SCREENS = [
         'title': T('لوحة المخزون', 'Inventory dashboard'),
         'summary': T('صحة المخزون من محرك الطلب: النواقص، الفائض، الراكد، والتوزيع بالفرع وبنوع الدواء، ورأس المال المحبوس. فلترة بالفرع ونوع الدواء وفئة ABC.',
                      'Stock health from the demand engine: shortages, overstock, dead stock, by branch and by medicine type, and tied-up capital. Filter by branch, medicine type and ABC class.'),
-        'audience': T('المشتريات والصيادلة والمشرفون والجودة.', 'Purchasing, pharmacists, supervisors and quality.'),
+        'audience': T('من يملك موديول «المخزون والتشغيلات» (شاشة «الصلاحيات») — افتراضياً المشتريات والصيادلة والمشرف والجودة والكول سنتر والبائع.', 'Whoever holds the "Stock and batches" module (Permissions screen) — by default purchasing, pharmacists, supervisor, quality, call center and salespeople.'),
         'tabs': [
             {'key': 'shortages', 'title': T('⚠️ النواقص', '⚠️ Shortages'), 'body': T('أصناف تحت حد الأمان مرتبة بالأولوية: الفجوة، المخزون، الأمان، متوسط الشهر، التغطية.', 'Items below safety stock, sorted by priority: gap, stock, safety, monthly average, coverage.')},
             {'key': 'overstock', 'title': T('📦 الفائض', '📦 Overstock'), 'body': T('أصناف أكثر من الحاجة مرتبة بقيمة الفائض — مرشحة للتحويل لفروع تحتاجها.', 'Items above need, sorted by excess value — candidates to transfer to branches that need them.')},
@@ -723,15 +723,15 @@ SCREENS = [
              'text': T('يشيل كل فلاتر الصنف مرة واحدة.', 'Removes all item filters at once.'),
              'open_hint': T('يظهر لما يكون فيه فلتر صنف شغال.', 'Shown when an item filter is on.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر المستوى والحركة بقت تقبل أكثر من اختيار.', 'The level and movement filters now take several choices.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «المخزون والتشغيلات» في «الصلاحيات»؛ الكول سنتر والبائع يفتحانها الآن', 'The screen follows the "Stock and batches" module on Permissions; call center and salespeople now open it'),
     },
     {
         'key': 'catalog.intelligence',
         'routes': ['/catalog-intelligence'],
         'title': T('ذكاء الكتالوج', 'Catalog intelligence'),
         'summary': T('تنظيم الكتالوج وتحسين جودة بياناته.', 'Organise the catalog and improve its data quality.'),
-        'audience': T('الصيادلة والمشتريات والمدير.', 'Pharmacists, purchasing and admins.'),
+        'audience': T('من يملك موديول «أدوات الأصناف» (شاشة «الصلاحيات») — افتراضياً المشتريات والمشرف والكول سنتر والإدارة. أزرار الإضافة والحذف والإثراء لمن يملك صلاحية التعديل في موديول الكتالوج؛ غيرهم يقرأ الشاشة بدونها.', 'Whoever holds the "Catalog tools" module (Permissions screen) — by default purchasing, supervisor, call center and management. The add, delete and enrichment buttons need the edit grant of the Catalog module; others read the screen without them.'),
         'tabs': [
             {'key': 'variants', 'title': T('🔗 مجموعات المتغيرات', '🔗 Variant groups'), 'body': T('تجميع الأصناف التي هي نفس المنتج بأشكال أو أحجام مختلفة (مثلاً أقراص وشراب) في مجموعة واحدة.', 'Group items that are the same product in different forms or sizes (e.g. tablets and syrup).')},
             {'key': 'bundles', 'title': T('📦 الباقات', '📦 Bundles'), 'body': T('إنشاء باقات أصناف مع خصم اختياري (نسبة أو مبلغ ثابت) وإظهارها أو إخفاؤها.', 'Create item bundles with an optional discount (percent or fixed) and show or hide them.')},
@@ -880,8 +880,8 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('إضافة كذا صنف مرة واحدة: Ctrl+مسافة أو Ctrl+F1 ثم «إضافة المحدد»', 'Add several items at once: Ctrl+Space, or Ctrl+F1 then «Add selected»'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «أدوات الأصناف» في «الصلاحيات»؛ الصيدلي لم يعد يفتحها', 'The screen follows the "Catalog tools" module on Permissions; pharmacists no longer open it'),
     },
     {
         'key': 'catalog.images',
@@ -889,7 +889,7 @@ SCREENS = [
         'title': T('صور المنتجات', 'Product images'),
         'summary': T('البحث الآلي عن صور للأصناف ومراجعتها: النظام يجد صوراً مرشحة ويقيّم جودتها وتطابقها ووجود علامة مائية؛ ما فوق حد الثقة يُعتمد تلقائياً والباقي يُراجع يدوياً.',
                      'Automatic image search for items and its review: the system finds candidate images and scores quality, match and watermarks; above the confidence threshold they are auto-approved, the rest are reviewed manually.'),
-        'audience': T('مسؤولو المحتوى والصيادلة والمشتريات.', 'Content managers, pharmacists and purchasing.'),
+        'audience': T('من يملك موديول «أدوات الأصناف» (شاشة «الصلاحيات»)؛ الرفع والاعتماد لمن يملك صلاحية التعديل فيه (افتراضياً المشتريات).', 'Whoever holds the "Catalog tools" module (Permissions screen); uploading and approving need its edit grant (purchasing by default).'),
         'tabs': [
             {'key': 'dashboard', 'title': T('📊 لوحة التحكم', '📊 Dashboard'), 'body': T('نسبة التغطية بالصور، و«تغطية قيمة/كمية المبيعات» = نسبة مبيعات الشهر اللي أصنافها ليها صورة معتمدة (الرقم اللي يهم)، وما ينتظر المراجعة، والمهام الجارية والفاشلة.', 'Image coverage, and "Sales value/qty coverage" = the share of monthly sales whose items have an approved image (the number that matters), pending review, and running and failed jobs.')},
             {'key': 'review', 'title': T('👁️ قائمة المراجعة', '👁️ Review queue'), 'body': T('قبول أو رفض الصور المرشحة. الأصناف الأعلى مبيعاً بتظهر الأول. انتبه لمؤشر العلامة المائية — الصورة المشبوهة راجعها يدوياً.', 'Accept or reject candidate images. Best-selling items come first. Watch the watermark indicator — review suspicious images manually.')},
@@ -1033,8 +1033,8 @@ SCREENS = [
              'warn': T('لو أحسن مرشح تقييمه 78% أو أكتر بيتقبل لوحده من غير مراجعة.', 'If the best candidate scores 78% or more it is accepted by itself without review.'),
              'open_hint': T('في المعرض، تبويب «🚀 بحث جديد».', 'In the gallery, "🚀 New search" panel.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الفئة والشركة المصنعة في «معرض المنتج» والمصدر في «نتائج التعلم» بقت تقبل أكثر من اختيار.', 'The class and manufacturer filters in "Product gallery" and the source filter in "Learning results" now take several choices.'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «أدوات الأصناف» في «الصلاحيات»؛ الصيدلي لم يعد يفتحها', 'The screen follows the "Catalog tools" module on Permissions; pharmacists no longer open it'),
     },
     {
         'key': 'catalog.recommendations',
@@ -1042,7 +1042,7 @@ SCREENS = [
         'title': T('التوصيات الذكية', 'Smart recommendations'),
         'summary': T('محرك التوصيات: يحلل الفواتير ليجد الأصناف التي تُشترى معاً، ويقترح لكل عميل أصنافاً حسب سلوكه، مع فلتر سلامة يستبعد ما يتعارض مع أدويته المزمنة.',
                      'The recommendation engine: analyses invoices to find items bought together, and suggests items per customer by their behaviour, with a safety filter that excludes anything conflicting with their chronic medicines.'),
-        'audience': T('الصيادلة والكول سنتر والمشتريات.', 'Pharmacists, call center and purchasing.'),
+        'audience': T('من يملك موديول «التوصيات» (شاشة «الصلاحيات») — افتراضياً الصيادلة والكول سنتر والمشتريات والمشرف ومدير الجودة؛ تشغيل المحرك وتعديل الإعدادات للمدير والمشرف فقط.', 'Whoever holds the "Recommendations" module (Permissions screen) — by default pharmacists, call center, purchasing, supervisor and quality manager; running the engine and changing settings stay with admin and supervisor.'),
         'tabs': [
             {'key': 'fbt', 'title': T('🔗 اقترانات الأصناف', '🔗 Item pairs'), 'body': T('الأزواج مع الدعم والثقة والرفع (Lift) — الرفع الأعلى من 1 يعني ارتباطاً حقيقياً.', 'Pairs with support, confidence and lift — lift above 1 means a real association.')},
             {'key': 'customer', 'title': T('👤 توصيات العملاء', '👤 Customer recommendations'), 'body': T('ابحث عن عميل لترى توصياته الشخصية.', 'Search a customer to see their personal recommendations.')},
@@ -1113,8 +1113,8 @@ SCREENS = [
                  '• «الثقة»: من اللي اشتروا الصنف الأساسي، كام في المية اشتروا المقترن معاه.\n• «الرفع» أعلى من 1 يعني ارتباط حقيقي مش صدفة.\n• «التكرار»: عدد الفواتير اللي اتجمعوا فيها.',
                  '• "Confidence": of those who bought the main item, what percent also bought the paired one.\n• "Lift" above 1 means a real association, not chance.\n• "Frequency": how many invoices they appeared on together.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «التوصيات» في «الصلاحيات»؛ المشرف ومدير الجودة يفتحانها الآن، وتشغيل المحرك للمدير والمشرف فقط', 'The screen follows the "Recommendations" module on Permissions; supervisor and quality manager now open it, and running the engine stays with admin and supervisor'),
     },
     {
         'key': 'catalog.vision',
@@ -1122,7 +1122,7 @@ SCREENS = [
         'title': T('المحرك البصري (بيانات التعلّم)', 'Vision engine (training data)'),
         'summary': T('متابعة نمو قاعدة بيانات التعلّم المملوكة لنا: كل صورة روشتة أو صوت أو فاتورة مورّد يُقرأ ثم يُؤكد بشرياً يصبح مثال تدريب للمحرك الداخلي للقراءة الآلية. تعرض الحجم، نسبة التصنيف، المصادر، ودقة المحركات.',
                      'Follow the growth of our own training dataset: every prescription photo, voice note or supplier invoice that is read then confirmed by a person becomes a training example for the in-house reading engine. Shows size, label rate, sources and engine accuracy.'),
-        'audience': T('الإدارة والمشرفون.', 'Management and supervisors.'),
+        'audience': T('من يملك موديول «أدوات الأصناف» (شاشة «الصلاحيات»).', 'Whoever holds the "Catalog tools" module (Permissions screen).'),
         'tips': [T('كلما أكّدت قراءة صحيحة في نقطة البيع أو النواقص أو الفواتير زادت دقة المحرك الداخلي.', 'Every correct reading you confirm in the POS, shortages or invoices improves the in-house engine.')],
         'tour': [
             {'target': 'catalog-vision-header',
@@ -1149,8 +1149,8 @@ SCREENS = [
                  'النسبة = كام صنف من الأصناف اللي الموظفين أكدوها المحرك لقاها صح، في آخر مجموعة عيّنات.\n• القسم ده مش بيظهر غير لما يكون فيه نتايج كفاية.',
                  'The percentage = how many of the items staff confirmed the engine found correctly, over the latest set of samples.\n• This section only appears when there are enough results.')},
         ],
-        'updated': '2026-10-26',
-        'change_note': T('شرح أوضح لكل زر في جولة «اعرض لي»', 'Clearer explanation of every button in the "Show me" tour'),
+        'updated': '2026-11-20',
+        'change_note': T('الشاشة تتبع موديول «أدوات الأصناف» في «الصلاحيات»', 'The screen follows the "Catalog tools" module on Permissions'),
     },
     {
         'key': 'catalog.mobile_items',

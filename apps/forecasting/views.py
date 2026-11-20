@@ -54,21 +54,31 @@ class CanUseForecasting(BasePermission):
     _guard / _is_analyst checks stay. Was: any logged-in user, and the seasonality / accuracy
     viewsets let anyone create, edit or delete records."""
     message = 'ليس لديك صلاحية على هذه الوحدة'
+    module = 'analytics'
 
     def has_permission(self, request, view):
         from core.permissions import matrix_allows
         if view is not None and not hasattr(view, request.method.lower()):
             return True                                  # no handler for the method: DRF answers 405
         sp = _staff(request)
-        if not matrix_allows(sp, 'analytics', 'view'):
+        if not matrix_allows(sp, self.module, 'view'):
             return False
         return request.method in SAFE_METHODS or bool(sp and sp.role in ANALYST_ROLES)
 
 
-class CanSeeSalespersonBoard(CanUseForecasting):
+class CanUseForecastTools(CanUseForecasting):
+    """Forecast runs, seasonality and accuracy — only the /forecasting screen calls them: the
+    `forecast` module (role review 2026-11-20, was analytics). Writes keep the analyst-role rule.
+    Scenarios, plan, references, backtest, the KPI board and profit exclusions are shared with the
+    analytics screens and stay on CanUseForecasting."""
+    module = 'forecast'
+
+
+class CanSeeSalespersonBoard(CanUseForecastTools):
     """The salesperson board (each rep's sales against target) is for the analysts who set the
     targets — reads too, as its menu entry (UAT W2, owner 2026-11-19). analytics view alone let
-    call center, pharmacists, viewers and the quality manager open it by URL."""
+    call center, pharmacists, viewers and the quality manager open it by URL. Module: forecast
+    (role review 2026-11-20); the analyst-role rule stays."""
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
@@ -79,7 +89,7 @@ class CanSeeSalespersonBoard(CanUseForecasting):
 
 class SeasonalityIndexViewSet(viewsets.ModelViewSet):
     serializer_class   = SeasonalityIndexSerializer
-    permission_classes = [IsAuthenticated, CanUseForecasting]
+    permission_classes = [IsAuthenticated, CanUseForecastTools]
     # sortable grid: the page is cut at 50, so the headers sort on the server (explicit whitelist)
     filter_backends    = [NullsLastOrdering]
     ordering_fields    = ['item__name', 'category__name', 'month', 'index_value', 'computed_at']
@@ -136,7 +146,7 @@ class SeasonalityIndexViewSet(viewsets.ModelViewSet):
 
 class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class   = ForecastRunSerializer
-    permission_classes = [IsAuthenticated, CanUseForecasting]
+    permission_classes = [IsAuthenticated, CanUseForecastTools]
     # «بواسطة» sorts by the name the grid shows (triggered_by_name = StaffProfile.full_name)
     queryset           = (ForecastRun.objects.select_related('triggered_by__user').annotate(
         triggered_by_sort=Coalesce(
@@ -170,7 +180,7 @@ class ForecastRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ForecastAccuracyViewSet(viewsets.ModelViewSet):
     serializer_class   = ForecastAccuracySerializer
-    permission_classes = [IsAuthenticated, CanUseForecasting]
+    permission_classes = [IsAuthenticated, CanUseForecastTools]
     filter_backends    = [NullsLastOrdering]
     ordering_fields    = ['item__name', 'branch__name', 'forecast_date', 'forecast_30d',
                           'actual_30d', 'mape', 'mae']

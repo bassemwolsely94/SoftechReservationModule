@@ -1254,6 +1254,7 @@ function DisposalTab() {
   const catalogView = usePermission('catalog', 'view')
   // approve / done: the managers the server names (apps/batches/views.py DISPOSAL_MANAGERS, owner
   // 2026-11-01) — and the screen's matrix grant (catalog view), so a removed grant hides it (UAT D5)
+  // role review decision 2: approving a disposal writes off stock (money); stays with the named disposal managers
   const canApprove = ['admin', 'quality_manager', 'supervisor'].includes(user?.role) && catalogView
   const qc = useQueryClient()
   const [statusF, setStatusF] = useState([])     // multi-select ([] = all)

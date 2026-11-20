@@ -84,7 +84,8 @@ class MergeTests(TestCase):
         self._status()  # persists last_status/last_ip
         with mock.patch.object(extensions, 'fetch_registrations', side_effect=OSError('timed out')):
             data = extensions.extension_status()
-        self.assertIn('timed out', data['error'])
+        self.assertTrue(data['error'])
+        self.assertNotIn('timed out', data['error'])      # the raw exception stays in the log (public_error)
         row = next(r for r in data['rows'] if r['extension'] == '101')
         self.assertEqual(row['ip'], '10.0.0.5')
         self.assertIsNone(row['problem'])     # no false "missing from PBX" while offline
@@ -111,16 +112,25 @@ class MappingApiTests(TestCase):
         r = self.admin.post('/api/pbx/extensions/map/', {'extension': '105', 'staff_id': None}, format='json')
         self.assertIsNone(AgentExtension.objects.get(extension='105').staff)
 
-    def test_non_supervisors_cannot_map_or_edit(self):
+    def test_pbx_settings_follow_the_callcenter_matrix(self):
+        # role review decision 5: call center (callcenter edit) configures; a role without the grant cannot
+        from apps.users.management.commands.seed_permissions import PERMISSIONS
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        for role in ('call_center', 'pharmacist'):
+            for module, actions in PERMISSIONS[role].items():
+                for a in actions:
+                    RoleModuleAccess.objects.get_or_create(role=role, module=module, action=a,
+                                                           defaults={'is_allowed': True})
+        module_access.clear_cache()
         ext = AgentExtension.objects.create(extension='110')
         self.assertEqual(self.agent_client.post('/api/pbx/extensions/map/',
-                         {'extension': '110', 'staff_id': self.agent.pk}, format='json').status_code, 403)
+                         {'extension': '110', 'staff_id': self.agent.pk}, format='json').status_code, 200)
         self.assertEqual(self.agent_client.patch(f'/api/pbx/agents/{ext.pk}/',
-                         {'staff': self.agent.pk}, format='json').status_code, 403)
-        self.assertEqual(self.agent_client.post('/api/pbx/agents/',
-                         {'extension': '111'}, format='json').status_code, 403)
-        self.assertEqual(self.agent_client.get('/api/pbx/agents/').status_code, 200)   # reads stay open
+                         {'staff': self.agent.pk}, format='json').status_code, 200)
         _, _, ph = make_pharmacist('ext_ph')
+        self.assertEqual(ph.post('/api/pbx/extensions/map/', {'extension': '110', 'staff_id': None},
+                                 format='json').status_code, 403)
         self.assertEqual(ph.get('/api/pbx/extensions/status/').status_code, 403)
 
     def test_validation(self):

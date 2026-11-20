@@ -7,24 +7,34 @@ in-house recognizer) and P3 (handwriting fine-tune).
 """
 from django.db.models import Count, Q
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import OcrSample
 from core.permissions import RouteModulePermission  # round 2, D6
 
+# The rule before the role review (2026-11-20), kept for a database with no catalog_tools rows yet
+# (spec: "Unseeded databases behave as today"); RouteModulePermission then asks catalog view.
+_UNSEEDED_READERS = frozenset({'admin', 'supervisor', 'purchasing', 'pharmacist'})
 
-def _staff(user):
-    return getattr(user, 'staff_profile', None)
+
+class UnseededCorpusReaders(BasePermission):
+    message = 'غير مصرّح.'
+
+    def has_permission(self, request, view):
+        from core.middleware import module_access
+        if 'catalog_tools' in module_access.seeded_modules():
+            return True                      # the matrix (RouteModulePermission) decides
+        sp = getattr(request.user, 'staff_profile', None)
+        return bool(sp and sp.role in _UNSEEDED_READERS)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RouteModulePermission])
+@permission_classes([IsAuthenticated, RouteModulePermission, UnseededCorpusReaders])
 def corpus_stats(request):
-    """Corpus size, module / engine mix, media split, and label rate."""
-    sp = _staff(request.user)
-    if not sp or sp.role not in ('admin', 'supervisor', 'purchasing', 'pharmacist'):
-        return Response({'detail': 'غير مصرّح.'}, status=403)
+    """Corpus size, module / engine mix, media split, and label rate. Who: the matrix's
+    catalog_tools view (RouteModulePermission asks it; role review 2026-11-20 dropped the
+    admin / supervisor / purchasing / pharmacist list here)."""
 
     qs = OcrSample.objects.all()
     total = qs.count()
@@ -52,16 +62,14 @@ def corpus_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RouteModulePermission])
+@permission_classes([IsAuthenticated, RouteModulePermission, UnseededCorpusReaders])
 def corpus_accuracy(request):
     """
     In-house vs Gemini: over recent LABELLED samples that ran engines in parallel, how
     many human-confirmed items did each engine's readings resolve to (via the catalog)?
     Per-engine recall of the ground truth — the signal for when to trust the in-house path.
+    Who: catalog_tools view, as corpus_stats.
     """
-    sp = _staff(request.user)
-    if not sp or sp.role not in ('admin', 'supervisor', 'purchasing', 'pharmacist'):
-        return Response({'detail': 'غير مصرّح.'}, status=403)
 
     from apps.shortage.matching import find_best_matches
     samples = list(OcrSample.objects.exclude(confirmations=[]).exclude(engine_readings={})

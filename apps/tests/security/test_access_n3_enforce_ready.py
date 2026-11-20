@@ -38,9 +38,21 @@ class HelpFeedbackOpenTests(TestCase):
 class RiderSecurityRouteTests(SimpleTestCase):
 
     def test_rider_security_route_has_require_role(self):
+        # never unguarded: since the role review (2026-11-20) the matrix's `rider` module decides,
+        # with the old role list as the fallback for a database without rider rows
         src = (Path(settings.BASE_DIR) / 'frontend' / 'src' / 'App.jsx').read_text('utf-8')
         line = next(l for l in src.splitlines() if 'path="/rider/security"' in l)
-        self.assertIn("<RequireRole roles={['delivery','admin','supervisor']}>", line)
+        self.assertIn("""<RequireRole module="rider" legacyRoles={legacyRolesFor('/rider')}>""", line)
+        nav = (Path(settings.BASE_DIR) / 'frontend' / 'src' / 'components' / 'navGroups.js').read_text('utf-8')
+        item = next(l for l in nav.splitlines() if "to: '/rider'," in l)
+        self.assertIn("module: 'rider'", item)
+        self.assertIn("legacyRoles: ['admin','delivery','supervisor']", item)
+
+    def test_rider_seeded_view_set_is_the_owner_approved_one(self):
+        from apps.users.management.commands.seed_permissions import PERMISSIONS, ROLE_REVIEW_MODULES
+        approved = {'admin', 'delivery', 'supervisor', 'call_center'}
+        self.assertEqual(set(ROLE_REVIEW_MODULES['rider'][1]), approved)
+        self.assertEqual({r for r, mods in PERMISSIONS.items() if 'view' in mods.get('rider', ())}, approved)
 
 
 class AccountReviewTests(TestCase):

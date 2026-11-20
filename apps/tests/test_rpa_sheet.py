@@ -143,13 +143,22 @@ class CreateJobTests(TestCase):
         self.assertTrue(AuditLog.objects.filter(action='rpa_job_uploaded', object_id=str(job.pk)).exists())
 
     def test_same_file_twice_refused(self):
-        job = self._create()
+        # Build the workbook ONCE and upload the same bytes each time. An .xlsx embeds its creation
+        # time to the second, so two separate _xlsx() builds that straddle a second boundary are
+        # different files with different SHA-256s, and the duplicate check rightly lets them through
+        # (that made this test fail at random in CI).
+        data = _xlsx(HEAD, [['60', 1, None]])
+
+        def same():
+            return SimpleUploadedFile('s.xlsx', data)
+
+        job = self._create(upload=same())
         with self.assertRaises(ValidationError) as ctx:
-            self._create()
+            self._create(upload=same())
         self.assertEqual(str(ctx.exception.detail['job_id']), str(job.pk))
         job.status = 'cancelled'
         job.save()
-        self._create()   # cancelled jobs do not block a re-upload
+        self._create(upload=same())   # cancelled jobs do not block a re-upload
 
     def test_branch_110_and_same_target_refused(self):
         with self.assertRaises(ValidationError):
