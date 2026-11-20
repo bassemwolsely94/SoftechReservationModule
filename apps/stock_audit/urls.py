@@ -21,4 +21,5 @@ urlpatterns = [
     path('access/<int:pk>/revoke/', views.access_revoke),
     path('refresh/', views.refresh),
     path('runs/', views.runs),
+    path('discount-policy/', views.discount_policy_preview),   # C07, read-only, unvalidated
 ]
