@@ -89,9 +89,11 @@ def to_stamps(punches) -> list:
             for p in punches if _usable(p)]
 
 
-def _session_gap_hours() -> int:
+def _session_hours() -> tuple:
+    """(gap_hours, max_shift_hours) from settings."""
     from django.conf import settings
-    return int(getattr(settings, 'HR_ATTENDANCE_SESSION_GAP_HOURS', 6))
+    return (int(getattr(settings, 'HR_ATTENDANCE_SESSION_GAP_HOURS', 6)),
+            int(getattr(settings, 'HR_ATTENDANCE_MAX_SHIFT_HOURS', 16)))
 
 
 def build_days(stamps, boundary, daily_hours, year, month, info_by_date=None):
@@ -107,7 +109,7 @@ def build_days(stamps, boundary, daily_hours, year, month, info_by_date=None):
     by_date: dict = {}
     sessions_by_date: dict = {}
     if boundary is None:
-        for s in sess.build_sessions(stamps, _session_gap_hours()):
+        for s in sess.build_sessions(stamps, *_session_hours()):
             if first <= s.work_date <= last:
                 sessions_by_date.setdefault(s.work_date, []).append(s)
     else:

@@ -65,6 +65,17 @@ class SessionTests(SimpleTestCase):
     def test_gap_of_exactly_six_hours_stays_together(self):
         self.assertEqual(len(build_sessions([S(0, '08:00'), S(0, '14:00')])), 1)
 
+    def test_forgotten_checkout_next_day(self):
+        sessions = build_sessions([S(0, '08:00'), S(1, '08:00'), S(1, '16:00')])
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual((sessions[0].work_date, sessions[0].needs_review, sessions[0].worked_minutes),
+                         (D, True, 0))
+        self.assertEqual((sessions[1].work_date, sessions[1].worked_minutes), (dt.date(2026, 11, 11), 480))
+
+    def test_double_shift_16h(self):
+        s = self.one([S(0, '08:00'), S(1, '00:00')])
+        self.assertEqual(s.worked_minutes, 960)
+
     def test_duplicate_window(self):
         merged = merge_stamps([S(0, '08:00:00'), S(0, '08:01:30')])
         self.assertEqual(len(merged), 1)

@@ -664,6 +664,7 @@ HR_ATTENDANCE_ENABLED = config('HR_ATTENDANCE_ENABLED', default=False, cast=bool
 HR_ATTENDANCE_LINKEDGATES_ENABLED = config('HR_ATTENDANCE_LINKEDGATES_ENABLED', default=False, cast=bool)
 HR_ATTENDANCE_DAY_SOURCE = config('HR_ATTENDANCE_DAY_SOURCE', default='linkedgates')
 HR_ATTENDANCE_SESSION_GAP_HOURS = config('HR_ATTENDANCE_SESSION_GAP_HOURS', default=6, cast=int)
+HR_ATTENDANCE_MAX_SHIFT_HOURS = config('HR_ATTENDANCE_MAX_SHIFT_HOURS', default=16, cast=int)
 POS_WRITER_PROFILE = config('POS_WRITER_PROFILE', default='test')   # test|prod
 # Wave 3 inc3: batch-write OUR POS item-selection telemetry into SOFTECH pos_cancel (the
 # «المبيعات غير المخزنة» activity log — NOT a transactional/financial table). OFF until the

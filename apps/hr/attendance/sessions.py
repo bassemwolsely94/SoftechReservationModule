@@ -4,7 +4,8 @@ Pure functions, no ORM. A stamp is one de-duplicated time clock event from any s
 machine, or Linked Gates). Rules (design 2026-11-20 §5.3):
 
 - Stamps within 120 s of each other are one stamp (sources united, earliest time kept).
-- A gap of more than ``gap_hours`` between consecutive stamps starts a new session.
+- Pair-aware split: an open "in" is closed by the next stamp within ``max_shift_hours``, else it stays
+  unpaired; after a closed pair a gap over ``gap_hours`` starts a new session.
 - A session belongs to the date of its first stamp, except a first stamp between 00:00 and 03:59,
   which belongs to the previous date (a late shift's start punch after midnight).
 - Worked time = the sum of consecutive pairs (1st-2nd, 3rd-4th, ...). An odd count needs review and
@@ -61,13 +62,21 @@ def _session(stamps) -> Session:
                    worked_minutes=worked, needs_review=len(stamps) % 2 == 1)
 
 
-def build_sessions(stamps, gap_hours: int = 6) -> list:
+def build_sessions(stamps, gap_hours: int = 6, max_shift_hours: int = 16) -> list:
+    """Pair-aware grouping. With an open "in" (odd count) the next stamp closes it if it is within
+    ``max_shift_hours``; otherwise the "in" stays unpaired and the next stamp starts a new session.
+    With the session closed (even count) a gap over ``gap_hours`` starts a new session; a shorter one
+    continues it as a new "in"."""
     merged = merge_stamps(stamps)
     gap = datetime.timedelta(hours=gap_hours)
+    longest = datetime.timedelta(hours=max_shift_hours)
     groups: list = []
     for s in merged:
-        if groups and s.at - groups[-1][-1].at <= gap:
-            groups[-1].append(s)
-        else:
-            groups.append([s])
+        if groups:
+            delta = s.at - groups[-1][-1].at
+            is_open = len(groups[-1]) % 2 == 1
+            if (is_open and delta <= longest) or (not is_open and delta <= gap):
+                groups[-1].append(s)
+                continue
+        groups.append([s])
     return [_session(g) for g in groups]
