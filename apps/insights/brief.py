@@ -66,8 +66,20 @@ def _yesterday_section(branch, yesterday):
              f'• {K.METRIC_LABELS[SALES_METRIC]}: {_n(sales)} ج.م',   # the board's «نقدى + توصيل»
              f'• عدد الفواتير: {_n(orders)}',
              f'• متوسط الفاتورة: {_n(basket) + " ج.م" if basket is not None else "—"}',
-             f'• عن نفس اليوم الأسبوع الماضي: {_signed_pct(sales, sales_before)}']
+             f'• عن نفس اليوم الأسبوع الماضي: {_signed_pct(sales, sales_before)}',
+             _identified_line(branch, yesterday)]
     return lines, sales
+
+
+def _identified_line(branch, yesterday):
+    """C11 / P-37: yesterday's share of sale invoices on a customer code — the gamification number
+    (apps/gamification/pic.branch_capture_rate: a PIC on the header, shared / house codes excluded)."""
+    from apps.gamification.pic import branch_capture_rate, capture_pct
+    total, on_pic = branch_capture_rate(branch, yesterday, yesterday)
+    if not total:
+        return '• فواتير على كود عميل: —'
+    return (f'• فواتير على كود عميل: {on_pic * 100 / total:.0f}% ({_n(on_pic)} من {_n(total)})'
+            f' — الهدف {capture_pct()}%')
 
 
 def _mtd_section(branch, yesterday):

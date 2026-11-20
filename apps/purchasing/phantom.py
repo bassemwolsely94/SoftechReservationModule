@@ -160,6 +160,15 @@ def reduced_order_qty(required_qty, order_pct, *, apply, monthly_avg=0.0):
     return max(reduced, floor)
 
 
+def next_flagged_at(was_flagged, now_flagged, prev_at, now, override=''):
+    """C30: when the item became phantom. Set when the flag turns on, kept while it stays on, cleared
+    when the automatic flag goes off — so a later re-flag counts as new again. An item a person
+    excluded keeps its date, so the month it was flagged still lists it as reviewed."""
+    if now_flagged:
+        return prev_at if was_flagged else now
+    return prev_at if override == 'excluded' else None
+
+
 def scan(persist=True):
     """Score every item with sales/purchase activity in the window and (optionally)
     update catalog.Item phantom fields. Human overrides are respected:
@@ -194,7 +203,8 @@ def scan(persist=True):
         now = timezone.now()
         # Update in chunks by softech_id (itemcode).
         items = Item.objects.filter(softech_id__in=list(scored.keys())).only(
-            'id', 'softech_id', 'phantom_override', 'is_stockable')
+            'id', 'softech_id', 'phantom_override', 'is_stockable',
+            'is_phantom_substitution', 'phantom_flagged_at')
         bulk = []
         for it in items:
             r = scored.get((it.softech_id or '').strip())
@@ -207,6 +217,8 @@ def scan(persist=True):
                 effective = True
             else:
                 effective = auto
+            it.phantom_flagged_at = next_flagged_at(it.is_phantom_substitution, effective,
+                                                    it.phantom_flagged_at, now, it.phantom_override)
             it.is_phantom_substitution = effective
             it.phantom_ratio = r['phantom_ratio']
             it.phantom_contract_ratio = r['contract_ratio']
@@ -223,6 +235,7 @@ def scan(persist=True):
                 'is_phantom_substitution', 'phantom_ratio', 'phantom_contract_ratio',
                 'phantom_order_pct', 'phantom_buyback_qty', 'phantom_sold_qty',
                 'phantom_genuine_need', 'phantom_detected_at', 'phantom_source',
+                'phantom_flagged_at',
             ], batch_size=500)
             updated = len(bulk)
 

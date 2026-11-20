@@ -16,6 +16,9 @@ import { Badge, MetricChip, ErrorState, Icon } from '../pos/design'
 import WhatsAppShareButton from '../components/WhatsAppShareButton'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
+import useGridKeyboard from '../hooks/useGridKeyboard'
+import BulkResultNote from '../components/BulkResultNote'
+import { keepFailedTicked, runEach } from '../utils/bulkRun'
 import BranchMultiSelect from '../components/BranchMultiSelect'
 import { confirmBar, notify } from '../components/ui'
 
@@ -261,6 +264,29 @@ function LiveCheckGapsPanel({ branchIds }) {
   const rows = data?.results || []
   const sorter = useSortableRows(rows, { getValue: (g, k) => (k === 'branch' ? (g.branch_name || g.branch) : g[k]) })
   const done = () => qc.invalidateQueries({ queryKey: ['pos-live-check-gaps'] })
+  // C24: close several open gaps with one review note — one POST …/<id>/review/ per row, so the
+  // server checks each gap's state (409 if already closed) and records each review on its own.
+  const [ticked, setTicked] = useState({})
+  const [bulkNote, setBulkNote] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
+  const openRows = sorter.sorted.filter(g => g.status === 'open')
+  const tickedRows = openRows.filter(g => ticked[g.id])
+  const allTicked = !!openRows.length && tickedRows.length === openRows.length
+  const toggle = g => g.status === 'open' && setTicked(t => ({ ...t, [g.id]: !t[g.id] }))
+  const tickAll = () => setTicked(allTicked ? {} : Object.fromEntries(openRows.map(g => [g.id, true])))
+  const kb = useGridKeyboard({ rows: sorter.sorted, getKey: g => g.id, onToggle: toggle, onSelectAll: tickAll })
+  const reviewMany = async () => {
+    if (!tickedRows.length || !bulkNote.trim() || bulkBusy) return
+    setBulkBusy(true); setBulkResult(null)
+    try {
+      const res = await runEach(tickedRows, g => api.post(`/pos-orders/live-check-gaps/${g.id}/review/`, { note: bulkNote.trim() }))
+      setBulkResult(res)
+      setTicked(keepFailedTicked(res))
+      if (!res.failed.length) setBulkNote('')
+      done()
+    } finally { setBulkBusy(false) }
+  }
   const review = useMutation({
     mutationFn: ({ id, note }) => api.post(`/pos-orders/live-check-gaps/${id}/review/`, { note }),
     onSuccess: (_, v) => { setNotes(n => ({ ...n, [v.id]: '' })); setMsg('') },
@@ -289,13 +315,29 @@ function LiveCheckGapsPanel({ branchIds }) {
         </span>
       </header>
       {msg && <div className="px-3 py-1.5 text-xs text-amber-700 bg-amber-50 border-b">{msg}</div>}
+      {bulkResult && <div className="px-3 pt-2"><BulkResultNote result={bulkResult} verb="تمت مراجعة"
+        labelOf={id => `POS-${rows.find(g => g.id === id)?.order_id ?? id}`} onClose={() => setBulkResult(null)}
+        testId="live-gaps-bulk-result" /></div>}
+      {tickedRows.length > 0 && (
+        <div data-tour="pos-exceptions-unchecked-bulk" data-testid="live-gaps-bulk-bar"
+             className="flex flex-wrap items-center gap-2 px-3 py-2 bg-blue-50/50 border-b text-xs">
+          <span>المحدد: <b>{tickedRows.length}</b></span>
+          <input value={bulkNote} onChange={e => setBulkNote(e.target.value)} disabled={bulkBusy}
+                 placeholder="ملاحظة المراجعة (مطلوبة)" className="border rounded px-2 py-0.5 flex-1 min-w-[12rem]" />
+          <button disabled={!bulkNote.trim() || bulkBusy} onClick={reviewMany}
+                  className="px-2 py-0.5 rounded border bg-white disabled:opacity-50">
+            {bulkBusy ? 'جاري…' : `تمت مراجعة المحدد (${tickedRows.length})`}</button>
+        </div>
+      )}
       {rows.length === 0
         ? <div className="px-3 py-3 text-sm text-gray-500">لا توجد مبيعات مفتوحة بدون فحص.</div>
         : (
-        <div className="overflow-x-auto">
+        <div {...kb.containerProps} className={`overflow-x-auto ${kb.containerProps.className}`}>
           <table className="w-full text-sm">
             <thead className="text-gray-500 text-xs border-b">
               <tr>
+                <th className="px-2 py-1.5 w-8"><input type="checkbox" checked={allTicked} onChange={tickAll}
+                    disabled={!openRows.length} title="تحديد الكل" aria-label="تحديد الكل" /></th>
                 <SortTh {...sorter.headerProps('order_id', 'number')} className="text-right px-3 py-1.5">أمر</SortTh>
                 <SortTh {...sorter.headerProps('kind_display', 'text')} className="text-right px-3 py-1.5">ما لم يُفحص</SortTh>
                 <SortTh {...sorter.headerProps('branch', 'text')} className="text-right px-3 py-1.5">الفرع</SortTh>
@@ -307,8 +349,12 @@ function LiveCheckGapsPanel({ branchIds }) {
               </tr>
             </thead>
             <tbody>
-              {sorter.sorted.map(g => (
-                <tr key={g.id} className="border-b last:border-0 hover:bg-gray-50 align-top">
+              {sorter.sorted.map(g => {
+                const rp = kb.rowProps(g)
+                return (
+                <tr key={g.id} {...rp} className={`border-b last:border-0 hover:bg-gray-50 align-top ${ticked[g.id] ? 'bg-blue-50/40' : ''} ${rp.className}`}>
+                  <td className="px-2 py-1.5"><input type="checkbox" checked={!!ticked[g.id]} disabled={g.status !== 'open'}
+                                                     onChange={() => toggle(g)} aria-label="تحديد" /></td>
                   <td className="px-3 py-1.5 font-mono">POS-{g.order_id}
                     <div className="text-xs text-gray-400">{g.status_display}</div></td>
                   <td className="px-3 py-1.5">{g.kind_display}
@@ -341,7 +387,8 @@ function LiveCheckGapsPanel({ branchIds }) {
                       <div className="text-xs text-gray-400">النقاط تُضاف بعد تحصيل الكاشير.</div>)}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
