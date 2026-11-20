@@ -1174,6 +1174,29 @@ function ItemStockRow({ itemId }) {
   )
 }
 
+// C33: per-line stock badge at the reservation's branch (server rule: sellable stock covers the line)
+const LINE_STOCK_CLS = {
+  ok:     'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
+  short:  'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+  out:    'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
+  manual: 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+}
+const OVERALL_CLS = {
+  all: LINE_STOCK_CLS.ok, partial: LINE_STOCK_CLS.short, none: LINE_STOCK_CLS.out, review: LINE_STOCK_CLS.manual,
+}
+const OPEN_STATUSES = ['pending', 'available', 'contacted', 'confirmed']
+
+function LineStockBadge({ row }) {
+  if (!row) return null
+  const qty = row.on_hand == null ? '' : ` · ${Number(row.on_hand).toLocaleString('en-US')} بالفرع`
+  return (
+    <span data-tour="reservations-detail-line-stock"
+      className={`text-[10px] font-bold border rounded px-1.5 py-0.5 ${LINE_STOCK_CLS[row.status] || LINE_STOCK_CLS.manual}`}>
+      {row.status_label}{qty}
+    </span>
+  )
+}
+
 // ── Unified all-items panel (primary + extra lines) ───────────────────────────
 function AllItemsPanel({ r, onRefresh }) {
   const [adding, setAdding] = useState(false)
@@ -1184,12 +1207,20 @@ function AllItemsPanel({ r, onRefresh }) {
   const hasPrimary = !!(r.item_name || r.manual_item_name)
   const lines = r.lines || []
   const isLocked = r.status !== 'pending'
+  const showStock = OPEN_STATUSES.includes(r.status) && r.line_stock
+  const stockRow = key => (showStock ? r.line_stock.lines.find(x => x.key === key) : null)
 
   return (
     <div className="card" data-tour="reservations-detail-items">
       <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
         <span>📦</span> أصناف الحجز
         <span className="text-xs font-normal text-gray-400">({allItems.length} صنف)</span>
+        {showStock && allItems.length > 0 && (
+          <span data-tour="reservations-detail-stock-overall"
+            className={`mr-auto text-[11px] font-bold border rounded-lg px-2 py-0.5 ${OVERALL_CLS[r.line_stock.overall] || OVERALL_CLS.review}`}>
+            {r.line_stock.overall_label} — {r.branch_name}
+          </span>
+        )}
       </h3>
 
       <div className="space-y-3">
@@ -1209,8 +1240,11 @@ function AllItemsPanel({ r, onRefresh }) {
                   )}
                 </div>
               </div>
-              <div className="shrink-0 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 tabular-nums">
-                × {r.quantity_requested}
+              <div className="shrink-0 flex flex-col items-end gap-1">
+                <div className="text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 tabular-nums">
+                  × {r.quantity_requested}
+                </div>
+                <LineStockBadge row={stockRow('header')} />
               </div>
             </div>
             {r.item && <ItemStockRow itemId={r.item} />}
@@ -1234,6 +1268,7 @@ function AllItemsPanel({ r, onRefresh }) {
                 </div>
               </div>
               <div className="shrink-0 flex items-center gap-1">
+                <LineStockBadge row={stockRow(`line:${line.id}`)} />
                 <div className="text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 tabular-nums">× {line.quantity_requested}</div>
                 {!isLocked && (
                   <ConfirmButton data-tour="reservations-detail-delete-line"
