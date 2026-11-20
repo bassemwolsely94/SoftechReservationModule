@@ -449,6 +449,7 @@ class MissedSaleSuggestion(models.Model):
                                     on_delete=models.SET_NULL, related_name='+')
     seen_at    = models.DateTimeField(db_index=True, verbose_name='وقت الاختيار على الكاشير')
     source     = models.CharField(max_length=12, choices=SOURCE_CHOICES, default=SOURCE_POS,
+                                  db_default=SOURCE_POS,
                                   db_index=True, verbose_name='المصدر')
     # C28 idempotency key: one suggestion per call item, ever (UNIQUE)
     call_item  = models.OneToOneField('callcenter.CallItem', null=True, blank=True,

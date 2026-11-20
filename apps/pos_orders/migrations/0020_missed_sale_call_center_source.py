@@ -20,6 +20,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='missedsalesuggestion',
             name='source',
-            field=models.CharField(choices=[('pos', 'الكاشير'), ('call_center', 'الكول سنتر')], db_index=True, default='pos', max_length=12, verbose_name='المصدر'),
+            field=models.CharField(choices=[('pos', 'الكاشير'), ('call_center', 'الكول سنتر')], db_index=True, db_default='pos', default='pos', max_length=12, verbose_name='المصدر'),
         ),
     ]
