@@ -182,7 +182,7 @@ class PlatformCommentTests(TestCase):
 
     def test_untrusted_order_number_is_cleaned(self):
         from apps.pos_orders.platform_accounts import platform_comment
-        o = self._draft("12'; DROP TABLE x--\r\n" + 'Z' * 80)
+        o = self._draft("12'; DROP TABLE x--\r\n" + 'Z' * 60)   # ExternalOrder.external_id holds 100
         text = platform_comment(o)
         self.assertNotIn("'", text)
         self.assertNotIn(';', text)
