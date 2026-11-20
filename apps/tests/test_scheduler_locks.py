@@ -119,8 +119,9 @@ SCHEDULER_JOB_GUARDS = {
         'one-shot catch-up of gl_compare_refresh, same lock'),
     'daily_count_job': ('unique_key', 'apps.stockcount.daily.service.generate', 'except IntegrityError:',
         'StockCountSession create per person/day; a concurrent run hits IntegrityError and skips'),
-    'missed_sales': ('unique_key', 'apps.pos_orders.missed_sales.detect_missed_sales', 'bulk_create(created, ignore_conflicts=True)',
-        'UniqueConstraint (cart_token, item_code)'),
+    'missed_sales': ('unique_key', 'apps.pos_orders.missed_sales', 'bulk_create(created, ignore_conflicts=True)',
+        'UniqueConstraint (cart_token, item_code) for the POS source; UNIQUE call_item for the call-centre '
+        'source (C28) — both detectors write with this line'),
     'gamification_score': ('unique_key', 'apps.gamification.engine.Scorer.award', 'except IntegrityError:',
         'PointEvent UniqueConstraint (staff, rule_key, source_key); level-up notices are in-app check-then-act (racy)'),
     'gamification_day_close': ('unique_key', 'apps.gamification.engine.Scorer.award', 'except IntegrityError:',
