@@ -127,6 +127,12 @@ def cover_tiers_export():
     return _get('/api/purchasing/cover-tiers/lines/?format=xlsx')
 
 
+
+def missing_bonus_export():
+    """C18 /supply «بونص ناقص» workbook: its summary lists every live receiving branch in view (HQ included);
+    pending / closed / call center never show."""
+    return _get('/api/supply/missing-bonus/?format=xlsx')
+
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
@@ -143,4 +149,5 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    ('missing_bonus_export', missing_bonus_export, ABSENT_ALL),
 ]
