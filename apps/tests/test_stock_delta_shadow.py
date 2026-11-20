@@ -71,6 +71,16 @@ def run(conn):
 class ModeTests(TestCase):
 
     def test_default_is_off(self):
+        # the code default, independent of whatever .env this machine has (python-decouple also finds a
+        # parent folder's .env)
+        from types import SimpleNamespace
+        with mock.patch.object(delta, 'settings', SimpleNamespace()):
+            self.assertEqual(delta.stock_mode(), 'off')
+        from decouple import Config, RepositoryEmpty
+        self.assertEqual(Config(RepositoryEmpty())('SYNC_DELTA_STOCK', default='off'), 'off')
+
+    @override_settings(SYNC_DELTA_STOCK='off')
+    def test_off(self):
         self.assertEqual(delta.stock_mode(), 'off')
 
     @override_settings(SYNC_DELTA_STOCK='shadow')
@@ -98,6 +108,7 @@ class ShadowTests(TestCase):
         with override_settings(SYNC_DELTA_STOCK='shadow'):
             run(_Conn(self.base))
 
+    @override_settings(SYNC_DELTA_STOCK='off')
     def test_off_sends_no_delta_query_and_records_nothing(self):
         conn = _Conn(self.base)
         run(conn)
@@ -192,6 +203,7 @@ class ShadowTests(TestCase):
 
 class ShadowApiTests(TestCase):
 
+    @override_settings(SYNC_DELTA_STOCK='off')
     def test_admin_sees_the_report(self):
         _, _, client = make_admin('shadow_admin')
         DeltaShadowRun.objects.create(stream='stkbal', rows_full=32000, rows_changed=12, rows_delta=40,
