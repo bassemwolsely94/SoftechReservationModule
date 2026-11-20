@@ -157,3 +157,11 @@ Rules that follow CLAUDE.md:
 | M3 | Settlement import + commission journal (finance GL) | Money reconciliation |
 | M4 | Amazon / Noon adapter for non-medicine catalog from HQ | Only after category approval |
 | M5 | Instashop / Chefaa API adapters | Only if they offer an API |
+
+**Platform order number on the SOFTECH sale — 2026-11-20 (owner OK, probe first):** a platform sale's header
+`comments` (varchar(100), the only free-text header column) carries «<platform> #<order no.>», e.g.
+«طلبات #TLB-1029384» (`platform_accounts.platform_comment`; order number cleaned to `A-Z a-z 0-9 . _ / -`).
+Every other sale keeps native's empty comments. Native POS never fills it on pending docs (80/180), while
+cashiers sometimes type one on settled sales — so whether it survives the cashier's settlement is checked on
+the first real platform sale (our `vf2` tag does not survive). Either way the link stays on our side
+(ExternalOrder → POS order → SOFTECH docnumber).
