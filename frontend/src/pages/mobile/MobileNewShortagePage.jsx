@@ -15,7 +15,7 @@ export default function MobileNewShortagePage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = canPickAnyBranch(user) || ['purchasing', 'call_center'].includes(user?.role)
+  const canPickBranch = canPickAnyBranch(user)
 
   const [branch, setBranch] = useState(user?.branch_id ? String(user.branch_id) : '')
   const [title, setTitle]   = useState('')

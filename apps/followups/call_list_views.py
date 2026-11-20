@@ -1,7 +1,7 @@
 """
 Outbound call lists (campaigns) API — /api/followups/call-lists/.
-Reads: the followups module view permission. Create/close: followups create/edit AND
-role admin / supervisor / call_center (owner decision 2026-11-09). Branch scope applies
+Reads: the followups module view permission. Create/close: the followups:create grant
+(role review 2026-11-20; was a named role list). Branch scope applies
 to the customers selected (core.branch_scope).
 """
 from rest_framework import status
@@ -21,8 +21,9 @@ def _profile(request):
 
 
 def _can_create(request):
+    from core.permissions import matrix_allows   # owner decision 6 (role review 2026-11-20): the matrix
     p = _profile(request)
-    return bool(p and p.is_active and p.role in call_lists.CREATOR_ROLES)
+    return bool(p and p.is_active and matrix_allows(p, 'followups', 'create'))
 
 
 def _clean_criteria(data) -> dict:
@@ -78,7 +79,7 @@ class CallListView(APIView):
     def post(self, request):
         from apps.users.models import StaffProfile
         if not _can_create(request):
-            return Response({'detail': 'إنشاء قوائم الاتصال للمدير والمشرف وموظفي الكول سنتر'}, status=403)
+            return Response({'detail': 'ليس لديك صلاحية إنشاء قوائم الاتصال'}, status=403)
         name = str(request.data.get('name', '')).strip()[:120]
         if not name:
             return Response({'detail': 'اسم القائمة مطلوب'}, status=400)

@@ -55,7 +55,6 @@ apps/demand/service.py::escalate_stale_recoveries::supervisor x1
 apps/demand/views.py::push_purchase_suggestions::admin,purchasing x1
 apps/finance/views.py::_is_admin_or_pharmacist::admin,pharmacist x1
 apps/followups/call_list_views.py::CallListAgentsView.get::admin,call_center,supervisor x1
-apps/followups/call_lists.py::<module>::admin,call_center,supervisor x1
 apps/followups/reminder_views.py::<module>::admin,supervisor x1
 apps/followups/reminder_views.py::CanViewReminders.has_permission::admin,call_center,quality_manager,supervisor x1
 apps/forecasting/views.py::<module>::admin,purchasing,supervisor x1
@@ -131,7 +130,6 @@ apps/omni/views.py::_AccountWrite.has_permission::admin,supervisor x1
 apps/payments/audit_views.py::<module>::admin,purchasing,supervisor x1
 apps/pbx/cdr.py::notify_bridge_silence::admin,supervisor x1
 apps/pbx/views.py::IsAdminOrSupervisor.has_permission::admin,supervisor x1
-apps/pbx/views.py::ReadOrAdminSupervisorWrite.has_permission::admin,supervisor x1
 apps/personal/views.py::persons_search::delivery x1
 apps/pos_orders/permissions.py::<module>::admin,call_center,pharmacist,salesperson,supervisor x1
 apps/pos_orders/views.py::<module>::admin,pharmacist,supervisor x1

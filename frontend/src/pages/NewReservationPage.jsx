@@ -230,7 +230,7 @@ export default function NewReservationPage() {
   const navigate    = useNavigate()
   const qc          = useQueryClient()
   const { user }    = useAuthStore()
-  const isCCOrAdmin = canPickAnyBranch(user) || user?.role === 'call_center'
+  const isCCOrAdmin = canPickAnyBranch(user)
   const fileRef     = useRef()
 
   // ── Form state ──────────────────────────────────────────────────────────────

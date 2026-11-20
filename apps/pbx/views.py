@@ -19,32 +19,35 @@ from apps.pbx.serializers import (
 )
 
 
-class ReadOrAdminSupervisorWrite(BasePermission):
-    """Any staff can read; only admin/supervisor change extension mapping."""
-    def has_permission(self, request, view):
-        if request.method in ('GET', 'HEAD', 'OPTIONS'):
-            return True
-        p = getattr(request.user, 'staff_profile', None)
-        return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
-
-
 from core.permissions import matrix_permission                     # noqa: E402
 
 # PBX = the `callcenter` matrix module (Batch 4, Z-8b — queues, call sessions, live calls and
 # dialling were open to any logged-in user). A user's own extension (my-extension) stays open:
 # the POS screen-pop reads it. Diagnostics / extension map / spy keep admin / supervisor.
 PBX = matrix_permission('callcenter', post=('create', 'edit', 'approve'))
+# PBX settings (extension map, diagnostics, spy, ...): the matrix, writes need callcenter edit
+# (role review decision 5; was a named admin / supervisor list)
+PBX_CONFIG = matrix_permission('callcenter', get=('view',), post=('edit',), edit=('edit',), delete=('edit',))
+
+
+class IsAdminOrSupervisor(BasePermission):
+    """Live listening / whispering (spy) stays supervisors-only: eavesdropping is not a PBX setting
+    (overblock decision, test_rbac_overblock_decisions); so does storing another extension's SIP
+    secret (WebRTC), a credential rather than a setting."""
+    def has_permission(self, request, view):
+        p = getattr(request.user, 'staff_profile', None)
+        return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
 
 
 class AgentExtensionListView(generics.ListCreateAPIView):
     serializer_class   = AgentExtensionSerializer
-    permission_classes = [IsAuthenticated, PBX, ReadOrAdminSupervisorWrite]
+    permission_classes = [IsAuthenticated, PBX, PBX_CONFIG]
     queryset           = AgentExtension.objects.select_related('staff').filter(is_active=True)
 
 
 class AgentExtensionDetailView(generics.RetrieveUpdateAPIView):
     serializer_class   = AgentExtensionSerializer
-    permission_classes = [IsAuthenticated, PBX, ReadOrAdminSupervisorWrite]
+    permission_classes = [IsAuthenticated, PBX, PBX_CONFIG]
     queryset           = AgentExtension.objects.select_related('staff')
 
 
@@ -116,12 +119,6 @@ class MyExtensionView(APIView):
 # Supervisor live listen / whisper (ChanSpy) — doc 15 Phase 2
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-class IsAdminOrSupervisor(BasePermission):
-    def has_permission(self, request, view):
-        p = getattr(request.user, 'staff_profile', None)
-        return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
-
-
 class BridgeStatusView(APIView):
     """GET /api/pbx/status/ — connection badge (cheap; reads the bridge's row)."""
     permission_classes = [IsAuthenticated, PBX]
@@ -144,7 +141,7 @@ class BridgeStatusView(APIView):
 
 class DiagnosticsView(APIView):
     """POST /api/pbx/diagnostics/ — run the step-by-step connectivity check."""
-    permission_classes = [IsAuthenticated, IsAdminOrSupervisor]
+    permission_classes = [IsAuthenticated, PBX_CONFIG]
 
     def post(self, request):
         from apps.pbx.diagnostics import run_diagnostics
@@ -153,7 +150,7 @@ class DiagnosticsView(APIView):
 
 class ExtensionStatusView(APIView):
     """GET /api/pbx/extensions/status/ — live registration per extension + mapping."""
-    permission_classes = [IsAuthenticated, IsAdminOrSupervisor]
+    permission_classes = [IsAuthenticated, PBX_CONFIG]
 
     def get(self, request):
         from apps.pbx.extensions import extension_status
@@ -166,7 +163,7 @@ class ExtensionMapView(APIView):
     Maps an extension to a staff member in OUR database only (Issabel untouched).
     A staff member holds one extension: mapping moves them off any previous one.
     """
-    permission_classes = [IsAuthenticated, IsAdminOrSupervisor]
+    permission_classes = [IsAuthenticated, PBX_CONFIG]
 
     def post(self, request):
         from django.db import transaction
@@ -282,7 +279,7 @@ class ExtensionWebRTCView(APIView):
 
 class StaffChoicesView(APIView):
     """GET /api/pbx/staff-choices/?q= — active staff for the mapping picker."""
-    permission_classes = [IsAuthenticated, IsAdminOrSupervisor]
+    permission_classes = [IsAuthenticated, PBX_CONFIG]
 
     def get(self, request):
         from apps.users.models import StaffProfile

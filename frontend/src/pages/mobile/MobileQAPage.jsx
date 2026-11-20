@@ -24,7 +24,7 @@ export default function MobileQAPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = canPickAnyBranch(user) || ['quality_manager', 'supervisor', 'call_center'].includes(user?.role)
+  const canPickBranch = canPickAnyBranch(user)
 
   const [creating, setCreating] = useState(false)
   const [tpl, setTpl]       = useState('')

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { followupsApi } from '../../api/client'
-import useAuthStore from '../../store/authStore'
+import { usePermission } from '../../hooks/usePermission'
 import BranchMultiSelect from '../BranchMultiSelect'
 import { ConfirmButton } from '../InlineConfirm'
 
@@ -9,7 +9,6 @@ const SEGMENTS = [
   ['vip', 'VIP 👑'], ['loyal', 'مخلص 💚'], ['regular', 'عادي'], ['at_risk', 'في خطر ⚠️'],
   ['dormant', 'نائم 💤'], ['new', 'جديد 🌱'], ['churned', 'مفقود ❌'],
 ]
-const CREATORS = ['admin', 'supervisor', 'call_center']
 const REFILL_SCRIPT = 'السلام عليكم، معاك صيدلية الرزيقي. حبينا نطمّن: علاجك لسه زي ما هو؟ تحب نجهّزهولك في الفرع ولا نوصّله لحد البيت؟'
 const money = v => Number(v || 0).toLocaleString('ar-EG', { maximumFractionDigits: 0 })
 
@@ -182,8 +181,7 @@ function NewListForm({ branches, onDone }) {
 
 export default function CallListsPanel({ branches = [], activeListId, onSelectList }) {
   const qc = useQueryClient()
-  const { user } = useAuthStore()
-  const canCreate = CREATORS.includes(user?.role)
+  const canCreate = usePermission('followups', 'create')
   const [showForm, setShowForm] = useState(false)
   const [status, setStatus] = useState('active')
   const { data: lists = [], isLoading } = useQuery({

@@ -549,7 +549,7 @@ useEffect(() => {
   return () => clearTimeout(delay)
 }, [searchInput])
 
-  const isCCOrAdmin   = canPickAnyBranch(user) || ['call_center', 'purchasing'].includes(user?.role)
+  const isCCOrAdmin   = canPickAnyBranch(user)
   const userBranchId  = user?.branch_id
 
   const { data: branches = [] } = useQuery({

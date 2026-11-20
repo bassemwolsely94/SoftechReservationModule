@@ -685,7 +685,7 @@ export default function DashboardPage() {
   // The sync widget reads the summary's own `sync` block; Layout follows sync/status, so a second
   // 30 s poll here was duplicate load (perf Stage 3, audit PERF-10).
 
-  const isAdminOrCC = canPickAnyBranch(user) || ['call_center', 'purchasing'].includes(user?.role)
+  const isAdminOrCC = canPickAnyBranch(user)
 
   const r  = data?.reservations || {}
   const tr = data?.transfers    || {}

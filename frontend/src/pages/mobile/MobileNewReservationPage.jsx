@@ -33,7 +33,7 @@ export default function MobileNewReservationPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = canPickAnyBranch(user) || user?.role === 'call_center'
+  const canPickBranch = canPickAnyBranch(user)
 
   const [form, setForm] = useState({
     customer:           '',

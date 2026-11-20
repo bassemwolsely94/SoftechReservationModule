@@ -341,7 +341,7 @@ export default function ReservationsKanban() {
   const { user } = useAuthStore()
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const isCCOrAdmin = canPickAnyBranch(user) || user?.role === 'call_center'
+  const isCCOrAdmin = canPickAnyBranch(user)
 
   const [viewMode, setViewMode] = useState('kanban')   // 'kanban' | 'list'
   // multi-select filters (arrays; none ticked = all) — sent as one comma list, e.g. ?status=pending,available

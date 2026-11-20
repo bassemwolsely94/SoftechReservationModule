@@ -61,6 +61,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     # the frontend only uses these to show menus/buttons — the views enforce them.
     can_supply_write = drf_serializers.SerializerMethodField()
     can_run_engine   = drf_serializers.SerializerMethodField()
+    can_pick_any_branch = drf_serializers.SerializerMethodField()   # role review: the server's own branch rule
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
     can_usage_print  = drf_serializers.SerializerMethodField()   # Project 5: flag ON + RBAC usage_print view
@@ -83,6 +84,11 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     def get_can_run_engine(self, obj):
         from apps.purchasing.access import can_run_engine
         return can_run_engine(obj.user)
+
+    def get_can_pick_any_branch(self, obj):
+        # same test as core.branch_scope.allows(profile, None): all-branch role or access flag
+        from core import branch_scope
+        return branch_scope.branch_ids(obj) is None
 
     def get_can_stock_audit(self, obj):
         from apps.stock_audit.access import can_open
@@ -113,7 +119,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_pick_any_branch', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
             'features',
         ]
 

@@ -19,7 +19,7 @@ export default function MobileNewTransferPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickRequesting = canPickAnyBranch(user) || ['purchasing', 'call_center'].includes(user?.role)
+  const canPickRequesting = canPickAnyBranch(user)
 
   const [requesting, setRequesting] = useState(user?.branch_id ? String(user.branch_id) : '')
   const [supplying, setSupplying]   = useState('')

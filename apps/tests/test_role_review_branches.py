@@ -112,3 +112,55 @@ class BranchPickerServerRuleTests(TestCase):
         for flow in ('reservation', 'demand', 'transfer', 'shortage'):
             with self.subTest(flow=flow):
                 self.assertEqual(self._post(flow, client, self.other).status_code, 403)
+
+
+class PbxCallListsAndMeTests(TestCase):
+    """Decisions 5 + 6 + the server-computed picker flag on /api/auth/me/."""
+
+    def setUp(self):
+        module_access.clear_cache()
+        self.home = make_branch()
+        for r in ('call_center', 'pharmacist', 'salesperson', 'viewer', 'supervisor',
+                  'quality_manager', 'accountant', 'purchasing'):
+            seed_matrix(r)
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def _client(self, role, **kw):
+        return make_user(f'pc_{role}', role=role, branch=self.home, **kw)[2]
+
+    def test_pbx_settings_follow_the_callcenter_matrix(self):
+        with mock.patch('apps.pbx.extensions.extension_status', return_value={}):
+            for role, ok in (('call_center', True), ('supervisor', True), ('viewer', False),
+                             ('pharmacist', False)):
+                with self.subTest(role=role):
+                    c = self._client(role)
+                    self.assertEqual(c.get('/api/pbx/extensions/status/').status_code == 200, ok)
+                    code = c.post('/api/pbx/extensions/map/', {}, format='json').status_code
+                    self.assertEqual(code != 403, ok)
+
+    def test_pbx_settings_refused_when_the_matrix_denies_supervisor(self):
+        RoleModuleAccess.objects.filter(role='supervisor', module='callcenter', action='edit').delete()
+        module_access.clear_cache()
+        c = self._client('supervisor')
+        self.assertEqual(c.post('/api/pbx/extensions/map/', {}, format='json').status_code, 403)
+
+    def test_call_list_create_follows_followups_create(self):
+        for role, ok in (('call_center', True), ('pharmacist', True), ('salesperson', True),
+                         ('viewer', False)):
+            with self.subTest(role=role):
+                code = self._client(role).post('/api/followups/call-lists/', {}, format='json').status_code
+                self.assertEqual(code != 403, ok)         # allowed roles reach validation (400)
+
+    def test_me_exposes_can_pick_any_branch(self):
+        for role in ('supervisor', 'quality_manager', 'accountant', 'purchasing'):
+            with self.subTest(role=role):
+                r = self._client(role).get('/api/auth/me/')
+                self.assertTrue(r.data['can_pick_any_branch'])
+        for role in ('pharmacist', 'salesperson'):
+            with self.subTest(role=role):
+                r = self._client(role).get('/api/auth/me/')
+                self.assertFalse(r.data['can_pick_any_branch'])
+        r = make_user('pc_flag', role='pharmacist', branch=self.home, access_all=True)[2].get('/api/auth/me/')
+        self.assertTrue(r.data['can_pick_any_branch'])
