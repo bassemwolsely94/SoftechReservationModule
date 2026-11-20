@@ -30,6 +30,7 @@ import PriceHistoryModal from './pricing/PriceHistoryModal'
 import useAuthStore from '../store/authStore'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
+import { ConfirmButton } from '../components/InlineConfirm'
 
 // ── Field config ──────────────────────────────────────────────────────────────
 
@@ -697,13 +698,15 @@ export default function PricingApprovalsPage() {
                             </button>
                           )}
                           {req.status === 'executed' && (
-                            <button data-tour="pricing-approvals-rollback"
-                              onClick={() => { if (confirm('إنشاء طلب تراجع إلى القيم السابقة؟')) rollback.mutate(req.id) }}
+                            <ConfirmButton data-tour="pricing-approvals-rollback"
+                              onConfirm={() => rollback.mutate(req.id)}
+                              confirmLabel="إنشاء طلب تراجع؟"
+                              title="إنشاء طلب تراجع إلى القيم السابقة"
                               disabled={rollback.isPending}
                               className="px-3 py-1 rounded-lg bg-purple-100 text-purple-700 text-xs hover:bg-purple-200 border border-purple-200 disabled:opacity-60"
                             >
                               ↩ تراجع
-                            </button>
+                            </ConfirmButton>
                           )}
                         </td>
                       )}

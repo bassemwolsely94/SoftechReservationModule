@@ -325,7 +325,7 @@ SCREENS = [
             {'target': 'pricing-approvals-rollback', 'label': T('↩ تراجع', '↩ Rollback'),
              'text': T('ينشئ طلباً جديداً «في الانتظار» يعيد القيم السابقة. لا يغيّر SOFTECH حتى يُعتمد.',
                        'Creates a new "Pending" request back to the previous values. SOFTECH does not change until it is approved.'),
-             'warn': T('الطلب الجديد يمر بنفس الاعتماد وينفَّذ على كل الفروع.', 'The new request goes through the same approval and runs on every branch.'),
+             'warn': T('اضغط مرتين («إنشاء طلب تراجع؟»). الطلب الجديد يمر بنفس الاعتماد وينفَّذ على كل الفروع.', 'Press twice ("Create a rollback request?"). The new request goes through the same approval and runs on every branch.'),
              'open_hint': T('للمدير فقط، على طلب «منفذ».', 'Admins only, on an "Executed" request.')},
             {'target': 'pricing-approvals-sla-review', 'label': T('مراجعة', 'Review'),
              'text': T('الطلبات المتأخرة الأقدم أولاً. «مراجعة» يفتح نافذة الاعتماد مباشرة.',
@@ -432,7 +432,7 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
-        'updated': '2026-11-19',
+        'updated': '2026-11-20',
         'change_note': T('حالة جديدة «تغيّر في SOFTECH — للمراجعة»: التنفيذ يقرأ الصنف من SOFTECH ولا يكتب لو تغيّر بعد الطلب.', 'New status "Changed in SOFTECH — review": execution reads the item from SOFTECH and writes nothing if it changed after the request.'),
     },
     {
