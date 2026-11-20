@@ -1600,6 +1600,9 @@ export const deliveryApi = {
   // F14 — CSAT report
   csatReport: (params) => api.get('/delivery/csat-report/', { params }),
 
+  // C20 — small orders + fee-less invoices (report only)
+  smallOrders:      (params) => api.get('/delivery/small-orders/', { params }),
+
   // F6 — Driver App
   myOrders:    () => api.get('/delivery/app/my-orders/'),
   myRoute:     () => api.get('/delivery/app/my-route/'),

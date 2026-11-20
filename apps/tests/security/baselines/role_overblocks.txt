@@ -821,6 +821,15 @@ salesperson GET /api/pos-orders/live-check-gaps/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/credit-points/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/review/
 
+# reason: C20 — the delivery small-order / fee-less invoice report (/api/delivery/small-orders/) is a
+#   branch money report (goods, margin, fees per invoice): on top of the delivery route grant it needs
+#   the analytics view grant (branch managers, supervisors, HQ). Riders and salespeople keep their own
+#   delivery screens.
+delivery GET /api/delivery/small-orders/
+salesperson GET /api/delivery/small-orders/
+delivery GET /api/delivery/small-orders/export/
+salesperson GET /api/delivery/small-orders/export/
+
 # reason: C17 — «اشترينا أغلى» (/api/supply/bought-dearer/) is HQ purchasing money across every
 #   branch, per buyer and supplier: company-level data, so on top of the purchasing view grant only an
 #   all-branch user may read it (core.branch_scope.sees_everything). Branch-bound viewer keeps /supply.
