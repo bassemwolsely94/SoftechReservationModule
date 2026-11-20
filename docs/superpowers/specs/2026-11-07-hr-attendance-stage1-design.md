@@ -1,5 +1,7 @@
 # HR Attendance — Stage 1: Employee List and Fingerprint Punch Collection
 
+> Stage 1b (Linked Gates as a second source, day cut-off) is specified in `docs/superpowers/specs/2026-11-20-hr-attendance-linkedgates-sessions-design.md`.
+
 Status: design, awaiting owner approval. Nothing is built.
 
 ## Why
