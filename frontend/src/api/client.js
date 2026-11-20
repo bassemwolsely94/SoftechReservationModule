@@ -2306,6 +2306,8 @@ export const glApi = {
   exceptionsCounts: (params)       => api.get('/finance/gl/exceptions/counts/', { params }),
   exceptionsPage:  (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
   exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
+  mixedPatterns:   ()              => api.get('/finance/gl/exceptions/mixed-patterns/'),
+  mixedPatternDecide: (body)       => api.post('/finance/gl/exceptions/mixed-patterns/decide/', body),
   exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
   exceptionAcceptSoftech: (id, body) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, body),   // {note, version}
   exceptionKeepEdit: (id, body)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, body),          // {note, version}

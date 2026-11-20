@@ -39,6 +39,7 @@ BUDGETS: dict[str, Budget] = {
     'insurance/claims': Budget('list', 10, 'measured 8 on 2026-11-19'),
     'purchasing/metrics': Budget('list', 7, 'measured 5 on 2026-11-19'),
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
+    'finance/gl/exceptions/mixed-patterns': Budget('list', 12, 'first measure pending (2026-11-20)'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'incentives/targets': Budget('report', 14, 'measured 12 → 52 with 10 targets on 2026-11-19; flat after Stage 3 '

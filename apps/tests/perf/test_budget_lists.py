@@ -17,6 +17,8 @@ from apps.reservations.models import Reservation, ReservationLine
 from apps.supply.models import SupplyCase
 
 from ..factories import make_admin, make_branch, make_item, make_pharmacist, make_user
+from ..test_gl_manual_import import row
+from ..test_gl_mixed_patterns import PatternBase
 from .budget import assert_budget
 
 
@@ -178,3 +180,26 @@ class PurchasingListBudgets(TestCase):
         self._metrics(2)
         assert_budget(self, 'purchasing/filter-options', self.client_, '/api/purchasing/filter-options/',
                       grow=self._metrics, min_rows=0)
+
+
+class GLMixedPatternBudgets(PatternBase):
+    """The pattern list reads every open «قيد يدوي مختلط» row once: flat however many are parked."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.client_ = APIClient()
+        self.client_.force_authenticate(self.staff.user)
+        self.n = 0
+
+    def _park_more(self):
+        rows = []
+        for _ in range(10):
+            self.n += 1
+            rows += [row('1302', debit=self.n, desc=f'نمط {self.n}'), row('3280', credit=self.n, desc=f'نمط {self.n}')]
+        self.run_import(rows)
+
+    def test_mixed_patterns(self):
+        self.park()
+        assert_budget(self, 'finance/gl/exceptions/mixed-patterns', self.client_,
+                      '/api/finance/gl/exceptions/mixed-patterns/', grow=self._park_more, min_rows=14,
+                      rows_of=lambda r: sum(p['count'] for p in r.data['results']))
