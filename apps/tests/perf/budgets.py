@@ -44,6 +44,8 @@ BUDGETS: dict[str, Budget] = {
     'insurance/claims': Budget('list', 10, 'measured 8 on 2026-11-19'),
     'purchasing/metrics': Budget('list', 7, 'measured 5 on 2026-11-19'),
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
+    'personal/saved-views': Budget('list', 6, 'C23, 2026-11-20: own + role-shared views in one query (+ auth); '
+                                              'not measured locally yet — CI first run'),
     'purchasing/phantom/monthly': Budget('list', 8, 'C30, 2026-11-20: one item query (+ auth); not measured '
                                                     'locally (shared PC), CI is the first run'),
     'purchasing/aggregated': Budget('list', 9, 'C16 2026-11-20: not measured yet (CI first run); '

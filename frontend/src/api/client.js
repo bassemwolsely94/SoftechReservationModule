@@ -507,6 +507,12 @@ export const helpApi = {
 }
 
 export const personalApi = {
+  // C23 saved filters per user on worklist screens (own + shared with my role)
+  savedViews:      (screen)    => api.get('/personal/saved-views/', { params: { screen } }),
+  createSavedView: (data)      => api.post('/personal/saved-views/', data),
+  updateSavedView: (id, data)  => api.patch(`/personal/saved-views/${id}/`, data),
+  deleteSavedView: (id)        => api.delete(`/personal/saved-views/${id}/`),
+
   // Person search for claiming an identity — kind: 'supplier' | 'customer'
   searchPersons: (q, kind) => api.get('/personal/persons/search/', { params: { q, ...(kind ? { kind } : {}) } }),
 

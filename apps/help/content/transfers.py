@@ -1086,6 +1086,10 @@ SCREENS = [
                  'Shows shipments received here whose receipt document (25) has not appeared in SOFTECH yet.\n• These are the ones the receiving branch must still receive in SOFTECH.\n• If they stay like that longer than the days set in settings (default 3), a daily alert is sent. Press it again to return to the normal view.')},
         ],
         'hints': [
+            {'target': 'saved-views', 'label': T('⭐ العروض المحفوظة', '⭐ Saved views'),
+             'text': T('احفظ الفلاتر الحالية باسم، واختر عرضاً لتطبيقه بضغطة. ★ = يفتح به الشاشة كل مرة. «مشاركة» تُظهره لزملاء دورك.',
+                       'Save the current filters under a name, and pick a view to apply it in one click. ★ = the screen opens with it. "Share" shows it to colleagues with your role.'),
+             'when': T('العرض يحفظ الفلاتر فقط — صلاحياتك وفروعك كما هي.', 'A view keeps filters only — your rights and branches stay the same.')},
             {'target': 'transfers-transits-bulk-stocking', 'label': T('🗄️ ورقة الترصيص', '🗄️ Stocking sheet'),
              'text': T('يصدّر ملف Excel واحد للأذونات المحددة بترتيب أرفف الفرع المستلم، عشان الترصيص يمشي بالمسار.', "Exports one Excel file for the ticked transfers in the receiving branch's shelf order, so stocking follows the route."),
              'when': T('لما الشحنة توصل الفرع وتحب ترصّها بالترتيب.', 'When the shipment reaches the branch and you want to shelve it in order.'),
@@ -1095,8 +1099,9 @@ SCREENS = [
              'when': T('لتسجيل سبب تأخير أو فرق أو تنسيق مع المخزن.', 'To record a delay reason, a difference or coordination with the store.'),
              'open_hint': T('افتح إذن، ثم تبويب الملاحظات.', 'Open a transfer, then the notes tab.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلاتر الأولوية والحالة والفروع تقبل أكثر من اختيار معاً', 'Priority, status and branch filters take several choices at once'),
+        'updated': '2026-11-20',
+        'change_note': T('«⭐ العروض» بجوار الفلاتر: احفظ فلاتر التحويلات قيد النقل باسم، واجعل واحداً افتراضياً',
+                         '"⭐ Views" next to the filters: save the in-transit filters under a name, and make one your default'),
     },
     {
         'key': 'transfers.pick_zones',
