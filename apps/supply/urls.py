@@ -7,6 +7,7 @@ from .views import (AvailabilityBatchViewSet, OrderListViewSet, SupplyCaseViewSe
                     supplier_network)
 
 from .receipt_views import receipt_check_decide, receipt_checks   # P-31
+from .out_here_views import out_here                               # C06
 
 router = SimpleRouter()     # no API-root index page (Z-7a)
 router.register(r'availability', AvailabilityBatchViewSet, basename='availability-batch')
@@ -16,6 +17,7 @@ router.register(r'decisions', SupplyDecisionViewSet, basename='supply-decision')
 
 urlpatterns = [
     path('receipts/', receipt_checks, name='supply-receipt-checks'),
+    path('out-here/', out_here, name='supply-out-here'),
     path('receipts/<int:pk>/decide/', receipt_check_decide, name='supply-receipt-check-decide'),
     path('freshness/', freshness, name='supply-freshness'),
     path('freshness/sync-stock/', freshness_sync_stock, name='supply-freshness-sync-stock'),
