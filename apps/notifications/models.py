@@ -75,6 +75,7 @@ class Notification(models.Model):
         ('sync_failure',              '🔴 فشل مزامنة متكرر'),
         ('attendance_alert',          '🕒 تنبيه الحضور والبصمة'),
         ('hq_exception_digest',       '💰 استثناءات الأسبوع بالجنيه'),
+        ('qa_fridge_alert',           '🌡️ تنبيه ثلاجة الفرع'),
         ('receipt_check_digest',      '📦 استلام بدون طلب'),
         ('return_window_digest',      '📆 نوافذ مرتجع الموردين'),
         ('ap_review_digest',          '🧾 مراجعة تسوية الموردين'),
@@ -188,6 +189,8 @@ class Notification(models.Model):
         'sync_failure':         CATEGORY_SETTINGS,
         # HR attendance health: for the HR head only, so it rides the bell silently (global).
         'attendance_alert':     CATEGORY_GLOBAL,
+        # C31: fridge reading out of range / missed → the branch's bell (actionable, cold chain)
+        'qa_fridge_alert':      CATEGORY_GLOBAL,
         # ── Periodic digests → 📊 reports feed (quiet) ────────────────────────
         'weekly_summary':       CATEGORY_REPORTS,
         'hq_exception_digest':  CATEGORY_REPORTS,

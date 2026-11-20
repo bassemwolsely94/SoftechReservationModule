@@ -16,6 +16,8 @@ import useGridKeyboard, { GRID_KEYS_HINT } from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
 import MultiSelectFilter from './MultiSelectFilter'
+import SavedViewsMenu from './SavedViewsMenu'
+import useSavedViews from '../hooks/useSavedViews'
 
 const fmtNum = (n, d = 0) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: d })
 const ACTIONS = [
@@ -120,12 +122,20 @@ function Outcomes({ branch }) {
   )
 }
 
+const NE_SV_KEYS = ['branch', 'action']
+
 export default function NearExpiryWorklistTab() {
   const qc = useQueryClient()
   const bl = useBranchLabels()
   const [view, setView] = useState('list')
   const [branch, setBranch] = useState([])
   const [actionF, setActionF] = useState('')
+  // C23 saved views: branches + suggested-action filter
+  const sv = useSavedViews('batches.near_expiry', {
+    keys: NE_SV_KEYS,
+    getFilters: () => ({ branch, action: actionF }),
+    applyFilters: f => { setBranch(f.branch || []); setActionF(f.action || '') },
+  })
   const [ticked, setTicked] = useState({})
   const [bulk, setBulk] = useState('')
   const [note, setNote] = useState('')
@@ -211,6 +221,7 @@ export default function NearExpiryWorklistTab() {
           <MultiSelectFilter className="w-48" options={branchOpts} selected={branch} onChange={setBranch}
                              allLabel="كل الفروع" showCode={false} />
         )}
+        <SavedViewsMenu sv={sv} />
         {view === 'outcomes' && data?.can_check_outcomes && (
           <button data-tour="batches-main-near-expiry-check" onClick={() => batchesApi.nearExpiryCheckOutcomes()
             .then(r => done(`قيست ${r.data.closed} نتيجة`)).catch(fail)}

@@ -111,6 +111,8 @@ SCHEDULER_JOB_GUARDS = {
         'used-lines set read up front, no lock: two concurrent runs can apply the same doc 120 line twice (returned_qty double-counted); PG only'),
     'delivery_stuck_autoclose': ('row_lock', 'apps.delivery.stuck_close._close_one', 'filter(pk=order_id, status=seen_status, cash_collection__isnull=True)',
         'C21: each close is a conditional UPDATE on the status this run saw, so a second run (or a person) wins and nothing closes twice; SOFTECH read only, no sends; switch off by default'),
+    'qa_fridge_missed': ('unique_key', 'apps.qa.fridge.check_missed', 'dedup_once=True',
+        'C31: in-app alerts only (no WhatsApp/SMS, no SOFTECH); the dedup key carries fridge, day and slot, so a second run adds nothing'),
     'near_expiry_outcomes': ('row_lock', 'apps.batches.near_expiry._evaluate_outcomes', "select_for_update().filter(status='open')",
         'open NearExpiryAction rows locked in one transaction (evaluate_outcomes); a concurrent run waits, then sees them closed; ledger lines used once via ledger_refs; PG only, no sends, no SOFTECH'),
     'gl_drafting': ('unique_key', 'apps.finance.gl.drafting.start_run', 'except IntegrityError:',
