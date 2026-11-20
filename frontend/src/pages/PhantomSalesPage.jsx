@@ -18,7 +18,7 @@ import { askBar, notify } from '../components/ui'
 
 const pct = (x) => `${Math.round((x ?? 0) * 100)}%`
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
-const invalidate = (qc) => ['phantom-candidates', 'phantom-excluded', 'phantom-summary']
+const invalidate = (qc) => ['phantom-candidates', 'phantom-excluded', 'phantom-summary', 'phantom-monthly']
   .forEach(k => qc.invalidateQueries({ queryKey: [k] }))
 const onErr = (e) => notify.error(e?.response?.data?.detail || e?.message || 'تعذّر تنفيذ الإجراء.')
 
@@ -68,7 +68,7 @@ function Table({ rows, tab, qc }) {
           </tr>
         </thead>
         <tbody className="divide-y">
-          {sorted.map(r => (
+          {sorted.map(r => { const mode = tab === 'monthly' ? (r.override === 'excluded' ? 'excluded' : 'flagged') : tab; return (
             <tr key={r.item_id} className="hover:bg-gray-50">
               <td className="px-3 py-2 font-mono text-xs text-gray-500">{r.code}</td>
               <td className="px-3 py-2">
@@ -89,7 +89,7 @@ function Table({ rows, tab, qc }) {
                 {!r.override && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">تلقائي</span>}
               </td>
               <td className="px-3 py-2 whitespace-nowrap">
-                {tab === 'flagged' ? (
+                {mode === 'flagged' ? (
                   <div data-tour="shortage-phantom-row-actions" className="flex gap-1">
                     {r.override !== 'confirmed' &&
                       <button data-tour="shortage-phantom-confirm" onClick={() => confirm.mutate(r.item_id)} className="px-2 py-1 text-xs text-violet-700 border border-violet-200 rounded hover:bg-violet-50">تأكيد</button>}
@@ -103,7 +103,7 @@ function Table({ rows, tab, qc }) {
                 )}
               </td>
             </tr>
-          ))}
+          ) })}
         </tbody>
       </table>
     </div>
@@ -115,12 +115,18 @@ export default function PhantomSalesPage() {
   const [tab, setTab] = useState('flagged')
   useHelpTab(tab)
   const [med, setMed] = useState([]); const [q, setQ] = useState('')   // med: multi-select codes (none = all)
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))   // C30 «جديد الشهر»: YYYY-MM
   const params = { ...(med.length ? { med: med.join(',') } : {}), ...(q.trim() ? { q: q.trim() } : {}) }
+  const fetchers = {
+    flagged: ['phantom-candidates', () => purchasingApi.phantomCandidates(params)],
+    excluded: ['phantom-excluded', () => purchasingApi.phantomExcluded(params)],
+    monthly: ['phantom-monthly', () => purchasingApi.phantomMonthly({ ...params, month })],
+  }
   const { data: summary } = useQuery({ queryKey: ['phantom-summary'], queryFn: () => purchasingApi.phantomSummary().then(r => r.data) })
   const { data: medTypes } = useQuery({ queryKey: ['phantom-medtypes'], queryFn: () => purchasingApi.phantomMedTypes().then(r => r.data.med_types) })
   const { data, isLoading } = useQuery({
-    queryKey: [tab === 'flagged' ? 'phantom-candidates' : 'phantom-excluded', params],
-    queryFn: () => (tab === 'flagged' ? purchasingApi.phantomCandidates(params) : purchasingApi.phantomExcluded(params)).then(r => r.data),
+    queryKey: [fetchers[tab][0], params, tab === 'monthly' ? month : null],
+    queryFn: () => fetchers[tab][1]().then(r => r.data),
   })
   return (
     <div dir="rtl" className="p-4 max-w-[1400px] mx-auto">
@@ -137,10 +143,19 @@ export default function PhantomSalesPage() {
         <Stat label="تخفيض الطلب (تقديري)" value={`${egp(data?.total_order_reduction_value)} ج`} tone="text-emerald-700" />
       </div>
       <div className="flex gap-4 border-b mb-4" data-tour="shortage-phantom-tabs">
-        {[['flagged', `المُكتشفة (${summary?.flagged ?? 0})`], ['excluded', `المستبعدة (${summary?.excluded ?? 0})`]].map(([k, l]) => (
+        {[['flagged', `المُكتشفة (${summary?.flagged ?? 0})`], ['excluded', `المستبعدة (${summary?.excluded ?? 0})`], ['monthly', '🗓 جديد الشهر']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === k ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{l}</button>
         ))}
       </div>
+      {tab === 'monthly' && (
+        <div className="flex flex-wrap items-center gap-3 mb-3 text-sm" data-tour="shortage-phantom-monthly">
+          <input type="month" value={month} onChange={e => e.target.value && setMonth(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm" aria-label="الشهر" />
+          <span className="text-gray-600">أصناف اتعلّمت «وهمية» لأول مرة في الشهر ده: <b className="tabular-nums">{data?.count ?? 0}</b></span>
+          <span className="text-amber-700">⏳ بانتظار القرار: <b className="tabular-nums">{data?.pending ?? 0}</b> — {egp(data?.egp_pending)} ج</span>
+          <span className="text-gray-500">✓ اتراجعت: <b className="tabular-nums">{data?.reviewed ?? 0}</b></span>
+        </div>
+      )}
       <Toolbar med={med} setMed={setMed} q={q} setQ={setQ} medTypes={medTypes || []} />
       {isLoading ? <p className="text-gray-400 py-10 text-center">جارٍ التحميل…</p>
         : <Table rows={data?.items || []} tab={tab} qc={qc} />}
