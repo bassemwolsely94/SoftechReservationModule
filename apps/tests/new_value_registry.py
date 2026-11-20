@@ -127,6 +127,30 @@ def cover_tiers_export():
     return _get('/api/purchasing/cover-tiers/lines/?format=xlsx')
 
 
+def delivery_small_orders_export():
+    """C20 delivery small-order / fee-less invoice workbook (/delivery/analytics → 💸 طلبات صغيرة): one small
+    channel-90 sale planted per branch; live branches only, so pending / closed / call center never show."""
+    import datetime as dt
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.branches.models import Branch
+    from apps.customers.models import PurchaseHistory, PurchaseHistoryLine
+    from apps.tests.factories import make_customer, make_item
+
+    day = dt.date(2026, 11, 10)
+    item, customer = make_item(softech_id='NVC20'), make_customer()
+    for b in Branch.objects.all():
+        inv = PurchaseHistory.objects.create(
+            customer=customer, softech_invoice_id=f'NV-C20-{b.softech_branch_id}', branch=b, doc_code='115',
+            docnumber='1', sales_channel='90', total_amount=Decimal('50'),
+            invoice_date=timezone.make_aware(dt.datetime.combine(day, dt.time(12, 0))))
+        PurchaseHistoryLine.objects.create(purchase=inv, item=item, quantity=Decimal('1'), unit_price=Decimal('50'),
+                                           line_total=Decimal('50'), cost_at_sale=Decimal('40'))
+    return _get(f'/api/delivery/small-orders/?date_from={day}&date_to={day}&format=xlsx')
+
+
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
@@ -143,4 +167,5 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    ('delivery_small_orders_export', delivery_small_orders_export, ABSENT_ALL),
 ]

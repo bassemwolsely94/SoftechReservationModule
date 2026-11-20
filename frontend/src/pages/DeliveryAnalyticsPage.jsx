@@ -1,6 +1,6 @@
 /**
  * DeliveryAnalyticsPage.jsx
- * F10 Driver Performance | F11 Area Heatmap | F12 Shift Report | F14 CSAT
+ * F10 Driver Performance | F11 Area Heatmap | F12 Shift Report | F14 CSAT | C20 Small orders
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -296,6 +296,109 @@ function CSATTab({ dateFrom, dateTo, branchId }) {
   )
 }
 
+// ── C20 Small orders + fee-less invoices (report only) ──────────────────────
+function SmallOrdersTab({ dateFrom, dateTo, branchId }) {
+  const params = { date_from: dateFrom, date_to: dateTo, branch: branchId || undefined }
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['delivery-small-orders', dateFrom, dateTo, branchId],
+    queryFn: () => deliveryApi.smallOrders(params).then(r => r.data),
+  })
+  const [busy, setBusy] = useState(false)
+  const { sorted, headerProps: hp } = useSortableRows(data?.orders || [], { defaultSort: { key: 'margin', dir: 'asc', type: 'number' } })
+  const exportXlsx = async () => {
+    setBusy(true)
+    try {
+      const res = await deliveryApi.smallOrdersExcel(params)
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `delivery_small_orders_${dateFrom}_${dateTo}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally { setBusy(false) }
+  }
+  if (isLoading) return <div className="text-center py-12 text-gray-400 animate-pulse">جاري التحميل…</div>
+  if (isError || !data) return <div className="text-center py-12 text-gray-400">تعذّر تحميل التقرير</div>
+  const t = data.totals
+  const flag = (on, label, tone) => (on ? <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${tone}`}>{label}</span> : null)
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-gray-600 leading-6 bg-gray-50 border border-gray-200 rounded-lg p-2">
+        فواتير بيع قناة التوصيل (90). «صغير» = أصناف أقل من {fmt(data.rules.small_order_egp)} ج.
+        «أقل من أجر الطيار» = هامش الأصناف + الرسوم أقل من {fmt(data.rules.rider_per_fee_unit)} ج لكل وحدة رسوم.
+        «بدون رسوم» = مفيش سطر «D.L.V.»، و«غير مفسَّر» لو نفس العميل مالوش فاتورة برسوم في نفس اليوم أو يوم قبل/بعد.
+        للمتابعة بس — أي حد أدنى للطلب أو رسوم قرار المالك.
+      </div>
+      <div className="flex flex-wrap items-center gap-3" data-tour="delivery-analytics-small-orders">
+        <span className="text-sm">طلبات: <b>{fmt(t.orders)}</b></span>
+        <span className="text-sm text-amber-700">صغيرة: <b>{fmt(t.small)}</b></span>
+        <span className="text-sm text-rose-700">أقل من أجر الطيار: <b>{fmt(t.below_rider)}</b></span>
+        <span className="text-sm text-gray-700">بدون رسوم: <b>{fmt(t.feeless)}</b> — غير مفسَّرة <b>{fmt(t.feeless_unexplained)}</b></span>
+        <button onClick={exportXlsx} disabled={busy}
+          className="ms-auto px-3 py-1.5 text-xs rounded-lg border border-gray-300 hover:border-brand-400 disabled:opacity-50">
+          {busy ? '…' : '⬇ Excel'}
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs text-right">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr><th className="px-2 py-1.5">الفرع</th><th className="px-2 py-1.5">طلبات</th><th className="px-2 py-1.5">صغيرة</th>
+              <th className="px-2 py-1.5">أقل من أجر الطيار</th><th className="px-2 py-1.5">بدون رسوم</th>
+              <th className="px-2 py-1.5">غير مفسَّرة</th><th className="px-2 py-1.5">الرسوم (ج)</th></tr>
+          </thead>
+          <tbody className="divide-y">
+            {data.by_branch.map(b => (
+              <tr key={b.branch_id}>
+                <td className="px-2 py-1">{b.branch_name || b.branch_code}</td>
+                <td className="px-2 py-1 font-mono">{fmt(b.orders)}</td><td className="px-2 py-1 font-mono">{fmt(b.small)}</td>
+                <td className="px-2 py-1 font-mono">{fmt(b.below_rider)}</td><td className="px-2 py-1 font-mono">{fmt(b.feeless)}</td>
+                <td className="px-2 py-1 font-mono">{fmt(b.feeless_unexplained)}</td><td className="px-2 py-1 font-mono">{fmt(b.fees)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!sorted.length ? <div className="text-center py-6 text-gray-400">لا توجد طلبات مُعلَّمة في الفترة</div> : (
+        <div className="overflow-x-auto">
+          {t.shown < t.flagged && <p className="text-xs text-gray-500 mb-1">يظهر أول {fmt(t.shown)} من {fmt(t.flagged)} — الباقي في Excel.</p>}
+          <table className="w-full text-xs text-right">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <SortTh {...hp('day', 'text')} className="px-2 py-1.5">التاريخ</SortTh>
+                <SortTh {...hp('branch_name', 'text')} className="px-2 py-1.5">الفرع</SortTh>
+                <SortTh {...hp('docnumber', 'text')} className="px-2 py-1.5">الفاتورة</SortTh>
+                <SortTh {...hp('customer', 'text')} className="px-2 py-1.5">العميل</SortTh>
+                <SortTh {...hp('goods', 'number')} className="px-2 py-1.5">الأصناف (ج)</SortTh>
+                <SortTh {...hp('fee', 'number')} className="px-2 py-1.5">الرسوم</SortTh>
+                <SortTh {...hp('margin', 'number')} className="px-2 py-1.5">الهامش + الرسوم</SortTh>
+                <th className="px-2 py-1.5">ليه</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {sorted.map(r => (
+                <tr key={r.invoice_id}>
+                  <td className="px-2 py-1 whitespace-nowrap">{r.day}</td>
+                  <td className="px-2 py-1">{r.branch_name || r.branch_code}</td>
+                  <td className="px-2 py-1 font-mono">{r.docnumber}</td>
+                  <td className="px-2 py-1">{r.customer}</td>
+                  <td className="px-2 py-1 font-mono">{fmt(r.goods, 2)}</td>
+                  <td className="px-2 py-1 font-mono">{fmt(r.fee, 2)}</td>
+                  <td className="px-2 py-1 font-mono">{fmt(r.margin, 2)}</td>
+                  <td className="px-2 py-1 whitespace-nowrap flex gap-1">
+                    {flag(r.small, 'صغير', 'bg-amber-100 text-amber-800')}
+                    {flag(r.below_rider, 'أقل من أجر الطيار', 'bg-rose-100 text-rose-700')}
+                    {flag(r.feeless_unexplained, 'بدون رسوم', 'bg-gray-100 text-gray-700')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MAIN PAGE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -305,6 +408,7 @@ const TABS = [
   { id: 'heatmap',  label: '🗺️ خريطة المناطق',   component: AreaHeatmapTab      },
   { id: 'shifts',   label: '⏰ تقرير الورديات',   component: ShiftReportTab      },
   { id: 'csat',     label: '⭐ رضا العملاء',      component: CSATTab             },
+  { id: 'small',    label: '💸 طلبات صغيرة وبدون رسوم', component: SmallOrdersTab },
 ]
 
 export default function DeliveryAnalyticsPage() {
