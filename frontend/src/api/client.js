@@ -425,6 +425,7 @@ export const syncApi = {
   slowRequests: (days = 14, sort = 'p95', limit = 10) =>                               // P-56 + perf stage 1
     api.get('/sync/slow-requests/', { params: { days, sort, limit } }),
   writerSwitches: () => api.get('/sync/writer-switches/'),                              // P-54
+  deltaShadow: (days = 7) => api.get('/sync/delta-shadow/', { params: { days } }),     // doc 40 §6 shadow report
   // Per-domain data freshness for module freshness bars. `domains` = array e.g. ['stock'].
   freshness:    (domains) => api.get('/sync/freshness/', domains?.length ? { params: { domains: domains.join(',') } } : undefined),
   // Trigger a specific tiered lane ('fast' = stock+sales, ~15s; 'slow'; 'full').

@@ -1056,9 +1056,12 @@ def sync_stock(conn, sync_run):
     from django.utils import timezone
     run_ts = timezone.now()
 
+    import time as _time
+    t_full = _time.monotonic()
     cursor = conn.cursor()
     cursor.execute(QUERY_STOCK)
     rows = cursor.fetchall()
+    full_ms = (_time.monotonic() - t_full) * 1000
 
     # Pre-load lookup dicts ONCE — avoids N+1 entirely
     item_map   = {i.softech_id: i.id   for i in Item.objects.only('id', 'softech_id')}
@@ -1118,8 +1121,10 @@ def sync_stock(conn, sync_run):
     # Guard: only reconcile after a healthy pull, so a partial/failed Sybase fetch
     # can never wipe the whole table.
     zeroed = 0
+    gone_keys = set()
     if count >= STOCK_RECONCILE_MIN_ROWS:
-        gone = [v[0] for key, v in current.items() if v[1] > 0 and key not in snapshot]
+        gone_keys = {key for key, v in current.items() if v[1] > 0 and key not in snapshot}
+        gone = [current[key][0] for key in gone_keys]
         for i in range(0, len(gone), 5000):
             zeroed += (ItemStock.objects.filter(pk__in=gone[i:i + 5000])
                        .update(quantity_on_hand=0, last_synced=run_ts))
@@ -1128,6 +1133,16 @@ def sync_stock(conn, sync_run):
         logger.debug(f"Stock: skipped {skipped} rows (item or branch not found yet)")
     SyncLog.objects.create(sync_run=sync_run, table_name='stkbal', records_processed=count)
     logger.info(f"Stock synced: {count} rows, {len(changed)} changed (zeroed {zeroed} sold-out rows)")
+
+    # Delta sync SHADOW (doc 40 §6.1): compare this run's real changes with a "changed since the
+    # watermark" read. Writes nothing it reads; off by default (SYNC_DELTA_STOCK).
+    from apps.sync import delta
+    if delta.stock_mode() == 'shadow':
+        changed_keys = {(o.item_id, o.branch_id, o.softech_store_code) for o in changed}
+        new_keys = {k for k in changed_keys if k not in current}
+        delta.shadow_stock(conn, changed_keys=(changed_keys - new_keys) | gone_keys, new_keys=new_keys,
+                           item_map=item_map, branch_map=branch_map, full_max=delta.max_stamp(rows),
+                           rows_full=count, full_ms=full_ms)
     return count
 
 

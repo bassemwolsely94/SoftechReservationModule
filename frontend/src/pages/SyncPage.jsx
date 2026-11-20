@@ -273,6 +273,66 @@ function SlowRequestsPanel() {
   )
 }
 
+// doc 40 §6: delta sync SHADOW — the full read still writes; a small "changed since last time" read is only
+// compared. A stream may switch ON only after 7 days with 0 missed rows and the owner's sign-off.
+function DeltaShadowPanel() {
+  const { data, error } = useQuery({
+    queryKey: ['deltaShadow'],
+    queryFn: () => syncApi.deltaShadow(7).then(r => r.data),
+    retry: false,
+  })
+  const { sorted: recent, headerProps } = useSortableRows(data?.recent || [])
+  if (error || !data) return null
+  const mode = data.mode?.stkbal || 'off'
+  const st = (data.streams || []).find(s => s.stream === 'stkbal')
+  return (
+    <div data-tour="admin-sync-delta-shadow" className="bg-white rounded-2xl border border-gray-200 p-4">
+      <SectionTitle icon="🔍">قراءة التغيّرات فقط — وضع المقارنة (المخزون)</SectionTitle>
+      <p className="text-xs text-gray-500 mb-2">
+        الوضع الحالي: <b>{mode === 'shadow' ? 'مقارنة (shadow)' : 'متوقف (off)'}</b>.
+        {' '}القراءة الكاملة هي اللي بتكتب زي النهارده؛ في وضع المقارنة بنقرا كمان الصفوف اللي اتغيّرت بس ونقارن.
+        {' '}«فوائت» = صف اتغيّر فعلاً والقراءة الصغيرة ماجابتهوش — لازم تفضل صفر ٧ أيام قبل التشغيل الفعلي.
+      </p>
+      {st ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-sm">
+          <div className="rounded-lg bg-gray-50 p-2"><div className="text-xs text-gray-500">مقارنات ({data.days} يوم)</div><div className="font-bold tabnum">{st.runs}</div></div>
+          <div className={`rounded-lg p-2 ${st.missed_total ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}><div className="text-xs">فوائت</div><div className="font-bold tabnum">{st.missed_total}</div></div>
+          <div className="rounded-lg bg-gray-50 p-2"><div className="text-xs text-gray-500">صفوف القراءة الصغيرة / الكاملة</div><div className="font-bold tabnum">{st.delta_rows_avg} / {st.full_rows_avg}</div></div>
+          <div className="rounded-lg bg-gray-50 p-2"><div className="text-xs text-gray-500">الزمن (مللي) صغيرة / كاملة</div><div className="font-bold tabnum">{st.delta_ms_avg} / {st.full_ms_avg}</div></div>
+        </div>
+      ) : (
+        <div className="text-sm text-gray-400 mb-2">لسه مفيش مقارنات{mode === 'off' ? ' — الوضع متوقف.' : '.'}</div>
+      )}
+      {recent.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-gray-500"><tr>
+              <SortTh {...headerProps('at')} className="text-right p-1.5">الوقت</SortTh>
+              <SortTh {...headerProps('rows_changed', 'number')} className="p-1.5">اتغيّر فعلاً</SortTh>
+              <SortTh {...headerProps('rows_delta', 'number')} className="p-1.5">القراءة الصغيرة</SortTh>
+              <SortTh {...headerProps('missed', 'number')} className="p-1.5">فوائت</SortTh>
+              <SortTh {...headerProps('delta_ms', 'number')} className="p-1.5">مللي</SortTh>
+              <th className="text-right p-1.5">ملاحظة / أمثلة</th>
+            </tr></thead>
+            <tbody>
+              {recent.map(r => (
+                <tr key={r.at + r.stream} className="border-t border-gray-100">
+                  <td className="p-1.5 tabnum">{format(new Date(r.at), 'd/M HH:mm')}</td>
+                  <td className="p-1.5 text-center tabnum">{r.rows_changed}</td>
+                  <td className="p-1.5 text-center tabnum">{r.rows_delta}</td>
+                  <td className={`p-1.5 text-center tabnum ${r.missed ? 'text-red-600 font-bold' : ''}`}>{r.missed}</td>
+                  <td className="p-1.5 text-center tabnum">{r.delta_ms}</td>
+                  <td className="p-1.5 text-xs text-gray-500" dir="ltr">{r.note || (r.missed_sample || []).join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SoftechLoadPanel() {
   const { roleLabel } = useRoles()
   const [hours, setHours] = useState(24)
@@ -519,6 +579,7 @@ export default function SyncPage() {
 
         {/* Slowest endpoints (P-56) */}
         <SlowRequestsPanel />
+        <DeltaShadowPanel />
 
         {/* SOFTECH writer switches (P-54) */}
         <WriterSwitchesPanel />

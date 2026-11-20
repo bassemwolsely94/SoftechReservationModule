@@ -151,3 +151,55 @@ class SlowRequest(models.Model):
 
     def __str__(self):
         return f'{self.method} {self.path} {self.duration_ms}ms'
+
+
+class SyncWatermark(models.Model):
+    """How far a SOFTECH table has been read (doc 40 §3.1). One row per stream, e.g. `stkbal`.
+
+    `value_ts` is a SOFTECH-side stamp taken from the rows' own column (never our clock), stored as an
+    aware Cairo time. It only moves forward; reads use it minus an overlap. Ignored while the stream's
+    switch (SYNC_DELTA_*) is `off`."""
+    stream = models.CharField(max_length=60, unique=True, verbose_name='المصدر')
+    value_ts = models.DateTimeField(null=True, blank=True, verbose_name='آخر ختم مقروء')
+    value_num = models.BigIntegerField(null=True, blank=True, verbose_name='آخر رقم مقروء')
+    mode = models.CharField(max_length=10, default='off', verbose_name='الوضع')
+    last_delta_at = models.DateTimeField(null=True, blank=True, verbose_name='آخر قراءة للتغيّرات')
+    last_full_at = models.DateTimeField(null=True, blank=True, verbose_name='آخر قراءة كاملة')
+    last_full_ok = models.BooleanField(default=False, verbose_name='آخر قراءة كاملة سليمة')
+    rows_last_delta = models.PositiveIntegerField(default=0, verbose_name='صفوف آخر قراءة للتغيّرات')
+    misses_last_shadow = models.PositiveIntegerField(default=0, verbose_name='فوائت آخر مقارنة')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'علامة مزامنة سوفتك'
+        verbose_name_plural = 'علامات مزامنة سوفتك'
+
+    def __str__(self):
+        return f'{self.stream} @ {self.value_ts} ({self.mode})'
+
+
+class DeltaShadowRun(models.Model):
+    """One SHADOW comparison (doc 40 §6.1): the full read still writes; the delta read is only compared.
+    `missed` = keys that really changed this run but the delta read did not return; must stay 0 for the
+    7 days before a stream may go ON (owner sign-off S2). Sample keys are SOFTECH codes only."""
+    stream = models.CharField(max_length=60, db_index=True, verbose_name='المصدر')
+    at = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='الوقت')
+    rows_full = models.PositiveIntegerField(default=0, verbose_name='صفوف القراءة الكاملة')
+    rows_changed = models.PositiveIntegerField(default=0, verbose_name='صفوف تغيّرت فعلاً')
+    rows_delta = models.PositiveIntegerField(default=0, verbose_name='صفوف قراءة التغيّرات')
+    missed = models.PositiveIntegerField(default=0, verbose_name='فوائت')
+    missed_new = models.PositiveIntegerField(default=0, verbose_name='صفوف جديدة لم تُقرأ')
+    missed_sample = models.JSONField(default=list, blank=True, verbose_name='أمثلة')
+    full_ms = models.PositiveIntegerField(default=0, verbose_name='زمن القراءة الكاملة (مللي)')
+    delta_ms = models.PositiveIntegerField(default=0, verbose_name='زمن قراءة التغيّرات (مللي)')
+    watermark_from = models.DateTimeField(null=True, blank=True)
+    watermark_to = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=200, blank=True, default='', verbose_name='ملاحظة')
+
+    class Meta:
+        ordering = ['-at']
+        verbose_name = 'مقارنة قراءة التغيّرات'
+        verbose_name_plural = 'مقارنات قراءة التغيّرات'
+
+    def __str__(self):
+        return f'{self.stream} {self.at:%Y-%m-%d %H:%M} missed={self.missed}'

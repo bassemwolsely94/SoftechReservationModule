@@ -219,3 +219,19 @@ class DiscountPolicyPreviewBudget(TestCase):
         self.client_.get('/api/stock-audit/discount-policy/')
         assert_budget(self, 'stock-audit/discount-policy', self.client_, '/api/stock-audit/discount-policy/',
                       grow=self._lines, min_rows=20, rows_of=lambda r: r.data['breach_lines'])
+
+
+class DeltaShadowReportBudget(TestCase):
+    """doc 40 §6: the shadow report stays a few aggregate queries however many runs are stored."""
+
+    def test_delta_shadow_report(self):
+        from apps.sync.models import DeltaShadowRun
+        _, _, client = make_admin('perf_shadow_admin')
+
+        def grow(n=40):
+            for i in range(n):
+                DeltaShadowRun.objects.create(stream='stkbal', rows_full=32000, rows_changed=i % 5,
+                                              rows_delta=40, missed=0, delta_ms=900, full_ms=21000)
+        grow(2)
+        assert_budget(self, 'sync/delta-shadow', client, '/api/sync/delta-shadow/', grow=grow,
+                      min_rows=20, rows_of=lambda r: len(r.data['recent']))

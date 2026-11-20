@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     sync_status, trigger_sync, sync_logs, branch_health, scheduler_status,
-    data_freshness, softech_load, slow_requests, writer_switches,
+    data_freshness, softech_load, slow_requests, writer_switches, delta_shadow,
 )
 
 urlpatterns = [
@@ -14,4 +14,5 @@ urlpatterns = [
     path('softech-load/', softech_load),
     path('slow-requests/', slow_requests),
     path('writer-switches/', writer_switches),    # P-54 — admin only
+    path('delta-shadow/', delta_shadow),          # doc 40 §6 — admin only
 ]
