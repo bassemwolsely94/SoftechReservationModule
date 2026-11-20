@@ -95,5 +95,8 @@ class OutHereBudget(TestCase):
 
     def test_out_here(self):
         self._short(2)
+        # warm once: apps/config/item_types keeps the medicine-type map per process (planning_excluded_codes),
+        # so the first request in a process reads it (2 queries) and every later one does not
+        self.assertEqual(self.client_.get('/api/supply/out-here/').status_code, 200)
         assert_budget(self, 'supply/out-here', self.client_, '/api/supply/out-here/',
                       grow=self._short, min_rows=30, rows_of=lambda r: len(r.data['rows']))
