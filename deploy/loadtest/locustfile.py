@@ -20,15 +20,30 @@ writer. Run it against a reader (VPS Stage A, or the UAT copy) — never against
 
 A 403 (the role may not open that screen) is not a server failure: it is recorded as success and
 counted once more under request type "403" so the role mix shows up in the stats.
+
+Performance boost (design docs/superpowers/specs/2026-11-19-performance-boost-design.md):
+* LOADTEST_POLL_MODE=push (default) models screens after Stage 5: the bell and freshness come over the
+  WebSocket, so the HTTP polls run only at the slow fallback rate (weights 1). LOADTEST_POLL_MODE=poll
+  restores the old 30/60/90 s mix, to compare.
+* LOADTEST_EXPORT_JOBS=1 adds ONE extra virtual user that keeps running the heavy purchasing export as a
+  Stage 4 background job (start → poll status → download) — the "interference test": read the other
+  routes' p95 with and without it. The job writes only its own export_jobs row in Postgres (no SOFTECH).
+  It needs an account that may export purchasing; otherwise its calls show as 403.
 """
 import itertools
 import json
 import os
 import random
+import time
 
-from locust import HttpUser, between, task
+from locust import HttpUser, between, constant, task
 
 SEARCH_TERMS = ['panadol', 'augmentin', 'بانادول', 'فيتامين', 'conco*', '0100']
+
+# Stage 5: bell / freshness / dashboard arrive over the WebSocket; HTTP polls are only the fallback.
+PUSH_MODE = os.environ.get('LOADTEST_POLL_MODE', 'push') != 'poll'
+BELL_W, FRESH_W, DASH_W = (1, 1, 1) if PUSH_MODE else (6, 3, 2)
+EXPORT_JOBS = os.environ.get('LOADTEST_EXPORT_JOBS') == '1'
 
 # role → weight in the UAT mix (≈ how many of the 20–40 daily staff sit in that role).
 ROLE_WEIGHTS = {'pharmacist': 4, 'salesperson': 3, 'call_center': 1, 'supervisor': 1, 'purchasing': 1}
@@ -84,17 +99,17 @@ class _Staff(HttpUser):
                 r.failure(f'HTTP {r.status_code}')
 
     # ── background polls (weights ≈ the 30 / 60 / 90 s intervals in the screens) ─────────────────
-    @task(6)
+    @task(BELL_W)
     def bell(self):
         self.get('/api/notifications/?limit=20', 'notifications/')
         self.get('/api/notifications/category-counts/', 'notifications/category-counts')
 
-    @task(3)
+    @task(FRESH_W)
     def freshness(self):
         self.get('/api/sync/status/', 'sync/status')
         self.get('/api/sync/freshness/', 'sync/freshness')
 
-    @task(2)
+    @task(DASH_W)
     def dashboard(self):
         self.get('/api/dashboard/summary/', 'dashboard/summary')
 
@@ -174,3 +189,49 @@ class PurchasingUser(_Staff):
     def purchasing(self):
         self.get('/api/purchasing/metrics/', 'purchasing/metrics')
         self.get('/api/purchasing/filter-options/', 'purchasing/filter-options')
+
+
+# ── interference test (Stage 4): one user keeps a heavy export running as a background job ───────
+class ExportJobUser(_Staff):
+    """LOADTEST_EXPORT_JOBS=1: start the purchasing export as a job, poll it the way the screen does
+    (every 1.5 s, up to 5 min), download the file, pause, repeat. Exactly one such user."""
+    abstract = not EXPORT_JOBS
+    fixed_count = 1
+    wait_time = constant(10)
+    role = 'purchasing'
+
+    def credentials(self):
+        if UAT_PASSWORD is not None and 'purchasing' in UAT_USERS_BY_ROLE:
+            return next(_CYCLES['purchasing']), UAT_PASSWORD
+        return os.environ['LOADTEST_USERNAME'], os.environ['LOADTEST_PASSWORD']
+
+    @task
+    def export_job(self):
+        with self.client.post('/api/purchasing/export/jobs/', json={}, name='purchasing/export/jobs [start]',
+                              catch_response=True) as r:
+            if r.status_code == 403:
+                r.success()
+                return
+            if r.status_code not in (200, 201, 202):
+                r.failure(f'HTTP {r.status_code}')
+                return
+            job_id = r.json().get('id')
+        started = time.monotonic()
+        status = 'queued'
+        while status in ('queued', 'running') and time.monotonic() - started < 300:
+            time.sleep(1.5)
+            with self.client.get(f'/api/export-jobs/{job_id}/', name='export-jobs/<id> [poll]',
+                                 catch_response=True) as r:
+                if r.status_code != 200:
+                    r.failure(f'HTTP {r.status_code}')
+                    return
+                status = r.json().get('status')
+        if status != 'done':
+            self.environment.events.request.fire(
+                request_type='JOB', name=f'purchasing export job {status}', response_time=0,
+                response_length=0, exception=RuntimeError(status), context={})
+            return
+        self.environment.events.request.fire(
+            request_type='JOB', name='purchasing export job total', response_length=0, exception=None,
+            response_time=(time.monotonic() - started) * 1000, context={})
+        self.get(f'/api/export-jobs/{job_id}/download/', 'export-jobs/<id>/download')
