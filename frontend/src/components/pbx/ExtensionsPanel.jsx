@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pbxApi } from '../../api/client'
+import useAuthStore from '../../store/authStore'
+import { canSetWebrtc } from '../../utils/pbxAccess'
 
 const TYPES = [
   ['agent', 'مركز اتصال'], ['branch', 'فرع'], ['hq', 'إداري'], ['gateway', 'بوابة خارجية'], ['other', 'أخرى'],
@@ -37,6 +39,7 @@ function WebRtcEditor({ row }) {
 
 function MapEditor({ row, onDone }) {
   const qc = useQueryClient()
+  const { user } = useAuthStore()
   const [q, setQ] = useState(row.mapping?.staff_id ? '' : suggestQuery(row.mapping?.pbx_name))
   const [type, setType] = useState(row.mapping?.type || 'agent')
   const { data: staff = [] } = useQuery({
@@ -64,7 +67,7 @@ function MapEditor({ row, onDone }) {
       {row.mapping?.pbx_name && (
         <div className="text-gray-500">الاسم في السنترال: <span className="font-medium" dir="ltr">{row.mapping.pbx_name}</span></div>
       )}
-      {row.mapping && <WebRtcEditor row={row} />}
+      {row.mapping && canSetWebrtc(user) && <WebRtcEditor row={row} />}
       <div className="max-h-48 overflow-auto divide-y divide-gray-100 dark:divide-gray-700">
         {staff.map(s => (
           <button key={s.id} onClick={() => save.mutate(s.id)} disabled={save.isPending}

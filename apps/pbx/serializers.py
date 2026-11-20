@@ -18,6 +18,8 @@ class AgentExtensionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AgentExtension
         fields = ['id', 'staff', 'staff_name', 'extension', 'sip_peer', 'queue_name', 'pbx_name', 'is_active']
+        # remaps go through the audited extensions/map endpoint only (fix round 1, C1)
+        read_only_fields = ['staff']
 
     def get_staff_name(self, obj):
         return _staff_display_name(obj.staff) if obj.staff_id else None

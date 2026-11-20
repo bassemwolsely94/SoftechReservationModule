@@ -84,7 +84,8 @@ class MergeTests(TestCase):
         self._status()  # persists last_status/last_ip
         with mock.patch.object(extensions, 'fetch_registrations', side_effect=OSError('timed out')):
             data = extensions.extension_status()
-        self.assertIn('timed out', data['error'])
+        self.assertTrue(data['error'])
+        self.assertNotIn('timed out', data['error'])      # the raw exception stays in the log (public_error)
         row = next(r for r in data['rows'] if r['extension'] == '101')
         self.assertEqual(row['ip'], '10.0.0.5')
         self.assertIsNone(row['problem'])     # no false "missing from PBX" while offline

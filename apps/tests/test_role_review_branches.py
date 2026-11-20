@@ -164,3 +164,61 @@ class PbxCallListsAndMeTests(TestCase):
                 self.assertFalse(r.data['can_pick_any_branch'])
         r = make_user('pc_flag', role='pharmacist', branch=self.home, access_all=True)[2].get('/api/auth/me/')
         self.assertTrue(r.data['can_pick_any_branch'])
+
+
+class PbxCredentialGuardTests(TestCase):
+    """Fix round 1 (C1/I1): a call-center agent cannot take over a credentialed extension and read
+    its SIP password; remaps go through the audited map endpoint; /auth/me carries can_set_webrtc."""
+
+    def setUp(self):
+        from apps.omni.crypto import encrypt_credentials
+        from apps.pbx.models import AgentExtension
+        module_access.clear_cache()
+        for r in ('call_center', 'supervisor', 'pharmacist'):
+            seed_matrix(r)
+        self.home = make_branch()
+        self.agent_user, self.agent, self.agent_c = make_user('cg_agent', role='call_center', branch=self.home)
+        _, self.victim, _ = make_user('cg_victim', role='call_center', branch=self.home)
+        self.sup_c = make_user('cg_sup', role='supervisor', branch=self.home)[2]
+        self.cred = AgentExtension.objects.create(
+            extension='301', staff=self.victim, webrtc_enabled=True,
+            webrtc_credentials=encrypt_credentials({'password': 'S3CRET-pw'}))
+        _, other, _ = make_user('cg_other', role='call_center', branch=self.home)
+        self.plain = AgentExtension.objects.create(extension='302', staff=other)
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def test_agent_cannot_map_self_onto_a_credentialed_extension(self):
+        r = self.agent_c.post('/api/pbx/extensions/map/', {'extension': '301', 'staff_id': self.agent.pk},
+                              format='json')
+        self.assertEqual(r.status_code, 403)
+        self.cred.refresh_from_db()
+        self.assertEqual(self.cred.staff_id, self.victim.pk)
+        with self.settings(PBX_WEBRTC_WSS_URL='wss://x'):
+            cfg = self.agent_c.get('/api/pbx/webrtc/config/').data
+        self.assertNotIn('password', cfg)
+
+    def test_patch_staff_is_ignored(self):
+        r = self.agent_c.patch(f'/api/pbx/agents/{self.cred.pk}/', {'staff': self.agent.pk}, format='json')
+        self.cred.refresh_from_db()
+        self.assertEqual(self.cred.staff_id, self.victim.pk)
+        self.assertIn(r.status_code, (200, 400, 403))
+
+    def test_supervisor_can_still_remap(self):
+        r = self.sup_c.post('/api/pbx/extensions/map/', {'extension': '301', 'staff_id': self.agent.pk},
+                            format='json')
+        self.assertEqual(r.status_code, 200)
+        self.cred.refresh_from_db()
+        self.assertEqual(self.cred.staff_id, self.agent.pk)
+
+    def test_agent_can_remap_an_extension_without_credentials(self):
+        r = self.agent_c.post('/api/pbx/extensions/map/', {'extension': '302', 'staff_id': self.agent.pk},
+                              format='json')
+        self.assertEqual(r.status_code, 200)
+
+    def test_me_exposes_can_set_webrtc(self):
+        self.assertTrue(self.sup_c.get('/api/auth/me/').data['can_set_webrtc'])
+        self.assertFalse(self.agent_c.get('/api/auth/me/').data['can_set_webrtc'])
+        ph = make_user('cg_ph', role='pharmacist', branch=self.home)[2]
+        self.assertFalse(ph.get('/api/auth/me/').data['can_set_webrtc'])

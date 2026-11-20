@@ -35,8 +35,8 @@ class IsAdminOrSupervisor(BasePermission):
     (overblock decision, test_rbac_overblock_decisions); so does storing another extension's SIP
     secret (WebRTC), a credential rather than a setting."""
     def has_permission(self, request, view):
-        p = getattr(request.user, 'staff_profile', None)
-        return bool(p and p.is_active and p.role in ('admin', 'supervisor'))
+        from apps.pbx.access import is_pbx_manager
+        return is_pbx_manager(getattr(request.user, 'staff_profile', None))
 
 
 class AgentExtensionListView(generics.ListCreateAPIView):
@@ -184,10 +184,19 @@ class ExtensionMapView(APIView):
             if staff is None:
                 return Response({'detail': 'الموظف غير موجود أو غير نشط'}, status=400)
 
+        from apps.pbx.access import is_pbx_manager
         with transaction.atomic():
             ext, created = AgentExtension.objects.select_for_update().get_or_create(
                 extension=extension,
                 defaults={'extension_type': ext_type or AgentExtension.TYPE_AGENT})
+            # an extension carrying a browser-phone credential may only be handed to someone else by
+            # a PBX manager — otherwise mapping yourself onto it would let you read its SIP secret
+            if ((ext.webrtc_enabled or ext.webrtc_credentials)
+                    and (staff.pk if staff else None) != ext.staff_id
+                    and not is_pbx_manager(getattr(request.user, 'staff_profile', None))):
+                transaction.set_rollback(True)
+                return Response({'detail': 'إعادة ربط رقم داخلي عليه هاتف متصفح للمشرف أو المدير فقط'},
+                                status=403)
             before = {'staff': ext.staff_id, 'type': ext.extension_type, 'sip_peer': ext.sip_peer}
             moved_from = None
             if staff is not None:

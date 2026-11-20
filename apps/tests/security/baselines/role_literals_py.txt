@@ -129,7 +129,7 @@ apps/omni/views.py::WallboardView.get::admin,call_center,quality_manager,supervi
 apps/omni/views.py::_AccountWrite.has_permission::admin,supervisor x1
 apps/payments/audit_views.py::<module>::admin,purchasing,supervisor x1
 apps/pbx/cdr.py::notify_bridge_silence::admin,supervisor x1
-apps/pbx/views.py::IsAdminOrSupervisor.has_permission::admin,supervisor x1
+apps/pbx/access.py::<module>::admin,supervisor x1
 apps/personal/views.py::persons_search::delivery x1
 apps/pos_orders/permissions.py::<module>::admin,call_center,pharmacist,salesperson,supervisor x1
 apps/pos_orders/views.py::<module>::admin,pharmacist,supervisor x1

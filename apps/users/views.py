@@ -61,6 +61,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     # the frontend only uses these to show menus/buttons — the views enforce them.
     can_supply_write = drf_serializers.SerializerMethodField()
     can_run_engine   = drf_serializers.SerializerMethodField()
+    can_set_webrtc = drf_serializers.SerializerMethodField()        # the PBX manager rule (apps/pbx/access.py)
     can_pick_any_branch = drf_serializers.SerializerMethodField()   # role review: the server's own branch rule
     can_stock_audit  = drf_serializers.SerializerMethodField()   # doc 32: management or a named branch manager
     can_pic_analytics = drf_serializers.SerializerMethodField()  # doc 33: management or a named branch manager
@@ -84,6 +85,10 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     def get_can_run_engine(self, obj):
         from apps.purchasing.access import can_run_engine
         return can_run_engine(obj.user)
+
+    def get_can_set_webrtc(self, obj):
+        from apps.pbx.access import is_pbx_manager
+        return is_pbx_manager(obj)
 
     def get_can_pick_any_branch(self, obj):
         # same test as core.branch_scope.allows(profile, None): all-branch role or access flag
@@ -119,7 +124,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'access_all_branches', 'softech_username',
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
-            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_pick_any_branch', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
+            'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_pick_any_branch', 'can_set_webrtc', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
             'features',
         ]
 
