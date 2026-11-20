@@ -65,6 +65,35 @@ class TrackBudgets(TestCase):
                       data={'route': '/reservations/123', 'tab': 'grid'}, grow=lambda: None, min_rows=0)
 
 
+class MissingBonusBudget(TestCase):
+    """C18 /supply «بونص ناقص»: flat however many receipts are judged."""
+
+    def setUp(self):
+        from apps.branches.models import Branch
+        self.branch = Branch.objects.create(softech_branch_id='132', name='MB', name_ar='MB', kind='retail',
+                                            is_active=True)
+        _, _, self.client_ = make_admin('perf_bonus')
+        self.n = 0
+
+    def _line(self, item, n, qty, free, doc):
+        from apps.procurement.models import PurchaseLine
+        PurchaseLine.objects.create(branch_code='132', supplier_code='565', doc_number=doc,
+                                    doc_date=timezone.localdate() - datetime.timedelta(days=n), item_code=item,
+                                    doccode='10', raw_qty=qty, net_qty=qty, raw_value=qty * 10, bonus_qty=free,
+                                    is_foc=free > 0)
+
+    def _receipts(self, n=30):
+        for _ in range(n):
+            self.n += 1
+            code = f'MB{self.n:04d}'
+            for i, days_ago in enumerate((90, 60, 40)):
+                self._line(code, days_ago, 10, 1, f'R{self.n}-{i}')
+            self._line(code, 2, 10, 0, f'C{self.n}')            # no bonus this time → flagged
+
+    def test_missing_bonus(self):
+        self._receipts(2)
+        assert_budget(self, 'supply/missing-bonus', self.client_, '/api/supply/missing-bonus/',
+                      grow=self._receipts, min_rows=30, rows_of=lambda r: len(r.data['rows']))
 class OutHereBudget(TestCase):
     """C06 /supply «ناقص هنا · موجود هناك»: flat however many short items there are."""
 

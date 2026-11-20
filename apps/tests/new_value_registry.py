@@ -128,6 +128,10 @@ def cover_tiers_export():
 
 
 
+def missing_bonus_export():
+    """C18 /supply «بونص ناقص» workbook: its summary lists every live receiving branch in view (HQ included);
+    pending / closed / call center never show."""
+    return _get('/api/supply/missing-bonus/export/')
 def out_here_export():
     """C06 /supply «ناقص هنا · موجود هناك» workbook: its summary lists every live retail branch in view (HQ is a
     source, never a destination); pending / closed / call center never show."""
@@ -149,5 +153,6 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    ('missing_bonus_export', missing_bonus_export, ABSENT_ALL),
     ('out_here_export', out_here_export, ABSENT_ALL),
 ]

@@ -1009,6 +1009,7 @@ export const supplyApi = {
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
   // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
   receipts:            (params)      => api.get('/supply/receipts/', { params }),
+  missingBonus:        (params)      => api.get('/supply/missing-bonus/', { params }),
   outHere:             (params)      => api.get('/supply/out-here/', { params }),
   receiptDecide:       (id, body)    => api.post(`/supply/receipts/${id}/decide/`, body),
   supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
