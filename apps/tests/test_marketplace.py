@@ -300,6 +300,43 @@ class MarketplacePushTests(TestCase):
         self.assertFalse(logs[0].ok)
         self.assertEqual(logs[0].response['error'], 'RuntimeError')
 
+    @override_settings(MARKETPLACE_PUSH_ENABLED=True)
+    def test_push_log_masks_credentials_echoed_by_platform(self):
+        # M2 gate: a platform reply that echoes our token or carries secret-named keys is masked before storage
+        from apps.marketplace.adapters.fake import FakeAdapter
+        from apps.marketplace.push import push_stock
+        self.channel.credentials = {'api_token': 'tok-ABCDEF123456', 'nested': {'client_secret': 'cs-998877'}}
+        self._activate()
+        reply = {'ok': True, 'echo': 'auth used tok-ABCDEF123456 for store', 'access_token': 'new-xyz-0001',
+                 'items': [{'sku': 'PU001', 'note': 'cs-998877'}], 'count': 3}
+        with patch.object(FakeAdapter, 'push_stock', return_value=reply):
+            log = push_stock(self.channel)[0]
+        log.refresh_from_db()
+        stored = str(log.response) + str(log.payload)
+        for secret in ('tok-ABCDEF123456', 'cs-998877', 'new-xyz-0001'):
+            self.assertNotIn(secret, stored)
+        self.assertEqual(log.response['access_token'], '***')
+        self.assertEqual(log.response['echo'], 'auth used *** for store')
+        self.assertEqual(log.response['items'], [{'sku': 'PU001', 'note': '***'}])
+        self.assertEqual(log.response['count'], 3)                 # ordinary values untouched
+
+    @override_settings(MARKETPLACE_PUSH_ENABLED=True)
+    def test_push_failure_detail_masks_credentials(self):
+        from apps.marketplace.adapters.fake import FakeAdapter
+        from apps.marketplace.push import push_stock
+        self.channel.credentials = {'api_token': 'tok-ABCDEF123456'}
+        self._activate()
+        with patch.object(FakeAdapter, 'push_stock', side_effect=RuntimeError('401 for tok-ABCDEF123456')):
+            log = push_stock(self.channel)[0]
+        self.assertFalse(log.ok)
+        self.assertNotIn('tok-ABCDEF123456', log.response['detail'])
+
+    def test_mask_leaves_short_credentials_and_plain_values(self):
+        from apps.marketplace.push import _secret_values, mask
+        self.channel.credentials = {'secret': 's3', 'enabled': True, 'store_ids': ['S1']}
+        self.assertEqual(_secret_values(self.channel), [])          # too short to mask safely
+        self.assertEqual(mask({'qty': 's3', 'token': ''}, []), {'qty': 's3', 'token': ''})
+
     def test_inactive_store_skipped_when_store_none(self):
         from apps.marketplace.push import push_stock
         self.store.is_active = False
@@ -585,6 +622,16 @@ class MarketplaceApiTests(TestCase):
         extra = {'HTTP_X_FAKE_SIGNATURE': sig} if sig is not None else {}
         return self.client.post(f'/api/marketplace/webhooks/{code}/', body if body is not None else self._webhook_body(),
                                 content_type='application/json', **extra)
+
+    def test_webhook_throttled_per_ip(self):
+        # M2 gate: the unauthenticated webhook is rate-limited per IP before the signature check
+        from apps.marketplace.views import WebhookThrottle
+        from core.limits import limits_cache
+        limits_cache.clear()
+        self.addCleanup(limits_cache.clear)
+        with patch.object(WebhookThrottle, 'rate', '2/minute'):
+            codes = [self._hook(body=self._webhook_body(f'T{i}'), sig='wrong').status_code for i in range(3)]
+        self.assertEqual(codes, [403, 403, 429])
 
     def test_flag_off_404(self):
         with override_settings(MARKETPLACE_ENABLED=False):
