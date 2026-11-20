@@ -108,8 +108,13 @@ class FridgeApiTests(TestCase):
         self.assertEqual(self._post(self.ph, self.f).status_code, 201)
         self.assertEqual(self._post(self.ph, self.f, temp='6').status_code, 400)
         rid = FridgeReading.objects.get().pk
-        self.assertEqual(self.ph.patch(f'{READINGS}{rid}/', {'temp_c': '4'}, format='json').status_code, 405)
-        self.assertEqual(self.ph.delete(f'{READINGS}{rid}/').status_code, 405)
+        # the pharmacist has no hr edit grant, so the matrix refuses first (403); an admin passes the
+        # matrix and still finds no edit / delete route (405) — readings are append-only for everyone
+        self.assertEqual(self.ph.patch(f'{READINGS}{rid}/', {'temp_c': '4'}, format='json').status_code, 403)
+        admin = bearer_client(make_user('fr_admin', role='admin', branch=self.branch)[0])
+        self.assertEqual(admin.patch(f'{READINGS}{rid}/', {'temp_c': '4'}, format='json').status_code, 405)
+        self.assertEqual(admin.delete(f'{READINGS}{rid}/').status_code, 405)
+        self.assertEqual(FridgeReading.objects.get().temp_c, Decimal('5.0'))
 
     def test_only_today_or_yesterday(self):
         old = (timezone.localdate() - dt.timedelta(days=3)).isoformat()
@@ -130,9 +135,11 @@ class FridgeApiTests(TestCase):
         self.assertEqual(self.ph.get(f'{FRIDGES}{self.f_other.pk}/month/').status_code, 404)
 
     def test_range_is_fixed_after_registration(self):
-        qm = bearer_client(make_user('fr_qm', role='quality_manager')[0])
-        r = qm.patch(f'{FRIDGES}{self.f.pk}/', {'max_c': '12'}, format='json')
+        # admin passes the edit grant, so this exercises the view's own rule, not the matrix
+        admin = bearer_client(make_user('fr_admin2', role='admin', branch=self.branch)[0])
+        r = admin.patch(f'{FRIDGES}{self.f.pk}/', {'max_c': '12'}, format='json')
         self.assertEqual(r.status_code, 400)
+        self.assertEqual(admin.patch(f'{FRIDGES}{self.f.pk}/', {'name': 'ثلاجة الأنسولين'}, format='json').status_code, 200)
         self.f.refresh_from_db()
         self.assertEqual(self.f.max_c, 8)
 
@@ -149,3 +156,12 @@ class FridgeApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['fridge']['id'], self.f.pk)
         self.assertEqual(self.ph.get(f'{FRIDGES}{self.f.pk}/month/', {'month': 'bad'}).status_code, 400)
+
+
+class SeesAllBranchesFlagTests(TestCase):
+    """/api/auth/me/ sees_all_branches drives the fridge page's branch picker (no JS role list)."""
+
+    def test_flag_follows_branch_scope(self):
+        branch = make_branch()
+        self.assertTrue(make_user('fr_flag_qm', role='quality_manager')[2].get('/api/auth/me/').json()['sees_all_branches'])
+        self.assertFalse(make_user('fr_flag_ph', role='pharmacist', branch=branch)[2].get('/api/auth/me/').json()['sees_all_branches'])

@@ -12,8 +12,6 @@ import useAuthStore from '../../store/authStore'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
 import { cairoToday } from '../../utils/cairoDate'
 
-const ALL_BRANCH_ROLES = ['admin', 'quality_manager', 'supervisor']
-
 function cairoHour() {
   return Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Africa/Cairo' }).format(new Date()))
 }
@@ -33,7 +31,7 @@ function Cell({ r }) {
 export default function MobileFridgeLogPage() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = ALL_BRANCH_ROLES.includes(user?.role)
+  const canPickBranch = !!user?.sees_all_branches   // server decides (core.branch_scope); it also scopes every call
   const [branch, setBranch] = useState(user?.branch_id ? String(user.branch_id) : '')
   const [fridgeId, setFridgeId] = useState('')
   const [month, setMonth] = useState(cairoToday().slice(0, 7))
