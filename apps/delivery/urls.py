@@ -38,6 +38,7 @@ urlpatterns = [
     path('csat-report/',         views.delivery_csat_report),           # F14
     path('small-orders/',        report_views.small_orders_report),     # C20
     path('small-orders/export/', report_views.small_orders_export),     # C20 workbook (export job)
+    path('stuck-orders/',        views.delivery_stuck_orders),          # C21
 
     # ── Tools & helpers ──────────────────────────────────────────────────────
     path('threshold/',           views.delivery_threshold_check),       # F4

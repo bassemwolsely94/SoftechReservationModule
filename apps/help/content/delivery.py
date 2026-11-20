@@ -327,6 +327,21 @@ SCREENS = [
              'more': T(
                  'نظرة سريعة على يوم التوصيل:\n• «إجمالي اليوم»، «في الانتظار»، «مكلَّف»، «في الطريق»، «مُسلَّم اليوم»، «فشل اليوم».\n• «معدل النجاح» ومعاه متوسط وقت التسليم بالدقايق.\n• «متأخرة الآن» ومعاه «نقدي معلق» — لو الرقم أحمر ابدأ بالطلبات المتأخرة.',
                  'A quick look at the delivery day:\n• "Total today", "Waiting", "Assigned", "On the way", "Delivered today", "Failed today".\n• "Success rate" with the average delivery time in minutes.\n• "Late now" with "Cash outstanding" — if it is red, start with the late orders.')},
+            {'target': 'delivery-dashboard-stuck', 'label': T('⏳ طلبات مفتوحة أقدم من 24 ساعة', '⏳ Orders open over 24 hours'),
+             'text': T('طلبات لسه مفتوحة هنا بعد المدة دي، ومعاها حالتها في SOFTECH من آخر فحص (كل ساعة، قراءة بس).',
+                       'Orders still open here after that time, with their SOFTECH status from the last hourly check (read only).'),
+             'when': T('يظهر بس لو فيه طلبات عالقة. اضغطه يفتح الجدول، واضغط صف يفتح الطلب.',
+                       'Shows only when orders are stuck. Click it to open the table; click a row to open the order.'),
+             'more': T('الحكم من SOFTECH نفسه، مش تخمين:\n'
+                       '• «مُسلَّم في SOFTECH» ← يتقفل هنا «مغلق»؛ «ملغى في SOFTECH» ← «ملغى».\n'
+                       '• «مفتوح في SOFTECH» أو «غير موجود» ← يفضل مفتوح: دي الحالات اللي محتاجة حد يراجعها.\n'
+                       '• طلب عليه تحصيل نقدية ما بيتلمسش — بيتقفل يدوي بعد مطابقة الفلوس.\n'
+                       '• الإغلاق التلقائي مطفأ لحد ما الإدارة تشغّله؛ وهو مطفأ الجدول بيعرض اللي كان هيتقفل بس. كل إغلاق بيتسجل في «سجل الحالات» باسم «نظام».',
+                       'The verdict comes from SOFTECH itself, not a guess:\n'
+                       '• "Delivered in SOFTECH" → closed here; "Cancelled in SOFTECH" → cancelled.\n'
+                       '• "Open in SOFTECH" or "Not in SOFTECH" → stays open: these are the cases someone must check.\n'
+                       '• An order with a cash collection is never touched — it is closed by hand after the cash is reconciled.\n'
+                       '• Auto-close stays off until management turns it on; while off, the table only shows what would close. Every close is logged in the "Status log" as "system".')},
             {'target': 'delivery-dashboard-search', 'label': T('بحث — اسم، هاتف، رقم طلب...', 'Search — name, phone, order no...'),
              'text': T('ابحث باسم العميل أو تليفونه أو رقم الطلب.', 'Search by customer name, phone or order number.'),
              'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls about their order.'),
@@ -446,9 +461,9 @@ SCREENS = [
                        'Saved under your name with no location check, and moves the order to "On the way" or "Delivered" at once.'),
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
-        'updated': '2026-11-17',
-        'change_note': T('«اليوم» في فلتر التاريخ بقى بتوقيت القاهرة — طلبات ما بعد نص الليل بتظهر على طول',
-                         '"Today" in the date filter now follows Cairo time — orders placed just after midnight show straight away'),
+        'updated': '2026-11-20',
+        'change_note': T('جديد: شريط «طلبات مفتوحة أقدم من 24 ساعة» بحالتها في SOFTECH، والإغلاق التلقائي للي SOFTECH خلّصها (مطفأ لحد قرار الإدارة)',
+                         'New: an "Orders open over 24 hours" bar with their SOFTECH status, and auto-close for those SOFTECH finished (off until management decides)'),
     },
     {
         'key': 'delivery.dispatch',
