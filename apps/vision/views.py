@@ -7,15 +7,30 @@ in-house recognizer) and P3 (handwriting fine-tune).
 """
 from django.db.models import Count, Q
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import OcrSample
 from core.permissions import RouteModulePermission  # round 2, D6
 
+# The rule before the role review (2026-11-20), kept for a database with no catalog_tools rows yet
+# (spec: "Unseeded databases behave as today"); RouteModulePermission then asks catalog view.
+_UNSEEDED_READERS = frozenset({'admin', 'supervisor', 'purchasing', 'pharmacist'})
+
+
+class UnseededCorpusReaders(BasePermission):
+    message = 'غير مصرّح.'
+
+    def has_permission(self, request, view):
+        from core.middleware import module_access
+        if 'catalog_tools' in module_access.seeded_modules():
+            return True                      # the matrix (RouteModulePermission) decides
+        sp = getattr(request.user, 'staff_profile', None)
+        return bool(sp and sp.role in _UNSEEDED_READERS)
+
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RouteModulePermission])
+@permission_classes([IsAuthenticated, RouteModulePermission, UnseededCorpusReaders])
 def corpus_stats(request):
     """Corpus size, module / engine mix, media split, and label rate. Who: the matrix's
     catalog_tools view (RouteModulePermission asks it; role review 2026-11-20 dropped the
@@ -47,7 +62,7 @@ def corpus_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RouteModulePermission])
+@permission_classes([IsAuthenticated, RouteModulePermission, UnseededCorpusReaders])
 def corpus_accuracy(request):
     """
     In-house vs Gemini: over recent LABELLED samples that ran engines in parallel, how

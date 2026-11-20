@@ -16,7 +16,7 @@ from rest_framework import filters, generics
 from apps.catalog.wildcard import WildcardSearchFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from .models import (
@@ -66,6 +66,20 @@ RECON_FINALIZE = _company_only(matrix_permission('reconciliation', post=('finali
 RECON_EXPORT   = _company_only(matrix_permission('reconciliation', get=('export',)))
 # C15 exception decisions: the reconciliation grant gates the door; _can_review_exceptions decides who acts
 RECON_REVIEW   = _company_only(matrix_permission('reconciliation', post=('view',)))
+
+
+class UnseededReportReaders(BasePermission):
+    """The read-only reports / exports' reader rule before the role review (admin / pharmacist +
+    the A/P review accountant), kept while `reconciliation` has no rows (spec: "Unseeded databases
+    behave as today"; RECON then asks finance). Once seeded, the matrix alone decides (decision 1)."""
+    message = 'صلاحية غير كافية'
+
+    def has_permission(self, request, view):
+        from core.middleware import module_access
+        if 'reconciliation' in module_access.seeded_modules():
+            return True
+        from apps.users.roles import AP_REVIEW_ROLES
+        return _is_admin_or_pharmacist(request.user) or             getattr(getattr(request.user, 'staff_profile', None), 'role', None) in AP_REVIEW_ROLES
 
 
 def _scope(request, qs, party_path='party'):
@@ -718,7 +732,7 @@ def reverse_allocation_softech(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RECON_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def unpaid_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
@@ -731,7 +745,7 @@ def unpaid_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RECON_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def review_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
@@ -834,7 +848,7 @@ def _sort_rows(rows, ordering, allowed) -> bool:
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RECON])
+@permission_classes([IsAuthenticated, RECON, UnseededReportReaders])
 def unpaid_report(request):
     """Totals + supplier summary + unpaid invoice rows for the finance department."""
     from . import recon_reports as R
@@ -866,7 +880,7 @@ def unpaid_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RECON])
+@permission_classes([IsAuthenticated, RECON, UnseededReportReaders])
 def partial_report(request):
     """Invoices paid part-way (with the vouchers that paid them) + part-used vouchers."""
     from . import recon_reports as R
@@ -889,7 +903,7 @@ def partial_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RECON_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def partial_export(request):
     from . import recon_reports as R
     from django.http import HttpResponse
@@ -902,7 +916,7 @@ def partial_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, RECON_EXPORT])
+@permission_classes([IsAuthenticated, RECON_EXPORT, UnseededReportReaders])
 def returns_chains_export(request):
     """Open returns owed by suppliers, purchases paid although returned, and the
     مدفوعات → مقبوضات → مدفوعات correction chains (doc 23 §17)."""

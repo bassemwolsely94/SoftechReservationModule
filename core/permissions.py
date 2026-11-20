@@ -108,6 +108,24 @@ def require_module(module: str, action: str = 'view'):
 
 # ── Per-action matrix checks (with the empty-matrix safety net) ───────────────
 
+# Role review 2026-11-20 (docs/superpowers/specs/2026-11-20-role-review-design.md: "Unseeded databases
+# behave as today"): the ten tool modules split out of the module their endpoints asked before. Until a
+# new module has a row, a check on it asks that earlier module instead (the same actions); None = admin
+# only — the access/* views were IsAdminRole. Once seeded (users.0062), the new module's rows decide.
+UNSEEDED_LEGACY = {
+    'access_control': None,
+    'catalog_tools': 'catalog',      # images/*, vision/* (vision also kept its role list: see the view)
+    'stock': 'analytics',            # analytics/inventory, inventory-investment
+    'loyalty': 'customers',          # referral/*
+    'rider': 'delivery',             # delivery/app/*
+    'dispatch': 'delivery',
+    'reconciliation': 'finance',     # finance/reconciliation/* (reports also kept a reader rule: see there)
+    'code_maps': 'settings',         # config/code-maps/*
+    'forecast': 'analytics',         # forecasting runs / seasonality / accuracy / salesperson board
+    'recommendations': 'analytics',
+}
+
+
 def matrix_allows(profile, module: str, *actions) -> bool:
     """True when the RoleModuleAccess matrix grants any of `actions` on `module`.
 
@@ -120,6 +138,11 @@ def matrix_allows(profile, module: str, *actions) -> bool:
     if profile.role == 'admin':
         return True
     from core.middleware import module_access
+    # a role-review tool module without rows yet asks the rule its endpoints had before (PR 197
+    # pattern: seeded_modules() first) — it never fails open
+    if module in UNSEEDED_LEGACY and module not in module_access.seeded_modules():
+        legacy = UNSEEDED_LEGACY[module]
+        return legacy is not None and matrix_allows(profile, legacy, *actions)
     # an enforced role (RBAC_ENFORCED_ROLES, a non-legacy or unknown role) never fails open: only
     # its own allowed rows count (R17)
     if module not in module_access.seeded_modules() and not module_access.is_enforced(profile.role):

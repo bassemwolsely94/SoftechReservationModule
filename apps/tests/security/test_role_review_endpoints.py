@@ -341,3 +341,104 @@ class ReconReportsFollowTheMatrixTests(_Base):
         for path in RECON_REPORTS + RECON_EXPORTS:
             with self.subTest(path=path):
                 self.assertEqual(c.get(path).status_code, 403)
+
+
+# ── CI 283 fix: unseeded fallback + device branch scope ──────────────────────
+
+def _device(name, branch, **kw):
+    from apps.access import devices
+    from apps.access.models import Device
+    return Device.objects.create(secret_hash=devices.hash_secret(devices.new_secret()), name=name,
+                                 branch=branch, **kw)
+
+
+# moved read -> (the module it asked before the role review, a role refused there once seeded)
+LEGACY = {'catalog_tools': 'catalog', 'stock': 'analytics', 'loyalty': 'customers', 'rider': 'delivery',
+          'reconciliation': 'finance', 'code_maps': 'settings', 'forecast': 'analytics'}
+
+
+@override_settings(RBAC_ENFORCEMENT='log')
+class UnseededFallbackTests(_Base):
+    """Spec: "Unseeded databases behave as today" — a new module with no rows asks the rule its
+    endpoints had before (PR 197 pattern: seeded_modules() first), never fails open."""
+
+    def _unseed(self, *modules):
+        RoleModuleAccess.objects.filter(module__in=modules or NEW_MODULES).delete()
+        module_access.clear_cache()
+
+    def test_empty_matrix_keeps_access_admin_only(self):
+        RoleModuleAccess.objects.all().delete()
+        module_access.clear_cache()
+        adm = self._client('admin')
+        for role in ('pharmacist', 'supervisor', 'call_center'):
+            c = self._client(role)
+            for path in ('/api/access/networks/', '/api/access/devices/', '/api/access/zone-policies/'):
+                with self.subTest(role=role, path=path):
+                    self.assertEqual(c.get(path).status_code, 403)
+        for path in ('/api/access/networks/', '/api/access/devices/', '/api/access/zone-policies/'):
+            with self.subTest(admin=path):
+                self.assertEqual(adm.get(path).status_code, 200)
+
+    def test_unseeded_access_control_refuses_a_settings_holder(self):
+        self._unseed('access_control')
+        self._grant('pharmacist', 'settings')
+        c = self._client('pharmacist')
+        self.assertEqual(c.get('/api/access/devices/').status_code, 403)
+        self.assertEqual(c.post('/api/access/devices/bulk-approve/', {'ids': []}, format='json').status_code, 403)
+
+    def test_unseeded_new_module_asks_its_legacy_module(self):
+        self._unseed()
+        for path, new, _parent in MOVED_GETS:
+            if new == 'access_control':
+                continue
+            legacy = LEGACY[new]
+            with self.subTest(path=path):
+                self._deny('pharmacist', legacy)
+                self.assertEqual(self._client('pharmacist', f'rr2_l_{new}').get(path).status_code, 403)
+
+    def test_unseeded_vision_keeps_the_old_role_list(self):
+        self._unseed('catalog_tools')
+        self._grant('call_center', 'catalog')
+        self.assertEqual(self._client('call_center').get('/api/vision/corpus-stats/').status_code, 403)
+        self._grant('supervisor', 'catalog')
+        self.assertEqual(self._client('supervisor').get('/api/vision/corpus-stats/').status_code, 200)
+
+    def test_unseeded_recon_reports_keep_the_old_reader_rule(self):
+        self._unseed('reconciliation')
+        self._grant('supervisor', 'finance')
+        self.assertEqual(self._client('supervisor').get(RECON_REPORTS[0]).status_code, 403)
+
+
+@override_settings(RBAC_ENFORCEMENT='log')
+class DeviceBranchScopeTests(_Base):
+    """CLAUDE.md DoD 2: a branch user holding access_control sees and acts on its own branches'
+    devices only (the canary sweep's GET /api/access/devices/ leak)."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = make_branch('RR2 other', softech_id='RR2O')
+        self.mine = _device('mine-pc', self.branch)
+        self.theirs = _device('their-pc', self.other)
+        self._grant('pharmacist', 'access_control')
+        self._grant('pharmacist', 'access_control', 'approve')
+        user, _, _ = make_user('rr2_dev_ph', role='pharmacist', branch=self.branch)
+        self.c = bearer_client(user)
+
+    def test_list_shows_only_own_branch(self):
+        names = {d['name'] for d in self.c.get('/api/access/devices/').json()}
+        self.assertEqual(names, {'mine-pc'})
+
+    def test_detail_of_another_branch_is_404(self):
+        self.assertEqual(self.c.get(f'/api/access/devices/{self.mine.pk}/').status_code, 200)
+        self.assertEqual(self.c.get(f'/api/access/devices/{self.theirs.pk}/').status_code, 404)
+
+    def test_bulk_approve_skips_another_branch(self):
+        r = self.c.post('/api/access/devices/bulk-approve/', {'ids': [self.theirs.pk]}, format='json')
+        self.assertEqual(r.json(), {'approved': 0, 'skipped': 1})
+        self.theirs.refresh_from_db()
+        self.assertEqual(self.theirs.status, 'pending')
+
+    def test_admin_sees_every_branch(self):
+        user, _, _ = make_user('rr2_dev_adm', role='admin', branch=self.branch, access_all=True)
+        names = {d['name'] for d in bearer_client(user).get('/api/access/devices/').json()}
+        self.assertTrue({'mine-pc', 'their-pc'} <= names)
