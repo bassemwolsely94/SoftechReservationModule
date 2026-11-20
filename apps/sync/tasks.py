@@ -2614,6 +2614,18 @@ def _run_near_expiry_outcomes():
         logger.error('[APScheduler] near-expiry outcomes failed: %s', exc)
 
 
+def _run_qa_fridge_missed():
+    """C31: after each fridge-reading due time (12:00 / 20:00 Cairo), alert the branch for every active
+    fridge with no reading for that slot (in-app only, once per fridge/day/slot). Local DB only."""
+    try:
+        from apps.qa.fridge import check_missed
+        sent = check_missed()
+        if sent:
+            logger.info('[APScheduler] fridge missed-reading alerts: %s', sent)
+    except Exception as exc:
+        logger.error('[APScheduler] fridge missed-reading check failed: %s', exc)
+
+
 def _run_cash_view_snapshot():
     """P-40: keep this Saturday's 13-week cash view for forecast-vs-actual (local DB only; one per date)."""
     try:
@@ -4073,6 +4085,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_near_expiry_outcomes, 'cron', hour=6, minute=20, id='near_expiry_outcomes',
         replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
+    )
+    # C31 fridge log: missed-reading check 15 min after each due time (local DB, in-app alerts only).
+    _scheduler.add_job(
+        _run_qa_fridge_missed, 'cron', hour='12,20', minute=15, id='qa_fridge_missed',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
     _scheduler.add_job(

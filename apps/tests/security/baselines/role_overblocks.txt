@@ -819,3 +819,41 @@ pharmacist POST /api/pos-orders/live-check-gaps/987654321/review/
 salesperson GET /api/pos-orders/live-check-gaps/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/credit-points/
 salesperson POST /api/pos-orders/live-check-gaps/987654321/review/
+
+# reason: C31 — the fridge temperature log rides the QA gate (apps/qa/views.py QA): only roles the
+#   registry marks qa_inspections (admin, pharmacist, supervisor, quality manager) read or record it,
+#   as for the inspections; every role's hr grant is self-service, not QA.
+accountant GET /api/qa/fridge-readings/
+accountant GET /api/qa/fridges/
+accountant GET /api/qa/fridges/987654321/
+accountant GET /api/qa/fridges/987654321/month/
+accountant POST /api/qa/fridge-readings/
+accountant POST /api/qa/fridges/
+call_center GET /api/qa/fridge-readings/
+call_center GET /api/qa/fridges/
+call_center GET /api/qa/fridges/987654321/
+call_center GET /api/qa/fridges/987654321/month/
+call_center POST /api/qa/fridge-readings/
+call_center POST /api/qa/fridges/
+delivery GET /api/qa/fridge-readings/
+delivery GET /api/qa/fridges/
+delivery GET /api/qa/fridges/987654321/
+delivery GET /api/qa/fridges/987654321/month/
+delivery POST /api/qa/fridge-readings/
+delivery POST /api/qa/fridges/
+purchasing GET /api/qa/fridge-readings/
+purchasing GET /api/qa/fridges/
+purchasing GET /api/qa/fridges/987654321/
+purchasing GET /api/qa/fridges/987654321/month/
+purchasing POST /api/qa/fridge-readings/
+purchasing POST /api/qa/fridges/
+salesperson GET /api/qa/fridge-readings/
+salesperson GET /api/qa/fridges/
+salesperson GET /api/qa/fridges/987654321/
+salesperson GET /api/qa/fridges/987654321/month/
+salesperson POST /api/qa/fridge-readings/
+salesperson POST /api/qa/fridges/
+viewer GET /api/qa/fridge-readings/
+viewer GET /api/qa/fridges/
+viewer GET /api/qa/fridges/987654321/
+viewer GET /api/qa/fridges/987654321/month/
