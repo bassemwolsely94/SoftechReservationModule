@@ -57,6 +57,8 @@ BUDGETS: dict[str, Budget] = {
     'finance/gl/exceptions/mixed-patterns': Budget('list', 9, 'measured 7 on 2026-11-20'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
+    'analytics/margin-board': Budget('report', 16, 'C19 2026-11-20: measured 7 warm in CI (10 cold); one '
+                                                   'grouped line query + branches + delivery fees + auth'),
     'supply/missing-bonus': Budget('report', 16, 'C18 2026-11-20: not measured yet (CI first run); branches, '
                                                  'lines, profiles, history, items + auth + scope'),
     'supply/out-here': Budget('report', 16, 'C06 2026-11-20: not measured yet (CI first run); six fixed queries '

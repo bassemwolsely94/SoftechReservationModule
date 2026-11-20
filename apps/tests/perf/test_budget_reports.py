@@ -65,6 +65,35 @@ class TrackBudgets(TestCase):
                       data={'route': '/reservations/123', 'tab': 'grid'}, grow=lambda: None, min_rows=0)
 
 
+class MarginBoardBudget(TestCase):
+    """C19 analytics «💹 الهامش: قناة × فرع»: two grouped queries, flat however many channels / lines."""
+
+    def setUp(self):
+        from ..factories import make_customer
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_margin')
+        self.cust = make_customer()
+        self.n = 0
+
+    def _sales(self, n=30):
+        from apps.customers.models import PurchaseHistory, PurchaseHistoryLine
+        from ..factories import make_item
+        for _ in range(n):
+            self.n += 1
+            p = PurchaseHistory.objects.create(customer=self.cust, branch=self.branch, doc_code='115',
+                                               total_amount=Decimal('114'), softech_invoice_id=f'PM-{self.n}',
+                                               invoice_date=timezone.now(), sales_channel=f'C{self.n}')
+            PurchaseHistoryLine.objects.create(purchase=p, item=make_item(f'PM {self.n}', f'PM{self.n:04d}'),
+                                               quantity=Decimal('1'), unit_price=Decimal('114'),
+                                               line_total=Decimal('114'), cost_at_sale=Decimal('70'))
+
+    def test_margin_board(self):
+        self._sales(2)
+        # warm once: the channel-label map (analytics.views, kept per process) and the trusted-network list
+        # are read by the first request in a process only
+        self.assertEqual(self.client_.get('/api/analytics/margin-board/').status_code, 200)
+        assert_budget(self, 'analytics/margin-board', self.client_, '/api/analytics/margin-board/',
+                      grow=self._sales, min_rows=30, rows_of=lambda r: len(r.data['rows']))
 class MissingBonusBudget(TestCase):
     """C18 /supply «بونص ناقص»: flat however many receipts are judged."""
 

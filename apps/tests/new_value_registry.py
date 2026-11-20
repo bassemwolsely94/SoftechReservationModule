@@ -128,6 +128,10 @@ def cover_tiers_export():
 
 
 
+def margin_board():
+    """C19 analytics «💹 الهامش: قناة × فرع» (JSON): one column per live branch in view; sales of a closed / pending
+    branch are folded into one code-less «فروع أخرى» column, so those branches never show."""
+    return _get('/api/analytics/margin-board/')
 def missing_bonus_export():
     """C18 /supply «بونص ناقص» workbook: its summary lists every live receiving branch in view (HQ included);
     pending / closed / call center never show."""
@@ -153,6 +157,7 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    ('margin_board', margin_board, ABSENT_ALL),
     ('missing_bonus_export', missing_bonus_export, ABSENT_ALL),
     ('out_here_export', out_here_export, ABSENT_ALL),
 ]

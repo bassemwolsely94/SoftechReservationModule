@@ -1663,6 +1663,7 @@ export const analyticsApi = {
   churn:               (params = {}) => api.get('/analytics/churn/',               { params }),
   branchContribution:  (params = {}) => api.get('/analytics/branch-contribution/',  { params }),
   inventoryInvestment: (params = {}) => api.get('/analytics/inventory-investment/', { params }),
+  marginBoard:         (params = {}) => api.get('/analytics/margin-board/',         { params }),
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────

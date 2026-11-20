@@ -15,6 +15,7 @@ import RefreshButton from '../components/RefreshButton'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import useHelpTab from '../help/useHelpTab'
+import MarginBoard from '../components/MarginBoard'
 
 const fmt    = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const fmtPct = n => `${fmt(n, 1)}%`
@@ -164,6 +165,7 @@ const TABS = [
   { key: 'medicine',      label: 'أنواع الأدوية',    icon: '💊' },
   { key: 'items',         label: 'أفضل الأصناف',     icon: '📦' },
   { key: 'time',          label: 'التوزيع الزمني',   icon: '🕐' },
+  { key: 'margin',        label: 'الهامش: قناة × فرع', icon: '💹' },
   { key: 'contribution',  label: 'مساهمة الفروع',    icon: '🏦' },
   { key: 'churn',         label: 'العملاء الغائبون', icon: '👻' },
 ]
@@ -282,7 +284,7 @@ export default function SalesDashboard() {
             <KpiCard label="صافي الإيرادات"      value={`${fmt(s.total_revenue)} جم`}    color="brand" icon="💰"
               sub={`مبيعات ${fmt(s.sales_revenue)} − مردودات ${fmt(s.returns_revenue)}`} />
             <KpiCard label="صافي الربح"           value={`${fmt(s.total_profit)} جم`}     color="green" icon="📈"
-              sub={`هامش ${fmtPct(s.profit_margin_pct)}`} />
+              sub={`هامش ${fmtPct(s.profit_margin_pct)} · بدون ضريبة ${fmtPct(s.margin_ex_vat_pct)}`} />
             <KpiCard label="تكلفة البضاعة (COGS)" value={`${fmt(s.total_cogs)} جم`}      color="red"   icon="🏭"
               sub={`${fmtPct(s.total_revenue ? (s.total_cogs / s.total_revenue) * 100 : 0)} من الإيراد`} />
             <KpiCard label="إجمالي الخصومات"      value={`${fmt(s.total_discount)} جم`}  color="amber" icon="🏷️" />
@@ -415,6 +417,8 @@ export default function SalesDashboard() {
                   emptyLabel="لا توجد بيانات للأصناف"
                 />
               )}
+
+              {activeTab === 'margin' && <MarginBoard params={params} />}
 
               {activeTab === 'contribution' && (
                 <div className="space-y-5">
