@@ -31,6 +31,8 @@ import ExportJobStatus from '../components/ExportJobStatus'
 import SharedSortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import SavedViewsMenu from '../components/SavedViewsMenu'
+import useSavedViews, { pickKnown } from '../hooks/useSavedViews'
 import { wildcardMatch } from '../utils/wildcard'
 
 // ── Column-resize hook ────────────────────────────────────────────────────────
@@ -1059,6 +1061,7 @@ const MULTI_KEYS = [
   'store_classif', 'nosale_classif', 'insurance_type', 'item_level',
   'branch_trans', 'supplier_trans', 'customer_trans',
 ]
+const PURCH_SV_KEYS = ['abc', 'search', 'item_filters']
 const EMPTY_ITEM_FILTERS = {
   ...Object.fromEntries(MULTI_KEYS.map(k => [k, []])),
   requires_fridge: false, is_fast_moving: false, has_points: false,
@@ -1497,6 +1500,17 @@ export default function PurchasingDashboard() {
   // Advanced item filters — shared across Aggregated and Branch tabs
   const [itemFilters,    setItemFilters]    = useState({ ...EMPTY_ITEM_FILTERS })
   const [showAdvFilters, setShowAdvFilters] = useState(false)
+  // C23 saved views: ABC tab + search + the advanced item filters (shared by the Aggregated / Branch tabs)
+  const sv = useSavedViews('purchasing', {
+    keys: PURCH_SV_KEYS,
+    getFilters: () => ({ abc: abcFilter, search, item_filters: itemFilters }),
+    applyFilters: f => {
+      setAbcFilter(f.abc || 'all'); setSearch(f.search || '')
+      const adv = { ...EMPTY_ITEM_FILTERS, ...pickKnown(f.item_filters, Object.keys(EMPTY_ITEM_FILTERS)) }
+      setItemFilters(adv)
+      if (Object.keys(EMPTY_ITEM_FILTERS).some(k => JSON.stringify(adv[k]) !== JSON.stringify(EMPTY_ITEM_FILTERS[k]))) setShowAdvFilters(true)
+    },
+  })
 
   // Filter options for dropdown population (medicine_type, supplier, family, categories)
   const { data: filterOpts } = useQuery({
@@ -2587,7 +2601,8 @@ export default function PurchasingDashboard() {
                   🔍 {showAdvFilters ? 'إخفاء الفلاتر' : 'فلاتر متقدمة'}
                 </button>
 
-                <div className="mr-auto">
+                <div className="mr-auto flex items-center gap-2">
+                  <SavedViewsMenu sv={sv} />
                   <input data-tour="purchasing-engine-search"
                     type="text"
                     placeholder="ابحث عن صنف..."

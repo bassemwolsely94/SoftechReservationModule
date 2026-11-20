@@ -17,6 +17,10 @@ import useGridKeyboard, { GRID_KEYS_HINT } from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
 import MultiSelectFilter from './MultiSelectFilter'
+import SavedViewsMenu from './SavedViewsMenu'
+import useSavedViews from '../hooks/useSavedViews'
+
+const RW_SV_KEYS = ['supplier', 'location', 'state']
 
 const fmtNum = (n, d = 0) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: d })
 const STATES = [
@@ -167,6 +171,12 @@ export default function ReturnWindowTab() {
   const [supplier, setSupplier] = useState([])   // multi-select supplier codes ([] = all)
   const [location, setLocation] = useState([])   // multi-select shelf / hq / 105 ([] = all)
   const [stateF, setStateF] = useState('')
+  // C23 saved views: suppliers / locations / state (the month is not saved — it moves on)
+  const sv = useSavedViews('batches.return_window', {
+    keys: RW_SV_KEYS,
+    getFilters: () => ({ supplier, location, state: stateF }),
+    applyFilters: f => { setSupplier(f.supplier || []); setLocation(f.location || []); setStateF(f.state || '') },
+  })
   const [ticked, setTicked] = useState({})
   const [pick, setPick] = useState({})               // line key → chosen supplier (ambiguous lines)
   const [msg, setMsg] = useState(null)
@@ -257,6 +267,7 @@ export default function ReturnWindowTab() {
                            onChange={setSupplier} allLabel="كل الموردين" showCode={false} />
         <MultiSelectFilter className="w-40" options={LOC_OPTIONS} selected={location} onChange={setLocation}
                            allLabel="كل المواقع" showCode={false} />
+        <SavedViewsMenu sv={sv} />
         {stateF && <button onClick={() => setStateF('')} className="px-2 py-1 text-xs border rounded-lg">✕ {STATES.find(s => s.key === stateF)?.label}</button>}
         <span className="flex-1" />
         <button data-tour="batches-main-return-refresh-expiry" onClick={() => refresh.mutate('expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 أرصدة الصلاحية</button>
