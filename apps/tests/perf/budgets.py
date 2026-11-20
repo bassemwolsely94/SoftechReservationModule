@@ -54,6 +54,7 @@ BUDGETS: dict[str, Budget] = {
                                                 '(+ auth); first measured in CI'),
     'qa/fridge-readings': Budget('list', 12, 'C31, 2026-11-20: page + count, fridge/recorder joined (+ auth); '
                                              'first measured in CI'),
+    'finance/gl/exceptions/mixed-patterns': Budget('list', 9, 'measured 7 on 2026-11-20'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'supply/bought-dearer': Budget('report', 14, 'C17, 2026-11-20: lines + suppliers + items + buyers + branches + '

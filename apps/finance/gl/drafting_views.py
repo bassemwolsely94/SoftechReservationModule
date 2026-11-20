@@ -29,7 +29,7 @@ from core.multi_filter import filter_in, multi_ids, multi_values
 from core.threads import start_thread
 from core.upload_safety import capped_rows, max_upload_bytes
 
-from . import drafting, parties, plan2_adapter, rules
+from . import drafting, mixed_patterns, parties, plan2_adapter, rules
 from .ledger import OPENING_DATE
 from .drafting_serializers import (
     exception_json, map_json, party_json, rule_json, source_doc_json,
@@ -489,6 +489,34 @@ def exception_ignore(request, pk):
                        new_data={'status': 'ignored', 'kind': e.kind, 'note': note,
                                  'source_key': e.source_doc.source_key})
     return Response(exception_json(e))
+
+
+@api_view(['GET'])
+@permission_classes(VIEW)
+def mixed_patterns_list(request):
+    """Open «قيد يدوي مختلط» groups per pattern (book + manual accounts + SOFTECH accounts)."""
+    return Response({'results': _j(mixed_patterns.list_patterns())})
+
+
+@api_view(['POST'])
+@permission_classes(CREATE)
+def mixed_patterns_decide(request):
+    """Import a whole pattern as drafts, or ignore it with a reason. Nothing is approved."""
+    profile, bad = _need_profile(request)
+    if bad:
+        return bad
+    d = request.data
+    expected = d.get('expected_count')
+    pattern = d.get('pattern')
+    if isinstance(expected, bool) or not isinstance(expected, int) or not isinstance(pattern, str) or not pattern:
+        return _err(['اختر النمط وعدد قيوده'])
+    try:
+        res = mixed_patterns.decide(pattern=pattern, decision=str(d.get('decision') or ''), expected_count=expected,
+                                    note=str(d.get('note') or ''), user=profile)
+    except mixed_patterns.PatternError as e:
+        http = status.HTTP_409_CONFLICT if e.code == 'count_changed' else status.HTTP_400_BAD_REQUEST
+        return Response({'code': e.code, 'detail': e.message}, status=http)
+    return Response(_j(res))
 
 
 @api_view(['POST'])
