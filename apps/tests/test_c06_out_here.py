@@ -184,11 +184,30 @@ class ApiTests(_Net):
         self.assertEqual([x['branch_code'] for x in r.data['rows']], ['140'])
 
     def test_branch_user_sees_own_branch_only(self):
-        _u, _s, client = make_user('c06_buyer', role='purchasing', branch=self.b130)
+        # viewer = a branch-scoped role with purchasing/view in the code matrix (core.branch_scope); asking for
+        # another branch drops it, for the list and for the Excel
+        from apps.tests.security.fixtures import seed_code_matrix
+        from core.middleware import module_access
+        seed_code_matrix()
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        _u, _s, client = make_user('c06_viewer', role='viewer', branch=self.b130)
         r = client.get(URL, {'branch': '130,140'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual([x['branch_code'] for x in r.data['rows']], ['130'])
         self.assertEqual([b['branch_code'] for b in r.data['branches']], ['130'])
+        from openpyxl import load_workbook
+        x = client.get(f'{URL}export/', {'branch': '130,140'})
+        self.assertEqual(x.status_code, 200)
+        wb = load_workbook(io.BytesIO(x.content))
+        self.assertEqual([row[0].split(' · ')[0] for row in wb['الأصناف'].iter_rows(min_row=2, values_only=True)],
+                         ['130'])
+
+    def test_purchasing_role_is_all_branch_by_design(self):
+        # apps/users/roles.py: purchasing = «HQ Only», all_branches=True — it sees every short branch
+        _u, _s, client = make_user('c06_buyer', role='purchasing', branch=self.b130)
+        r = client.get(URL)
+        self.assertEqual(sorted(x['branch_code'] for x in r.data['rows']), ['130', '140'])
 
     def test_without_purchasing_rights(self):
         from apps.tests.security.fixtures import seed_code_matrix
