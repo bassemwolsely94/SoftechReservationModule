@@ -127,6 +127,12 @@ def cover_tiers_export():
     return _get('/api/purchasing/cover-tiers/lines/?format=xlsx')
 
 
+
+def margin_board():
+    """C19 analytics «💹 الهامش: قناة × فرع» (JSON): one column per live branch in view; sales of a closed / pending
+    branch are folded into one code-less «فروع أخرى» column, so those branches never show."""
+    return _get('/api/analytics/margin-board/')
+
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
@@ -143,4 +149,5 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    ('margin_board', margin_board, ABSENT_ALL),
 ]
