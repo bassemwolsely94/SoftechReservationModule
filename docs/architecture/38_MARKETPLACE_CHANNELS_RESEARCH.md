@@ -158,6 +158,12 @@ Rules that follow CLAUDE.md:
 | M4 | Amazon / Noon adapter for non-medicine catalog from HQ | Only after category approval |
 | M5 | Instashop / Chefaa API adapters | Only if they offer an API |
 
+**M2 safety gates — done 2026-11-20 (before any real adapter):** every PushLog payload / response / error
+is masked before it is stored (`push.mask`: the channel's own credential values, secret-named keys such as
+token / secret / password / api key / authorization, plus `core.errors.redact`), so a platform echoing our
+token can never reach the push-log screen; the unauthenticated webhook is throttled per IP
+(`WebhookThrottle`, 300/minute, fail-closed counters) before the signature check. Still needed for M2:
+Talabat partner API credentials + their webhook signature scheme.
 **Platform order number on the SOFTECH sale — 2026-11-20 (owner OK, probe first):** a platform sale's header
 `comments` (varchar(100), the only free-text header column) carries «<platform> #<order no.>», e.g.
 «طلبات #TLB-1029384» (`platform_accounts.platform_comment`; order number cleaned to `A-Z a-z 0-9 . _ / -`).
