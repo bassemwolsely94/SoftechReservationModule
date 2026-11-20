@@ -13,7 +13,7 @@ from django.test import SimpleTestCase, TestCase
 
 from apps.hr.attendance import days
 from apps.hr.attendance.days import (
-    build_days, leave_info, month_totals, punches_for_month, work_date_for,
+    leave_info, month_totals, punches_for_month, to_stamps, work_date_for,
 )
 from apps.hr.models import (
     AttendanceDevice, AttendancePunch, Employee, LeaveRequest, LeaveType, Permit,
@@ -21,6 +21,11 @@ from apps.hr.models import (
 from apps.tests.factories import make_branch, make_user
 
 B4 = dt.time(4, 0)
+
+
+def build_days(punches, *args, **kwargs):
+    """The engine takes stamps; these tests build punch stand-ins, so convert first."""
+    return days.build_days(to_stamps(punches), *args, **kwargs)
 
 
 def P(date, time, machine='HQ', state=0, flag=''):

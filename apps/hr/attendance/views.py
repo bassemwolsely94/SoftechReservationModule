@@ -258,9 +258,9 @@ def month_export(request):
 def employee_days(request, acc, pk):
     emp = get_object_or_404(Employee.objects.select_related('branch', 'staff__user'), pk=pk)
     year, mon = _month(request)
-    punches = day_engine.punches_for_month([emp.pk], year, mon).get(emp.pk, [])
+    punches = day_engine.punches_for_month([emp.pk], year, mon, lead_days=1).get(emp.pk, [])
     info = day_engine.leave_info([emp], year, mon).get(emp.pk, {})
-    rows = day_engine.build_days(punches, day_engine.effective_boundary(emp), emp.daily_hours, year, mon, info)
+    rows = day_engine.build_days(day_engine.to_stamps(punches), emp.day_boundary, emp.daily_hours, year, mon, info)
     totals = day_engine.month_totals(rows)
     days = [{
         'work_date': d.work_date, 'first_in': d.first_in, 'last_out': d.last_out,
