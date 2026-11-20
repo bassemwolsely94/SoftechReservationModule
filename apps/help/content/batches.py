@@ -299,6 +299,10 @@ SCREENS = [
                  'Click any column title to sort (e.g. "Value at risk" or "Earliest expiry"); a red row is an expired item.\n• "🗑️ Disposal/return" opens a window: the decision (destroy, return to supplier, quarantine, review), quantity and reason, then "Record decision".\n• The decision is saved as a draft in the "Disposal/return" tab and deducts nothing in SOFTECH.')},
         ],
         'hints': [
+            {'target': 'saved-views', 'label': T('⭐ العروض المحفوظة', '⭐ Saved views'),
+             'text': T('احفظ الفلاتر الحالية باسم، واختر عرضاً لتطبيقه بضغطة. ★ = يفتح به الشاشة كل مرة. «مشاركة» تُظهره لزملاء دورك.',
+                       'Save the current filters under a name, and pick a view to apply it in one click. ★ = the screen opens with it. "Share" shows it to colleagues with your role.'),
+             'when': T('العرض يحفظ الفلاتر فقط — صلاحياتك وفروعك كما هي.', 'A view keeps filters only — your rights and branches stay the same.')},
             {'target': 'batches-main-near-expiry-list', 'label': T('🧭 قائمة العمل', '🧭 Worklist'),
              'text': T('التشغيلات اللي مش هتتباع قبل انتهائها، بإجراء مقترح واحد لكل تشغيلة.', 'Lots that will not sell before they expire, with one suggested action each.'),
              'open_hint': T('تبويب «🧭 قائمة عمل قرب الانتهاء».', '"🧭 Near-expiry worklist" tab.')},

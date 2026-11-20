@@ -47,6 +47,8 @@ def validate_params(code, params, partial=True):
                 s = str(v).strip()
                 if not s or len(s) > 20:
                     raise ParamError(f'{key}: invalid code {v!r}')
+                if len(kind) > 1 and kind[1] == 'pct_map':
+                    _check_pct_entry(key, s)
                 if s not in cleaned:
                     cleaned.append(s)
             out[key] = cleaned
@@ -57,6 +59,17 @@ def validate_params(code, params, partial=True):
     return out
 
 
+def _check_pct_entry(key, entry):
+    """A 'channel:percent' entry (C07 class discounts), e.g. '30:12'."""
+    code, sep, pct = entry.partition(':')
+    try:
+        ok = bool(sep and code.strip()) and 0 <= Decimal(pct.strip()) <= 100
+    except (InvalidOperation, ValueError):
+        ok = False
+    if not ok:
+        raise ParamError(f'{key}: {entry!r} must look like channel:percent, e.g. 30:12')
+
+
 def ensure_rules():
     """Create missing StockAuditRule rows from RULES defaults; add newly introduced default keys
     to existing rows without touching values the owner already set. Returns {code: rule}."""
@@ -65,7 +78,9 @@ def ensure_rules():
     for code, spec in RULES.items():
         r = rules.get(code)
         if r is None:
-            rules[code] = StockAuditRule.objects.create(code=code, params=dict(spec['defaults']))
+            # a rule may ship switched off (C07: report-only and unvalidated until finance checks samples)
+            rules[code] = StockAuditRule.objects.create(code=code, params=dict(spec['defaults']),
+                                                        enabled=spec.get('default_enabled', True))
             continue
         missing = {k: v for k, v in spec['defaults'].items() if k not in (r.params or {})}
         if missing:
