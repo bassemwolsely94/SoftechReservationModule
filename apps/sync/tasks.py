@@ -2687,6 +2687,16 @@ def _run_hq_exception_digest():
         logger.error('[APScheduler] HQ exception digest failed: %s', exc)
 
 
+def _run_phantom_review_monthly():
+    """C30: 1st of the month — last month's new phantom-substitution flags to the owner (in-app, once
+    per month). Reads the local flag only (apps/purchasing/phantom_review.py); no stock reduction."""
+    try:
+        from apps.purchasing.phantom_review import send_monthly
+        logger.info('[APScheduler] phantom monthly review sent=%s', send_monthly())
+    except Exception as exc:
+        logger.error('[APScheduler] phantom monthly review failed: %s', exc)
+
+
 def _run_receipt_check_daily():
     """P-31: re-check received purchase lines against the sent need sheets (local DB only) and send the
     daily «استلام بدون طلب» digest to purchasing. The refresh also runs the check after every pull."""
@@ -4275,6 +4285,10 @@ def start_scheduler():
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
     _scheduler.add_job(   # C32: weekly HQ exception digest (Sunday, after the overnight engines)
         _run_hq_exception_digest, 'cron', day_of_week='sun', hour=9, minute=10, id='hq_exception_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
+    _scheduler.add_job(   # C30: monthly phantom-substitution review list (1st, after the overnight engine)
+        _run_phantom_review_monthly, 'cron', day=1, hour=9, minute=30, id='phantom_review_monthly',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
     _scheduler.add_job(   # in-app help: weekly training digest to supervisors (Sunday, start of week)
