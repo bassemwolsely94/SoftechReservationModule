@@ -65,7 +65,8 @@ Details: [11](11_BUG_FIX_REGISTER.md) §Wave 2.
 
 - CSP enforce + JWT out of `localStorage` (SEC-5, SEC-8, FE-26) as one frontend-security project.
 - `RBAC_ENFORCEMENT=enforce` after go-live (D-26).
-- Testing maturity: state-aware sweep builder for the 77 `role_unproven` routes; property-based tests
+- Testing maturity: state-aware sweep builder for the 77 `role_unproven` routes (**built 2026-11-20**:
+  `apps/tests/security/state_builders.py`, list now 0 with a ratchet; findings W4-F1..F3 open for the owner); property-based tests
   (Hypothesis) on strip/pack quantity, tender split, offers cap and VAT; mutation testing on the POS, A/P and
   insurance pricing modules; a concurrency test harness (two threads, `TransactionTestCase`) for every
   writer's idempotency guard.
