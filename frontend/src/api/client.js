@@ -858,6 +858,7 @@ export const purchasingApi = {
   phantomExcluded:    (params)      => api.get('/purchasing/phantom/excluded/', { params }),
   phantomSummary:     ()            => api.get('/purchasing/phantom/summary/'),
   phantomMedTypes:    ()            => api.get('/purchasing/phantom/med-types/'),
+  phantomMonthly:     (params)      => api.get('/purchasing/phantom/monthly/', { params }),
   phantomConfirm:     (data)        => api.post('/purchasing/phantom/confirm/', data),
   phantomExclude:     (data)        => api.post('/purchasing/phantom/exclude/', data),
   phantomReset:       (itemId)      => api.post('/purchasing/phantom/reset/', { item_id: itemId }),
@@ -1544,6 +1545,7 @@ export const deliveryApi = {
   update:    (id, data)  => api.patch(`/delivery/${id}/`, data),
   summary:   ()          => api.get('/delivery/summary/'),
   dashboard: (params)    => api.get('/delivery/dashboard/', { params }),
+  stuckOrders: ()        => api.get('/delivery/stuck-orders/'),   // C21 read-only
 
   // Lifecycle transitions
   assign:      (id, data) => api.post(`/delivery/${id}/assign/`, data),

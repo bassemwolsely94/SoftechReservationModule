@@ -65,6 +65,11 @@ function fmtQty(v) {
   return parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
+function fmtEgp(v) {
+  if (v === null || v === undefined) return '—';
+  return parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -729,6 +734,21 @@ function VarianceTab({ session, onRefresh }) {
         </div>
       )}
 
+      {/* C14: value at cost, sales during the count netted out */}
+      {data?.valuation && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13 }} data-tour="stockcount-variance-value">
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <span>نقص صافي: <b style={{ color: '#dc2626' }}>{fmtEgp(data.valuation.net_deficit_value)} ج</b></span>
+            <span>زيادة صافية: <b style={{ color: '#15803d' }}>{fmtEgp(data.valuation.net_surplus_value)} ج</b></span>
+            <span style={{ color: '#6b7280' }}>النقص قبل خصم البيع أثناء الجرد: {fmtEgp(data.valuation.raw_deficit_value)} ج</span>
+            <span style={{ color: '#6b7280' }}>«نقص» طلع بيع أثناء الجرد: {data.valuation.cleared_by_sales} صنف</span>
+          </div>
+          <div style={{ color: '#6b7280', fontSize: 12, marginTop: 4 }}>
+            القيمة {data.valuation.basis_label?.ar}. الفارق الصافي = المعدود − (المتوقع − المباع بعد اللقطة + المرتجع). كود ERP وملف التسوية بالفارق الأصلي زي ما هو.
+          </div>
+        </div>
+      )}
+
       {/* Filters + actions */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }} data-tour="stockcount-sessions-variance-filter">
         {[
@@ -790,6 +810,9 @@ function VarianceTab({ session, onRefresh }) {
                 <SortTh {...vHp('difference', 'number')} style={th}>الفارق</SortTh>
                 <SortTh {...vHp('variance_type', 'text')} style={th}>النوع</SortTh>
                 <SortTh {...vHp('erp_doccode', 'text')} style={th}>كود ERP</SortTh>
+                <SortTh {...vHp('moved_qty', 'number')} style={th}>بيع بعد اللقطة</SortTh>
+                <SortTh {...vHp('net_difference', 'number')} style={th}>الفارق الصافي</SortTh>
+                <SortTh {...vHp('net_value', 'number')} style={th}>القيمة الصافية (ج)</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -820,6 +843,14 @@ function VarianceTab({ session, onRefresh }) {
                     </td>
                     <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: '#7c3aed' }}>
                       {row.erp_doccode || '—'}
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>{row.moved_qty ? fmtQty(row.moved_qty) : '—'}</td>
+                    <td style={{ ...td, textAlign: 'center', fontWeight: 600,
+                      color: row.net_difference > 0 ? '#15803d' : row.net_difference < 0 ? '#dc2626' : '#6b7280' }}>
+                      {row.net_difference == null ? '—' : (row.net_difference > 0 ? '+' : '') + fmtQty(row.net_difference)}
+                    </td>
+                    <td style={{ ...td, textAlign: 'center', fontWeight: 600 }}>
+                      {row.net_value == null ? '—' : fmtEgp(row.net_value)}
                     </td>
                   </tr>
                 );

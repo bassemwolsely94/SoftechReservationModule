@@ -2626,6 +2626,18 @@ def _run_near_expiry_outcomes():
         logger.error('[APScheduler] near-expiry outcomes failed: %s', exc)
 
 
+def _run_delivery_stuck_autoclose():
+    """C21: close delivery orders SOFTECH already delivered/cancelled (SOFTECH read-only). Switch
+    delivery_stuck_autoclose_enabled is OFF by default — then the run only stores the dry-run list."""
+    try:
+        from apps.delivery.stuck_close import run
+        rec = run()
+        logger.info('[APScheduler] delivery stuck-close %s: checked=%s closed=%s cancelled=%s',
+                    rec['mode'], rec['checked'], rec['closed'], rec['cancelled'])
+    except Exception as exc:
+        logger.error('[APScheduler] delivery stuck-close failed: %s', exc)
+
+
 def _run_cash_view_snapshot():
     """P-40: keep this Saturday's 13-week cash view for forecast-vs-actual (local DB only; one per date)."""
     try:
@@ -2685,6 +2697,16 @@ def _run_hq_exception_digest():
         logger.info('[APScheduler] HQ exception digest sent=%s', send_weekly())
     except Exception as exc:
         logger.error('[APScheduler] HQ exception digest failed: %s', exc)
+
+
+def _run_phantom_review_monthly():
+    """C30: 1st of the month — last month's new phantom-substitution flags to the owner (in-app, once
+    per month). Reads the local flag only (apps/purchasing/phantom_review.py); no stock reduction."""
+    try:
+        from apps.purchasing.phantom_review import send_monthly
+        logger.info('[APScheduler] phantom monthly review sent=%s', send_monthly())
+    except Exception as exc:
+        logger.error('[APScheduler] phantom monthly review failed: %s', exc)
 
 
 def _run_receipt_check_daily():
@@ -4086,6 +4108,11 @@ def start_scheduler():
         _run_near_expiry_outcomes, 'cron', hour=6, minute=20, id='near_expiry_outcomes',
         replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
     )
+    # C21 delivery stuck-order close: hourly; SOFTECH read-only; switch off = dry-run list only.
+    _scheduler.add_job(
+        _run_delivery_stuck_autoclose, 'cron', minute=40, id='delivery_stuck_autoclose',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
+    )
     # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
     _scheduler.add_job(
         _run_portal_expire_leases, 'interval', minutes=5, id='rpa_portal_expire_leases',
@@ -4275,6 +4302,10 @@ def start_scheduler():
     # Timed after the overnight syncs so yesterday's data is complete (Africa/Cairo).
     _scheduler.add_job(   # C32: weekly HQ exception digest (Sunday, after the overnight engines)
         _run_hq_exception_digest, 'cron', day_of_week='sun', hour=9, minute=10, id='hq_exception_digest',
+        replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
+    )
+    _scheduler.add_job(   # C30: monthly phantom-substitution review list (1st, after the overnight engine)
+        _run_phantom_review_monthly, 'cron', day=1, hour=9, minute=30, id='phantom_review_monthly',
         replace_existing=True, max_instances=1, misfire_grace_time=6 * 3600,
     )
     _scheduler.add_job(   # in-app help: weekly training digest to supervisors (Sunday, start of week)

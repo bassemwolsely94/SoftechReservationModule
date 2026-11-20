@@ -12,6 +12,8 @@
  *   onDelete        (id)  => void
  *   onClickNotif    (notif) => void
  *   onClose         ()    => void
+ *   view            'action' | 'all'  — C26: «يحتاج إجراء» (default) or «الكل»
+ *   onViewChange    (view) => void    — switches + saves the choice for this user
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -19,6 +21,7 @@ import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { notificationsApi } from '../api/client'
 import { wildcardMatch } from '../utils/wildcard'
+import useNotificationStore from '../store/notificationStore'
 
 const toLatinDigits = s => s ? s.replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x660)) : s
 
@@ -243,8 +246,11 @@ export default function NotificationPanel({
   onClearAll,   // provided by NotificationBell — handles API call + state refresh
   onOpenPrefs,
   onOpenInbox,
+  view = 'all',
+  onViewChange,
 }) {
-  const [filter,  setFilter]  = useState('all')   // 'all' | 'unread'
+  const bellCounts = useNotificationStore(s => s.bellCounts)
+  const [filter,  setFilter]  = useState('all')   // 'all' | 'unread' (inside the current view)
   const [search,  setSearch]  = useState('')
   const [clearing, setClearing] = useState(false)
   const [showReminders, setShowReminders] = useState(false)
@@ -320,29 +326,40 @@ export default function NotificationPanel({
       {/* ── Personal reminders (toggle) ──────────────────────────────────── */}
       {showReminders && <RemindersSection />}
 
-      {/* ── Filter tabs ──────────────────────────────────────────────────── */}
-      <div className="flex border-b border-gray-100">
+      {/* ── View tabs (C26): action items first, everything one click away ── */}
+      <div className="flex border-b border-gray-100" data-tour="shell-notifications-view">
         {[
-          { key: 'all',    label: 'الكل' },
-          { key: 'unread', label: `غير مقروء (${unreadCount})` },
+          { key: 'action', label: 'يحتاج إجراء', n: view === 'action' ? unreadCount : bellCounts?.action },
+          { key: 'all',    label: 'الكل',        n: view === 'all' ? unreadCount : bellCounts?.bell },
         ].map(tab => (
           <button
             key={tab.key}
-            onClick={() => setFilter(tab.key)}
+            data-testid={`bell-view-${tab.key}`}
+            aria-pressed={view === tab.key}
+            onClick={() => onViewChange?.(tab.key)}
             className={`flex-1 py-2 text-xs font-semibold transition-colors
-              ${filter === tab.key
+              ${view === tab.key
                 ? 'text-brand-700 border-b-2 border-brand-600'
                 : 'text-gray-400 hover:text-gray-600'
               }`}
           >
-            {tab.label}
+            {tab.label}{tab.n > 0 ? ` (${tab.n > 99 ? '99+' : tab.n})` : ''}
           </button>
         ))}
       </div>
 
-      {/* ── Search ───────────────────────────────────────────────────────── */}
-      <div className="px-4 py-2 border-b border-gray-50">
-        <div className="relative">
+      {/* ── Search + unread-only ─────────────────────────────────────────── */}
+      <div className="px-4 py-2 border-b border-gray-50 flex items-center gap-2">
+        <button
+          data-tour="shell-notifications-unread-only"
+          onClick={() => setFilter(f => (f === 'unread' ? 'all' : 'unread'))}
+          aria-pressed={filter === 'unread'}
+          className={`text-[11px] font-medium px-2 py-1 rounded-lg border whitespace-nowrap ${
+            filter === 'unread' ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+        >
+          غير مقروء فقط
+        </button>
+        <div className="relative flex-1">
           <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
             fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -363,10 +380,18 @@ export default function NotificationPanel({
       <div className="flex-1 overflow-y-auto">
         {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-center px-6">
-            <div className="text-3xl mb-2">🔔</div>
+            <div className="text-3xl mb-2">{view === 'action' ? '✅' : '🔔'}</div>
             <div className="text-xs text-gray-500">
-              {filter === 'unread' ? 'لا توجد إشعارات غير مقروءة' : 'لا توجد إشعارات'}
+              {view === 'action'
+                ? 'لا شيء يحتاج إجراء الآن'
+                : (filter === 'unread' ? 'لا توجد إشعارات غير مقروءة' : 'لا توجد إشعارات')}
             </div>
+            {view === 'action' && onViewChange && (
+              <button onClick={() => onViewChange('all')}
+                className="mt-2 text-xs text-brand-600 hover:text-brand-800 font-medium">
+                عرض كل الإشعارات
+              </button>
+            )}
           </div>
         ) : (
           groups.map(group => (

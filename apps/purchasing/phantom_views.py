@@ -6,6 +6,7 @@ Read + human-review over the auto-detected flag (apps.purchasing.phantom):
   GET  excluded/     — items a human marked "ليست مبيعات وهمية" (override='excluded')
   GET  summary/      — counts + med-type filter options + total order-reduction value
   GET  med-types/    — general-classification options for the filter
+  GET  monthly/      — C30: items first flagged in one month + review state + EGP (monthly digest)
   POST confirm/      — human confirms it IS phantom (sticky: override='confirmed')
   POST exclude/      — human says NOT phantom (override='excluded', +note) → unflag
   POST reset/        — clear the override → back to auto (recompute from current ratio)
@@ -57,6 +58,7 @@ def _row(it):
         'reviewed': bool(it.phantom_override),
         'in_shortage': it.in_shortage,            # overlap with نواقص السوق
         'detected_at': it.phantom_detected_at,
+        'flagged_at': it.phantom_flagged_at,
     }
 
 
@@ -73,7 +75,7 @@ _FIELDS = ('id', 'softech_id', 'name', 'medicine_type', 'medicine_type_name_ar',
            'medicine_type_name', 'pack_price', 'cost_price', 'phantom_ratio',
            'phantom_contract_ratio', 'phantom_order_pct', 'phantom_buyback_qty',
            'phantom_sold_qty', 'phantom_genuine_need', 'phantom_override',
-           'phantom_override_note', 'in_shortage', 'phantom_detected_at')
+           'phantom_override_note', 'in_shortage', 'phantom_detected_at', 'phantom_flagged_at')
 
 
 @api_view(['GET'])
@@ -127,6 +129,19 @@ def phantom_med_types(request):
     return Response({'med_types': opts})
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, PHANTOM_READ])
+def phantom_monthly(request):
+    """C30: the items that became phantom in one month (?month=YYYY-MM, default this month) with
+    their review state and EGP — the list the monthly digest points to."""
+    from .phantom_review import monthly_review, parse_month
+    month = parse_month(request.GET.get('month'))
+    if month is None:
+        return Response({'detail': 'month must be YYYY-MM'}, status=status.HTTP_400_BAD_REQUEST)
+    data = monthly_review(month, qs=_apply_filters(Item.objects.all(), request))
+    return Response(data)
+
+
 def _get_item(request):
     return Item.objects.filter(id=request.data.get('item_id')).first()
 
@@ -139,11 +154,13 @@ def phantom_confirm(request):
     if it is None:
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
     it.phantom_override = 'confirmed'
+    it.phantom_flagged_at = P.next_flagged_at(it.is_phantom_substitution, True, it.phantom_flagged_at,
+                                              timezone.now())
     it.is_phantom_substitution = True
     it.phantom_override_note = (request.data.get('note') or '')[:300]
     it.phantom_reviewed_by = _staff(request)
     it.phantom_reviewed_at = timezone.now()
-    it.save(update_fields=['phantom_override', 'is_phantom_substitution',
+    it.save(update_fields=['phantom_override', 'is_phantom_substitution', 'phantom_flagged_at',
                            'phantom_override_note', 'phantom_reviewed_by', 'phantom_reviewed_at'])
     logger.info('[PHANTOM] confirm %s (%s)', it.softech_id, it.name)
     return Response({'ok': True, 'item_id': it.id})
@@ -176,12 +193,16 @@ def phantom_reset(request):
         return Response({'detail': 'item not found'}, status=status.HTTP_404_NOT_FOUND)
     it.phantom_override = ''
     it.phantom_override_note = ''
+    was_flagged = it.is_phantom_substitution
     it.is_phantom_substitution = bool(
         P.classify(it.phantom_ratio or 0, float(it.phantom_sold_qty or 0),
                    float(it.phantom_buyback_qty or 0)) and it.is_stockable)
+    it.phantom_flagged_at = P.next_flagged_at(was_flagged, it.is_phantom_substitution,
+                                              it.phantom_flagged_at, timezone.now())
     it.phantom_reviewed_by = _staff(request)
     it.phantom_reviewed_at = timezone.now()
     it.save(update_fields=['phantom_override', 'phantom_override_note',
-                           'is_phantom_substitution', 'phantom_reviewed_by', 'phantom_reviewed_at'])
+                           'is_phantom_substitution', 'phantom_flagged_at',
+                           'phantom_reviewed_by', 'phantom_reviewed_at'])
     logger.info('[PHANTOM] reset %s → auto (flag=%s)', it.softech_id, it.is_phantom_substitution)
     return Response({'ok': True, 'item_id': it.id, 'is_phantom_substitution': it.is_phantom_substitution})

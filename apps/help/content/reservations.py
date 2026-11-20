@@ -23,8 +23,8 @@ MODULE = {
                    'A suggestion only: no reservation exists until a staff member saves one.'),
         'states': [
             {'key': 'new', 'label': T('جديد', 'New'),
-             'desc': T('عميل معروف اختار الصنف على الكاشير ولم يشتره. راجعه: طلب حقيقي أم تصحيح؟',
-                       'A known customer picked the item at the POS and did not buy it. Review it: a real request or a correction?'),
+             'desc': T('عميل معروف اختار الصنف على الكاشير (أو طلبه في مكالمة) ولم يشتره. راجعه: طلب حقيقي أم تصحيح؟',
+                       'A known customer picked the item at the POS (or asked for it on a call) and did not buy it. Review it: a real request or a correction?'),
              'next': ['confirmed', 'rejected', 'expired']},
             {'key': 'confirmed', 'label': T('تم تأكيده كحجز', 'Confirmed as reservation'),
              'desc': T('موظف أكّده وحفظ حجزاً عادياً مرتبطاً به.', 'A staff member confirmed it and saved a normal reservation linked to it.')},
@@ -882,8 +882,12 @@ SCREENS = [
         'tips': [
             T('الشريط فوق القائمة بيقول سجل «المبيعات غير المخزنة» من SOFTECH اتحدّث إمتى (كل ليلة).', 'The bar above the list says when the SOFTECH "unsaved sales" log was last refreshed (nightly).'),
             T('رقم العميل يظهر مُخفى (آخر 3 أرقام) لمن لا يملك صلاحية رؤية أرقام العملاء.', 'The customer number shows masked (last 3 digits) to staff without the see-customer-phones permission.'),
-            T('المصدر هو كاشير النظام الجديد فقط، لأن SOFTECH لا يسجل العميل الحقيقي في سجل المبيعات غير المخزنة.',
-              'The source is our new POS only, because SOFTECH does not record the real customer in its unsaved-sales log.'),
+            T('المصدر كاشير النظام الجديد، لأن SOFTECH لا يسجل العميل الحقيقي في سجل المبيعات غير المخزنة. '
+              'ولو مفتاح «الكول سنتر» شغّال: الأصناف اللي عميل معروف طلبها في مكالمة ومتحوّلتش لحجز أو تحويل، ومر عليها يومين من غير ما يشتريها.',
+              'The source is our new POS, because SOFTECH does not record the real customer in its unsaved-sales log. '
+              'With the call-centre switch on: items a known customer asked for on a call that were not turned into a reservation or transfer and not bought within two days.'),
+            T('نفس العميل والصنف بيظهروا مرة واحدة بس حتى لو جم من الكاشير والكول سنتر مع بعض.',
+              'The same customer and item show once only, even when both the POS and the call centre saw them.'),
             T('الصنف اللي اتباع في نفس الفاتورة أو اشتراه العميل بعدها في أي فرع لا يظهر هنا.',
               'An item sold on the same invoice, or bought by the customer later at any branch, never shows here.'),
             T('الاقتراح الذي لا يُبت فيه خلال 14 يوماً ينتهي تلقائياً.', 'A suggestion not decided within 14 days expires automatically.'),
@@ -901,6 +905,9 @@ SCREENS = [
         'tour': [
             {'target': 'missed-sales-status', 'label': T('جديدة · تم تأكيدها · مرفوضة · انتهت', 'New · Confirmed · Rejected · Expired'),
              'text': T('«جديدة» هي اللي محتاجة قرارك؛ الباقي سجل بالقرارات.', '"New" needs your decision; the rest is the record of decisions.')},
+            {'target': 'missed-sales-source', 'label': T('المصدر', 'Source'),
+             'text': T('اعرض الكل، أو الكاشير بس، أو الكول سنتر بس. سطر الكول سنتر مكتوب عليه «📞 مكالمة» برقمها.',
+                       'Show all, the POS only or the call centre only. A call-centre row shows «📞 Call» with its number.')},
             {'target': 'missed-sales-table', 'label': T('جدول الاقتراحات', 'Suggestions table'),
              'text': T('العميل والصنف والكمية والقيمة والفرع واللي اشتراه في نفس السلة. اضغط أي عنوان للترتيب.',
                        'Customer, item, quantity, value, branch and what was bought in the same cart. Click any header to sort.')},
@@ -914,6 +921,11 @@ SCREENS = [
              'open_hint': T('على أي سطر في «جديدة».', 'On any row under "New".')},
         ],
         'hints': [
+            {'target': 'missed-sales-stock', 'label': T('📍 الفروع', '📍 Branches'),
+             'text': T('رصيد الصنف في كل الفروع. «حجز هنا» يفتح نموذج التأكيد على الفرع اللي فيه رصيد.',
+                       'The item\'s stock in every branch. «Reserve here» opens the confirm form at the branch that has it.'),
+             'warn': T('الحجز لا يتسجل إلا لما تحفظ النموذج.', 'Nothing is reserved until you save the form.'),
+             'open_hint': T('على سطر «جديدة» لصنف من الكتالوج.', 'On a "New" row for a catalog item.')},
             {'target': 'missed-sales-refresh', 'label': T('↻ تحديث', '↻ Refresh'),
              'text': T('يعيد تحميل القائمة. الاقتراحات الجديدة تُبنى كل 30 دقيقة.', 'Reloads the list. New suggestions are built every 30 minutes.')},
             {'target': 'missed-sales-reject-reason', 'label': T('سبب الرفض', 'Reject reason'),
@@ -927,6 +939,7 @@ SCREENS = [
              'open_hint': T('يظهر لما تحدد سطر أو أكتر في «جديدة».', 'Appears once you tick one or more rows under "New".')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('تحديد أكتر من اقتراح ورفضهم بسبب واحد', 'Tick several suggestions and reject them with one reason'),
+        'change_note': T('مصدر جديد (بمفتاح): أصناف طلبها العميل في مكالمة؛ فلتر «المصدر» و«📍 الفروع»؛ وتحديد أكتر من اقتراح ورفضهم بسبب واحد.',
+                         'A new (switched) source: items asked for on a call; a "Source" filter and «📍 Branches»; and tick several suggestions to reject with one reason.'),
     },
 ]
