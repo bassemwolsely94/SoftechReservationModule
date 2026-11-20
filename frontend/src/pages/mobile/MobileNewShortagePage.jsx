@@ -10,8 +10,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { shortageApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
 import { canPickAnyBranch } from '../../utils/branchAccess'
+import { useModuleAction } from '../../hooks/usePermission'
+import MobileNoPermission from '../../components/MobileNoPermission'
+import { WRITE_ACTIONS } from './mobileWriteGates'
+import { legacyRolesFor } from '../../components/navGroups'
 
 export default function MobileNewShortagePage() {
+  // the create endpoint's own POST rule (UAT W8): no form the server would refuse
+  const canCreate = useModuleAction('shortage', WRITE_ACTIONS.shortage, legacyRolesFor('/shortage'))
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
@@ -43,6 +49,8 @@ export default function MobileNewShortagePage() {
       setBusy(false)
     }
   }
+
+  if (!canCreate) return <div className="p-3"><MobileNoPermission /></div>
 
   return (
     <div className="p-3 space-y-3">

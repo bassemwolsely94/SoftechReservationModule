@@ -16,6 +16,9 @@ import { canPickAnyBranch } from '../../utils/branchAccess'
 import CustomerSearchWidget from '../../components/CustomerSearchWidget'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import PhoneAlertToggle from '../../components/PhoneAlertToggle'
+import { useModuleAction } from '../../hooks/usePermission'
+import MobileNoPermission from '../../components/MobileNoPermission'
+import { WRITE_ACTIONS } from './mobileWriteGates'
 
 const CHANNELS = [
   { value: 'cash_sales',     icon: '💵', label: 'بيع نقدي' },
@@ -30,6 +33,8 @@ const PRIORITIES = [
 ]
 
 export default function MobileNewReservationPage() {
+  // the create endpoint's own POST rule (UAT W8): no form the server would refuse
+  const canCreate = useModuleAction('reservations', WRITE_ACTIONS.reservations)
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
@@ -126,6 +131,8 @@ export default function MobileNewReservationPage() {
       setSubmitting(false)
     }
   }
+
+  if (!canCreate) return <div className="p-3"><MobileNoPermission /></div>
 
   return (
     <div className="p-3 space-y-3">

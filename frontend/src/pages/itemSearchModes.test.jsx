@@ -78,6 +78,8 @@ describe('offers item scope (multi)', () => {
 })
 
 describe('mobile new transfer (list)', () => {
+  // the form shows only with the transfers POST grant (UAT W8: no form the server would refuse)
+  beforeEach(() => usePermissionStore.setState({ permissions: { transfers: { view: true, create: true } }, seeded: ['transfers'] }))
   afterEach(() => { cleanup(); widget.props = [] })
 
   it('opens the box in list mode; two picks make two lines, a repeat adds none', () => {

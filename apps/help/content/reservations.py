@@ -417,7 +417,6 @@ SCREENS = [
             T('حدد الحجوزات الأول، وبعدين «📥 تصدير Excel» يصدّر الحجوزات المحددة بس.', 'Select reservations first; "📥 Export Excel" then exports only the selected ones.'),
         ],
         'tips': [T('رقم العميل بيظهر لموظفي الفرع اللي بيخدموا الحجز علشان يتصلوا؛ دور «مشاهد» وأي حد مقفول عنده عرض الأرقام بيشوفه مخفي.', 'The customer\'s number shows to the branch staff serving the reservation so they can call; the "viewer" role and anyone with phone numbers turned off see it hidden.'),
-                 
             T('الحجوزات التي لا تسمح حالتها بالانتقال المختار يتم تخطيها تلقائياً، والنظام يخبرك بعددها.',
               'Reservations whose status does not allow the chosen move are skipped automatically, and the system tells you how many.'),
         ],
@@ -598,8 +597,10 @@ SCREENS = [
              'text': T('يلغي الصنف المختار ويرجّع خانة البحث عشان تختار صنف تاني.', 'Clears the chosen item and brings the search box back so you can pick another.'),
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
+        'tips': [T('لو دورك ما عندوش صلاحية الإنشاء هنا، الشاشة بتقول «ليس لديك صلاحية الإنشاء هنا» بدل النموذج — اطلب الصلاحية من المدير.', 'If your role has no create permission here, the screen says so instead of showing the form — ask your manager for the permission.')],
         'updated': '2026-11-20',
-        'change_note': T('اختيار الفرع لأي دور له صلاحية كل الفروع، لا للكول سنتر والمدير فقط', 'Any role with all-branch access picks the branch, not only call center and admin'),
+        'change_note': T('اللي ما عندوش صلاحية الإنشاء بيشوف سطر هادي بدل نموذج كان السيرفر هيرفضه، وزر «جديد هنا؟» بقى فوق تحت العنوان على الموبايل · اختيار الفرع لأي دور له صلاحية كل الفروع، لا للكول سنتر والمدير فقط',
+                         'Without the create permission you see a calm line instead of a form the server would refuse; on the phone the «New here?» chip now sits at the top, under the header · Any role with all-branch access picks the branch, not only call center and admin'),
     },
     {
         'key': 'reservations.detail',
@@ -626,7 +627,7 @@ SCREENS = [
             T('بعد الصرف: قسم «مطابقة مستند ERP» يبحث عن فاتورة البيع في SOFTECH (برقم المستند أو تلقائياً بالأصناف والتاريخ) ويعرض هل الصرف متطابق أو جزئي أو غير موجود.',
               'After dispensing: the "ERP document match" section looks for the sales invoice in SOFTECH (by document number or automatically by items and date) and shows whether it is matched, partial or not found.'),
         ],
-        'tips': [
+        'tips': [T('على الموبايل: أزرار تغيير الحالة (والإلغاء) تظهر بس لمن له صلاحية العمل على الحجوزات؛ صلاحية العرض فقط تشوف الحالة من غير أزرار.', 'On the phone: the status buttons (cancel included) show only to roles that may work reservations; view-only roles see the status without buttons.'),
             T('لو صنف إضافي ما اتحفظش وقت إنشاء الحجز، بيظهر تنبيه أحمر فوق الصفحة باسمه وكميته — أضفه من «الأصناف».',
               'If an extra item failed to save when the reservation was created, a red notice at the top names it and its quantity — add it from "Items".'),
             T('صور الروشتة الجديدة بتتصغّر تلقائيًا (أطول ضلع ٢٠٠٠ بكسل) من غير ما تتأثر القراءة. تقدر تمسح صورة أو تبدّلها زي الأول، والصورة المحذوفة بتتحفظ ٣٠ يومًا قبل ما تتمسح نهائيًا.',
@@ -808,8 +809,8 @@ SCREENS = [
              'open_hint': T('بعد «إلغاء ✕» من أزرار دورك.', 'After "Cancel ✕" in your role buttons.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('فحص المخزون بقى لكل صنف في الحجز مش الصنف الأول بس: شارة جنب كل صنف، و«المخزون متاح» التلقائي محتاج كل الأصناف.',
-                         'The stock check now covers every item in the reservation, not just the first: a badge beside each item, and the automatic "Stock available" needs all of them.'),
+        'change_note': T('على الموبايل أزرار الحالة والإلغاء بقت تظهر بس لمن له صلاحية العمل على الحجز · فحص المخزون بقى لكل صنف في الحجز مش الصنف الأول بس: شارة جنب كل صنف، و«المخزون متاح» التلقائي محتاج كل الأصناف.',
+                         'On the phone the status and cancel buttons now show only to roles that may work the reservation · The stock check now covers every item in the reservation, not just the first: a badge beside each item, and the automatic "Stock available" needs all of them.'),
     },
     {
         'key': 'reservations.mobile_list',

@@ -3,6 +3,8 @@
  *
  * Quality manager lists recent inspections and starts a new walk-through
  * (pick template + branch → fill checklist on the detail page). Reuses apps/qa.
+ * The «+» follows the server's QA rule (UAT W8): an hr write grant, and a role the server lets read
+ * the inspections (a refused list means a role outside the QA roles).
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -11,6 +13,8 @@ import { qaApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
 import { canPickAnyBranch } from '../../utils/branchAccess'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
+import { useModuleAction } from '../../hooks/usePermission'
+import { WRITE_ACTIONS, qaCreateAllowed } from './mobileWriteGates'
 
 function scoreClass(s) {
   if (s == null) return 'bg-gray-100 text-gray-600'
@@ -46,6 +50,9 @@ export default function MobileQAPage() {
     queryFn: () => branchesApi.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (d.results ?? []) }),
     enabled: creating && canPickBranch,
   })
+
+  const hasHrWrite = useModuleAction('hr', WRITE_ACTIONS.hr)
+  const canCreate  = qaCreateAllowed(hasHrWrite, inspections.error)
 
   const rows = Array.isArray(inspections.data) ? inspections.data : (inspections.data?.results || [])
   const tplList = Array.isArray(templates.data) ? templates.data : []
@@ -122,7 +129,7 @@ export default function MobileQAPage() {
           </div>
         )}
 
-      {!creating && (
+      {!creating && canCreate && (
         <button data-tour="hr-qa-new" onClick={() => { setCreating(true); setError('') }}
           className="fixed bottom-20 left-4 z-20 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg shadow-brand-900/30 flex items-center justify-center text-2xl active:bg-brand-700"
           title="مراجعة جديدة">+</button>
