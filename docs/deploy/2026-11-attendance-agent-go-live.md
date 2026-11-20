@@ -168,8 +168,8 @@ steps above work. Nothing here writes to Linked Gates or to a machine.
 
 ### Read-only login (IT person, on PC HR)
 
-Send the IT person the note at `.superpowers/sdd/2026-11-20-hr-attendance-linkedgates-sessions/it-note.md`
-(or the steps below). Prefer a **Windows account** (no password). In SSMS:
+Send the IT person the note at `docs/deploy/2026-11-linkedgates-readonly-login.md`
+(or the steps below). The agent's `agent.ini` uses `server = .\SQLEXPRESS` (the local instance), while SSMS shows `HR\SQLEXPRESS`. Prefer a **Windows account** (no password). In SSMS:
 
 ```sql
 USE [master];
