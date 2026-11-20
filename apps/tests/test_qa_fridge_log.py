@@ -109,11 +109,11 @@ class FridgeApiTests(TestCase):
         self.assertEqual(self._post(self.ph, self.f, temp='6').status_code, 400)
         rid = FridgeReading.objects.get().pk
         # the pharmacist has no hr edit grant, so the matrix refuses first (403); an admin passes the
-        # matrix and still finds no edit / delete route (405) — readings are append-only for everyone
+        # matrix and still finds no reading detail URL at all (404) — readings are append-only for everyone
         self.assertEqual(self.ph.patch(f'{READINGS}{rid}/', {'temp_c': '4'}, format='json').status_code, 403)
         admin = bearer_client(make_user('fr_admin', role='admin', branch=self.branch)[0])
-        self.assertEqual(admin.patch(f'{READINGS}{rid}/', {'temp_c': '4'}, format='json').status_code, 405)
-        self.assertEqual(admin.delete(f'{READINGS}{rid}/').status_code, 405)
+        self.assertEqual(admin.patch(f'{READINGS}{rid}/', {'temp_c': '4'}, format='json').status_code, 404)
+        self.assertEqual(admin.delete(f'{READINGS}{rid}/').status_code, 404)
         self.assertEqual(FridgeReading.objects.get().temp_c, Decimal('5.0'))
 
     def test_only_today_or_yesterday(self):
