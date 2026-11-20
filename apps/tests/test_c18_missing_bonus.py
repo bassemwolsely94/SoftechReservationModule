@@ -181,10 +181,26 @@ class ApiTests(_Lines):
         self.assertEqual(r.data['refs'], 3)
 
     def test_branch_user_sees_own_branch_only(self):
-        _u, _s, client = make_user('c18_buyer', role='purchasing', branch=self.b130)
-        r = client.get(URL)
+        # viewer = a branch-scoped role with purchasing/view in the code matrix (core.branch_scope)
+        from apps.tests.security.fixtures import seed_code_matrix
+        from core.middleware import module_access
+        seed_code_matrix()
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        _u, _s, client = make_user('c18_viewer', role='viewer', branch=self.b130)
+        r = client.get(URL, {'branch': '100,130'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual([x['branch_code'] for x in r.data['rows']], ['130'])
+        from openpyxl import load_workbook
+        x = client.get(f'{URL}export/', {'branch': '100,130'})
+        self.assertEqual(x.status_code, 200)
+        wb = load_workbook(io.BytesIO(x.content))
+        self.assertEqual([row[1].split(' · ')[0] for row in wb['السطور'].iter_rows(min_row=2, values_only=True)],
+                         ['130'])
+
+    def test_purchasing_role_is_all_branch_by_design(self):
+        _u, _s, client = make_user('c18_buyer', role='purchasing', branch=self.b130)
+        self.assertEqual(sorted(x['branch_code'] for x in client.get(URL).data['rows']), ['100', '130'])
 
     def test_without_purchasing_rights(self):
         from apps.tests.security.fixtures import seed_code_matrix
