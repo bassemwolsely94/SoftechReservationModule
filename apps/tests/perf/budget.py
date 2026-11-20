@@ -17,7 +17,7 @@ from core import branch_scope
 
 from .budgets import BUDGETS
 
-SLACK = 2
+SLACK = 1   # after M3 (fresh user per call) the only gaps left are real first-call queries (1)
 _LITERALS =re.compile(r"'(?:[^']|'')*'|\b\d+(?:\.\d+)?\b")
 
 
@@ -31,9 +31,16 @@ def default_rows(resp) -> int:
 
 
 def measure(client, url: str, *, method: str = 'get', data=None):
-    """(query count, response) for one call, with every cache that could hide a query cleared."""
+    """(query count, response) for one call, with every cache that could hide a query cleared.
+
+    The forced user is reloaded from the database before each call: force_authenticate keeps one
+    in-memory User across requests, so its cached staff_profile hid ~1 query on the second call
+    that every real (JWT) request runs (Stage 1 review, M3)."""
     cache.clear()
     branch_scope.bump_generation()
+    forced = getattr(getattr(client, 'handler', None), '_force_user', None)
+    if forced is not None:
+        client.force_authenticate(user=type(forced).objects.get(pk=forced.pk))
     with CaptureQueriesContext(connection) as ctx:
         if method == 'get':
             resp = client.get(url, data or {})
@@ -63,5 +70,8 @@ def assert_budget(testcase, name: str, client, url: str, *, grow: Callable[[], N
     # per grown row, which is always far more than SLACK because grow() adds 10+ rows.
     testcase.assertLessEqual(abs(after - before), SLACK, f'{name}: queries grow with rows ({before} → {after}):\n'
                                                          f'{_top_shapes(queries)}')
-    testcase.assertLessEqual(after, budget.ceiling, f'{name}: {after} queries > ceiling {budget.ceiling}:\n'
+    # the dearer of the two calls must fit (a de-duplicating tracker inserts on the first call only;
+    # Stage 1 review, M2)
+    worst = max(before, after)
+    testcase.assertLessEqual(worst, budget.ceiling, f'{name}: {worst} queries > ceiling {budget.ceiling}:\n'
                                                     f'{_top_shapes(queries)}')
