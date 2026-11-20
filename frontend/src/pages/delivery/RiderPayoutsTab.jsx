@@ -17,7 +17,8 @@ const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigit
 const errText = (e, fallback) => e?.response?.data?.detail || fallback
 const thisMonth = () => new Date().toISOString().slice(0, 7)
 const today = () => new Date().toISOString().slice(0, 10)
-const newRef = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
+const newRef = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16)))
 const VEHICLE = { motorcycle: 'دراجة نارية', car: 'سيارة', bicycle: 'دراجة', on_foot: 'سير', van: 'ميكروباص' }
 
 function RuleLine({ rule }) {

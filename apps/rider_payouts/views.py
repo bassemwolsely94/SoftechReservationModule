@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.http import HttpResponse
@@ -188,7 +189,10 @@ def rides(request):
     driver = DeliveryDriver.objects.filter(pk=d.get('driver')).first()
     if branch is None or driver is None:
         return _bad('اختر الفرع والطيار')
-    client_ref = (str(d.get('client_ref') or '').strip()[:64]) or None
+    try:
+        client_ref = uuid.UUID(str(d.get('client_ref'))) if d.get('client_ref') else None
+    except ValueError:
+        client_ref = None                    # not a UUID: no retry protection, still one ride per click
     try:
         ride, created = ledger.add_ride(
             driver=driver, branch=branch, ride_date=ride_date, deliveries=deliveries, distance_km=distance,
@@ -348,7 +352,7 @@ def period_adjustments(request, pk):
         return _locked()
     except ledger.LedgerError as e:
         return _bad(e)
-    return Response({'id': adj.pk, **period_json(_get_period(request, pk))}, status=status.HTTP_201_CREATED)
+    return Response({**period_json(_get_period(request, pk)), 'adjustment_id': adj.pk}, status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])

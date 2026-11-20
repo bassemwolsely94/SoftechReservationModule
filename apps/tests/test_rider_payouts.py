@@ -262,7 +262,7 @@ class AdjustmentAndRideEntryTests(_LedgerBase):
         self.assertEqual(ev.after['total_payout'], '50.00')
         self.assertEqual(ev.reason, 'تحويل لفرع 140')
         # remove it again, with a reason
-        adj_id = r.data['id']
+        adj_id = r.data['adjustment_id']
         r = self.manager.post(f'{BASE}adjustments/{adj_id}/remove/', {'reason': 'أُدخلت بالخطأ'}, format='json')
         self.assertEqual(r.status_code, 200, r.content)
         period.refresh_from_db()
@@ -271,7 +271,7 @@ class AdjustmentAndRideEntryTests(_LedgerBase):
 
     def test_branch_ride_entry_priced_by_rule_and_idempotent(self):
         body = {'driver': self.driver.pk, 'branch': self.branch.pk, 'ride_date': DAY.isoformat(),
-                'deliveries': 3, 'distance_km': '4.10', 'order_refs': '1201, 1202, 1203', 'client_ref': 'abc-1'}
+                'deliveries': 3, 'distance_km': '4.10', 'order_refs': '1201, 1202, 1203', 'client_ref': '6f1c2d0e-8a4b-4c55-9e1a-3b2f7d9c0a11'}
         r = self.manager.post(f'{BASE}rides/', body, format='json')
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.data['amount'], '42.30')                  # 3 × 10 + 3 × 4.10

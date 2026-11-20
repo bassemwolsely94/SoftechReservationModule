@@ -96,8 +96,8 @@ class RiderPayoutRide(models.Model):
                                           verbose_name='أجر المسافة')
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'), verbose_name='أجر الرحلة')
     note = models.CharField(max_length=500, blank=True, verbose_name='ملاحظة')
-    # A double-click / retry of the same branch entry sends the same key → one row.
-    client_ref = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # A double-click / retry of the same branch entry sends the same key (a UUID) → one row.
+    client_ref = models.UUIDField(null=True, blank=True, unique=True)
 
     is_void = models.BooleanField(default=False, db_index=True, verbose_name='ملغاة')
     void_reason = models.TextField(blank=True, verbose_name='سبب الإلغاء')
