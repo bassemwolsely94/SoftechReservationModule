@@ -9,12 +9,13 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { shortageApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
+import { canPickAnyBranch } from '../../utils/branchAccess'
 
 export default function MobileNewShortagePage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = ['admin', 'purchasing', 'call_center'].includes(user?.role)
+  const canPickBranch = canPickAnyBranch(user) || ['purchasing', 'call_center'].includes(user?.role)
 
   const [branch, setBranch] = useState(user?.branch_id ? String(user.branch_id) : '')
   const [title, setTitle]   = useState('')

@@ -23,6 +23,7 @@ import { useQuery } from '@tanstack/react-query'
 import { dashboardApi } from '../api/client'
 import { tint } from '../theme/theme'
 import useAuthStore from '../store/authStore'
+import { canPickAnyBranch } from '../utils/branchAccess'
 import { FALLBACK_POLL_MS, MAIN_SYNC_DOMAINS, useOnFreshnessChange } from '../store/liveStore'
 import { usePermission } from '../hooks/usePermission'
 import GamificationCard from '../components/GamificationCard'
@@ -684,7 +685,7 @@ export default function DashboardPage() {
   // The sync widget reads the summary's own `sync` block; Layout follows sync/status, so a second
   // 30 s poll here was duplicate load (perf Stage 3, audit PERF-10).
 
-  const isAdminOrCC = ['admin', 'call_center', 'purchasing'].includes(user?.role)
+  const isAdminOrCC = canPickAnyBranch(user) || ['call_center', 'purchasing'].includes(user?.role)
 
   const r  = data?.reservations || {}
   const tr = data?.transfers    || {}

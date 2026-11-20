@@ -36,8 +36,8 @@ frontend/src/pages/BatchesPage.jsx::admin,pharmacist,purchasing x2
 frontend/src/pages/BatchesPage.jsx::admin,quality_manager,supervisor x1
 frontend/src/pages/CallCenterAnalyticsPage.jsx::admin,call_center,quality_manager,supervisor x1
 frontend/src/pages/CallCenterPage.jsx::admin,quality_manager,supervisor x1
-frontend/src/pages/DashboardPage.jsx::admin,call_center,purchasing x1
-frontend/src/pages/DemandPage.jsx::admin,call_center,purchasing x1
+frontend/src/pages/DashboardPage.jsx::call_center,purchasing x1
+frontend/src/pages/DemandPage.jsx::call_center,purchasing x1
 frontend/src/pages/ForecastScenarioPage.jsx::admin,purchasing,supervisor x1
 frontend/src/pages/InsightsPage.jsx::admin,purchasing,quality_manager,supervisor x1
 frontend/src/pages/InsightsPage.jsx::admin,supervisor x1
@@ -53,10 +53,10 @@ frontend/src/pages/RecommendationsPage.jsx::admin,supervisor x1
 frontend/src/pages/ReservationsKanban.jsx::call_center x1
 frontend/src/pages/SalespersonBoardPage.jsx::admin,purchasing,supervisor x1
 frontend/src/pages/TargetsPage.jsx::admin,purchasing,supervisor x1
-frontend/src/pages/mobile/MobileNewDemandPage.jsx::admin,call_center x1
+frontend/src/pages/mobile/MobileNewDemandPage.jsx::call_center x1
 frontend/src/pages/mobile/MobileNewReservationPage.jsx::call_center x1
-frontend/src/pages/mobile/MobileNewShortagePage.jsx::admin,call_center,purchasing x1
-frontend/src/pages/mobile/MobileNewTransferPage.jsx::admin,call_center,purchasing x1
-frontend/src/pages/mobile/MobileQAPage.jsx::admin,call_center,quality_manager,supervisor x1
+frontend/src/pages/mobile/MobileNewShortagePage.jsx::call_center,purchasing x1
+frontend/src/pages/mobile/MobileNewTransferPage.jsx::call_center,purchasing x1
+frontend/src/pages/mobile/MobileQAPage.jsx::call_center,quality_manager,supervisor x1
 frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,purchasing,quality_manager,salesperson,supervisor,viewer x1
 frontend/src/pages/mobile/mobileAccess.js::admin,call_center,pharmacist,quality_manager,salesperson,supervisor,viewer x1

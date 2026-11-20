@@ -10,6 +10,7 @@ import BranchSelect from '../components/BranchSelect'
 import BranchMultiSelect from '../components/BranchMultiSelect'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import useAuthStore from '../store/authStore'
+import { canPickAnyBranch } from '../utils/branchAccess'
 import CanDo from '../components/CanDo'
 import { usePermission } from '../hooks/usePermission'
 import ItemSearchWidget from '../components/ItemSearchWidget'
@@ -548,7 +549,7 @@ useEffect(() => {
   return () => clearTimeout(delay)
 }, [searchInput])
 
-  const isCCOrAdmin   = ['admin', 'call_center', 'purchasing'].includes(user?.role)
+  const isCCOrAdmin   = canPickAnyBranch(user) || ['call_center', 'purchasing'].includes(user?.role)
   const userBranchId  = user?.branch_id
 
   const { data: branches = [] } = useQuery({

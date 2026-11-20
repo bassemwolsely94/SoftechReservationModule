@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { qaApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
+import { canPickAnyBranch } from '../../utils/branchAccess'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
 
 function scoreClass(s) {
@@ -23,7 +24,7 @@ export default function MobileQAPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = ['admin', 'quality_manager', 'supervisor', 'call_center'].includes(user?.role)
+  const canPickBranch = canPickAnyBranch(user) || ['quality_manager', 'supervisor', 'call_center'].includes(user?.role)
 
   const [creating, setCreating] = useState(false)
   const [tpl, setTpl]       = useState('')

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, branchesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { canPickAnyBranch } from '../utils/branchAccess'
 import BranchMultiSelect from '../components/BranchMultiSelect'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import CanDo from '../components/CanDo'
@@ -340,7 +341,7 @@ export default function ReservationsKanban() {
   const { user } = useAuthStore()
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const isCCOrAdmin = user?.role === 'admin' || user?.role === 'call_center'
+  const isCCOrAdmin = canPickAnyBranch(user) || user?.role === 'call_center'
 
   const [viewMode, setViewMode] = useState('kanban')   // 'kanban' | 'list'
   // multi-select filters (arrays; none ticked = all) — sent as one comma list, e.g. ?status=pending,available

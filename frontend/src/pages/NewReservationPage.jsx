@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi, branchesApi, itemsApi, configApi, customersApi, missedSalesApi } from '../api/client'
 import useAuthStore from '../store/authStore'
+import { canPickAnyBranch } from '../utils/branchAccess'
 import BranchSelect from '../components/BranchSelect'
 import ItemSearchWidget from '../components/ItemSearchWidget'
 import CustomerSearchWidget from '../components/CustomerSearchWidget'
@@ -229,7 +230,7 @@ export default function NewReservationPage() {
   const navigate    = useNavigate()
   const qc          = useQueryClient()
   const { user }    = useAuthStore()
-  const isCCOrAdmin = user?.role === 'admin' || user?.role === 'call_center'
+  const isCCOrAdmin = canPickAnyBranch(user) || user?.role === 'call_center'
   const fileRef     = useRef()
 
   // ── Form state ──────────────────────────────────────────────────────────────

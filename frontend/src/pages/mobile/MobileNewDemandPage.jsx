@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { branchesApi } from '../../api/client'
 import { queuedPost } from '../../api/offlineQueue'
 import useAuthStore from '../../store/authStore'
+import { canPickAnyBranch } from '../../utils/branchAccess'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import { DEMAND_PRIORITIES, DEMAND_SOURCES } from './demandStatus'
 
@@ -18,7 +19,7 @@ export default function MobileNewDemandPage() {
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
-  const canPickBranch = ['admin', 'call_center'].includes(user?.role)
+  const canPickBranch = canPickAnyBranch(user) || user?.role === 'call_center'
 
   const [phone, setPhone]       = useState('')
   const [name, setName]         = useState('')
