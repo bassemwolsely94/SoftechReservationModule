@@ -9,14 +9,18 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest import mock
 
-from django.test import SimpleTestCase, TestCase
+from django.db import connection
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from apps.hr.attendance import days
 from apps.hr.attendance.days import (
     leave_info, month_totals, punches_for_month, to_stamps, work_date_for,
 )
 from apps.hr.models import (
-    AttendanceDevice, AttendancePunch, Employee, LeaveRequest, LeaveType, Permit,
+    AttendanceDevice, AttendancePunch, Employee, LeaveRequest, LeaveType, LinkedGatesDevice,
+    LinkedGatesPunch, Permit,
 )
 from apps.tests.factories import make_branch, make_user
 
@@ -196,16 +200,111 @@ class QueryHelperTests(TestCase):
         self.punch(self.emp, '2026-10-31', '23:00')     # cannot belong to November
         got = punches_for_month([self.emp.id], 2026, 11)[self.emp.id]
         self.assertEqual(len(got), 2)
-        rows = build_days(got, dt.time(4, 0), None, 2026, 11)
+        rows = days.build_days(got, dt.time(4, 0), None, 2026, 11)
         self.assertEqual(day(rows, '2026-11-30').worked_minutes, 240)
         self.assertEqual(month_totals(rows).days_with_punches, 1)
 
     def test_query_count_is_constant(self):
         for i in range(5):
             self.punch(self.emp, f'2026-11-{i + 1:02d}', '09:00')
-        with self.assertNumQueries(1):
-            for p in punches_for_month([self.emp.id], 2026, 11)[self.emp.id]:
-                p.device.name
+        with self.assertNumQueries(1):          # switch off: machine punches only
+            self.assertEqual(len(punches_for_month([self.emp.id], 2026, 11)[self.emp.id]), 5)
+
+
+class MergedSourcesTests(TestCase):
+    """Machine + Linked Gates punches become one stamp list."""
+
+    def setUp(self):
+        self.dev = AttendanceDevice.objects.create(serial='S1', name='HQ')
+        self.emp = Employee.objects.create(hr_number='3001', name_ar='أحمد')
+        self._n = 0
+
+    def machine(self, emp, date, time):
+        self._n += 1
+        y, m, d = map(int, date.split('-'))
+        h, mi, *s = map(int, time.split(':'))
+        return AttendancePunch.objects.create(
+            device=self.dev, user_code='3001', raw_stamp=2000 + self._n, employee=emp,
+            punch_date=dt.date(y, m, d), punch_time=dt.time(h, mi, *(s or [0])))
+
+    def lg(self, emp, date, time, device_id=None, **kw):
+        self._n += 1
+        y, m, d = map(int, date.split('-'))
+        h, mi, *s = map(int, time.split(':'))
+        at = timezone.make_aware(dt.datetime(y, m, d, h, mi, *(s or [0])))
+        return LinkedGatesPunch.objects.create(
+            lg_check_id=9000 + self._n, enroll_no=1, check_time=at, lg_device_id=device_id,
+            employee=emp, **kw)
+
+    @override_settings(HR_ATTENDANCE_LINKEDGATES_ENABLED=True)
+    def test_same_punch_both_sources_counts_once(self):
+        self.machine(self.emp, '2026-11-10', '08:00:10')
+        self.lg(self.emp, '2026-11-10', '08:00:40')
+        got = punches_for_month([self.emp.id], 2026, 11)[self.emp.id]
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0].sources, frozenset({'machine', 'lg'}))
+        self.assertEqual(got[0].at, dt.datetime(2026, 11, 10, 8, 0, 10))
+
+    @override_settings(HR_ATTENDANCE_LINKEDGATES_ENABLED=True)
+    def test_lg_manual_punch_used(self):
+        self.machine(self.emp, '2026-11-10', '08:00')
+        self.lg(self.emp, '2026-11-10', '16:00', device_id=None)
+        got = punches_for_month([self.emp.id], 2026, 11)[self.emp.id]
+        self.assertEqual([s.machine for s in got], ['HQ', 'يدوي'])
+        r = day(days.build_days(got, dt.time(4, 0), None, 2026, 11), '2026-11-10')
+        self.assertEqual(r.worked_minutes, 480)
+        self.assertFalse(r.needs_review)
+
+    @override_settings(HR_ATTENDANCE_LINKEDGATES_ENABLED=True)
+    def test_machine_name_from_mapped_or_lg_device(self):
+        LinkedGatesDevice.objects.create(lg_device_id=1, name='LG-One', device=self.dev)
+        LinkedGatesDevice.objects.create(lg_device_id=2, name='LG-Two')
+        self.lg(self.emp, '2026-11-10', '08:00', device_id=1)
+        self.lg(self.emp, '2026-11-10', '09:00', device_id=2)
+        self.lg(self.emp, '2026-11-10', '10:00', device_id=77)     # unknown id
+        got = punches_for_month([self.emp.id], 2026, 11)[self.emp.id]
+        self.assertEqual([s.machine for s in got], ['HQ', 'LG-Two', 'يدوي'])
+
+    @override_settings(HR_ATTENDANCE_LINKEDGATES_ENABLED=True)
+    def test_superseded_and_removed_ignored(self):
+        self.lg(self.emp, '2026-11-10', '08:00', superseded_at=timezone.now())
+        self.lg(self.emp, '2026-11-10', '09:00', lg_removed=True)
+        self.lg(self.emp, '2026-11-10', '10:00', flag='bad_date')
+        self.lg(None, '2026-11-10', '11:00')
+        self.lg(self.emp, '2026-11-10', '12:00')
+        got = punches_for_month([self.emp.id], 2026, 11)[self.emp.id]
+        self.assertEqual([s.at.hour for s in got], [12])
+
+    @override_settings(HR_ATTENDANCE_LINKEDGATES_ENABLED=False)
+    def test_switch_off_means_machine_only(self):
+        self.machine(self.emp, '2026-11-10', '08:00')
+        self.lg(self.emp, '2026-11-10', '16:00')
+        got = punches_for_month([self.emp.id], 2026, 11)[self.emp.id]
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0].sources, frozenset({'machine'}))
+        both = punches_for_month([self.emp.id], 2026, 11, sources=('machine', 'lg'))[self.emp.id]
+        self.assertEqual(len(both), 2)
+
+    @override_settings(HR_ATTENDANCE_LINKEDGATES_ENABLED=True)
+    def test_query_count_flat(self):
+        # assert_budget is URL-based (needs a registered endpoint); the contract here is the same:
+        # the helper's query count must not grow with the number of employees.
+        def make(n):
+            emps = [Employee.objects.create(hr_number=f'4{n}{i:03d}', name_ar=f'م{i}') for i in range(n)]
+            for e in emps:
+                self.machine(e, '2026-11-10', '08:00')
+                self.lg(e, '2026-11-10', '16:00')
+            return [e.id for e in emps]
+
+        def count(ids):
+            with CaptureQueriesContext(connection) as ctx:
+                punches_for_month(ids, 2026, 11)
+            return len(ctx)
+
+        one = count(make(1))
+        thirty = count(make(30))
+        self.assertEqual(one, thirty)
+        self.assertLessEqual(thirty, 3)     # machine, devices map, Linked Gates
 
 
 class LeaveInfoTests(TestCase):

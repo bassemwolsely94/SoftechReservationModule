@@ -187,28 +187,63 @@ def month_totals(days) -> MonthTotals:
     )
 
 
-def punches_for_month(employee_ids, year, month, lead_days: int = 0) -> dict:
-    """{employee_id: [AttendancePunch]} for resolved, unflagged punches that can fall in the month's
-    work days. A work date is never later than the punch date, so the window is the month's first
-    day through the day after its last (a 02:00 punch on the 1st of next month still belongs here).
-    Callers pass each list to ``build_days``, which drops anything outside the month. ``lead_days``
-    also reads that many days BEFORE the month, so a session that began last month and ends in this
-    one is not mistaken for a lone stamp."""
-    from apps.hr.models import AttendancePunch
+MANUAL_MACHINE = 'يدوي'     # a Linked Gates punch typed in by hand (no device)
 
+
+def default_sources() -> tuple:
+    """Machine punches always; Linked Gates only while its switch is on."""
+    from django.conf import settings
+    if getattr(settings, 'HR_ATTENDANCE_LINKEDGATES_ENABLED', False):
+        return ('machine', 'lg')
+    return ('machine',)
+
+
+def punches_for_month(employee_ids, year, month, lead_days: int = 0, sources=None) -> dict:
+    """{employee_id: [Stamp]} for resolved, unflagged punches that can fall in the month's work days,
+    merged across sources (120 s fold, sources united). A work date is never later than the punch
+    date, so the window is the month's first day through the day after its last (a 02:00 punch on the
+    1st of next month still belongs here). Callers pass each list to ``build_days``, which drops
+    anything outside the month. ``lead_days`` also reads that many days BEFORE the month, so a
+    session that began last month and ends in this one is not mistaken for a lone stamp.
+    ``sources`` defaults from the Linked Gates switch; Linked Gates rows used are current ones only."""
+    from apps.hr.attendance.sessions import Stamp, merge_stamps
+    from apps.hr.models import AttendancePunch, LinkedGatesDevice, LinkedGatesPunch
+
+    if sources is None:
+        sources = default_sources()
     employee_ids = list(employee_ids)
-    first = datetime.date(year, month, 1)
-    last = datetime.date(year, month, calendar.monthrange(year, month)[1])
-    qs = (AttendancePunch.objects
-          .filter(employee_id__in=employee_ids, flag='',
-                  punch_date__gte=first - datetime.timedelta(days=lead_days), punch_date__lte=last + datetime.timedelta(days=1),
-                  punch_time__isnull=False)
-          .select_related('device')
-          .order_by('punch_date', 'punch_time', 'id'))
-    out: dict = {eid: [] for eid in employee_ids}
-    for p in qs:
-        out[p.employee_id].append(p)
-    return out
+    first = datetime.date(year, month, 1) - datetime.timedelta(days=lead_days)
+    last = datetime.date(year, month, calendar.monthrange(year, month)[1]) + datetime.timedelta(days=1)
+    collected: dict = {eid: [] for eid in employee_ids}
+
+    if 'machine' in sources:
+        qs = (AttendancePunch.objects
+              .filter(employee_id__in=employee_ids, flag='', punch_date__gte=first, punch_date__lte=last,
+                      punch_time__isnull=False)
+              .select_related('device'))
+        for p in qs:
+            for st in to_stamps([p]):
+                collected[p.employee_id].append(st)
+
+    if 'lg' in sources:
+        tz = timezone.get_current_timezone()
+        start = timezone.make_aware(datetime.datetime.combine(first, datetime.time.min), tz)
+        end = timezone.make_aware(datetime.datetime.combine(last + datetime.timedelta(days=1),
+                                                            datetime.time.min), tz)
+        devices = {d.lg_device_id: d for d in LinkedGatesDevice.objects.select_related('device')}
+        qs = LinkedGatesPunch.objects.filter(
+            employee_id__in=employee_ids, superseded_at__isnull=True, lg_removed=False, flag='',
+            check_time__gte=start, check_time__lt=end)
+        for p in qs:
+            dev = devices.get(p.lg_device_id) if p.lg_device_id is not None else None
+            if dev is None:
+                machine = MANUAL_MACHINE
+            else:
+                machine = (dev.device.name if dev.device_id else '') or dev.name or MANUAL_MACHINE
+            at = timezone.localtime(p.check_time, tz).replace(tzinfo=None)
+            collected[p.employee_id].append(Stamp(at=at, machine=machine, sources=frozenset({'lg'})))
+
+    return {eid: merge_stamps(stamps) for eid, stamps in collected.items()}
 
 
 def month_rows(employees, year, month, with_leave=False):
@@ -220,7 +255,7 @@ def month_rows(employees, year, month, with_leave=False):
     info = leave_info(employees, year, month) if with_leave else {}
     out = []
     for e in employees:
-        rows = build_days(to_stamps(punches.get(e.pk, [])), e.day_boundary, e.daily_hours, year, month,
+        rows = build_days(punches.get(e.pk, []), e.day_boundary, e.daily_hours, year, month,
                           info.get(e.pk))
         out.append((e, rows, month_totals(rows)))
     return out

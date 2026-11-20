@@ -260,7 +260,7 @@ def employee_days(request, acc, pk):
     year, mon = _month(request)
     punches = day_engine.punches_for_month([emp.pk], year, mon, lead_days=1).get(emp.pk, [])
     info = day_engine.leave_info([emp], year, mon).get(emp.pk, {})
-    rows = day_engine.build_days(day_engine.to_stamps(punches), emp.day_boundary, emp.daily_hours, year, mon, info)
+    rows = day_engine.build_days(punches, emp.day_boundary, emp.daily_hours, year, mon, info)
     totals = day_engine.month_totals(rows)
     days = [{
         'work_date': d.work_date, 'first_in': d.first_in, 'last_out': d.last_out,
