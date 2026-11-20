@@ -22,6 +22,11 @@ permission was checked too late, or not at all.
 Round 2, R3: detail routes are sent to a REAL record (sweep.seed_detail_paths plants one per
 route through the canary Planter), so a denied role's 404 there is a real refusal, not an id
 nobody created. Baseline lines keep the canonical 987654321 path.
+
+The two modes live in two modules (this one: enforce; test_role_sweep_log.py: log) so CI can
+run them on different shards — each sweep takes ~6 minutes and they used to run back to back
+in one module. Checks that took the union of both modes (crashes, SOFTECH reach, outside
+work) now run per mode, each against its own baseline, which is at least as strict.
 """
 import logging
 
@@ -52,7 +57,10 @@ def seeded_paths(clients, branch):
         logging.disable(previous)
 
 
-class RoleSweepTests(TestCase):
+class SweepSetup:
+    """Shared class setup: the code matrix, one client per role, planted detail records, then
+    one sweep in MODE. Not a TestCase itself, so it is never collected on its own."""
+    MODE = None
 
     @classmethod
     def setUpTestData(cls):
@@ -60,41 +68,35 @@ class RoleSweepTests(TestCase):
         branch = make_branch()
         clients = role_clients(branch)
         cls.seeded = seeded_paths(clients, branch)
-        cls.enforce = sweep('enforce', clients, seeded=cls.seeded)
-        cls.log = sweep('log', clients, seeded=cls.seeded)
+        cls.result = sweep(cls.MODE, clients, seeded=cls.seeded)
 
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
         module_access.clear_cache()      # the seeded matrix is rolled back with the class
 
+    def test_crashes(self):
+        assert_matches_baseline(self, f'role_crashes_{self.MODE}', self.result.crashes)
+
+    def test_denied_roles_never_reach_softech(self):
+        assert_matches_baseline(self, 'role_softech_reach', self.result.softech_reach)
+
+    def test_denied_roles_never_start_outside_work(self):
+        assert_matches_baseline(self, 'role_outside_reach', self.result.outside_reach)
+
+
+class RoleSweepTests(SweepSetup, TestCase):
+    MODE = 'enforce'
+
     def test_sweep_is_not_empty(self):
-        self.assertGreater(self.enforce.classified, 2000)
+        self.assertGreater(self.result.classified, 2000)
 
     def test_detail_routes_get_real_records(self):
         """R3: most detail routes admin could not reach now carry a planted record."""
         self.assertGreater(len(self.seeded), 50)
 
     def test_enforce_mode_leaks(self):
-        assert_matches_baseline(self, 'role_leaks_enforce', self.enforce.leaks)
-
-    def test_log_mode_leaks(self):
-        assert_matches_baseline(self, 'role_leaks_log', self.log.leaks)
+        assert_matches_baseline(self, 'role_leaks_enforce', self.result.leaks)
 
     def test_overblocks(self):
-        assert_matches_baseline(self, 'role_overblocks', self.enforce.overblocks)
-
-    def test_crashes(self):
-        assert_matches_baseline(self, 'role_crashes', self.enforce.crashes | self.log.crashes)
-
-    def test_unproven(self):
-        """Denied role got 404 and so did admin: the check behind it was never reached."""
-        assert_matches_baseline(self, 'role_unproven', self.log.unproven)
-
-    def test_denied_roles_never_reach_softech(self):
-        assert_matches_baseline(self, 'role_softech_reach',
-                                self.enforce.softech_reach | self.log.softech_reach)
-
-    def test_denied_roles_never_start_outside_work(self):
-        assert_matches_baseline(self, 'role_outside_reach',
-                                self.enforce.outside_reach | self.log.outside_reach)
+        assert_matches_baseline(self, 'role_overblocks', self.result.overblocks)

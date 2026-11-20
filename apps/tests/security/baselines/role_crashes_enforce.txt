@@ -1,4 +1,4 @@
-# Owner: Batch 7. Requests that answered 500 or raised, for some role, with SOFTECH and the internet offline.
+# Owner: Batch 7. Requests that answered 500 or raised, for some role, with SOFTECH and the internet offline — enforce mode (test_role_sweep.py). Split from role_crashes.txt on 2026-11-20; role_crashes_log.txt holds the log-mode sweep.
 # R7 (2026-11-05): empty — replication scan answers 503, voucher mark-used fixed (V-1).
 # Round-2 close-out (2026-11-12): the 93 lines R3 found on real records were triaged; 90 fixed
 #   (test_round2_crash_fixes.py): demand actions from the wrong status → 400, insurance client /
