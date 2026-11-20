@@ -1,7 +1,7 @@
 // D-25 / FE-9 — native window.confirm / alert / prompt block the tab (CLAUDE.md rule 11).
 // Converted screens use ConfirmButton / useConfirm (components/InlineConfirm.jsx) and toasts.
-// Every file listed here must stay free of them; add a file once its batch is converted.
-// The count of what is left is printed so the next batch can pick the busiest screens.
+// Batch 7 (2026-11-20) converted the last five, so the whole of src/ must now stay at zero:
+// the last test fails on any new window.confirm / alert / prompt anywhere, not only in this list.
 import { describe, expect, it } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -85,6 +85,10 @@ const CONVERTED = [
   'components/NotificationBell.jsx',
   'components/CustomerLocationsPanel.jsx',
   'components/InlineConfirm.jsx',
+  // batch 7 — the last ones
+  'pages/BatchesPage.jsx',
+  'pages/CashOptimizationPage.jsx',
+  'pages/PricingApprovalsPage.jsx',
 ]
 
 function walk(dir, out = []) {
@@ -123,13 +127,12 @@ describe('native browser dialogs', () => {
     expect(offenders).toEqual([])
   })
 
-  it('reports how many native dialogs are left for later batches', () => {
+  it('no file under src/ calls a native dialog (D-25 finished — the count is a ratchet at zero)', () => {
     const left = walk(SRC)
       .map(p => [relative(SRC, p).replace(/\\/g, '/'), code(readFileSync(p, 'utf8'))])
       .map(([rel, src]) => [rel, (src.match(new RegExp(NATIVE.source, 'g')) || []).length])
       .filter(([, n]) => n > 0)
     const total = left.reduce((s, [, n]) => s + n, 0)
-    console.info(`[D-25] native dialogs left: ${total} in ${left.length} files`)
-    expect(left.some(([rel]) => CONVERTED.includes(rel))).toBe(false)
+    expect(left, `[D-25] native dialogs came back: ${total} in ${left.length} files — use ConfirmButton / useConfirm / confirmBar / notify`).toEqual([])
   })
 })

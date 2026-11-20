@@ -39,6 +39,8 @@ BUDGETS: dict[str, Budget] = {
     'insurance/claims': Budget('list', 10, 'measured 8 on 2026-11-19'),
     'purchasing/metrics': Budget('list', 7, 'measured 5 on 2026-11-19'),
     'purchasing/filter-options': Budget('list', 14, 'measured 12 on 2026-11-19'),
+    'purchasing/aggregated': Budget('list', 9, 'C16 2026-11-20: not measured yet (CI first run); '
+                                               'the cover limit is read once per response, not per row'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'supply/out-here': Budget('report', 16, 'C06 2026-11-20: not measured yet (CI first run); six fixed queries '

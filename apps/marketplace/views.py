@@ -32,6 +32,7 @@ from rest_framework import generics, status
 from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from apps.audit.models import AuditLog
@@ -39,6 +40,7 @@ from apps.branches.models import Branch
 from apps.catalog.wildcard import wq
 from core import branch_scope
 from core.permissions import matrix_permission
+from core.limits import limits_cache
 from core.sort_ordering import explicit_order_by
 
 from . import intake, push, settlement
@@ -510,11 +512,22 @@ _FORBIDDEN = {'detail': 'غير مسموح'}
 _UNPROCESSABLE = {'detail': 'تعذر قبول الطلب'}
 
 
+class WebhookThrottle(AnonRateThrottle):
+    """Per-IP cap on the unauthenticated platform webhook (doc 38 M2 gate): a platform sends one call per
+    order / status change, so 300 a minute leaves room for a busy evening and still stops a flood or a
+    signature-guessing run. Counted before the signature check; fail-closed counters (core/limits.py)."""
+    scope = 'marketplace_webhook'
+    cache = limits_cache
+    rate = '300/minute'
+
+
 class WebhookView(APIView):
     """Inbound platform orders. No staff session: flag on + channel active + non-manual adapter, then the
-    adapter's signature check. Never echoes the payload or credentials; nothing is stored on a failure."""
+    adapter's signature check. Never echoes the payload or credentials; nothing is stored on a failure.
+    Throttled per IP (WebhookThrottle)."""
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [WebhookThrottle]
 
     def post(self, request, channel_code):
         if not enabled():
