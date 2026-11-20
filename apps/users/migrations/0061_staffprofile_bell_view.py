@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='staffprofile',
             name='bell_view',
-            field=models.CharField(choices=[('action', 'يحتاج إجراء'), ('all', 'الكل')], default='action', max_length=10, verbose_name='عرض الجرس'),
+            field=models.CharField(choices=[('action', 'يحتاج إجراء'), ('all', 'الكل')], db_default='action', default='action', max_length=10, verbose_name='عرض الجرس'),
         ),
     ]

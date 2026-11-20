@@ -219,7 +219,7 @@ class StaffProfile(models.Model):
     # C26 / D-19: what the bell opens on — 'action' (يحتاج إجراء, default) or 'all' (الكل).
     # The list of action types lives in apps/notifications/action_items.py.
     bell_view = models.CharField(
-        max_length=10, default='action',
+        max_length=10, default='action', db_default='action',
         choices=[('action', 'يحتاج إجراء'), ('all', 'الكل')],
         verbose_name='عرض الجرس',
     )
