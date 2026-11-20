@@ -206,13 +206,12 @@ class SyncTests(TempTestCase):
         db = FakeDatabase(total=6200)
         self.sync(db).run(FakeUploader())
         db.executed.clear()
-        db.total = 11200
+        db.total = 12400
         uploader = FakeUploader()
         self.sync(db).run(uploader)
-        incremental = [e for e in db.executed if 'EmployeeCheckID > ?' in e[0]
-                       and 'CheckTime' not in e[0]]
+        incremental = [e for e in db.executed if e[0] == ALLOWED_QUERIES['punches_after']]
         self.assertEqual(len(incremental), 3)  # 5000, 1200, then none
-        self.assertEqual(self.cursor()['last_check_id'], 11200)
+        self.assertEqual(self.cursor()['last_check_id'], 12400)
 
     def test_resume_after_failed_batch(self):
         db = FakeDatabase(total=6200)
@@ -306,7 +305,7 @@ class ConfigAndLoopTests(TempTestCase):
             load_config(self.ini('[linkedgates]\nserver = x\n'))
 
     def test_connect_factory_needs_no_pyodbc_until_called(self):
-        connect = collector.make_lg_connect(
+        connect = lg_reader.make_lg_connect(
             {'server': 's', 'database': 'd', 'trusted': True, 'user': '', 'password': ''})
         self.assertTrue(callable(connect))
 

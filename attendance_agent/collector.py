@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .lg_reader import LinkedGatesReader, LinkedGatesSync
+from .lg_reader import LinkedGatesReader, LinkedGatesSync, make_lg_connect
 from .spool import Spool
 from .uploader import Uploader, UploadError
 from .zk_client import ZkClient, ZkError, ZkProtocolError
@@ -66,24 +66,6 @@ def _load_linkedgates(parser):
     else:
         lg['first_load_from'] = None
     return lg
-
-
-def make_lg_connect(lg):
-    """A function that opens a read-only connection to Linked Gates. pyodbc is imported
-    here, so an agent without [linkedgates] never needs it. Nothing about the connection
-    (server, user, password) is logged."""
-    parts = [
-        'DRIVER={ODBC Driver 18 for SQL Server}', f"SERVER={lg['server']}",
-        f"DATABASE={lg['database']}", 'Encrypt=no',
-    ]
-    parts += (['Trusted_Connection=yes'] if lg['trusted']
-              else [f"UID={lg['user']}", f"PWD={lg['password']}"])
-    connection_string = ';'.join(parts)
-
-    def connect():
-        import pyodbc  # lazy: only an agent with [linkedgates] needs it
-        return pyodbc.connect(connection_string, readonly=True, timeout=15)
-    return connect
 
 
 def load_config(path) -> AgentConfig:

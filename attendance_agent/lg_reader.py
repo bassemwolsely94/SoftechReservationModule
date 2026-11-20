@@ -125,6 +125,24 @@ class LinkedGatesReader:
         }
 
 
+def make_lg_connect(lg):
+    """A function that opens a read-only connection to Linked Gates. pyodbc is imported
+    here, so an agent without [linkedgates] never needs it. Nothing about the connection
+    (server, user, password) is logged."""
+    parts = [
+        'DRIVER={ODBC Driver 18 for SQL Server}', f"SERVER={lg['server']}",
+        f"DATABASE={lg['database']}", 'Encrypt=no',
+    ]
+    parts += (['Trusted_Connection=yes'] if lg['trusted']
+              else [f"UID={lg['user']}", f"PWD={lg['password']}"])
+    connection_string = ';'.join(parts)
+
+    def connect():
+        import pyodbc  # lazy: only an agent with [linkedgates] needs it
+        return pyodbc.connect(connection_string, readonly=True, timeout=15)
+    return connect
+
+
 class LinkedGatesSync:
     """Reads new Linked Gates punches and sends them. The cursor file moves forward only
     after the ERP has accepted a batch, so a failed send is read again from the same place."""
