@@ -18,6 +18,8 @@ test.describe('call centre network stock', () => {
     await page.getByPlaceholder('ابحث باسم الصنف أو الكود... (*نجمة للبحث الشامل)').fill('E2E PARA')
     await page.getByText('E2E PARACETAMOL 500MG 20 TAB').first().click()
 
+    // C12: saving needs a reason chip (one tap)
+    await page.locator('[data-tour="callcenter-operator-purpose"]').getByRole('button', { name: /توفر صنف/ }).click()
     const saved = page.waitForResponse(r => /\/api\/callcenter\/calls\/$/.test(r.url()) && r.request().method() === 'POST')
     await page.locator('[data-tour="callcenter-operator-save"]').click()
     expect((await saved).status()).toBe(201)

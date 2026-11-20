@@ -62,6 +62,6 @@ re-measured here (the local coverage run was stopped, see §2). Known thin areas
 | **Property-based** (Wave 4: strip/pack, VAT inclusive, tender split, offers cap done; insurance co-pay + VAT exclusive left) | Edge cases in money/quantity math | Hypothesis on strip→pack `transqty` rounding, tender split, offers cap (≤ line gross), VAT inclusive/exclusive, insurance co-pay | 1.5 days |
 | **Mutation** | Tests that pass even when the rule changes | mutmut on `pos_orders/pricing`, `finance/recon_writer`, `insurance` pricing, `vouchers` eligibility — fix surviving mutants | 2 days |
 | **Resilience** | Behaviour when SOFTECH/PG/Redis drop mid-flow | Fault-injection tests around `get_branch_connection`, commit-reply loss (raise after commit), PG `OperationalError`, channel-layer down | 1.5 days |
-| **State-aware sweeps** | 77 `role_unproven` routes (round 2) | Builder that creates records in the state each route needs | 2 days |
+| **State-aware sweeps** | 77 `role_unproven` routes (round 2) | Builder that creates records in the state each route needs | **Built (Wave 4, 2026-11-20):** `state_builders.py` + regex-group rendering; `role_unproven` 84 → 0, ratchet `UNPROVEN_CEILING` |
 | **Frontend** | Screens without error states, v5 regressions (FE-4/5/6/7) | RTL tests for the shared error state + a lint rule banning `invalidateQueries([` and `keepPreviousData:` | 1 day |
 | **CI time** | Backend 55–70 of 75 min | Shard backend tests (2–3 jobs) or move sweeps nightly | 0.5 day |

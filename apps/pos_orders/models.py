@@ -411,6 +411,14 @@ class MissedSaleSuggestion(models.Model):
     STATUS_CONFIRMED = 'confirmed'
     STATUS_REJECTED  = 'rejected'
     STATUS_EXPIRED   = 'expired'
+    # C28: where the unsold ask was seen. 'call_center' rows come from call items an agent
+    # recorded (missed_sales.detect_call_center_missed_sales, own switch, default OFF).
+    SOURCE_POS         = 'pos'
+    SOURCE_CALL_CENTER = 'call_center'
+    SOURCE_CHOICES = [
+        (SOURCE_POS,         'الكاشير'),
+        (SOURCE_CALL_CENTER, 'الكول سنتر'),
+    ]
     STATUS_CHOICES = [
         (STATUS_NEW,       'جديد'),
         (STATUS_CONFIRMED, 'تم تأكيده كحجز'),
@@ -440,6 +448,13 @@ class MissedSaleSuggestion(models.Model):
     selected_by = models.ForeignKey('users.StaffProfile', null=True, blank=True,
                                     on_delete=models.SET_NULL, related_name='+')
     seen_at    = models.DateTimeField(db_index=True, verbose_name='وقت الاختيار على الكاشير')
+    source     = models.CharField(max_length=12, choices=SOURCE_CHOICES, default=SOURCE_POS,
+                                  db_default=SOURCE_POS,
+                                  db_index=True, verbose_name='المصدر')
+    # C28 idempotency key: one suggestion per call item, ever (UNIQUE)
+    call_item  = models.OneToOneField('callcenter.CallItem', null=True, blank=True,
+                                      on_delete=models.SET_NULL, related_name='missed_sale',
+                                      verbose_name='صنف المكالمة')
 
     status        = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_NEW,
                                      db_index=True)
