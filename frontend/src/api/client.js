@@ -726,6 +726,11 @@ export const qaApi = {
   create:    (data)     => api.post('/qa/inspections/', data),
   update:    (id, data) => api.patch(`/qa/inspections/${id}/`, data),
   submit:    (id, data) => api.post(`/qa/inspections/${id}/submit/`, data),
+  // C31 fridge log
+  fridges:   (params)   => api.get('/qa/fridges/', { params }),
+  createFridge: (data)  => api.post('/qa/fridges/', data),
+  fridgeMonth: (id, month) => api.get(`/qa/fridges/${id}/month/`, { params: { month } }),
+  recordFridgeReading: (data) => api.post('/qa/fridge-readings/', data),
 }
 
 // ── Transfers ─────────────────────────────────────────────────────────────────
