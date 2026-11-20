@@ -1539,6 +1539,7 @@ export const deliveryApi = {
   update:    (id, data)  => api.patch(`/delivery/${id}/`, data),
   summary:   ()          => api.get('/delivery/summary/'),
   dashboard: (params)    => api.get('/delivery/dashboard/', { params }),
+  stuckOrders: ()        => api.get('/delivery/stuck-orders/'),   // C21 read-only
 
   // Lifecycle transitions
   assign:      (id, data) => api.post(`/delivery/${id}/assign/`, data),

@@ -46,6 +46,8 @@ BUDGETS: dict[str, Budget] = {
                                                     'locally (shared PC), CI is the first run'),
     'purchasing/aggregated': Budget('list', 9, 'C16 2026-11-20: not measured yet (CI first run); '
                                                'the cover limit is read once per response, not per row'),
+    'delivery/stuck-orders': Budget('list', 14, 'C21, 2026-11-20: 3 settings + count + one joined page '
+                                                '(+ auth); first measured in CI'),
     # ── reports on screen ────────────────────────────────────────────────────────
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'stockcount/variance-report': Budget('report', 10, 'C14, 2026-11-20: session + snapshots + item costs + one '

@@ -233,3 +233,25 @@ class PurchasingListBudgets(TestCase):
         # the grown items carry 5 effect codes (E0–E4): they must reach the effects list
         assert_budget(self, 'purchasing/filter-options', self.client_, '/api/purchasing/filter-options/',
                       grow=self._metrics, min_rows=5, rows_of=lambda r: len(r.data.get('effects') or []))
+
+
+class DeliveryListBudgets(TestCase):
+    """C21: the stuck-orders board list reads one page of local orders + the stored last run."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_del_admin')
+
+    def _orders(self, n=20):
+        import datetime as _d
+        from django.utils import timezone
+        from apps.delivery.models import DeliveryOrder
+        old = timezone.now() - _d.timedelta(hours=30)
+        for _ in range(n):
+            DeliveryOrder.objects.create(branch=self.branch, customer_name='عميل', ordered_at=old,
+                                         status=DeliveryOrder.STATUS_READY)
+
+    def test_stuck_orders(self):
+        self._orders(2)
+        assert_budget(self, 'delivery/stuck-orders', self.client_, '/api/delivery/stuck-orders/',
+                      grow=self._orders, min_rows=20, rows_of=_count_list)

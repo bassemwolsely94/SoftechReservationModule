@@ -2626,6 +2626,18 @@ def _run_near_expiry_outcomes():
         logger.error('[APScheduler] near-expiry outcomes failed: %s', exc)
 
 
+def _run_delivery_stuck_autoclose():
+    """C21: close delivery orders SOFTECH already delivered/cancelled (SOFTECH read-only). Switch
+    delivery_stuck_autoclose_enabled is OFF by default — then the run only stores the dry-run list."""
+    try:
+        from apps.delivery.stuck_close import run
+        rec = run()
+        logger.info('[APScheduler] delivery stuck-close %s: checked=%s closed=%s cancelled=%s',
+                    rec['mode'], rec['checked'], rec['closed'], rec['cancelled'])
+    except Exception as exc:
+        logger.error('[APScheduler] delivery stuck-close failed: %s', exc)
+
+
 def _run_cash_view_snapshot():
     """P-40: keep this Saturday's 13-week cash view for forecast-vs-actual (local DB only; one per date)."""
     try:
@@ -4095,6 +4107,11 @@ def start_scheduler():
     _scheduler.add_job(
         _run_near_expiry_outcomes, 'cron', hour=6, minute=20, id='near_expiry_outcomes',
         replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=6 * 3600,
+    )
+    # C21 delivery stuck-order close: hourly; SOFTECH read-only; switch off = dry-run list only.
+    _scheduler.add_job(
+        _run_delivery_stuck_autoclose, 'cron', minute=40, id='delivery_stuck_autoclose',
+        replace_existing=True, max_instances=1, coalesce=True, misfire_grace_time=1800,
     )
     # Supplier-portal robot leases (apps/rpa/portal/queue.py): every 5 min, local DB only.
     _scheduler.add_job(
