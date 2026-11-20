@@ -267,13 +267,17 @@ class LinkedGatesSync:
         since = self._now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
             days=REREAD_DAYS
         )
+        since_text = since.replace(microsecond=0).isoformat()
         after = sent = batches = 0
         while batches < MAX_BATCHES_PER_TICK:
             rows = self._reader.read_since(since, after)
+            # Adjacent windows share an edge (this batch's to_id is the next one's from_id), and
+            # the empty final batch has no upper bound, so rows deleted at a batch edge or after
+            # the last batch are still seen by the ERP.
+            window = {'from_id': after, 'to_id': rows.max_id or None, 'since': since_text}
+            uploader.send('lg_punches', {'rows': list(rows), 'reread': True, 'window': window})
             if not rows.max_id:
                 break
-            if rows:
-                uploader.send('lg_punches', {'rows': list(rows), 'reread': True})
             after = rows.max_id
             sent += len(rows)
             batches += 1

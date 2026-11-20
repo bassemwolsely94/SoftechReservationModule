@@ -335,8 +335,13 @@ class SyncTests(TempTestCase):
         later = NOW + timedelta(days=1)
         self.sync(db, now=lambda: later).run(tomorrow)
         rereads = [p for p in tomorrow.of('lg_punches') if p['reread']]
-        self.assertEqual(len(rereads), 1)
+        # the data batch, then an empty final batch with no upper bound (trailing deletions)
+        self.assertEqual(len(rereads), 2)
         self.assertEqual(len(rereads[0]['rows']), 10)
+        since_text = '2026-10-07T00:00:00'
+        self.assertEqual(rereads[0]['window'], {'from_id': 0, 'to_id': 10, 'since': since_text})
+        self.assertEqual(rereads[1]['rows'], [])
+        self.assertEqual(rereads[1]['window'], {'from_id': 10, 'to_id': None, 'since': since_text})
         since = [e[1][0] for e in db.executed if 'CheckTime >= ?' in e[0]][-1]
         self.assertEqual(since, datetime(2026, 11, 21) - timedelta(days=45))
 

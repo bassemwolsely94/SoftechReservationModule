@@ -12,7 +12,7 @@ from django.utils.dateparse import parse_datetime
 
 from apps.hr.models import AttendanceDevice, LinkedGatesDevice, LinkedGatesEmployee, LinkedGatesPunch
 
-from . import resolve
+from . import ingest as ingest_module
 from .ingest import FLAG_BAD_DATE, Malformed, is_bad_date, is_storable_text
 
 MAX_LG_ROWS_PER_REQUEST = 5000
@@ -32,20 +32,22 @@ def _opt_int(value):
     return value
 
 
-def _moment(value, required):
-    """Naive Cairo time from the agent -> aware datetime."""
-    if value is None and not required:
+def _moment(value):
+    """Naive Cairo time from the agent -> aware datetime, or None when it is NULL or unreadable."""
+    if not isinstance(value, str):
         return None
     try:
-        parsed = parse_datetime(value) if isinstance(value, str) else None
+        parsed = parse_datetime(value)
     except ValueError:
-        parsed = None
+        return None
     if parsed is None:
-        raise Malformed('time')
+        return None
     return timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
 
 
 def _clean_row(row):
+    """A usable row, or None when its check_time is NULL or unreadable (the caller counts it as
+    skipped). A wrong JSON type anywhere else breaks the contract: Malformed, whole request."""
     if not isinstance(row, dict):
         raise Malformed('lg row')
     check_id, enroll = row.get('lg_check_id'), row.get('enroll_no')
@@ -54,39 +56,55 @@ def _clean_row(row):
     if not _is_int(enroll) or not _INT_MIN <= enroll <= _INT_MAX:
         raise Malformed('enroll_no')
     mode = row.get('in_out_mode', 0)
+    raw_time = row.get('check_time')
+    if raw_time is not None and not isinstance(raw_time, str):
+        raise Malformed('check_time')
+    check_time = _moment(raw_time)
+    if check_time is None:
+        return None
     return {
         'lg_check_id': check_id, 'enroll_no': enroll,
         'in_out_mode': _opt_int(mode) if mode is not None else 0,
-        'check_time': _moment(row.get('check_time'), True),
+        'check_time': check_time,
         'lg_device_id': _opt_int(row.get('lg_device_id')),
         'created_by_lg': _opt_int(row.get('created_by')),
         'edit_by_lg': _opt_int(row.get('edit_by')),
-        'edit_on_lg': _moment(row.get('edit_on'), False),
+        'edit_on_lg': _moment(row.get('edit_on')),
     }
 
 
 def _same(current, clean) -> bool:
     return (current.check_time == clean['check_time'] and current.enroll_no == clean['enroll_no']
-            and current.lg_device_id == clean['lg_device_id'])
+            and current.lg_device_id == clean['lg_device_id']
+            and current.in_out_mode == clean['in_out_mode'])
 
 
-def _employee_id(enroll_no, cache):
-    if enroll_no not in cache:
-        employee = resolve._employee_for(str(enroll_no))
-        cache[enroll_no] = employee.pk if employee else None
-    return cache[enroll_no]
+def _clean_window(window):
+    """A re-read says which slice of the source it covers: ids above from_id (exclusive) up to
+    to_id (inclusive; None = no upper bound, the final batch) and check times from `since`."""
+    if not isinstance(window, dict):
+        raise Malformed('window')
+    from_id, to_id = window.get('from_id'), window.get('to_id')
+    if not _is_int(from_id) or from_id < 0 or not (to_id is None or (_is_int(to_id) and to_id >= from_id)):
+        raise Malformed('window')
+    since = _moment(window.get('since'))
+    if since is None:
+        raise Malformed('window')
+    return from_id, to_id, since
 
 
-def store_lg_punches(rows, reread, today=None) -> dict:
-    """Store a batch, all or nothing."""
+def store_lg_punches(rows, reread, today=None, window=None) -> dict:
+    """Store a batch, all or nothing. A re-read must carry its window (see _clean_window)."""
     today = today or timezone.localdate()
-    batch = {}
+    bounds = _clean_window(window) if reread else None
+    batch, skipped = {}, 0
     for row in rows:
         clean = _clean_row(row)
+        if clean is None:
+            skipped += 1
+            continue
         batch[clean['lg_check_id']] = clean          # a repeated id inside one batch: the last wins
-    counts = {'new': 0, 'versioned': 0, 'unchanged': 0, 'removed': 0}
-    if not batch:
-        return counts
+    counts = {'new': 0, 'versioned': 0, 'unchanged': 0, 'removed': 0, 'skipped': skipped}
     with transaction.atomic():
         ids = list(batch)
         current = {p.lg_check_id: p for p in
@@ -95,7 +113,7 @@ def store_lg_punches(rows, reread, today=None) -> dict:
         for check_id, version in (LinkedGatesPunch.objects.filter(lg_check_id__in=ids)
                                   .order_by('lg_check_id', 'version').values_list('lg_check_id', 'version')):
             latest[check_id] = version
-        cache, new_rows, supersede, revive = {}, [], [], []
+        new_rows, supersede, revive = [], [], []
         for check_id, clean in batch.items():
             cur = current.get(check_id)
             if cur is not None and _same(cur, clean):
@@ -110,22 +128,24 @@ def store_lg_punches(rows, reread, today=None) -> dict:
                 counts['new'] += 1
             bad = is_bad_date(timezone.localtime(clean['check_time']).date(), today)
             new_rows.append(LinkedGatesPunch(
-                version=latest.get(check_id, 0) + 1, employee_id=_employee_id(clean['enroll_no'], cache),
-                flag=FLAG_BAD_DATE if bad else '', **clean))
-        # Only the two bookkeeping fields are ever bulk-updated; the model guard covers the rest.
+                version=latest.get(check_id, 0) + 1, flag=FLAG_BAD_DATE if bad else '', **clean))
+        # Only bookkeeping fields are ever bulk-updated; the model guard covers the rest.
         if supersede:
             LinkedGatesPunch.objects.filter(pk__in=supersede).update(superseded_at=timezone.now())
         if revive:
             LinkedGatesPunch.objects.filter(pk__in=revive).update(lg_removed=False)
         LinkedGatesPunch.objects.bulk_create(new_rows)
-        if reread:
-            times = [c['check_time'] for c in batch.values()]
+        if bounds is not None:
+            from_id, to_id, since = bounds
             gone = (LinkedGatesPunch.objects
                     .filter(superseded_at__isnull=True, lg_removed=False,
-                            lg_check_id__gte=min(ids), lg_check_id__lte=max(ids),
-                            check_time__gte=min(times), check_time__lte=max(times))
+                            lg_check_id__gt=from_id, check_time__gte=since)
                     .exclude(lg_check_id__in=ids))
+            if to_id is not None:
+                gone = gone.filter(lg_check_id__lte=to_id)
             counts['removed'] = gone.update(lg_removed=True)
+    # The employee link is derived: the shared resolver (employment dates included) sets it.
+    ingest_module._resolve_all({str(c['enroll_no']) for c in batch.values()})
     return counts
 
 

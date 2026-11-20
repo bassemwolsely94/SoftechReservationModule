@@ -748,9 +748,9 @@ class LinkedGatesEmployee(models.Model):
 
 class LinkedGatesPunch(models.Model):
     """One Linked Gates check row, one VERSION of it (an edit there becomes version 2 here).
-    APPEND-ONLY except the two bookkeeping fields: superseded_at (a newer version exists) and
-    lg_removed (the row vanished from the source)."""
-    MUTABLE_FIELDS = frozenset({'superseded_at', 'lg_removed'})
+    APPEND-ONLY except the bookkeeping fields: superseded_at (a newer version exists), lg_removed
+    (the row vanished from the source) and employee (derived link, re-resolved by resolve.py)."""
+    MUTABLE_FIELDS = frozenset({'superseded_at', 'lg_removed', 'employee'})
 
     lg_check_id   = models.BigIntegerField()
     version       = models.PositiveIntegerField(default=1, db_default=1)

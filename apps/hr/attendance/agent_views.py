@@ -133,7 +133,9 @@ class AgentLgPunchesView(AgentLgView):
         if len(rows) > lg_ingest.MAX_LG_ROWS_PER_REQUEST:
             return Response({'detail': 'عدد البصمات أكبر من المسموح'},
                             status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-        return Response(lg_ingest.store_lg_punches(rows, self.body(request).get('reread') is True))
+        body = self.body(request)
+        return Response(lg_ingest.store_lg_punches(
+            rows, body.get('reread') is True, window=body.get('window')))
 
 
 class AgentLgReferenceView(AgentLgView):
