@@ -58,13 +58,17 @@ def board(params, user) -> dict:
     line_qs = _line_qs_for(qs, params)
     rev, rev_ex, cogs, _profit = M.line_expressions()
     agg = {}
-    for doc, sign in (('115', 1), ('30', -1)):
-        for row in (line_qs.filter(purchase__doc_code=doc)
-                    .values('purchase__sales_channel', 'purchase__branch_id').order_by()
-                    .annotate(rev=Sum(rev), rev_ex=Sum(rev_ex), cogs=Sum(cogs))):
-            key = (row['purchase__sales_channel'] or '', row['purchase__branch_id'])
-            a = agg.setdefault(key, _blank())
-            _add(a, {k: Decimal(str(row[k] or 0)) for k in ('rev', 'rev_ex', 'cogs')}, sign)
+    # one grouped query: sales (115) and returns (30) as conditional sums, netted here
+    sale, ret = Q(purchase__doc_code='115'), Q(purchase__doc_code='30')
+    for row in (line_qs.filter(purchase__doc_code__in=('115', '30'))
+                .values('purchase__sales_channel', 'purchase__branch_id').order_by()
+                .annotate(rev_s=Sum(rev, filter=sale), rev_ex_s=Sum(rev_ex, filter=sale),
+                          cogs_s=Sum(cogs, filter=sale), rev_r=Sum(rev, filter=ret),
+                          rev_ex_r=Sum(rev_ex, filter=ret), cogs_r=Sum(cogs, filter=ret))):
+        key = (row['purchase__sales_channel'] or '', row['purchase__branch_id'])
+        a = agg.setdefault(key, _blank())
+        for k in ('rev', 'rev_ex', 'cogs'):
+            a[k] += Decimal(str(row[f'{k}_s'] or 0)) - Decimal(str(row[f'{k}_r'] or 0))
 
     ids = branch_scope.branch_ids(user)
     live = list(Branch.objects.live().order_by('display_order', 'softech_branch_id'))

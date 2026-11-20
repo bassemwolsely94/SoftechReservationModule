@@ -89,5 +89,8 @@ class MarginBoardBudget(TestCase):
 
     def test_margin_board(self):
         self._sales(2)
+        # warm once: the channel-label map (analytics.views, kept per process) and the trusted-network list
+        # are read by the first request in a process only
+        self.assertEqual(self.client_.get('/api/analytics/margin-board/').status_code, 200)
         assert_budget(self, 'analytics/margin-board', self.client_, '/api/analytics/margin-board/',
                       grow=self._sales, min_rows=30, rows_of=lambda r: len(r.data['rows']))
