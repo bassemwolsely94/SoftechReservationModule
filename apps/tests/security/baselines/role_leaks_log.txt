@@ -2,10 +2,9 @@
 # while RBAC_ENFORCEMENT=log (today's production mode). Batch 4 is done when this file is empty.
 # Format: <role> <METHOD> <path>
 
-# reason: Z-4 — settings look-up by key is a READ sent as POST; pharmacist and
-# purchasing hold settings view (the sweep counts every POST as a write)
+# reason: Z-4 — settings look-up by key is a READ sent as POST; pharmacist holds
+# settings view (the sweep counts every POST as a write; purchasing lost settings in the role review 2026-11-20)
 pharmacist POST /api/config/settings/by_key/
-purchasing POST /api/config/settings/by_key/
 
 # ── Round 2, R3: found once the sweep sent real (seeded) records to detail routes ─────────────────────
 # The 182 lines found there were closed on the owner's answers of 2026-11-05 (Q-3, Q-5, Q-7a–e:

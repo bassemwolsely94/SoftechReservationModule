@@ -141,21 +141,9 @@ call_center POST /api/delivery/app/orders/987654321/location/
 delivery GET /api/delivery/app/my-orders/
 delivery GET /api/delivery/app/my-route/
 delivery POST /api/delivery/app/orders/987654321/location/
-pharmacist GET /api/delivery/app/my-orders/
-pharmacist GET /api/delivery/app/my-route/
-pharmacist POST /api/delivery/app/orders/987654321/location/
-purchasing GET /api/delivery/app/my-orders/
-purchasing GET /api/delivery/app/my-route/
-quality_manager GET /api/delivery/app/my-orders/
-quality_manager GET /api/delivery/app/my-route/
-salesperson GET /api/delivery/app/my-orders/
-salesperson GET /api/delivery/app/my-route/
-salesperson POST /api/delivery/app/orders/987654321/location/
 supervisor GET /api/delivery/app/my-orders/
 supervisor GET /api/delivery/app/my-route/
 supervisor POST /api/delivery/app/orders/987654321/location/
-viewer GET /api/delivery/app/my-orders/
-viewer GET /api/delivery/app/my-route/
 
 # reason: Z-11c — delivery assign / routes / dispatch / backfill need assign; drivers do not create
 #   orders, drivers or area fees (DeliveryModulePermission).
@@ -238,6 +226,16 @@ quality_manager GET /api/finance/reconciliation/review/export/
 quality_manager GET /api/finance/reconciliation/unpaid/
 quality_manager GET /api/finance/reconciliation/unpaid/export/
 
+# reason: role review 2026-11-20 — supervisor now holds the reconciliation module (owner, spec table); the
+#   read-only A/P reports and their exports keep their own reader list (_can_read_recon_reports: admin /
+#   pharmacist / accountant), as for purchasing and quality_manager above, until the owner widens it.
+supervisor GET /api/finance/reconciliation/partial/
+supervisor GET /api/finance/reconciliation/partial/export/
+supervisor GET /api/finance/reconciliation/returns-chains/export/
+supervisor GET /api/finance/reconciliation/review/export/
+supervisor GET /api/finance/reconciliation/unpaid/
+supervisor GET /api/finance/reconciliation/unpaid/export/
+
 # reason: Z-11c — follow-up maintenance (dedupe / cleanup / backfill / priority scores / reminders run-now)
 #   are admin batch jobs.
 call_center POST /api/followups/refill-reminders/run/
@@ -296,18 +294,6 @@ salesperson GET /api/dashboard/purchasing/
 salesperson GET /api/dashboard/supply/
 supervisor GET /api/dashboard/purchasing/
 viewer GET /api/dashboard/purchasing/
-
-# reason: Z-11c — OCR corpus statistics are internals for admin / supervisor / purchasing / pharmacist.
-call_center GET /api/vision/corpus-accuracy/
-call_center GET /api/vision/corpus-stats/
-delivery GET /api/vision/corpus-accuracy/
-delivery GET /api/vision/corpus-stats/
-quality_manager GET /api/vision/corpus-accuracy/
-quality_manager GET /api/vision/corpus-stats/
-salesperson GET /api/vision/corpus-accuracy/
-salesperson GET /api/vision/corpus-stats/
-viewer GET /api/vision/corpus-accuracy/
-viewer GET /api/vision/corpus-stats/
 
 # reason: Z-11c — customer merges and loyalty point adjustments are sensitive customer / money data
 #   (merge reviewers, point adjusters).
@@ -369,10 +355,6 @@ purchasing POST /api/recommendations/trigger/
 quality_manager POST /api/recommendations/trigger/
 # reason: Z-3 — reconciliation exports need finance export (pharmacist has view only);
 # the sweep counts any GET as view
-pharmacist GET /api/finance/reconciliation/partial/export/
-pharmacist GET /api/finance/reconciliation/returns-chains/export/
-pharmacist GET /api/finance/reconciliation/review/export/
-pharmacist GET /api/finance/reconciliation/unpaid/export/
 # reason: Z-5a — offers edit lets purchasing past the matrix; the SOFTECH channel A/B writes
 # (posdiscp / specialoffers) stay admin-only inside the view
 purchasing POST /api/offers/987654321/posdiscp-apply/
@@ -485,30 +467,13 @@ pharmacist PUT /api/transits/item-overrides/987654321/
 pharmacist PUT /api/transits/pick-rules/987654321/
 pharmacist PUT /api/transits/pick-zones/987654321/
 
-# reason: owner decision B-1 (2026-10-30) — supplier A/P reconciliation is company-level finance: all-branch roles only; a branch pharmacist keeps the finance grant for their own branch's screens.
-pharmacist GET /api/finance/reconciliation/candidates/
-pharmacist GET /api/finance/reconciliation/candidates/groups/
-pharmacist GET /api/finance/reconciliation/dashboard/
-pharmacist GET /api/finance/reconciliation/exceptions/
-pharmacist GET /api/finance/reconciliation/invoices/
-pharmacist GET /api/finance/reconciliation/invoices/987654321/lines/
-pharmacist GET /api/finance/reconciliation/partial/
-pharmacist GET /api/finance/reconciliation/parties/
-pharmacist GET /api/finance/reconciliation/parties/x/ledger/
-pharmacist GET /api/finance/reconciliation/parties/x/timeline/
-pharmacist GET /api/finance/reconciliation/payments/
-pharmacist GET /api/finance/reconciliation/runs/
-pharmacist GET /api/finance/reconciliation/supplier-options/
-pharmacist GET /api/finance/reconciliation/unpaid/
-pharmacist GET /api/finance/reconciliation/workbench/
-
 # reason: Batch 5 part 2, owner decision B-1 — the branch-contribution (every branch's revenue, COGS,
 #   expenses, contribution margin) and inventory-investment (every branch's capital) boards compare
 #   all branches, so they are for the all-branch roles; branch roles keep their own-branch analytics.
 pharmacist GET /api/analytics/branch-contribution/
 pharmacist GET /api/analytics/inventory-investment/
+salesperson GET /api/analytics/inventory-investment/
 viewer GET /api/analytics/branch-contribution/
-viewer GET /api/analytics/inventory-investment/
 # reason: owner decision B-1 (2026-10-30) — P-40 cash view, P-41 contract receivables and P-42 supplier terms are company-level
 #   finance (recon_views._company_only): all-branch roles only; finance exports need the finance export grant (Z-3).
 pharmacist GET /api/finance/receivables/export/
@@ -530,28 +495,6 @@ pharmacist GET /api/finance/cash-view/fixed-outflows/
 pharmacist GET /api/finance/cash-view/lines/x/
 pharmacist GET /api/finance/cash-view/opening-balance/
 quality_manager GET /api/finance/cash-view/export/
-
-# reason: owner answer Q-1 (2026-11-05): trusted networks and the zone-policy grid stay admin only. Security N1 — the trusted-network list decides who counts as "inside the company"; it is
-#   admin only (IsAdminRole) like the rest of the access settings, even for roles that can open settings.
-pharmacist GET /api/access/networks/
-pharmacist GET /api/access/networks/987654321/
-purchasing GET /api/access/networks/
-purchasing GET /api/access/networks/987654321/
-
-# reason: security N2 — the device registry (approve / block / retire a browser) is admin only
-#   (IsAdminRole, §7.2 owner decision) even for roles that can open settings.
-pharmacist GET /api/access/devices/
-pharmacist GET /api/access/devices/987654321/
-purchasing GET /api/access/devices/
-purchasing GET /api/access/devices/987654321/
-# reason: owner answer Q-1 (2026-11-05), security N3 — the zone policy grid (role x zone) is admin only (IsAdminRole, same as the device
-#   registry), even for roles that can open settings.
-pharmacist GET /api/access/zone-policies/
-pharmacist GET /api/access/zone-policies/987654321/
-pharmacist GET /api/access/zone-policies/choices/
-purchasing GET /api/access/zone-policies/
-purchasing GET /api/access/zone-policies/987654321/
-purchasing GET /api/access/zone-policies/choices/
 
 # reason: owner 2026-11-01 — disposal status changes are mapped to the expiry screen (catalog view) so
 #   supervisor / quality manager reach them; the view's gate then admits only admin / quality manager /
@@ -763,10 +706,7 @@ supervisor POST /api/rpa/screens/x/
 # reason: UAT W2 (owner 2026-11-19, per-screen split) — the salesperson board (each rep's sales against
 #   target) is for the analysts who set the targets (forecasting ANALYST_ROLES: admin, supervisor,
 #   purchasing), reads too, as its menu entry; analytics view alone is not enough.
-call_center GET /api/forecasting/salesperson-board/
-pharmacist GET /api/forecasting/salesperson-board/
 quality_manager GET /api/forecasting/salesperson-board/
-viewer GET /api/forecasting/salesperson-board/
 
 # reason: UAT W2 (owner 2026-11-19, per-screen split) — branch QA inspections only for roles the registry
 #   marks qa_inspections (admin, pharmacist, supervisor, quality manager); every role holds hr for its own

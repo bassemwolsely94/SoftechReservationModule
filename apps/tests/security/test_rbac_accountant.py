@@ -34,7 +34,10 @@ class AccountantMatrixTests(TestCase):
         # tax_invoicing: the accountant reviews tax documents, sending stays `finalize` (owner's tax
         # invoicing brief 2026-11-07; the grant itself is on the open list in doc 36)
         self.assertEqual({m: a for m, a in PERMISSIONS['accountant'].items() if a},
-                         {**DECIDED, 'hr': {'view', 'create'}, 'tax_invoicing': {'view', 'create', 'edit', 'approve'}})
+                         {**DECIDED, 'hr': {'view', 'create'}, 'tax_invoicing': {'view', 'create', 'edit', 'approve'},
+                          # role review 2026-11-20: supplier A/P reconciliation split out of finance with the
+                          # accountant's finance grant copied (users 0061)
+                          'reconciliation': {'view', 'export'}})
 
     def test_only_admin_and_accountant_hold_ledger(self):
         holders = {r for r, mods in PERMISSIONS.items() if mods.get('ledger')}
@@ -48,11 +51,13 @@ class AccountantMatrixTests(TestCase):
         # crews: users 0057 seeds an explicit denial row for every role but admin;
         # rpa: users 0058 seeds an explicit row for every role and action, accountant denied;
         # marketplace: users 0059 does the same;
-        # alerts: users 0060 seeds admin + supervisor grants and a denial row for every other role).
+        # alerts: users 0060 seeds admin + supervisor grants and a denial row for every other role;
+        # the ten role-review modules: users 0061 seeds a row for every role and action).
         later = importlib.import_module('apps.users.migrations.0055_data_health_module')
         self.assertIn('accountant', later.ROLES)
-        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing', 'crews', 'rpa', 'marketplace', 'alerts'},
-                         set(ALL_MODULES))
+        from apps.users.management.commands.seed_permissions import ROLE_REVIEW_MODULES
+        self.assertEqual(set(mig.MODULES) | {'hr_attendance', 'data_health', 'tax_invoicing', 'crews', 'rpa', 'marketplace', 'alerts'}
+                         | set(ROLE_REVIEW_MODULES), set(ALL_MODULES))
         from apps.users.models import RoleModuleAccess
         self.assertEqual(RoleModuleAccess.objects.filter(role='accountant', module='tax_invoicing').count(), len(ALL_ACTIONS))
         self.assertEqual(mig.ACTIONS, ALL_ACTIONS)
@@ -81,7 +86,8 @@ class AccountantEnforcedInLogModeTests(TestCase):
 
     def test_ledger_write_needs_the_ledger_grant_not_finance(self):
         self.assertEqual(module_access.required('/api/finance/gl/entries/', 'POST')[0], 'ledger')
-        self.assertEqual(module_access.required('/api/finance/reconciliation/unpaid/', 'GET')[0], 'finance')
+        # reconciliation is its own module since the role review 2026-11-20 (accountant: view + export)
+        self.assertEqual(module_access.required('/api/finance/reconciliation/unpaid/', 'GET')[0], 'reconciliation')
         # each write needs exactly the view's grant: accountant holds create/approve, not edit
         req = module_access.required
         self.assertEqual(req('/api/finance/gl/entries/', 'POST'), ('ledger', ('create',)))

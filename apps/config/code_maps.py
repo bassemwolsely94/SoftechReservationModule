@@ -35,7 +35,8 @@ from apps.forecasting import channels
 from apps.forecasting.models import ChannelBucketMap
 from core.permissions import matrix_permission
 
-SETTINGS = matrix_permission('settings')     # GET → view · PATCH → edit
+# GET → view · PATCH → edit, on the code_maps module (role review 2026-11-20; was settings)
+SETTINGS = matrix_permission('code_maps')
 SALES_WINDOW_DAYS = 90
 
 _GROUP_ERR = {'invalid_choice': 'مجموعة غير معروفة.', 'null': 'المجموعة مطلوبة.',

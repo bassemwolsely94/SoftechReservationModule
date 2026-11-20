@@ -14,17 +14,12 @@ from .models import OcrSample
 from core.permissions import RouteModulePermission  # round 2, D6
 
 
-def _staff(user):
-    return getattr(user, 'staff_profile', None)
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, RouteModulePermission])
 def corpus_stats(request):
-    """Corpus size, module / engine mix, media split, and label rate."""
-    sp = _staff(request.user)
-    if not sp or sp.role not in ('admin', 'supervisor', 'purchasing', 'pharmacist'):
-        return Response({'detail': 'غير مصرّح.'}, status=403)
+    """Corpus size, module / engine mix, media split, and label rate. Who: the matrix's
+    catalog_tools view (RouteModulePermission asks it; role review 2026-11-20 dropped the
+    admin / supervisor / purchasing / pharmacist list here)."""
 
     qs = OcrSample.objects.all()
     total = qs.count()
@@ -58,10 +53,8 @@ def corpus_accuracy(request):
     In-house vs Gemini: over recent LABELLED samples that ran engines in parallel, how
     many human-confirmed items did each engine's readings resolve to (via the catalog)?
     Per-engine recall of the ground truth — the signal for when to trust the in-house path.
+    Who: catalog_tools view, as corpus_stats.
     """
-    sp = _staff(request.user)
-    if not sp or sp.role not in ('admin', 'supervisor', 'purchasing', 'pharmacist'):
-        return Response({'detail': 'غير مصرّح.'}, status=403)
 
     from apps.shortage.matching import find_best_matches
     samples = list(OcrSample.objects.exclude(confirmations=[]).exclude(engine_readings={})

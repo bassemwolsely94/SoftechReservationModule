@@ -39,6 +39,9 @@ from rest_framework.decorators import api_view, permission_classes
 from core.permissions import matrix_permission
 
 ANALYTICS = matrix_permission('analytics')     # Batch 4, Z-9a — was any logged-in user
+# The inventory dashboard's own reports (role review 2026-11-20): the stock module, not analytics.
+# filter-options stays on analytics — the sales / performance dashboards read it too.
+STOCK = matrix_permission('stock')
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -1430,7 +1433,7 @@ def performance_analytics(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, ANALYTICS])
+@permission_classes([IsAuthenticated, STOCK])
 def inventory_analytics(request):
     """
     GET /api/analytics/inventory/
@@ -1959,7 +1962,7 @@ def branch_contribution(request):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, ANALYTICS])
+@permission_classes([IsAuthenticated, STOCK])
 def inventory_investment(request):
     """
     GET /api/analytics/inventory-investment/

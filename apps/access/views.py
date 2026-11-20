@@ -1,5 +1,6 @@
 """
-«من أين أتصل؟» (whoami) and the admin-only trusted-networks API (security N1, log only).
+«من أين أتصل؟» (whoami) and the trusted-networks / devices / zone-policy API (security N1, log only;
+the access_control matrix module, admin only as seeded).
 """
 from django.db import transaction
 from django.db.models import Case, IntegerField, Prefetch, Value, When
@@ -13,7 +14,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from core.limits import limits_cache
 
 from apps.audit.models import AuditLog
-from apps.users.permissions import IsAdminRole
+from core.permissions import matrix_permission
 from core.multi_filter import filter_in, multi_values
 
 from . import devices as dev_api
@@ -23,6 +24,13 @@ from .serializers import DeviceSerializer, TrustedNetworkSerializer, ZonePolicyS
 from .zones import ZONE_LABELS
 
 _AUDITED = ('name', 'cidr', 'kind', 'branch_id', 'is_active', 'notes')
+
+# The access_control matrix module (role review 2026-11-20; was IsAdminRole — only admin holds it as
+# seeded): GET view, POST create, PATCH / PUT edit, DELETE delete; approving / blocking / retiring a
+# device is an approval.
+ACCESS_CONTROL = matrix_permission('access_control')
+DEVICE_ACCESS = matrix_permission('access_control', actions={
+    'approve': ('approve',), 'block': ('approve',), 'retire': ('approve',), 'bulk_approve': ('approve',)})
 
 
 class WhoamiThrottle(SimpleRateThrottle):
@@ -121,7 +129,7 @@ def _snapshot(tn):
 
 class TrustedNetworkViewSet(viewsets.ModelViewSet):
     serializer_class = TrustedNetworkSerializer
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, ACCESS_CONTROL]
     pagination_class = None
     queryset = TrustedNetwork.objects.select_related('branch').order_by('name', 'id')
 
@@ -151,7 +159,7 @@ class DeviceViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
     """Admin device registry (N2). No create, no delete: a deleted row would revive its tokens
     (unknown device ids count as not revoked), so devices are retired instead."""
     serializer_class = DeviceSerializer
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, DEVICE_ACCESS]
     pagination_class = None
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
@@ -243,7 +251,7 @@ class ZonePolicyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
     """«سياسة الشبكات» (N3): the role x zone grid. Edit only: rows are seeded, never created or
     deleted here, and PUT is not offered."""
     serializer_class = ZonePolicySerializer
-    permission_classes = [IsAuthenticated, IsAdminRole]
+    permission_classes = [IsAuthenticated, ACCESS_CONTROL]
     pagination_class = None
     http_method_names = ['get', 'patch', 'head', 'options']
     queryset = ZonePolicy.objects.select_related('updated_by__user').order_by('role', 'zone')
