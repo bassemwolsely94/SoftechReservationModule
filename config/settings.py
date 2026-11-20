@@ -1219,6 +1219,10 @@ PUBLIC_MIN_FILL_SECONDS = config('PUBLIC_MIN_FILL_SECONDS', default=3, cast=int)
 PUBLIC_PHONE_DAILY_MAX  = config('PUBLIC_PHONE_DAILY_MAX', default=3, cast=int)   # portal sign-in link, per phone, Cairo day
 PUBLIC_NOTIFY_DAILY_MAX = config('PUBLIC_NOTIFY_DAILY_MAX', default=10, cast=int)  # /notify (shelf QR), per phone, Cairo day
 SLOW_REQUEST_MS = config('SLOW_REQUEST_MS', default=1000, cast=int)
+# SOFTECH delta sync (doc 40 §3.2), read-side switches: off | shadow (on is not built yet: it needs 7 days
+# of SHADOW with 0 misses and the owner's sign-off, S2). off = today's full read only. shadow = the full read
+# still writes; a small "changed since the watermark" read runs too and is only compared (apps/sync/delta.py).
+SYNC_DELTA_STOCK = config('SYNC_DELTA_STOCK', default='off')
 # Performance Stage 2 (design §10): statement timeout for WEB requests only (request threads of
 # the Daphne processes, both the default and audit_log connections). The scheduler, management
 # commands and background threads (PIC export, OCR) never get it. Ships OFF; switch on only after

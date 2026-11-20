@@ -167,6 +167,15 @@ QUERY_STOCK = """
     FROM SOFTECHDB9.dbo.stkbal sb WHERE sb.nowqty > 0
 """
 
+# Delta read (doc 40 §4.1): every stock row stamped since the watermark (minus the overlap), WITHOUT the
+# nowqty > 0 filter so a row that sold out arrives as 0. The stamp is bound as text 'YYYYMMDD HH:MM:SS'
+# (unseparated ISO date, which Sybase converts the same way under every dateformat setting).
+QUERY_STOCK_DELTA = """
+    SELECT sb.itemcode, sb.branchcode, sb.storecode, sb.nowqty,
+           sb.monthlyqty, sb.onorderqty, sb.modif_lastupdate
+    FROM SOFTECHDB9.dbo.stkbal sb WHERE sb.modif_lastupdate >= convert(datetime, ?)
+"""
+
 # ── PERSON TYPES — lookup table ───────────────────────────────────────────────
 # ptcode is the person-class code (e.g. '01'=عميل, '02'=مورد, '03'=مصنع …).
 # ptdescr = Arabic name, ptedescr = English name.
