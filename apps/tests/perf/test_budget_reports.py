@@ -87,5 +87,7 @@ class DiscountPolicyPreviewBudget(TestCase):
 
     def test_discount_policy_preview(self):
         self._lines(2)
+        # warm once: the first request fills per-process caches (2 queries) that are not per-row work
+        self.client_.get('/api/stock-audit/discount-policy/')
         assert_budget(self, 'stock-audit/discount-policy', self.client_, '/api/stock-audit/discount-policy/',
                       grow=self._lines, min_rows=20, rows_of=lambda r: r.data['breach_lines'])
