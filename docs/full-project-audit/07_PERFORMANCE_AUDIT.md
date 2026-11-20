@@ -452,3 +452,30 @@ many rows; ceiling = measured + 2 (`apps/tests/perf/budgets.py`).
 
 Pending the owner's after-closing restart (`docs/deploy/2026-11-office-pg-query-stats.md`, from the
 Stage 1 ranking/stats PR). Then: `manage.py perf_top_queries --limit 20`.
+
+### 6.4 Query budgets after Stages 3–5 (2026-11-20)
+
+Same harness, now reloading the signed-in user before each call (so counts match a real JWT request:
+about +1 query versus §6.2) and checking the ceiling against the dearer of the two calls.
+First call → call after growing the rows.
+
+| Route | Kind | Queries | vs §6.2 |
+|---|---|---:|---|
+| `sync/freshness` | poll | 6 → 6 | 47 → 6 |
+| `dashboard/summary` | poll | 12 → 12 | 34 → 12 (stock alerts now exercised) |
+| `notifications/`, `category-counts`, `sync/status` | poll | 3 | +1 (user reload) |
+| `reservations` | list | 10 → 9 | first call seeds one setting |
+| `customers`, `customers?search` | list | 8 | |
+| `items?search` | list | 6 | |
+| `search/universal` | list | 19 | now grows all four groups |
+| `supply/cases`, `purchasing/metrics` | list | 6 | |
+| `pos-orders` | list | 8 | |
+| `insurance/claims` | list | 9 | |
+| `purchasing/filter-options` | list | 13 | row check on effects added |
+| `incentives/targets` | report | 9 → 9 | was 12 → 52 (N+1 fixed) |
+| `batches/stock-expiry/summary` | report | 5 | 33 → 5 |
+| `audit/screen-view` | track | 4 → 3 | the de-dup insert is on the first call; ceiling checks it |
+| `export-jobs/<id>` | poll | 4 | Stage 4 |
+
+`SLACK` (allowed difference between the two calls) is now 1. §6.1 p50 is the upper median; rows with
+n < 5 are anecdotal.
