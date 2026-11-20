@@ -255,9 +255,11 @@ class ReservationViewSet(viewsets.ModelViewSet):
         missed.decided_by, missed.decided_at = staff, timezone.now()
         missed.save(update_fields=['status', 'reservation', 'decided_by', 'decided_at'])
         reservation = Reservation.objects.get(pk=reservation_id)
+        seen = ('طُلب في مكالمة' if missed.source == MissedSaleSuggestion.SOURCE_CALL_CENTER
+                else 'اختير على الكاشير')
         log_activity(reservation=reservation, activity_type='note', staff=staff,
                      message=f'أُنشئ من المبيعات الفائتة #{missed.pk} '
-                             f'(اختير على الكاشير {timezone.localtime(missed.seen_at):%Y-%m-%d %H:%M})')
+                             f'({seen} {timezone.localtime(missed.seen_at):%Y-%m-%d %H:%M})')
         AuditLog.log('missed_sale_confirmed', user=staff, obj=missed, request=request,
                      changes={'status': ['new', 'confirmed']},
                      new_data={'reservation': reservation_id})

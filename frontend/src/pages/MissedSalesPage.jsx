@@ -1,20 +1,25 @@
 /**
  * MissedSalesPage — «مبيعات فائتة» (Project 3).
  *
- * Items a KNOWN customer had on our POS cart but did not buy. Suggestions only: «تأكيد كحجز»
+ * Items a KNOWN customer had on our POS cart — or asked for on a call-centre call (C28, own
+ * switch) — but did not buy. Suggestions only: «تأكيد كحجز»
  * opens the normal new-reservation form prefilled (the server confirms the suggestion when the
  * reservation is saved); «رفض» needs a reason. Branch staff see their branch; call center and
  * management see all. Server decides everything — this page only shows and sends.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { missedSalesApi } from '../api/client'
 import DataFreshnessBar from '../components/DataFreshnessBar'
+import StockLookupDrawer from '../components/StockLookupDrawer'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import useHelpTab from '../help/useHelpTab'
+import useGridKeyboard, { GRID_KEYS_HINT } from '../hooks/useGridKeyboard'
+import BulkResultNote from '../components/BulkResultNote'
+import { keepFailedTicked, runEach } from '../utils/bulkRun'
 
 const STATUS_TABS = [
   { key: 'new',       label: 'جديدة' },
@@ -28,6 +33,11 @@ const REASONS = [
   { value: 'wrong_item',       label: 'صنف خطأ / تصحيح كاشير' },
   { value: 'bought_elsewhere', label: 'اشتراه من مكان آخر' },
   { value: 'other',            label: 'سبب آخر' },
+]
+const SOURCES = [
+  { key: '',            label: 'كل المصادر' },
+  { key: 'pos',         label: '🧾 الكاشير' },
+  { key: 'call_center', label: '📞 الكول سنتر' },
 ]
 const SORTABLE = ['seen_at', 'value', 'qty', 'item_name', 'customer__name', 'branch__name', 'decided_at']
 
@@ -67,6 +77,44 @@ function RejectRow({ row, onDone }) {
   )
 }
 
+// C24: reject several «new» rows with one reason. Each row still goes through POST …/<id>/reject/
+// (permission, branch scope and "already decided" are checked per row and audited per row).
+export const canBulkReject = (count, reason, note) =>
+  count > 0 && !!reason && (reason !== 'other' || !!(note || '').trim())
+
+function BulkRejectBar({ rows, onDone }) {
+  const [reason, setReason] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit() {
+    if (!canBulkReject(rows.length, reason, note) || busy) return
+    setBusy(true)
+    try {
+      const res = await runEach(rows, r => missedSalesApi.reject(r.id, reason, note))
+      if (!res.failed.length) { setReason(''); setNote('') }
+      onDone(res)
+    } finally { setBusy(false) }
+  }
+  return (
+    <div data-tour="missed-sales-bulk" data-testid="missed-sales-bulk-bar"
+         className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm">
+      <span className="text-gray-600 dark:text-gray-300">المحدد: <b>{rows.length}</b></span>
+      <select value={reason} onChange={e => setReason(e.target.value)} disabled={busy} aria-label="سبب الرفض"
+              className="input-field text-sm py-1 w-auto">
+        <option value="">— سبب الرفض —</option>
+        {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+      </select>
+      <input value={note} onChange={e => setNote(e.target.value)} maxLength={255} disabled={busy}
+             placeholder={reason === 'other' ? 'اكتب السبب (مطلوب)' : 'ملاحظة (اختياري)'}
+             className="input-field text-sm py-1 flex-1 min-w-[10rem]" />
+      <button type="button" onClick={submit} disabled={busy || !canBulkReject(rows.length, reason, note)}
+              className="btn-secondary text-sm py-1 disabled:opacity-50">
+        {busy ? 'جاري…' : `رفض المحدد (${rows.length})`}
+      </button>
+    </div>
+  )
+}
+
 export default function MissedSalesPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -74,17 +122,36 @@ export default function MissedSalesPage() {
   const [ordering, setOrdering] = useState('-seen_at')
   const [page, setPage] = useState(1)
   const [rejecting, setRejecting] = useState(null)
+  const [source, setSource] = useState('')
+  const [stockFor, setStockFor] = useState(null)   // C28: «📍» network stock for a row
   useHelpTab(status)
   const { headerProps } = useServerSort(ordering, o => { setOrdering(o); setPage(1) },
                                         { allowed: SORTABLE, defaultOrdering: '-seen_at' })
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['missed-sales', status, ordering, page],
-    queryFn: () => missedSalesApi.list({ status, ordering, page }).then(r => r.data),
+    queryKey: ['missed-sales', status, ordering, page, source],
+    queryFn: () => missedSalesApi.list({ status, ordering, page, ...(source ? { source } : {}) }).then(r => r.data),
     placeholderData: keepPreviousData,
   })
   const rows = data?.results || []
   const disabled = error?.response?.status === 503
+  const isNew = status === 'new'
+  const [ticked, setTicked] = useState({})
+  const [bulkResult, setBulkResult] = useState(null)
+  useEffect(() => { setTicked({}); setBulkResult(null) }, [status, page, ordering])
+  const toggle = r => r.status === 'new' && setTicked(t => ({ ...t, [r.id]: !t[r.id] }))
+  const newRows = rows.filter(r => r.status === 'new')
+  const tickedRows = newRows.filter(r => ticked[r.id])
+  const allTicked = !!newRows.length && tickedRows.length === newRows.length
+  const tickAll = () => setTicked(allTicked ? {} : Object.fromEntries(newRows.map(r => [r.id, true])))
+  const kb = useGridKeyboard({ rows: isNew ? rows : [], getKey: r => r.id, onToggle: toggle, onSelectAll: tickAll,
+                               enabled: isNew && rejecting == null })
+  const labelOf = id => rows.find(r => r.id === id)?.item_name || `#${id}`
+  function afterBulk(res) {
+    setBulkResult(res)
+    setTicked(keepFailedTicked(res))
+    qc.invalidateQueries({ queryKey: ['missed-sales'] })
+  }
 
   function afterReject() {
     setRejecting(null)
@@ -97,7 +164,7 @@ export default function MissedSalesPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">مبيعات فائتة</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            أصناف اختارها عميل معروف على الكاشير ولم يشترها. أكّد الطلب الحقيقي كحجز، أو ارفضه مع السبب.
+            أصناف اختارها عميل معروف على الكاشير أو طلبها في مكالمة ولم يشترها. أكّد الطلب الحقيقي كحجز، أو ارفضه مع السبب.
           </p>
         </div>
         <button data-tour="missed-sales-refresh" type="button" onClick={() => refetch()} disabled={isFetching}
@@ -117,6 +184,11 @@ export default function MissedSalesPage() {
             {t.label}
           </button>
         ))}
+        <select data-tour="missed-sales-source" aria-label="المصدر" value={source}
+                onChange={e => { setSource(e.target.value); setPage(1); setRejecting(null) }}
+                className="input-field text-sm py-1.5 w-auto mr-auto">
+          {SOURCES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
       </div>
 
       {disabled && (
@@ -131,11 +203,18 @@ export default function MissedSalesPage() {
       )}
       {isLoading && <div className="text-center py-8 text-gray-400">جاري التحميل…</div>}
 
+      <BulkResultNote result={bulkResult} verb="تم رفض" labelOf={labelOf} onClose={() => setBulkResult(null)}
+                      testId="missed-sales-bulk-result" />
+      {isNew && tickedRows.length > 0 && <BulkRejectBar rows={tickedRows} onDone={afterBulk} />}
+
       {!isLoading && !isError && (
-        <div data-tour="missed-sales-table" className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <div data-tour="missed-sales-table" {...(isNew ? kb.containerProps : {})}
+             className={`overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 ${isNew ? kb.containerProps.className : ''}`}>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-right">
               <tr>
+                {isNew && <th className="px-2 py-2 w-8"><input type="checkbox" checked={allTicked} onChange={tickAll}
+                                                              disabled={!newRows.length} title="تحديد الكل" aria-label="تحديد الكل" /></th>}
                 <SortTh className="px-3 py-2" {...headerProps('seen_at', 'date')}>الوقت</SortTh>
                 <SortTh className="px-3 py-2" {...headerProps('customer__name')}>العميل</SortTh>
                 <SortTh className="px-3 py-2" {...headerProps('item_name')}>الصنف</SortTh>
@@ -148,22 +227,39 @@ export default function MissedSalesPage() {
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">لا توجد اقتراحات هنا</td></tr>
+                <tr><td colSpan={isNew ? 9 : 8} className="px-3 py-10 text-center text-gray-400">لا توجد اقتراحات هنا</td></tr>
               )}
-              {rows.map(r => (
-                <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800 align-top">
+              {rows.map(r => {
+                const rp = isNew ? kb.rowProps(r) : {}
+                return (
+                <tr key={r.id} {...rp} className={`border-t border-gray-100 dark:border-gray-800 align-top ${ticked[r.id] ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''} ${rp.className || ''}`}>
+                  {isNew && (
+                    <td className="px-2 py-2">
+                      <input type="checkbox" checked={!!ticked[r.id]} disabled={r.status !== 'new'} onChange={() => toggle(r)}
+                             aria-label="تحديد" />
+                    </td>
+                  )}
                   <td className="px-3 py-2 whitespace-nowrap">{when(r.seen_at)}
+                    {r.source === 'call_center' && (
+                      <div className="text-xs text-indigo-700 dark:text-indigo-300">📞 مكالمة #{r.call_log}</div>
+                    )}
                     {r.selected_by_name && <div className="text-xs text-gray-400">{r.selected_by_name}</div>}</td>
                   <td className="px-3 py-2">
                     <div className="font-medium text-gray-900 dark:text-gray-100">{r.customer_name}</div>
                     <div className="text-xs text-gray-400 ltr text-right">{r.customer_phone} · {r.customer_pic}</div>
                   </td>
-                  <td className="px-3 py-2">{r.item_name}<div className="text-xs text-gray-400">{r.item_code}</div></td>
+                  <td className="px-3 py-2">{r.item_name}
+                    <div className="text-xs text-gray-400 flex items-center gap-2">{r.item_code}
+                      {r.status === 'new' && r.item && (
+                        <button data-tour="missed-sales-stock" type="button" title="رصيد الصنف في كل الفروع"
+                                onClick={() => setStockFor(r)} className="text-brand-700 hover:underline">📍 الفروع</button>
+                      )}
+                    </div></td>
                   <td className="px-3 py-2">{Number(r.qty)}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{money(r.value)}</td>
                   <td className="px-3 py-2">{r.branch_name}</td>
                   <td className="px-3 py-2 text-xs text-gray-500 max-w-[14rem]">
-                    {r.bought_in_cart?.length ? r.bought_in_cart.join('، ') : '—'}
+                    {r.source === 'call_center' ? 'طلب في مكالمة' : (r.bought_in_cart?.length ? r.bought_in_cart.join('، ') : '—')}
                   </td>
                   <td className="px-3 py-2 min-w-[12rem]">
                     {r.status === 'new' ? (
@@ -191,10 +287,27 @@ export default function MissedSalesPage() {
                     )}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {isNew && rows.length > 0 && <p className="text-xs text-gray-400">{GRID_KEYS_HINT.replace(' · Enter تأكيد', '').replace(' · M مطابقة', '')}</p>}
+
+      {stockFor && (
+        // C01's network-stock drawer: «حجز هنا» opens the same confirm form at the branch that has it,
+        // so the suggestion is confirmed with the reservation (one server path, every check applies)
+        <StockLookupDrawer
+          item={{ id: stockFor.item, name: stockFor.item_name, softech_id: stockFor.item_code }}
+          branchId={stockFor.branch} customer={{ id: stockFor.customer, name: stockFor.customer_name }}
+          channel={stockFor.source === 'call_center' ? 'call_center' : 'pos'} fixedQty={Number(stockFor.qty)}
+          onReserveAt={(branch) => {
+            navigate(`/reservations/new?missed_sale=${stockFor.id}&branch=${branch}`)
+            return Promise.resolve()
+          }}
+          onClose={() => setStockFor(null)} />
       )}
 
       {(data?.next || data?.previous) && (
