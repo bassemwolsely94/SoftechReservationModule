@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import report_views, views
 
 urlpatterns = [
     # ── Orders CRUD ──────────────────────────────────────────────────────────
@@ -36,6 +36,9 @@ urlpatterns = [
     path('area-heatmap/',        views.delivery_area_heatmap),          # F11
     path('shift-report/',        views.delivery_shift_report),          # F12
     path('csat-report/',         views.delivery_csat_report),           # F14
+    path('small-orders/',        report_views.small_orders_report),     # C20
+    path('small-orders/export/', report_views.small_orders_export),     # C20 workbook (export job)
+    path('stuck-orders/',        views.delivery_stuck_orders),          # C21
 
     # ── Tools & helpers ──────────────────────────────────────────────────────
     path('threshold/',           views.delivery_threshold_check),       # F4

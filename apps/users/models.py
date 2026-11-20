@@ -227,6 +227,13 @@ class StaffProfile(models.Model):
     muted_notification_categories = models.JSONField(
         default=list, blank=True, verbose_name='فئات إشعارات مكتومة',
     )
+    # C26 / D-19: what the bell opens on — 'action' (يحتاج إجراء, default) or 'all' (الكل).
+    # The list of action types lives in apps/notifications/action_items.py.
+    bell_view = models.CharField(
+        max_length=10, default='action', db_default='action',
+        choices=[('action', 'يحتاج إجراء'), ('all', 'الكل')],
+        verbose_name='عرض الجرس',
+    )
 
     # Customer data visibility
     can_see_all_customers = models.BooleanField(

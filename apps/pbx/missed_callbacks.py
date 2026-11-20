@@ -111,7 +111,7 @@ def queue_missed_callbacks(now=None):
             with transaction.atomic():
                 log = CallLog.objects.create(
                     phone_number=first.customer_number or key, customer=first.customer,
-                    direction='inbound', status='callback', source='pbx', purpose='general',
+                    direction='inbound', status='callback', source='pbx', purpose='pending',
                     called_at=first.call_at, callback_due=due_for(first.call_at),
                     missed_cdr=first, missed_count=len(misses), notes=NOTE,
                 )

@@ -69,11 +69,18 @@ class _MeSerializer(drf_serializers.ModelSerializer):
     can_hr_attendance = drf_serializers.SerializerMethodField()  # admin or a named attendance grantee
     can_marketplace  = drf_serializers.SerializerMethodField()   # doc 38: flag ON + RBAC marketplace view
     features = drf_serializers.SerializerMethodField()           # switches for features that ship dark
+    # all-branch user (registry all_branches role or access_all_branches), from core.branch_scope, so
+    # screens pick a branch picker without a hard-coded role list (DoD 8; C31 fridge log)
+    sees_all_branches = drf_serializers.SerializerMethodField()
 
     def get_features(self, obj):
         from django.conf import settings as dj
         return {'camera_scan': bool(getattr(dj, 'CAMERA_SCAN_ENABLED', False)),
                 'daily_count': bool(getattr(dj, 'DAILY_COUNT_ENABLED', False))}
+
+    def get_sees_all_branches(self, obj):
+        from core.branch_scope import sees_all_branches
+        return bool(sees_all_branches(obj))
 
     def get_branch_id(self, obj):
         return obj.branch_id  # Django auto-attribute (FK integer)
@@ -125,7 +132,7 @@ class _MeSerializer(drf_serializers.ModelSerializer):
             'phone', 'is_active',
             'can_see_all_customers', 'can_see_customer_phone',
             'mfa_enabled', 'can_supply_write', 'can_run_engine', 'can_pick_any_branch', 'can_set_webrtc', 'can_stock_audit', 'can_pic_analytics', 'can_usage_print', 'can_hr_attendance', 'can_marketplace',
-            'features',
+            'features', 'sees_all_branches',
         ]
 
 

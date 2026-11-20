@@ -56,7 +56,7 @@ class RoleReviewModulesTests(TestCase):
         self.assertFalse(PERMISSIONS['purchasing'].get('settings'))
 
     def test_migration_inserts_rows_and_keeps_an_edit(self):
-        mig = importlib.import_module('apps.users.migrations.0061_role_review_modules')
+        mig = importlib.import_module('apps.users.migrations.0062_role_review_modules')
         RoleModuleAccess.objects.filter(module__in=NEW).delete()
         # parents unseeded (no rows at all, except purchasing/settings below): the code seed decides
         RoleModuleAccess.objects.filter(module__in=set(PARENTS.values())).delete()
@@ -87,7 +87,7 @@ class MigrationCopiesLiveParentTests(TestCase):
     an unseeded parent falls back to the code seed; existing rows of a new module are untouched."""
 
     def setUp(self):
-        self.mig = importlib.import_module('apps.users.migrations.0061_role_review_modules')
+        self.mig = importlib.import_module('apps.users.migrations.0062_role_review_modules')
         RoleModuleAccess.objects.filter(module__in=NEW).delete()
         RoleModuleAccess.objects.filter(module__in=set(PARENTS.values())).delete()
 

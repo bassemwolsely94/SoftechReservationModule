@@ -22,6 +22,7 @@ import { AccountPicker } from './EntryEditor'
 import RuleEditor, { SOURCE_TYPES, MAP_KINDS } from './RuleEditor'
 import { amountsText } from './SourcePanel'
 import { BRANCH_KEYED } from './SourceMapsPanel'
+import MixedPatternsPanel from './MixedPatternsPanel'
 import useBranchLabels from '../../../hooks/useBranchLabels'
 import {
   money, errOf, listOf, useGlBranches, inputCls, btnPrimary, btnPlain, ErrorBox,
@@ -441,6 +442,8 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
   const [ruleFor, setRuleFor] = useState(null)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
+  const [byPattern, setByPattern] = useState(false)   // «حسب النمط»: mixed journal groups, one row per pattern
+  const showPatterns = byPattern && kindFilter === 'mixed_manual_entry'
 
   const params = useMemo(() => Object.fromEntries(Object.entries({
     kind: kindFilter, source_type: filters.source_type, date_from: filters.date_from,
@@ -512,7 +515,13 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
             {KIND_LABEL[k]} · {byKind[k] ?? 0}
           </button>
         ))}
-        {canSelect && (
+        {kindFilter === 'mixed_manual_entry' && (
+          <button type="button" onClick={() => setByPattern(x => !x)}
+                  className={`px-2.5 py-1 rounded-full border text-xs ${byPattern ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+            حسب النمط
+          </button>
+        )}
+        {canSelect && !showPatterns && (
           <button type="button" className={`${btnPrimary} ms-auto`} disabled={!selected.size || redraft.isPending} onClick={() => redraft.mutate()}>
             {redraft.isPending ? 'جاري البدء…' : `إعادة الترحيل${selected.size ? ` (${selected.size})` : ''}`}
           </button>
@@ -521,6 +530,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
       {msg && <div className="text-sm text-green-700">{msg}</div>}
       <ErrorBox>{err || (listQ.isError ? errOf(listQ.error, 'تعذّر تحميل الاستثناءات') : '')}</ErrorBox>
 
+      {showPatterns ? <MixedPatternsPanel canCreate={!!perms.create} /> : (<>
       <div className={ruleFor ? 'grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-start' : ''}>
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto" data-tour="finance-gl-exceptions-grid" {...kb.containerProps}>
           {listQ.isLoading ? <SkeletonTable rows={6} cols={7} /> : !flat.length ? (
@@ -584,6 +594,7 @@ export default function ExceptionsTab({ filters, perms, onRunStarted, onBusy }) 
           </button>
         )}
       </div>
+      </>)}
     </div>
   )
 }

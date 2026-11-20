@@ -4,19 +4,24 @@ the load test (deploy/loadtest/locustfile.py) hits. Each call runs the same numb
 or many rows and stays under its ceiling in apps/tests/perf/budgets.py.
 """
 import datetime
+import uuid
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.branches.models import Branch
+from apps.callcenter.models import CallItem, CallLog
 from apps.customers.models import Customer
 from apps.insurance import models as ins
-from apps.pos_orders.models import SoftechSalesOrder, SoftechSalesOrderLine
+from apps.pos_orders.models import MissedSaleSuggestion, SoftechSalesOrder, SoftechSalesOrderLine
 from apps.purchasing.models import DemandCalculationRun, ItemDemandMetrics
 from apps.reservations.models import Reservation, ReservationLine
 from apps.supply.models import SupplyCase
 
 from ..factories import make_admin, make_branch, make_item, make_pharmacist, make_user
+from ..test_gl_manual_import import row
+from ..test_gl_mixed_patterns import PatternBase
 from .budget import assert_budget
 
 
@@ -85,6 +90,31 @@ class ListBudgets(TestCase):
             for _ in range(2):
                 SoftechSalesOrderLine.objects.create(order=o, softech_itemcode='100', qty=Decimal('1'))
 
+    def _missed_sales(self, n=24):
+        """Both sources (C28): POS rows whose cart reached SOFTECH (bought_in_cart prefetch) and
+        call-centre rows linked to a call item (select_related call_item)."""
+        for k in range(n):
+            i = self.c.next()
+            cust = Customer.objects.create(name=f'عميل فائت {i}', phone=f'013{i:08d}',
+                                           softech_pic=f'MS{i:06d}', preferred_branch=self.branch)
+            row = dict(branch=self.branch, customer=cust, item=self.item, item_code='IT001',
+                       item_name='باراسيتامول', qty=1, value=Decimal('10'), seen_at=timezone.now(),
+                       selected_by=self.admin)
+            if k % 2:
+                log = CallLog.objects.create(phone_number=cust.phone, customer=cust, branch=self.branch,
+                                             handled_by=self.admin)
+                ci = CallItem.objects.create(call_log=log, item=self.item)
+                MissedSaleSuggestion.objects.create(source='call_center', call_item=ci, **row)
+            else:
+                token = uuid.uuid4()
+                o = SoftechSalesOrder.objects.create(branch=self.branch,
+                                                     softech_branchcode=self.branch.softech_branch_id,
+                                                     store_code=self.branch.softech_branch_id, channel='cash',
+                                                     client_token=token,
+                                                     status=SoftechSalesOrder.STATUS_PUSHED)
+                SoftechSalesOrderLine.objects.create(order=o, softech_itemcode='100', qty=Decimal('1'))
+                MissedSaleSuggestion.objects.create(source='pos', cart_token=token, **row)
+
     def _claims(self, n=15):
         client = ins.InsuranceClient.objects.create(name=f'جهة {self.c.next()}')
         sub = ins.InsuranceSubClient.objects.create(client=client, name='فئة')
@@ -95,6 +125,19 @@ class ListBudgets(TestCase):
                                               period_to=datetime.date(2026, 8, 31))
 
     # ── tests ─────────────────────────────────────────────────────────────────
+    @override_settings(MISSED_SALES_ENABLED=True)
+    def test_missed_sales_branch_scoped(self):
+        self._missed_sales(2)
+        assert_budget(self, 'pos-orders/missed-sales', self.pharma_client, '/api/pos-orders/missed-sales/',
+                      grow=self._missed_sales, min_rows=25, rows_of=_count_list)
+
+    @override_settings(MISSED_SALES_ENABLED=True)
+    def test_missed_sales_source_filter(self):
+        self._missed_sales(2)
+        assert_budget(self, 'pos-orders/missed-sales', self.pharma_client,
+                      '/api/pos-orders/missed-sales/?source=call_center',
+                      grow=lambda: self._missed_sales(30), min_rows=15, rows_of=_count_list)
+
     def test_reservations(self):
         self._reservations(2)
         assert_budget(self, 'reservations', self.admin_client, '/api/reservations/',
@@ -174,7 +217,66 @@ class PurchasingListBudgets(TestCase):
         assert_budget(self, 'purchasing/metrics', self.client_, '/api/purchasing/metrics/',
                       grow=self._metrics, min_rows=30, rows_of=_count_list)
 
+    def _aggregated(self, n=30):
+        from apps.purchasing.models import ItemDemandAggregated
+        for _ in range(n):
+            self.n += 1
+            it = make_item(f'دواء {self.n}', f'M{self.n:05d}')
+            ItemDemandAggregated.objects.create(run=self.run, item=it, calc_date=self.TODAY, total_monthly_avg=1,
+                                                total_current_stock=self.n % 9)
+
+    def test_aggregated(self):
+        self._aggregated(2)
+        assert_budget(self, 'purchasing/aggregated', self.client_, '/api/purchasing/aggregated/',
+                      grow=self._aggregated, min_rows=30, rows_of=_count_list)
+
     def test_filter_options(self):
         self._metrics(2)
+        # the grown items carry 5 effect codes (E0–E4): they must reach the effects list
         assert_budget(self, 'purchasing/filter-options', self.client_, '/api/purchasing/filter-options/',
-                      grow=self._metrics, min_rows=0)
+                      grow=self._metrics, min_rows=5, rows_of=lambda r: len(r.data.get('effects') or []))
+
+
+class DeliveryListBudgets(TestCase):
+    """C21: the stuck-orders board list reads one page of local orders + the stored last run."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_del_admin')
+
+    def _orders(self, n=20):
+        import datetime as _d
+        from django.utils import timezone
+        from apps.delivery.models import DeliveryOrder
+        old = timezone.now() - _d.timedelta(hours=30)
+        for _ in range(n):
+            DeliveryOrder.objects.create(branch=self.branch, customer_name='عميل', ordered_at=old,
+                                         status=DeliveryOrder.STATUS_READY)
+
+    def test_stuck_orders(self):
+        self._orders(2)
+        assert_budget(self, 'delivery/stuck-orders', self.client_, '/api/delivery/stuck-orders/',
+                      grow=self._orders, min_rows=20, rows_of=_count_list)
+
+
+class GLMixedPatternBudgets(PatternBase):
+    """The pattern list reads every open «قيد يدوي مختلط» row once: flat however many are parked."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.client_ = APIClient()
+        self.client_.force_authenticate(self.staff.user)
+        self.n = 0
+
+    def _park_more(self):
+        rows = []
+        for _ in range(10):
+            self.n += 1
+            rows += [row('1302', debit=self.n, desc=f'نمط {self.n}'), row('3280', credit=self.n, desc=f'نمط {self.n}')]
+        self.run_import(rows)
+
+    def test_mixed_patterns(self):
+        self.park()
+        assert_budget(self, 'finance/gl/exceptions/mixed-patterns', self.client_,
+                      '/api/finance/gl/exceptions/mixed-patterns/', grow=self._park_more, min_rows=14,
+                      rows_of=lambda r: sum(p['count'] for p in r.data['results']))

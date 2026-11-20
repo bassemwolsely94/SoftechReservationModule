@@ -2223,3 +2223,39 @@ def delivery_backfill(request, pk):
         return Response({'detail': 'لا يوجد ما يُحدَّث'}, status=status.HTTP_400_BAD_REQUEST)
     order.save()
     return Response(DeliveryOrderSerializer(order, context={'request': request}).data)
+
+
+# ── C21: stuck orders (read-only list + the last auto-close run) ──────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, RouteModulePermission])
+def delivery_stuck_orders(request):
+    """GET /api/delivery/stuck-orders/ — open orders older than the threshold (branch-scoped), each
+    with what the last C21 run decided for it. Read-only: closing happens only in the scheduled job
+    (apps/delivery/stuck_close.py), behind its switch."""
+    denied = guard(request, 'view')
+    if denied:
+        return denied
+    from . import stuck_close
+    last = stuck_close.last_run()
+    by_id = {r['id']: r for r in last.get('rows', [])}
+    hours = stuck_close.min_age_hours()
+    qs = _orders(request, stuck_close.stuck_queryset(hours)).select_related('branch')
+    total = qs.count()
+    labels = dict(DeliveryOrder.STATUS_CHOICES)
+    rows = []
+    for o in qs[:300]:
+        r = by_id.get(o.id, {})
+        rows.append({
+            'id': o.id, 'status': o.status, 'status_label': labels.get(o.status, o.status),
+            'ordered_at': o.ordered_at, 'age_hours': int((timezone.now() - o.ordered_at).total_seconds() // 3600),
+            'branch_id': o.branch_id, 'branch_name': getattr(o.branch, 'name', ''),
+            'source_type': o.source_type, 'customer_name': o.customer_name,
+            'softech_crm_order_no': o.softech_crm_order_no, 'total_value': o.total_value,
+            'verdict': r.get('verdict', ''), 'softech_status': r.get('softech_status'),
+        })
+    return Response({
+        'enabled': stuck_close.is_enabled(), 'min_age_hours': hours, 'total': total,
+        'last_run': {k: v for k, v in last.items() if k != 'rows'},
+        'results': rows,
+    })

@@ -63,3 +63,159 @@ class TrackBudgets(TestCase):
         _, _, client = make_pharmacist('perf_track', branch=make_branch())
         assert_budget(self, 'audit/screen-view', client, '/api/audit/screen-view/', method='post',
                       data={'route': '/reservations/123', 'tab': 'grid'}, grow=lambda: None, min_rows=0)
+
+
+class MarginBoardBudget(TestCase):
+    """C19 analytics «💹 الهامش: قناة × فرع»: two grouped queries, flat however many channels / lines."""
+
+    def setUp(self):
+        from ..factories import make_customer
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_margin')
+        self.cust = make_customer()
+        self.n = 0
+
+    def _sales(self, n=30):
+        from apps.customers.models import PurchaseHistory, PurchaseHistoryLine
+        from ..factories import make_item
+        for _ in range(n):
+            self.n += 1
+            p = PurchaseHistory.objects.create(customer=self.cust, branch=self.branch, doc_code='115',
+                                               total_amount=Decimal('114'), softech_invoice_id=f'PM-{self.n}',
+                                               invoice_date=timezone.now(), sales_channel=f'C{self.n}')
+            PurchaseHistoryLine.objects.create(purchase=p, item=make_item(f'PM {self.n}', f'PM{self.n:04d}'),
+                                               quantity=Decimal('1'), unit_price=Decimal('114'),
+                                               line_total=Decimal('114'), cost_at_sale=Decimal('70'))
+
+    def test_margin_board(self):
+        self._sales(2)
+        # warm once: the channel-label map (analytics.views, kept per process) and the trusted-network list
+        # are read by the first request in a process only
+        self.assertEqual(self.client_.get('/api/analytics/margin-board/').status_code, 200)
+        assert_budget(self, 'analytics/margin-board', self.client_, '/api/analytics/margin-board/',
+                      grow=self._sales, min_rows=30, rows_of=lambda r: len(r.data['rows']))
+class MissingBonusBudget(TestCase):
+    """C18 /supply «بونص ناقص»: flat however many receipts are judged."""
+
+    def setUp(self):
+        from apps.branches.models import Branch
+        self.branch = Branch.objects.create(softech_branch_id='132', name='MB', name_ar='MB', kind='retail',
+                                            is_active=True)
+        _, _, self.client_ = make_admin('perf_bonus')
+        self.n = 0
+
+    def _line(self, item, n, qty, free, doc):
+        from apps.procurement.models import PurchaseLine
+        PurchaseLine.objects.create(branch_code='132', supplier_code='565', doc_number=doc,
+                                    doc_date=timezone.localdate() - datetime.timedelta(days=n), item_code=item,
+                                    doccode='10', raw_qty=qty, net_qty=qty, raw_value=qty * 10, bonus_qty=free,
+                                    is_foc=free > 0)
+
+    def _receipts(self, n=30):
+        for _ in range(n):
+            self.n += 1
+            code = f'MB{self.n:04d}'
+            for i, days_ago in enumerate((90, 60, 40)):
+                self._line(code, days_ago, 10, 1, f'R{self.n}-{i}')
+            self._line(code, 2, 10, 0, f'C{self.n}')            # no bonus this time → flagged
+
+    def test_missing_bonus(self):
+        self._receipts(2)
+        assert_budget(self, 'supply/missing-bonus', self.client_, '/api/supply/missing-bonus/',
+                      grow=self._receipts, min_rows=30, rows_of=lambda r: len(r.data['rows']))
+class OutHereBudget(TestCase):
+    """C06 /supply «ناقص هنا · موجود هناك»: flat however many short items there are."""
+
+    def setUp(self):
+        from apps.branches.models import Branch
+        from apps.purchasing.models import DemandCalculationRun
+        self.run = DemandCalculationRun.objects.create(status='success', calc_date=timezone.localdate(),
+                                                       finished_at=timezone.now())
+        self.here = Branch.objects.create(softech_branch_id='131', name='H', name_ar='H', kind='retail',
+                                          is_active=True)
+        self.there = Branch.objects.create(softech_branch_id='141', name='T', name_ar='T', kind='retail',
+                                           is_active=True)
+        _, _, self.client_ = make_admin('perf_outhere')
+        self.n = 0
+
+    def _short(self, n=30):
+        from apps.catalog.models import ItemStock
+        from apps.purchasing.models import ItemDemandMetrics
+        from ..factories import make_item
+        for _ in range(n):
+            self.n += 1
+            it = make_item(f'OH {self.n}', f'OH{self.n:04d}')
+            ItemDemandMetrics.objects.create(run=self.run, item=it, branch=self.here, calc_date=self.run.calc_date,
+                                             monthly_avg=10, gap=10, abc_class='A', pack_price=5)
+            ItemDemandMetrics.objects.create(run=self.run, item=it, branch=self.there, calc_date=self.run.calc_date,
+                                             monthly_avg=10, safety_stock=2, abc_class='A', pack_price=5)
+            ItemStock.objects.create(item=it, branch=self.there, softech_store_code='101', quantity_on_hand=40)
+
+    def test_out_here(self):
+        self._short(2)
+        # warm once: apps/config/item_types keeps the medicine-type map per process (planning_excluded_codes),
+        # so the first request in a process reads it (2 queries) and every later one does not
+        self.assertEqual(self.client_.get('/api/supply/out-here/').status_code, 200)
+        assert_budget(self, 'supply/out-here', self.client_, '/api/supply/out-here/',
+                      grow=self._short, min_rows=30, rows_of=lambda r: len(r.data['rows']))
+class FridgeLogBudgets(TestCase):
+    """C31: the fridge readings list and the month sheet read one fridge's rows in one query."""
+
+    def setUp(self):
+        from apps.qa.models import FridgeUnit
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_fridge_admin')
+        self.fridge = FridgeUnit.objects.create(branch=self.branch, name='ثلاجة الأداء')
+        self.day = timezone.localdate().replace(day=1)
+
+    def _readings(self, n=20):
+        from apps.qa.models import FridgeReading
+        have = FridgeReading.objects.filter(fridge=self.fridge).count()
+        for i in range(have, have + n):
+            FridgeReading.objects.create(fridge=self.fridge, day=self.day - datetime.timedelta(days=i // 2),
+                                         slot='am' if i % 2 == 0 else 'pm', temp_c=Decimal('5'), initials='x')
+
+    def test_fridge_readings_list(self):
+        self._readings(2)
+        assert_budget(self, 'qa/fridge-readings', self.client_, f'/api/qa/fridge-readings/?fridge={self.fridge.pk}',
+                      grow=self._readings, min_rows=20, rows_of=_count_list)
+
+    def test_fridge_month_sheet(self):
+        from apps.qa.models import FridgeReading
+        FridgeReading.objects.create(fridge=self.fridge, day=self.day, slot='am', temp_c=Decimal('5'), initials='x')
+
+        def grow():
+            for d in range(1, 15):
+                for s in ('am', 'pm'):
+                    FridgeReading.objects.get_or_create(fridge=self.fridge, day=self.day.replace(day=d), slot=s,
+                                                        defaults={'temp_c': Decimal('5'), 'initials': 'x'})
+        assert_budget(self, 'qa/fridges/<id>/month', self.client_,
+                      f'/api/qa/fridges/{self.fridge.pk}/month/?month={self.day:%Y-%m}', grow=grow, min_rows=0)
+
+
+class DiscountPolicyPreviewBudget(TestCase):
+    """C07: the unvalidated discount-policy preview computes check 12 live; its queries stay flat as lines grow."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        _, _, self.client_ = make_admin('perf_dp_admin')
+        from apps.stock_audit.params import ensure_rules
+        ensure_rules()   # the first call would otherwise seed the rule rows and skew the count
+        self.n = 0
+
+    def _lines(self, n=30):
+        from apps.stock_audit.models import StockLedgerLine
+        today = timezone.localdate()
+        for _ in range(n):
+            self.n += 1
+            StockLedgerLine.objects.create(branchcode=self.branch.softech_branch_id, doccode='115', docnumber=self.n,
+                                           docdate=today, itemcode=f'D{self.n:05d}', transqty=Decimal('1'),
+                                           transprice=Decimal('70'), itemsaleprice=Decimal('100'),
+                                           custdiscp=Decimal('30'), usercode=str(100 + self.n % 7))
+
+    def test_discount_policy_preview(self):
+        self._lines(2)
+        # warm once: the first request fills per-process caches (2 queries) that are not per-row work
+        self.client_.get('/api/stock-audit/discount-policy/')
+        assert_budget(self, 'stock-audit/discount-policy', self.client_, '/api/stock-audit/discount-policy/',
+                      grow=self._lines, min_rows=20, rows_of=lambda r: r.data['breach_lines'])

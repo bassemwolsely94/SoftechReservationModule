@@ -728,6 +728,18 @@ function MySalesBody({ payload }) {
       <Kpi label="هامش الربح" value={`${qtyFmt(payload.margin)}%`} />
       <Kpi label="المرتجعات" value={money(payload.returns_value)} tone="text-red-600" />
       <Kpi label="عدد المرتجعات" value={qtyFmt(payload.returns_count)} />
+      {payload.identified && (() => {
+        // C11: share of my sale invoices on a customer code (same count as gamification)
+        const { yesterday: y, period: p, target_pct: target } = payload.identified
+        const pct = (r) => (r?.pct == null ? '—' : `${qtyFmt(r.pct)}%`)
+        const tone = (r) => (r?.pct == null ? undefined : r.pct >= target ? 'text-green-700' : 'text-amber-700')
+        return (
+          <>
+            <Kpi label={`على كود عميل أمس (الهدف ${target}%)`} value={pct(y)} tone={tone(y)} />
+            <Kpi label={`على كود عميل آخر ${payload.days} يوم`} value={pct(p)} tone={tone(p)} />
+          </>
+        )
+      })()}
     </div>
   )
 }

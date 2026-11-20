@@ -74,7 +74,8 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
         Client can send:
           {"action": "ping"}                       → pong
           {"action": "mark_read", "id": 123}       → mark one notification read
-          {"action": "mark_all_read"}              → mark all read
+          {"action": "mark_all_read", "view": "action"|"all"} → mark the bell read (same scope as
+                                                                REST mark-all-read, C26)
         """
         try:
             data   = json.loads(text_data)
@@ -96,7 +97,7 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
                     await self._counts_to_all_tabs()
 
         elif action == 'mark_all_read':
-            count = await self._mark_all_read()
+            count = await self._mark_all_read(data.get('view'))
             await self.send(text_data=json.dumps({
                 'event': 'all_marked_read', 'count': count
             }))
@@ -210,16 +211,16 @@ class NotificationConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):
         return updated
 
     @database_sync_to_async
-    def _mark_all_read(self) -> int:
-        from django.utils import timezone
-        from apps.notifications.models import Notification, NotificationLog
-        count = Notification.objects.filter(
-            recipient_id=self.profile_id, is_read=False
-        ).update(is_read=True)
-        NotificationLog.objects.filter(
-            recipient_id=self.profile_id, read_at__isnull=True
-        ).update(read_at=timezone.now())
-        return count
+    def _mark_all_read(self, view=None) -> int:
+        """The bell's «قراءة الكل» over the socket — the SAME scope as the REST route (C26). It used to
+        mark every category (quiet feeds and snoozed rows included) and stamp every log row."""
+        from apps.users.models import StaffProfile
+        from .action_items import clean_view
+        from .views import mark_bell_read
+        profile = StaffProfile.objects.filter(pk=self.profile_id).first()
+        if not profile:
+            return 0
+        return mark_bell_read(profile, view=clean_view(view))
 
 
 class ChatterConsumer(ZoneGuardMixin, AsyncWebsocketConsumer):

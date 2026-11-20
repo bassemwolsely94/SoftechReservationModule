@@ -507,6 +507,12 @@ export const helpApi = {
 }
 
 export const personalApi = {
+  // C23 saved filters per user on worklist screens (own + shared with my role)
+  savedViews:      (screen)    => api.get('/personal/saved-views/', { params: { screen } }),
+  createSavedView: (data)      => api.post('/personal/saved-views/', data),
+  updateSavedView: (id, data)  => api.patch(`/personal/saved-views/${id}/`, data),
+  deleteSavedView: (id)        => api.delete(`/personal/saved-views/${id}/`),
+
   // Person search for claiming an identity — kind: 'supplier' | 'customer'
   searchPersons: (q, kind) => api.get('/personal/persons/search/', { params: { q, ...(kind ? { kind } : {}) } }),
 
@@ -726,6 +732,11 @@ export const qaApi = {
   create:    (data)     => api.post('/qa/inspections/', data),
   update:    (id, data) => api.patch(`/qa/inspections/${id}/`, data),
   submit:    (id, data) => api.post(`/qa/inspections/${id}/submit/`, data),
+  // C31 fridge log
+  fridges:   (params)   => api.get('/qa/fridges/', { params }),
+  createFridge: (data)  => api.post('/qa/fridges/', data),
+  fridgeMonth: (id, month) => api.get(`/qa/fridges/${id}/month/`, { params: { month } }),
+  recordFridgeReading: (data) => api.post('/qa/fridge-readings/', data),
 }
 
 // ── Transfers ─────────────────────────────────────────────────────────────────
@@ -852,6 +863,7 @@ export const purchasingApi = {
   phantomExcluded:    (params)      => api.get('/purchasing/phantom/excluded/', { params }),
   phantomSummary:     ()            => api.get('/purchasing/phantom/summary/'),
   phantomMedTypes:    ()            => api.get('/purchasing/phantom/med-types/'),
+  phantomMonthly:     (params)      => api.get('/purchasing/phantom/monthly/', { params }),
   phantomConfirm:     (data)        => api.post('/purchasing/phantom/confirm/', data),
   phantomExclude:     (data)        => api.post('/purchasing/phantom/exclude/', data),
   phantomReset:       (itemId)      => api.post('/purchasing/phantom/reset/', { item_id: itemId }),
@@ -993,9 +1005,12 @@ export const supplyApi = {
   purchasePrices:      (params = {}) => api.get('/supply/purchase-prices/', { params }),
   purchasePricesExcel: (params = {}) => api.get('/supply/purchase-prices/', { params: { ...params, format: 'xlsx' }, responseType: 'blob' }),
   purchasePriceItem:   (code)        => api.get(`/supply/purchase-prices/item/${code}/`),
+  boughtDearer:        (params = {}) => api.get('/supply/bought-dearer/', { params }),
   refreshPurchases:    ()            => api.post('/supply/freshness/refresh-purchases/'),
   // P-31 «استلام بدون طلب»: params { status }; body { action: return|accept|reopen, reason }
   receipts:            (params)      => api.get('/supply/receipts/', { params }),
+  missingBonus:        (params)      => api.get('/supply/missing-bonus/', { params }),
+  outHere:             (params)      => api.get('/supply/out-here/', { params }),
   receiptDecide:       (id, body)    => api.post(`/supply/receipts/${id}/decide/`, body),
   supplierNetwork: (itemId)      => api.get(`/supply/comparison/network/${itemId}/`),
   supplierCodeReport:      (days) => api.get('/supply/reports/supplier-codes/', { params: { days } }),
@@ -1538,6 +1553,7 @@ export const deliveryApi = {
   update:    (id, data)  => api.patch(`/delivery/${id}/`, data),
   summary:   ()          => api.get('/delivery/summary/'),
   dashboard: (params)    => api.get('/delivery/dashboard/', { params }),
+  stuckOrders: ()        => api.get('/delivery/stuck-orders/'),   // C21 read-only
 
   // Lifecycle transitions
   assign:      (id, data) => api.post(`/delivery/${id}/assign/`, data),
@@ -1583,6 +1599,9 @@ export const deliveryApi = {
 
   // F14 — CSAT report
   csatReport: (params) => api.get('/delivery/csat-report/', { params }),
+
+  // C20 — small orders + fee-less invoices (report only)
+  smallOrders:      (params) => api.get('/delivery/small-orders/', { params }),
 
   // F6 — Driver App
   myOrders:    () => api.get('/delivery/app/my-orders/'),
@@ -1647,6 +1666,7 @@ export const analyticsApi = {
   churn:               (params = {}) => api.get('/analytics/churn/',               { params }),
   branchContribution:  (params = {}) => api.get('/analytics/branch-contribution/',  { params }),
   inventoryInvestment: (params = {}) => api.get('/analytics/inventory-investment/', { params }),
+  marginBoard:         (params = {}) => api.get('/analytics/margin-board/',         { params }),
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -2306,6 +2326,8 @@ export const glApi = {
   exceptionsCounts: (params)       => api.get('/finance/gl/exceptions/counts/', { params }),
   exceptionsPage:  (url)           => api.get(String(url).replace(/^.*?\/api(?=\/)/, '')),
   exceptionIgnore: (id, note)      => api.post(`/finance/gl/exceptions/${id}/ignore/`, { note }),
+  mixedPatterns:   ()              => api.get('/finance/gl/exceptions/mixed-patterns/'),
+  mixedPatternDecide: (body)       => api.post('/finance/gl/exceptions/mixed-patterns/decide/', body),
   exceptionsRedraft: (ids)         => api.post('/finance/gl/exceptions/redraft/', { ids }),
   exceptionAcceptSoftech: (id, body) => api.post(`/finance/gl/exceptions/${id}/accept-softech/`, body),   // {note, version}
   exceptionKeepEdit: (id, body)    => api.post(`/finance/gl/exceptions/${id}/keep-edit/`, body),          // {note, version}
@@ -3301,6 +3323,7 @@ export const stockAuditApi = {
   candidates:   (q)             => api.get('/stock-audit/access/candidates/', { params: { q } }),
   refresh:      ()              => api.post('/stock-audit/refresh/'),
   runs:         ()              => api.get('/stock-audit/runs/'),
+  discountPolicy: (params = {}) => api.get('/stock-audit/discount-policy/', { params }),   // C07 unvalidated preview
 }
 
 // HR attendance (stage 1) — fingerprint machines → days. Every route is gated on the server by level

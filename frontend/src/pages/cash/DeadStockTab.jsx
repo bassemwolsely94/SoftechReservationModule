@@ -16,6 +16,10 @@ import useServerSort from '../../hooks/useServerSort'
 import SortTh from '../../components/SortTh'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
 import BranchMultiSelect from '../../components/BranchMultiSelect'
+import SavedViewsMenu from '../../components/SavedViewsMenu'
+import useSavedViews from '../../hooks/useSavedViews'
+
+const SV_KEYS = ['lane', 'location', 'branch', 'q', 'show_decided']
 
 const egp = (n) => (n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const errOf = (e, d) => e?.response?.data?.detail || d
@@ -43,6 +47,15 @@ export default function DeadStockTab() {
                     q: q || undefined, show_decided: showDecided ? 1 : undefined }
   const params = { ...filters, ...(ordering ? { ordering } : {}), page }
   useEffect(() => { setPage(1); setTicked(new Set()) }, [lane, location, branch, q, showDecided])
+  // C23 saved views: lane / location / branch / search / show-excluded
+  const sv = useSavedViews('cash.dead_stock', {
+    keys: SV_KEYS,
+    getFilters: () => ({ lane, location, branch, q, show_decided: showDecided }),
+    applyFilters: f => {
+      setLane(f.lane || ''); setLocation(f.location || []); setBranch(f.branch || [])
+      setQ(f.q || ''); setShowDecided(!!f.show_decided)
+    },
+  })
   const reload = () => qc.invalidateQueries({ queryKey: ['dead-stock'] })
   const summary = useQuery({ queryKey: ['dead-stock', 'summary'], queryFn: () => purchasingApi.deadStockSummary().then(r => r.data) })
   const lines = useQuery({ queryKey: ['dead-stock', 'lines', params], placeholderData: prev => prev,
@@ -126,6 +139,7 @@ export default function DeadStockTab() {
                            branches={(summary.data?.branches || []).map(b => ({ id: b.code, softech_branch_id: b.code, name_ar: b.name }))} />
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالصنف أو الكود" className="border rounded px-2 py-1" />
         <label className="flex items-center gap-1 text-xs text-gray-600"><input type="checkbox" checked={showDecided} onChange={e => setShowDecided(e.target.checked)} /> إظهار المستبعد</label>
+        <SavedViewsMenu sv={sv} />
         <span className="flex-1" />
         <div data-tour="purchasing-cash-dead-actions" className="flex items-center gap-2">
           <span className="text-xs text-gray-500">{ticked.size} محدد</span>

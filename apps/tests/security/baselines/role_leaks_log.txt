@@ -17,3 +17,22 @@ purchasing PATCH /api/hr/shifts/987654321/
 purchasing PUT /api/hr/shifts/987654321/
 supervisor PATCH /api/hr/shifts/987654321/
 supervisor PUT /api/hr/shifts/987654321/
+
+# ── Wave 4 (2026-11-20): found once state_builders.py gave these DELETE routes a real record ──────────────
+# reason: W4-F1 — finding for the owner, view unchanged. Deleting a whole shortage list, count session or item
+#   ingredient link is allowed by the VIEW to roles with module edit (matrix_permission delete=(edit, delete));
+#   the matrix asks `delete`, which these roles do not hold, so enforce refuses them and log lets them through.
+#   Either the matrix grants these roles delete there (deleting a draft = editing it, like Q-7e line removal),
+#   or the views drop `edit` from delete=. Decide before RBAC_ENFORCEMENT=enforce.
+call_center DELETE /api/shortage/lists/987654321/
+pharmacist DELETE /api/items/x/ingredients/987654321/
+pharmacist DELETE /api/shortage/lists/987654321/
+pharmacist DELETE /api/stockcount/sessions/987654321/
+purchasing DELETE /api/items/x/ingredients/987654321/
+purchasing DELETE /api/shortage/lists/987654321/
+salesperson DELETE /api/shortage/lists/987654321/
+supervisor DELETE /api/shortage/lists/987654321/
+supervisor DELETE /api/stockcount/sessions/987654321/
+# reason: W4-F2 — finding for the owner, view unchanged. SupplierInvoiceViewSet.rbac_delete = (delete, approve):
+#   purchasing (invoices approve) may delete an invoice in log mode; the matrix asks `delete`.
+purchasing DELETE /api/invoices/invoices/987654321/

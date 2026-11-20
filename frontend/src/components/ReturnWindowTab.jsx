@@ -8,6 +8,8 @@
  * The server decides scope, states, quantities and permissions; this screen shows them.
  */
 import { useMemo, useRef, useState } from 'react'
+import BulkResultNote from './BulkResultNote'
+import { keepFailedTicked, runEach } from '../utils/bulkRun'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { batchesApi, supplyApi } from '../api/client'
 import DataFreshnessBar from './DataFreshnessBar'
@@ -17,6 +19,10 @@ import useGridKeyboard, { GRID_KEYS_HINT } from '../hooks/useGridKeyboard'
 import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
 import MultiSelectFilter from './MultiSelectFilter'
+import SavedViewsMenu from './SavedViewsMenu'
+import useSavedViews from '../hooks/useSavedViews'
+
+const RW_SV_KEYS = ['supplier', 'location', 'state']
 
 const fmtNum = (n, d = 0) => Number(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: d })
 const STATES = [
@@ -167,6 +173,12 @@ export default function ReturnWindowTab() {
   const [supplier, setSupplier] = useState([])   // multi-select supplier codes ([] = all)
   const [location, setLocation] = useState([])   // multi-select shelf / hq / 105 ([] = all)
   const [stateF, setStateF] = useState('')
+  // C23 saved views: suppliers / locations / state (the month is not saved — it moves on)
+  const sv = useSavedViews('batches.return_window', {
+    keys: RW_SV_KEYS,
+    getFilters: () => ({ supplier, location, state: stateF }),
+    applyFilters: f => { setSupplier(f.supplier || []); setLocation(f.location || []); setStateF(f.state || '') },
+  })
   const [ticked, setTicked] = useState({})
   const [pick, setPick] = useState({})               // line key → chosen supplier (ambiguous lines)
   const [msg, setMsg] = useState(null)
@@ -223,14 +235,34 @@ export default function ReturnWindowTab() {
     onError: e => { setSince(null); setMsg(e.response?.data?.detail || 'تعذّر التحديث') },
   })
 
-  const canTick = (l) => data?.can_request && !l.record && !!supplierOf(l) && l.state !== 'missed'
+  // C24: a line is tickable to REQUEST it (no record yet) or to ANSWER it (draft, no supplier answer yet).
+  const canAnswer = (l) => !!data?.can_request && !!l.record && !l.record.answer && l.record.status === 'draft'
+  const canRequest = (l) => data?.can_request && !l.record && !!supplierOf(l) && l.state !== 'missed'
+  const canTick = (l) => canRequest(l) || canAnswer(l)
   const kb = useGridKeyboard({
     rows: lines, getKey: l => l.key,
     onToggle: (l) => canTick(l) && setTicked(t => ({ ...t, [l.key]: !t[l.key] })),
     onSelectAll: () => setTicked(Object.fromEntries(lines.filter(canTick).map(l => [l.key, true]))),
-    onConfirm: (l) => l.record && !l.record.answer && l.record.status === 'draft' && answerAccepted.mutate(l),
+    onConfirm: (l) => canAnswer(l) && answerAccepted.mutate(l),
   })
   const tickedRows = lines.filter(l => ticked[l.key])
+  const tickedRequest = tickedRows.filter(canRequest)
+  const tickedAnswer = tickedRows.filter(canAnswer)
+  // C24: the same supplier answer for every ticked draft — one call per row to the per-row endpoint
+  // (the server checks scope + state per row and records each answer); refusals stay ticked.
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkResult, setBulkResult] = useState(null)
+  const answerMany = async (answer) => {
+    if (!tickedAnswer.length || bulkBusy) return
+    setBulkBusy(true); setBulkResult(null)
+    try {
+      const res = await runEach(tickedAnswer, l => batchesApi.returnWindowAnswer(l.record.id, { answer }), l => l.key)
+      setBulkResult({ ...res, answer })
+      setTicked(keepFailedTicked(res))
+      reload()
+    } finally { setBulkBusy(false) }
+  }
+  const lineLabel = (key) => { const l = allLines.find(x => x.key === key); return l ? (l.item_name || l.item_code) : key }
   const suppliers = Object.entries(data?.suppliers || {})
   // the summary narrows with the supplier filter, so the options keep every supplier seen so far
   const seenSuppliers = useRef(new Map())
@@ -257,6 +289,7 @@ export default function ReturnWindowTab() {
                            onChange={setSupplier} allLabel="كل الموردين" showCode={false} />
         <MultiSelectFilter className="w-40" options={LOC_OPTIONS} selected={location} onChange={setLocation}
                            allLabel="كل المواقع" showCode={false} />
+        <SavedViewsMenu sv={sv} />
         {stateF && <button onClick={() => setStateF('')} className="px-2 py-1 text-xs border rounded-lg">✕ {STATES.find(s => s.key === stateF)?.label}</button>}
         <span className="flex-1" />
         <button data-tour="batches-main-return-refresh-expiry" onClick={() => refresh.mutate('expiry')} disabled={refresh.isPending} className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-50">🔄 أرصدة الصلاحية</button>
@@ -283,9 +316,18 @@ export default function ReturnWindowTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-2 text-sm">
-        <button data-tour="batches-main-return-request" onClick={() => request.mutate(tickedRows)}
-                disabled={!tickedRows.length || request.isPending}
-                className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-40">طلب مرتجع ({tickedRows.length})</button>
+        <button data-tour="batches-main-return-request" onClick={() => request.mutate(tickedRequest)}
+                disabled={!tickedRequest.length || request.isPending}
+                className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-40">طلب مرتجع ({tickedRequest.length})</button>
+        {tickedAnswer.length > 0 && (
+          <span data-tour="batches-main-return-bulk-answer" data-testid="return-bulk-answer" className="flex items-center gap-1">
+            <span className="text-xs text-gray-500">رد المورد للمحدد ({tickedAnswer.length}):</span>
+            <button onClick={() => answerMany('accepted')} disabled={bulkBusy}
+                    className="px-3 py-2 bg-green-600 text-white rounded-lg disabled:opacity-40">{bulkBusy ? 'جارٍ…' : 'مقبول'}</button>
+            <button onClick={() => answerMany('rejected')} disabled={bulkBusy}
+                    className="px-3 py-2 bg-white border border-red-300 text-red-700 rounded-lg disabled:opacity-40">مرفوض</button>
+          </span>
+        )}
         <button data-tour="batches-main-return-export" onClick={() => exportX.mutate('supplier')} disabled={supplier.length !== 1 || exportX.isPending}
                 title={supplier.length === 1 ? '' : 'اختر موردًا واحدًا أولاً'}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">⬇️ تصدير للمورد</button>
@@ -294,6 +336,8 @@ export default function ReturnWindowTab() {
         <span className="text-xs text-gray-400">{GRID_KEYS_HINT.replace(' · M مطابقة', '')} (Enter = مقبول)</span>
       </div>
 
+      <BulkResultNote result={bulkResult} verb={bulkResult?.answer === 'accepted' ? 'سُجّل «مقبول» لـ' : 'سُجّل «مرفوض» لـ'}
+                      labelOf={lineLabel} onClose={() => setBulkResult(null)} testId="return-bulk-result" />
       {isLoading ? <div className="text-center py-10 text-gray-400">جارٍ التحميل…</div> : lines.length === 0 ? (
         <div className="text-center py-14 text-gray-400">لا توجد سطور في نوافذ المرتجع لهذا الاختيار.</div>
       ) : (

@@ -67,6 +67,10 @@ export default function MobileQAPage() {
 
   return (
     <div className="p-3 space-y-3">
+      <button data-tour="hr-qa-fridge-link" onClick={() => navigate('/m/qa/fridge')}
+        className="w-full text-right bg-white rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-800 active:bg-gray-50">
+        🌡️ سجل حرارة الثلاجة <span className="text-xs font-normal text-gray-500">— قراءتين يومياً + طباعة الشهر</span>
+      </button>
       {creating && (
         <div data-tour="hr-qa-new-form" className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
           <h2 className="font-semibold text-gray-700 text-sm">مراجعة جديدة</h2>

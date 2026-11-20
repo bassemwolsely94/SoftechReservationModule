@@ -410,8 +410,10 @@ SCREENS = [
                        'They count without seeing the expected quantity, which is read from SOFTECH the moment they save. Here: who finished their list, the open differences, and for each: recount, accept with a reason, or escalate to the auditor. '
                        "Big (200 EGP or more) or repeated differences, and the branch manager's own counts, go straight to the central auditor. Nothing is written to SOFTECH.")},
             {'key': 'variance', 'title': T('📉 الفروق', '📉 Variance'),
-             'body': T('لكل صنف: المتوقع، المعدود، الفارق. صفِّ (الكل / زيادة فقط / نقص فقط / مطابق) وبحد أدنى للفارق. «تصدير للتسوية» يعطي ملف أصناف الزيادة والنقص لإدخال التسوية في SOFTECH. «إغلاق الجلسة» نهائي.',
-                       'Per item: expected, counted, difference. Filter (all / surplus / deficit / match) with a minimum difference. "Export for adjustment" gives the surplus and deficit file to enter the adjustment in SOFTECH. "Close session" is final.')},
+             'body': T('لكل صنف: المتوقع، المعدود، الفارق. صفِّ (الكل / زيادة فقط / نقص فقط / مطابق) وبحد أدنى للفارق. «تصدير للتسوية» يعطي ملف أصناف الزيادة والنقص لإدخال التسوية في SOFTECH. «إغلاق الجلسة» نهائي. '
+                       'فوق الجدول: النقص والزيادة بالجنيه بالتكلفة الحالية للصنف. «بيع بعد اللقطة» = اللي اتباع ناقص المرتجع على فواتير الفرع بين أخذ اللقطة وآخر عدّ؛ «الفارق الصافي» = المعدود − (المتوقع − البيع بعد اللقطة)، فالصنف اللي «نقصه» كان بيع أثناء الجرد بيطلع مطابق. ده للعرض بس: كود ERP وملف التسوية بالفارق الأصلي زي ما هو.',
+                       'Per item: expected, counted, difference. Filter (all / surplus / deficit / match) with a minimum difference. "Export for adjustment" gives the surplus and deficit file to enter the adjustment in SOFTECH. "Close session" is final. '
+                       'Above the table: deficit and surplus in EGP at the item\'s current cost. "Sold after snapshot" = sold minus returned on the branch\'s invoices between the snapshot and the last count entry; "Net difference" = counted − (expected − sold after snapshot), so an item whose "shortage" was only sales during the count shows as matched. Display only: the ERP code and the adjustment file keep the original difference.')},
         ],
         'steps': [
             T('أنشئ الجلسة من «الجلسات» (أو «بدء سريع»).', 'Create the session from "Sessions" (or "Quick start").'),
@@ -533,9 +535,15 @@ SCREENS = [
             {'target': 'stockcount-sessions-row', 'label': T('كارت الجلسة', 'Session card'),
              'text': T('يفتح الجلسة على تبويباتها: 📸 اللقطة، 📊 العد، 📉 الفروق.', 'Opens the session on its tabs: 📸 Snapshot, 📊 Count, 📉 Variances.'),
              'when': T('لما تكمّل جرد شغّال أو تراجع فروقات جلسة.', 'To continue a running count or review a session\'s variances.')},
+            {'target': 'stockcount-variance-value', 'label': T('نقص صافي · زيادة صافية', 'Net deficit · Net surplus'),
+             'text': T('الفروق بالجنيه بالتكلفة الحالية، بعد خصم اللي اتباع بين اللقطة وآخر عدّ.',
+                       'The variances in EGP at current cost, after taking out what was sold between the snapshot and the last count.'),
+             'when': T('قبل ما تدوّر على نقص: شوف الأول هل كان بيع أثناء الجرد.', 'Before chasing a shortage: first check whether it was a sale during the count.'),
+             'open_hint': T('في «📉 الفروق» لجلسة فيها عدّ.', 'In "📉 Variance" for a session with counts.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»', 'The screen opens for every role that holds its module on Permissions'),
+        'change_note': T('«الفروق»: قيمة النقص والزيادة بالجنيه، والبيع أثناء الجرد بيتخصم من الفارق الصافي. · الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»',
+                         '"Variance": deficit and surplus in EGP, and sales during the count are netted out of the net difference. · The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'stockcount.mobile',

@@ -346,9 +346,36 @@ def _margin(profit, revenue):
     return round(profit / revenue * 100, 2) if revenue else 0.0
 
 
-# Module-level caches — invalidated by sync task after every run.
+# Module-level caches — invalidated by sync task after every run (it sets them back to None).
+# A map with labels is kept until then. An EMPTY map (no classification synced yet) is kept for
+# EMPTY_LABEL_TTL seconds only: long enough that one request never re-queries per row (every
+# _channel_label() call used to re-run the lookups — an N+1 on by_channel), short enough that labels
+# synced by another process show up soon without that process's invalidation reaching this one.
+EMPTY_LABEL_TTL = 300
 _channel_label_cache: dict | None = None
 _person_type_label_cache: dict | None = None
+_empty_until: dict = {}          # cache name → time.monotonic() deadline while that cache holds an empty map
+
+
+def _cached(name):
+    """The cached map for `name`, or None when absent or an empty map past its TTL."""
+    import time
+    m = globals()[name]
+    if m is None:
+        return None
+    until = _empty_until.get(name)
+    if until is not None and time.monotonic() >= until:
+        return None
+    return m
+
+
+def _store(name, m, empty):
+    import time
+    globals()[name] = m
+    if empty:
+        _empty_until[name] = time.monotonic() + EMPTY_LABEL_TTL
+    else:
+        _empty_until.pop(name, None)
 
 
 def _get_channel_label_map() -> dict:
@@ -359,9 +386,9 @@ def _get_channel_label_map() -> dict:
     Fallback: Customer.person_classif_label (populated during customer sync).
     Cached per process; invalidated by sync task.
     """
-    global _channel_label_cache
-    if _channel_label_cache is not None:
-        return _channel_label_cache
+    hit = _cached('_channel_label_cache')
+    if hit is not None:
+        return hit
 
     m: dict = {'': 'غير مصنّف'}
 
@@ -407,8 +434,7 @@ def _get_channel_label_map() -> dict:
             if code and label:
                 m[code] = label
 
-    if len(m) > 1:
-        _channel_label_cache = m
+    _store('_channel_label_cache', m, empty=len(m) <= 1)
     return m
 
 
@@ -418,9 +444,9 @@ def _get_person_type_label_map() -> dict:
 
     Primary source: SoftechPersonType cache; fallback: Customer.person_type_label.
     """
-    global _person_type_label_cache
-    if _person_type_label_cache is not None:
-        return _person_type_label_cache
+    hit = _cached('_person_type_label_cache')
+    if hit is not None:
+        return hit
 
     m: dict = {}
 
@@ -444,8 +470,7 @@ def _get_person_type_label_map() -> dict:
             if r['softech_ptcode'] and r['person_type_label']:
                 m[r['softech_ptcode']] = r['person_type_label']
 
-    if m:
-        _person_type_label_cache = m
+    _store('_person_type_label_cache', m, empty=not m)
     return m
 
 
@@ -759,7 +784,13 @@ def sales_overview(request):
     # net_cogs   = Σ(cogs   on sales lines) − Σ(cogs   on return lines)
     #
     # Using conditional Sum in a single aggregate query (one DB round-trip).
+    from . import margin as _M                       # C19: the one VAT-aligned margin basis (additive fields)
+    _rev, _rev_ex, _cogs_x, _pex = _M.line_expressions()
     lines_agg = line_qs.aggregate(
+        rev_ex_s     = Sum(_rev_ex,   filter=Q(purchase__doc_code='115')),
+        rev_ex_r     = Sum(_rev_ex,   filter=Q(purchase__doc_code='30')),
+        cogs_x_s     = Sum(_cogs_x,   filter=Q(purchase__doc_code='115')),
+        cogs_x_r     = Sum(_cogs_x,   filter=Q(purchase__doc_code='30')),
         profit_s     = Sum(_PROFIT,   filter=Q(purchase__doc_code='115')),
         profit_r     = Sum(_PROFIT,   filter=Q(purchase__doc_code='30')),
         cogs_s       = Sum(_COGS,     filter=Q(purchase__doc_code='115')),
@@ -776,6 +807,8 @@ def sales_overview(request):
     total_qty      = float(lines_agg['total_qty']       or 0)
     total_line_count = lines_agg['total_line_count']    or 0
     distinct_items   = lines_agg['distinct_items']      or 0
+    rev_ex_vat    = (lines_agg['rev_ex_s'] or 0) - (lines_agg['rev_ex_r'] or 0)
+    profit_ex_vat = rev_ex_vat - ((lines_agg['cogs_x_s'] or 0) - (lines_agg['cogs_x_r'] or 0))
 
     # Use net_revenue (sales - returns) everywhere as the primary revenue metric.
     avg_basket    = round(net_rev / total_transactions, 2) if total_transactions else 0.0
@@ -1101,6 +1134,11 @@ def sales_overview(request):
             'total_profit':       total_profit,
             'total_cogs':         total_cogs,        # cost of goods sold = Σ(cost_price × qty)
             'profit_margin_pct':  profit_margin,
+            # C19: the same lines on the VAT-aligned basis (apps/analytics/margin.py); the fields above unchanged
+            'margin_basis':       _M.BASIS,
+            'revenue_ex_vat':     _M.money(rev_ex_vat),
+            'profit_ex_vat':      _M.money(profit_ex_vat),
+            'margin_ex_vat_pct':  _M.margin_pct(profit_ex_vat, rev_ex_vat),
             'total_discount':     total_discount,
             'avg_basket':         avg_basket,
             'total_qty':          total_qty,

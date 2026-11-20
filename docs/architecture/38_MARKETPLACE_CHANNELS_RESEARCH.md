@@ -157,3 +157,17 @@ Rules that follow CLAUDE.md:
 | M3 | Settlement import + commission journal (finance GL) | Money reconciliation |
 | M4 | Amazon / Noon adapter for non-medicine catalog from HQ | Only after category approval |
 | M5 | Instashop / Chefaa API adapters | Only if they offer an API |
+
+**M2 safety gates — done 2026-11-20 (before any real adapter):** every PushLog payload / response / error
+is masked before it is stored (`push.mask`: the channel's own credential values, secret-named keys such as
+token / secret / password / api key / authorization, plus `core.errors.redact`), so a platform echoing our
+token can never reach the push-log screen; the unauthenticated webhook is throttled per IP
+(`WebhookThrottle`, 300/minute, fail-closed counters) before the signature check. Still needed for M2:
+Talabat partner API credentials + their webhook signature scheme.
+**Platform order number on the SOFTECH sale — 2026-11-20 (owner OK, probe first):** a platform sale's header
+`comments` (varchar(100), the only free-text header column) carries «<platform> #<order no.>», e.g.
+«طلبات #TLB-1029384» (`platform_accounts.platform_comment`; order number cleaned to `A-Z a-z 0-9 . _ / -`).
+Every other sale keeps native's empty comments. Native POS never fills it on pending docs (80/180), while
+cashiers sometimes type one on settled sales — so whether it survives the cashier's settlement is checked on
+the first real platform sale (our `vf2` tag does not survive). Either way the link stays on our side
+(ExternalOrder → POS order → SOFTECH docnumber).

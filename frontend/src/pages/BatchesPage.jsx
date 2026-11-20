@@ -18,6 +18,8 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from '../components/SortTh'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import { ConfirmButton } from '../components/InlineConfirm'
+import { confirmBar, notify } from '../components/ui'
 
 // ── date helpers ──────────────────────────────────────────────────────────────
 const _iso = (d) => d.toISOString().slice(0, 10)
@@ -674,13 +676,14 @@ function PurchaseExpiryAuditTab() {
                             ? <span className="text-green-600 text-xs">✓ طُلب الخصم</span>
                             : <button
                                 data-tour="batches-main-request-discount"
-                                onClick={() => {
+                                onClick={async () => {
                                   const below = r.unit_cost != null && r.markdown_net_price != null && r.markdown_net_price < r.unit_cost
-                                  if (window.confirm(
+                                  const ok = await confirmBar(
                                     `طلب خصم خاص ${r.markdown_discount_pct}% على «${r.item_name}» `
                                     + `(سعر بعد الخصم ${r.markdown_net_price} ج${below ? ' — أقل من التكلفة (تصريف)' : ''}).\n`
-                                    + `سيُرسَل للاعتماد في «اعتماد الأسعار» ولن يُطبَّق في SOFTECH إلا بعد الموافقة.`))
-                                    requestMarkdown.mutate(r)
+                                    + `سيُرسَل للاعتماد في «اعتماد الأسعار» ولن يُطبَّق في SOFTECH إلا بعد الموافقة.`,
+                                    { title: 'طلب خصم قرب الانتهاء', confirmLabel: 'إرسال للاعتماد' })
+                                  if (ok) requestMarkdown.mutate(r)
                                 }}
                                 disabled={requestMarkdown.isPending}
                                 className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
@@ -1269,7 +1272,7 @@ function DisposalTab() {
   const setStatus = useMutation({
     mutationFn: ({ id, status }) => batchesApi.expiryDisposalStatus(id, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['batches', 'disposal'] }),
-    onError: (e) => alert(e?.response?.data?.detail || 'تعذّر تغيير الحالة'),
+    onError: (e) => notify.error('تعذّر تغيير الحالة', e?.response?.data?.detail),
   })
   const exp = useMutation({
     mutationFn: () => batchesApi.expiryDisposalExport({ items: rows }),
@@ -1334,7 +1337,7 @@ function DisposalTab() {
                       {r.status === 'approved' && canApprove &&
                         <button data-tour="batches-main-disposal-done" onClick={() => setStatus.mutate({ id: r.id, status: 'done' })} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">تم التنفيذ</button>}
                       {r.status !== 'cancelled' && r.status !== 'done' &&
-                        <button data-tour="batches-main-disposal-cancel" onClick={() => window.confirm('إلغاء قرار الإتلاف/المرتجع ده؟') && setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</button>}
+                        <ConfirmButton data-tour="batches-main-disposal-cancel" confirmLabel="تأكيد الإلغاء؟" title="إلغاء قرار الإتلاف/المرتجع" onConfirm={() => setStatus.mutate({ id: r.id, status: 'cancelled' })} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">إلغاء</ConfirmButton>}
                     </div>
                   </td>
                 </tr>

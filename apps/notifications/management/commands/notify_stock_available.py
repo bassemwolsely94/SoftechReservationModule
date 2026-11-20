@@ -5,11 +5,12 @@ Called automatically after every sync run (hooked into tasks.py).
 Can also be run manually:
     python manage.py notify_stock_available
 
-Scans all 'pending' reservations. When stock covers the requested qty
-at the reservation's branch, it:
+Scans all 'pending' reservations. When SELLABLE stock at the reservation's branch covers
+EVERY line (header item + extra lines — C33, apps/reservations/stock_check.py), it:
   1. Auto-promotes reservation to 'available'
   2. Fires a notification to the assigned staff + branch call_center
   3. Logs to the reservation's chatter (ReservationActivity)
+A basket with one short line, or with a free-text (manual) line, stays 'pending'.
 """
 from django.core.management.base import BaseCommand
 
@@ -22,31 +23,29 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from apps.reservations.models import Reservation, ReservationStatusLog
-        from apps.catalog.models import ItemStock
+        from apps.reservations import stock_check
         from apps.notifications.models import Notification
         from apps.users.models import StaffProfile
 
         dry_run = options['dry_run']
         pending = Reservation.objects.filter(
             status='pending'
-        ).select_related('item', 'branch', 'customer', 'assigned_to', 'created_by')
+        ).select_related('item', 'branch', 'customer', 'assigned_to', 'created_by'
+                         ).prefetch_related('lines__item')
 
         promoted = 0
         for r in pending:
-            stock = ItemStock.objects.filter(
-                item=r.item,
-                branch=r.branch,
-                quantity_on_hand__gte=r.quantity_requested,
-            ).first()
-
-            if not stock:
-                continue
+            result = stock_check.check(r, lines=list(r.lines.all()))
+            if result['overall'] != stock_check.ALL_AVAILABLE:
+                continue                       # one short / manual line keeps it pending (C33)
+            where = r.branch.name_ar or r.branch.name
+            detail = stock_check.summary_text(result)
+            first = result['lines'][0]['label']
+            n = len(result['lines'])
+            name = first if n == 1 else f'{first} (+{n - 1})'
 
             if dry_run:
-                self.stdout.write(
-                    f'[DRY RUN] Would promote #{r.id} {r.item.name} '
-                    f'({stock.quantity_on_hand} available)'
-                )
+                self.stdout.write(f'[DRY RUN] Would promote #{r.id} {name} ({detail})')
                 continue
 
             # Promote status
@@ -55,7 +54,7 @@ class Command(BaseCommand):
                 reservation=r,
                 old_status=old_status,
                 new_status='available',
-                note=f'تلقائي: {stock.quantity_on_hand} وحدة متاحة في {r.branch.name_ar or r.branch.name}',
+                note=f'تلقائي: كل الأصناف متاحة في {where} — {detail}'[:500],
             )
             r.status = 'available'
             r.save(update_fields=['status', 'updated_at'])
@@ -68,21 +67,18 @@ class Command(BaseCommand):
                 ReservationActivity.objects.create(
                     reservation=r,
                     activity_type='stock_checked',
-                    message=(
-                        f'✅ المخزون متاح تلقائياً: {stock.quantity_on_hand} وحدة '
-                        f'في {r.branch.name_ar or r.branch.name}'
-                    ),
+                    message=f'✅ المخزون متاح تلقائياً لكل الأصناف في {where}: {detail}',
                     created_by=None,
                 )
             except Exception:
                 pass  # ReservationActivity may not exist in all installations
 
             # Build notification content
-            title = f'📦 المخزون متاح — {r.item.name}'
+            title = f'📦 المخزون متاح — {name}'
+            customer_name = r.customer.name if r.customer_id else (r.contact_name or 'عميل')
             body = (
-                f'الحجز #{r.id} للعميل {r.customer.name} ({r.contact_phone}) '
-                f'أصبح المخزون متاحاً: {stock.quantity_on_hand} وحدة '
-                f'في فرع {r.branch.name_ar or r.branch.name}. '
+                f'الحجز #{r.id} للعميل {customer_name} ({r.contact_phone}) '
+                f'أصبحت كل أصنافه متاحة في فرع {where}: {detail}. '
                 f'يرجى التواصل مع العميل.'
             )
 
@@ -125,7 +121,7 @@ class Command(BaseCommand):
                 )
 
             promoted += 1
-            self.stdout.write(f'  ✓ Promoted #{r.id} — {r.item.name}')
+            self.stdout.write(f'  ✓ Promoted #{r.id} — {name}')
 
         if not dry_run:
             self.stdout.write(self.style.SUCCESS(

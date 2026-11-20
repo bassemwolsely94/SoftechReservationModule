@@ -328,6 +328,21 @@ SCREENS = [
              'more': T(
                  'نظرة سريعة على يوم التوصيل:\n• «إجمالي اليوم»، «في الانتظار»، «مكلَّف»، «في الطريق»، «مُسلَّم اليوم»، «فشل اليوم».\n• «معدل النجاح» ومعاه متوسط وقت التسليم بالدقايق.\n• «متأخرة الآن» ومعاه «نقدي معلق» — لو الرقم أحمر ابدأ بالطلبات المتأخرة.',
                  'A quick look at the delivery day:\n• "Total today", "Waiting", "Assigned", "On the way", "Delivered today", "Failed today".\n• "Success rate" with the average delivery time in minutes.\n• "Late now" with "Cash outstanding" — if it is red, start with the late orders.')},
+            {'target': 'delivery-dashboard-stuck', 'label': T('⏳ طلبات مفتوحة أقدم من 24 ساعة', '⏳ Orders open over 24 hours'),
+             'text': T('طلبات لسه مفتوحة هنا بعد المدة دي، ومعاها حالتها في SOFTECH من آخر فحص (كل ساعة، قراءة بس).',
+                       'Orders still open here after that time, with their SOFTECH status from the last hourly check (read only).'),
+             'when': T('يظهر بس لو فيه طلبات عالقة. اضغطه يفتح الجدول، واضغط صف يفتح الطلب.',
+                       'Shows only when orders are stuck. Click it to open the table; click a row to open the order.'),
+             'more': T('الحكم من SOFTECH نفسه، مش تخمين:\n'
+                       '• «مُسلَّم في SOFTECH» ← يتقفل هنا «مغلق»؛ «ملغى في SOFTECH» ← «ملغى».\n'
+                       '• «مفتوح في SOFTECH» أو «غير موجود» ← يفضل مفتوح: دي الحالات اللي محتاجة حد يراجعها.\n'
+                       '• طلب عليه تحصيل نقدية ما بيتلمسش — بيتقفل يدوي بعد مطابقة الفلوس.\n'
+                       '• الإغلاق التلقائي مطفأ لحد ما الإدارة تشغّله؛ وهو مطفأ الجدول بيعرض اللي كان هيتقفل بس. كل إغلاق بيتسجل في «سجل الحالات» باسم «نظام».',
+                       'The verdict comes from SOFTECH itself, not a guess:\n'
+                       '• "Delivered in SOFTECH" → closed here; "Cancelled in SOFTECH" → cancelled.\n'
+                       '• "Open in SOFTECH" or "Not in SOFTECH" → stays open: these are the cases someone must check.\n'
+                       '• An order with a cash collection is never touched — it is closed by hand after the cash is reconciled.\n'
+                       '• Auto-close stays off until management turns it on; while off, the table only shows what would close. Every close is logged in the "Status log" as "system".')},
             {'target': 'delivery-dashboard-search', 'label': T('بحث — اسم، هاتف، رقم طلب...', 'Search — name, phone, order no...'),
              'text': T('ابحث باسم العميل أو تليفونه أو رقم الطلب.', 'Search by customer name, phone or order number.'),
              'when': T('أسرع طريقة لما العميل يتصل يسأل على طلبه.', 'The fastest way when a customer calls about their order.'),
@@ -448,7 +463,8 @@ SCREENS = [
              'open_hint': T('افتح طلب واضغط «✍️ إدخال يدوي».', 'Open an order and press "✍️ Manual entry".')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»', 'The screen opens for every role that holds its module on Permissions'),
+        'change_note': T('جديد: شريط «طلبات مفتوحة أقدم من 24 ساعة» بحالتها في SOFTECH، والإغلاق التلقائي للي SOFTECH خلّصها (مطفأ لحد قرار الإدارة) · الشاشة تفتح لكل دور يملك موديولها في «الصلاحيات»',
+                         'New: an "Orders open over 24 hours" bar with their SOFTECH status, and auto-close for those SOFTECH finished (off until management decides) · The screen opens for every role that holds its module on Permissions'),
     },
     {
         'key': 'delivery.dispatch',
@@ -612,6 +628,9 @@ SCREENS = [
              'body': T('توزيع الطلبات على ساعات اليوم وساعة الذروة — لتحديد عدد السائقين في كل وردية.', 'Orders by hour of day and the peak hour — to plan drivers per shift.')},
             {'key': 'csat', 'title': T('⭐ رضا العملاء', '⭐ Customer satisfaction'),
              'body': T('متوسط تقييم العملاء بعد التسليم، توزيع التقييمات، والتقييمات المنخفضة (1-2) لمتابعتها.', 'Average customer rating after delivery, the distribution, and low ratings (1-2) to follow up.')},
+            {'key': 'small', 'title': T('💸 طلبات صغيرة وبدون رسوم', '💸 Small and fee-less orders'),
+             'body': T('فواتير بيع قناة التوصيل (90) من مبيعات SOFTECH المتزامنة، الافتراضي آخر 7 أيام. «صغير» = الأصناف أقل من 100 ج. «أقل من أجر الطيار» = هامش الأصناف (البيع − التكلفة وقت البيع) + رسوم «D.L.V.» أقل من 10 ج لكل وحدة رسوم (وحدة واحدة على الأقل). «بدون رسوم» = مفيش سطر «D.L.V.» (كود 2)؛ و«غير مفسَّر» لو نفس العميل (الـ PIC) مالوش فاتورة توصيل برسوم في نفس اليوم أو يوم قبل أو بعد. ملخص لكل فرع وقائمة الطلبات المُعلَّمة وExcel. فروعك بس. للمتابعة فقط — أي حد أدنى للطلب أو تغيير في الرسوم قرار المالك.',
+                       'Sales invoices on the delivery channel (90) from the synced SOFTECH sales, last 7 days by default. "Small" = goods under 100 EGP. "Below the rider\'s pay" = goods margin (sale − cost at sale) + the «D.L.V.» fee under 10 EGP per fee unit (at least one unit). "Fee-less" = no «D.L.V.» line (code 2); "unexplained" when the same customer (PIC) has no fee-carrying delivery invoice the same day or the day before or after. A summary per branch, the flagged orders and Excel. Your branches only. For follow-up only — any minimum order or fee change is the owner\'s decision.')},
         ],
         'related': ['delivery.dashboard'],
         'tour': [
@@ -633,6 +652,11 @@ SCREENS = [
                        'Per driver: total, delivered, failed, success rate, average time and cash collected.'),
              'when': T('النقدي هنا هو المسجَّل في النظام — مش بديل لعدّ الفلوس الفعلي.', 'The cash here is what was recorded in the system — not a substitute for counting the real money.'),
              'open_hint': T('في تبويب «أداء السائقين»، لو فيه طلبات في الفترة.', 'On the "Driver performance" tab, when the period has orders.')},
+            {'target': 'delivery-analytics-small-orders', 'label': T('💸 طلبات صغيرة وبدون رسوم', '💸 Small and fee-less orders'),
+             'text': T('عدد الطلبات الصغيرة، واللي هامشها أقل من أجر الطيار، واللي من غير رسوم ومالهاش طلب مرافق.',
+                       'How many orders were small, earned less than the rider\'s pay, or carried no fee with no companion order.'),
+             'when': T('في مراجعة الأسبوع، قبل أي نقاش عن حد أدنى للطلب.', 'In the weekly review, before any talk of a minimum order.'),
+             'open_hint': T('في تبويب «💸 طلبات صغيرة وبدون رسوم».', 'On the "💸 Small and fee-less orders" tab.')},
             {'target': 'delivery-analytics-content', 'label': T('محتوى التبويب', 'Tab content'),
              'text': T('محتوى التبويب المختار. في «الورديات» ساعة الذروة، وفي «الرضا» التقييمات المنخفضة (1-2) للمتابعة.',
                        'The chosen tab\'s content. "Shifts" shows the peak hour; "CSAT" lists low ratings (1-2) to follow up.'),
@@ -647,8 +671,9 @@ SCREENS = [
                  'شاشة قراءة بس — مفيش فيها أي تعديل على الطلبات.\n• استخدمها في مراجعة الأسبوع أو الشهر: مين من السائقين محتاج متابعة، وأي منطقة أو ساعة محتاجة سائقين أكتر.',
                  'A read-only screen — it changes nothing on the orders.\n• Use it in the weekly or monthly review: which drivers need follow-up, and which area or hour needs more drivers.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر الفرع يقبل أكثر من فرع معاً', 'The branch filter takes several branches at once'),
+        'updated': '2026-11-20',
+        'change_note': T('تبويب جديد «💸 طلبات صغيرة وبدون رسوم»: الطلبات الصغيرة واللي أقل من أجر الطيار والفواتير بدون رسوم.',
+                         'New "💸 Small and fee-less orders" tab: small orders, orders below the rider\'s pay and fee-less invoices.'),
     },
     {
         'key': 'delivery.mobile_board',

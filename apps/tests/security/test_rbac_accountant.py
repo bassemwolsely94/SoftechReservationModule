@@ -52,7 +52,7 @@ class AccountantMatrixTests(TestCase):
         # rpa: users 0058 seeds an explicit row for every role and action, accountant denied;
         # marketplace: users 0059 does the same;
         # alerts: users 0060 seeds admin + supervisor grants and a denial row for every other role;
-        # the ten role-review modules: users 0061 seeds a row for every role and action).
+        # the ten role-review modules: users 0062 seeds a row for every role and action).
         later = importlib.import_module('apps.users.migrations.0055_data_health_module')
         self.assertIn('accountant', later.ROLES)
         from apps.users.management.commands.seed_permissions import ROLE_REVIEW_MODULES

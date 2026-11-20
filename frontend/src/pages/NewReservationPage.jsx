@@ -338,7 +338,8 @@ export default function NewReservationPage() {
       if (item) handleItemSelect(item)
       setForm(f => ({
         ...f,
-        branch: String(m.branch),
+        // C28: «حجز هنا» in the missed-sales network-stock drawer passes the branch that has it
+        branch: searchParams.get('branch') || String(m.branch),
         quantity_requested: Math.max(1, Math.round(Number(m.qty) || 1)),
         order_source: 'pos_missed',
         ...(item ? {} : { manual_item_name: m.item_name }),

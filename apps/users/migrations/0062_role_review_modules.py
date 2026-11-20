@@ -121,7 +121,7 @@ def backwards(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('users', '0060_alerts_module'),
+        ('users', '0061_staffprofile_bell_view'),
     ]
 
     operations = [

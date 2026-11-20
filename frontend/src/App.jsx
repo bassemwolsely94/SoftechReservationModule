@@ -126,6 +126,7 @@ const MobileStockCountDetailPage = lazy(() => import('./pages/mobile/MobileStock
 const MobileDailyCountPage = lazy(() => import('./pages/mobile/MobileDailyCountPage'))
 const MobileQAPage = lazy(() => import('./pages/mobile/MobileQAPage'))
 const MobileQADetailPage = lazy(() => import('./pages/mobile/MobileQADetailPage'))
+const MobileFridgeLogPage = lazy(() => import('./pages/mobile/MobileFridgeLogPage'))
 const MobileAttendancePage = lazy(() => import('./pages/mobile/MobileAttendancePage'))
 const DeliveryTrackPage = lazy(() => import('./pages/DeliveryTrackPage'))
 const CounselCardPublicPage = lazy(() => import('./pages/CounselCardPublicPage'))
@@ -360,6 +361,7 @@ export default function App() {
             <Route path="stock-count/:id"   element={<MobileStockCountDetailPage />} />
             <Route path="daily-count"       element={<MobileDailyCountPage />} />
             <Route path="qa"                element={<MobileQAPage />} />
+            <Route path="qa/fridge"         element={<MobileFridgeLogPage />} />
             <Route path="qa/:id"            element={<MobileQADetailPage />} />
             <Route path="attendance"        element={<MobileAttendancePage />} />
           </Route>

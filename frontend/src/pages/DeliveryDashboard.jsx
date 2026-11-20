@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deliveryApi, branchesApi } from '../api/client'
 import DeliveryBackfillModal from '../components/DeliveryBackfillModal'
+import StuckOrdersPanel from '../components/delivery/StuckOrdersPanel'
 import useHelpTab from '../help/useHelpTab'
 import { fa } from '../utils/flowArrow'
 import { cairoDaysAgo, cairoToday } from '../utils/cairoDate'
@@ -851,6 +852,9 @@ export default function DeliveryDashboard() {
             color={summary.late_orders > 0 ? 'red' : 'gray'} icon="⚠️" />
         </div>
       )}
+
+      {/* C21: orders open longer than the threshold + what SOFTECH says about them */}
+      <StuckOrdersPanel onOpen={setDetailId} />
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">

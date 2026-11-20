@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .margin_views import margin_board   # C19
 
 urlpatterns = [
     path('filter-options/',   views.filter_options,         name='analytics-filter-options'),
@@ -11,4 +12,5 @@ urlpatterns = [
     path('churn/',            views.customer_churn,         name='analytics-churn'),
     path('branch-contribution/', views.branch_contribution, name='analytics-branch-contribution'),
     path('inventory-investment/', views.inventory_investment, name='analytics-inventory-investment'),
+    path('margin-board/', margin_board, name='analytics-margin-board'),
 ]

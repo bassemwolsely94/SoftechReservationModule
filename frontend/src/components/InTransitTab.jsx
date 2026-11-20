@@ -27,6 +27,10 @@ import useSortableRows from '../hooks/useSortableRows'
 import SortTh from './SortTh'
 import MultiSelectFilter from './MultiSelectFilter'
 import BranchMultiSelect from './BranchMultiSelect'
+import SavedViewsMenu from './SavedViewsMenu'
+import useSavedViews from '../hooks/useSavedViews'
+
+const TR_SV_KEYS = ['priority', 'transit_status', 'awaiting_erp', 'supplying_branch', 'receiving_branch', 'min_days']
 import { notify } from './ui'
 
 const toLatinDigits = s =>
@@ -1069,6 +1073,8 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
   const { user } = useAuthStore()
   const qc       = useQueryClient()
   const [filters, setFilters] = useState({ transit_status: ['in_transit'] })
+  // C23 saved views: the whole filter bar
+  const sv = useSavedViews('transits', { keys: TR_SV_KEYS, getFilters: () => filters, applyFilters: setFilters })
   // Deep-link: open a specific document straight into the detail panel
   // (e.g. arriving from a transfer request's "قيد النقل ←" link).
   const [selected, setSelected] = useState(openId ? { id: openId } : null)
@@ -1263,7 +1269,10 @@ export default function InTransitTab({ openId = null, onOpenConsumed }) {
       </div>
 
       {/* Filters */}
-      <FiltersBar filters={filters} setFilters={setFilters} branches={branches} />
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0"><FiltersBar filters={filters} setFilters={setFilters} branches={branches} /></div>
+        <SavedViewsMenu sv={sv} className="pt-3 pe-3" />
+      </div>
 
       {/* Grid */}
       {isLoading ? (
