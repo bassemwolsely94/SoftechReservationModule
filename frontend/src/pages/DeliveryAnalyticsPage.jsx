@@ -4,7 +4,9 @@
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { deliveryApi, branchesApi } from '../api/client'
+import { deliveryApi, branchesApi, exportJobsApi } from '../api/client'
+import useExportJob from '../hooks/useExportJob'
+import ExportJobStatus from '../components/ExportJobStatus'
 import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
@@ -303,20 +305,12 @@ function SmallOrdersTab({ dateFrom, dateTo, branchId }) {
     queryKey: ['delivery-small-orders', dateFrom, dateTo, branchId],
     queryFn: () => deliveryApi.smallOrders(params).then(r => r.data),
   })
-  const [busy, setBusy] = useState(false)
   const { sorted, headerProps: hp } = useSortableRows(data?.orders || [], { defaultSort: { key: 'margin', dir: 'asc', type: 'number' } })
-  const exportXlsx = async () => {
-    setBusy(true)
-    try {
-      const res = await deliveryApi.smallOrdersExcel(params)
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `delivery_small_orders_${dateFrom}_${dateTo}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
-    } finally { setBusy(false) }
-  }
+  // Stage 4: the workbook is built as a background job (start → progress → download)
+  const exp = useExportJob({
+    storageKey: 'export-job:delivery-small-orders',
+    start: () => exportJobsApi.start('/delivery/small-orders/export/', params),
+  })
   if (isLoading) return <div className="text-center py-12 text-gray-400 animate-pulse">جاري التحميل…</div>
   if (isError || !data) return <div className="text-center py-12 text-gray-400">تعذّر تحميل التقرير</div>
   const t = data.totals
@@ -334,10 +328,11 @@ function SmallOrdersTab({ dateFrom, dateTo, branchId }) {
         <span className="text-sm text-amber-700">صغيرة: <b>{fmt(t.small)}</b></span>
         <span className="text-sm text-rose-700">أقل من أجر الطيار: <b>{fmt(t.below_rider)}</b></span>
         <span className="text-sm text-gray-700">بدون رسوم: <b>{fmt(t.feeless)}</b> — غير مفسَّرة <b>{fmt(t.feeless_unexplained)}</b></span>
-        <button onClick={exportXlsx} disabled={busy}
+        <button onClick={() => exp.run()} disabled={exp.busy}
           className="ms-auto px-3 py-1.5 text-xs rounded-lg border border-gray-300 hover:border-brand-400 disabled:opacity-50">
-          {busy ? '…' : '⬇ Excel'}
+          {exp.busy ? '…' : '⬇ Excel'}
         </button>
+        <ExportJobStatus exp={exp} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs text-right">

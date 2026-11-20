@@ -118,7 +118,7 @@ class ApiTests(TestCase):
         r = c.get(URL, {'date_from': D.isoformat(), 'date_to': D.isoformat()})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(sorted(o['pic'] for o in r.json()['orders']), ['B1', 'B2'])
-        x = c.get(URL, {'date_from': D.isoformat(), 'date_to': D.isoformat(), 'format': 'xlsx'})
+        x = c.get(URL + 'export/', {'date_from': D.isoformat(), 'date_to': D.isoformat()})
         self.assertIn('spreadsheetml', x['Content-Type'])
         self.assertEqual(c.get(URL, {'date_from': 'x'}).status_code, 400)
 
@@ -137,3 +137,17 @@ class ApiTests(TestCase):
     def test_anonymous_refused(self):
         from rest_framework.test import APIClient
         self.assertIn(APIClient().get(URL).status_code, (401, 403))
+
+    def test_export_runs_as_a_background_job(self):
+        from apps.export_jobs import view_kinds
+        from apps.export_jobs.models import ExportJob
+        self.assertEqual(view_kinds.key_for_path(URL + 'export/'), 'v:delivery_small_orders')
+        _, _, c = make_admin('c20_admin_job')
+        r = c.post(f'{URL}export/jobs/?date_from={D}&date_to={D}')
+        self.assertIn(r.status_code, (200, 201, 202), r.content)
+        self.assertEqual(ExportJob.objects.get(pk=r.json()['id']).kind, 'v:delivery_small_orders')
+
+    def test_rider_cannot_start_the_export_job(self):
+        _, _, c = make_user('c20_rider_job', role='delivery', branch=self.b1)
+        self.assertEqual(c.get(URL + 'export/').status_code, 403)
+        self.assertEqual(c.post(URL + 'export/jobs/').status_code, 403)

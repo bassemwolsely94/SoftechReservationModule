@@ -148,7 +148,7 @@ def delivery_small_orders_export():
             invoice_date=timezone.make_aware(dt.datetime.combine(day, dt.time(12, 0))))
         PurchaseHistoryLine.objects.create(purchase=inv, item=item, quantity=Decimal('1'), unit_price=Decimal('50'),
                                            line_total=Decimal('50'), cost_at_sale=Decimal('40'))
-    return _get(f'/api/delivery/small-orders/?date_from={day}&date_to={day}&format=xlsx')
+    return _get(f'/api/delivery/small-orders/export/?date_from={day}&date_to={day}')
 
 
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,

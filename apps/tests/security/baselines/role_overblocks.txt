@@ -826,3 +826,5 @@ salesperson POST /api/pos-orders/live-check-gaps/987654321/review/
 #   delivery screens.
 delivery GET /api/delivery/small-orders/
 salesperson GET /api/delivery/small-orders/
+delivery GET /api/delivery/small-orders/export/
+salesperson GET /api/delivery/small-orders/export/
