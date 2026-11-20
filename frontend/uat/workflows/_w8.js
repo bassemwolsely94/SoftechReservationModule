@@ -57,6 +57,9 @@ export async function ensureSignedIn(page, key, when = '') {
   if (s === 0 || s >= 500) throw new Error(`UAT backend not answering ${when} for over a minute (status ${s || 'refused'}); this run does not count`)
   await page.request.post('/api/auth/refresh/', { headers: XHR }).catch(() => null)
   if ((s = await meStatus(page)) !== 200) {
+    // a dead session (e.g. a retired device's cookies) must not ride along with the password login
+    // (W8 triage 1d): sign in from a clean cookie jar
+    await page.context().clearCookies()
     const r = await page.request.post('/api/auth/login/', {
       headers: XHR, data: { username: userByKey(key).username, password: PASSWORD } }).catch(() => null)
     if ((s = await meStatus(page)) !== 200) throw new Error(`${key}: could not sign in again ${when} (login ${r?.status() ?? 'failed'}, me ${s}); this run does not count`)
@@ -65,14 +68,31 @@ export async function ensureSignedIn(page, key, when = '') {
   return true
 }
 
+/** The «جديد هنا؟» tour offer chip (frontend/src/help/Hints.jsx TourOffer). */
+export const HELP_CHIP = '[data-tour="general-help-center-offer"]'
+
+/** Init script: hide the help chip, so whether it shows (it is offered once per screen version and
+ *  remembered in localStorage) never decides a click (W8 triage 1b). The overlap itself is checked
+ *  once, on its own, by mobile.spec.js «chip:». */
+function hideHelpChip(selector) {
+  const add = () => {
+    const st = document.createElement('style')
+    st.textContent = `${selector}{display:none !important}`
+    ;(document.head || document.documentElement).appendChild(st)
+  }
+  if (document.documentElement) add()
+  else document.addEventListener('DOMContentLoaded', add, { once: true })
+}
+
 /**
  * A page signed in as `key` in its own context (phone-sized unless `desktop`), session checked.
  * Inline confirms are answered like the old native dialogs (D-25). close() writes rotated cookies
- * back to the role's state file.
+ * back to the role's state file. The help chip is hidden unless `helpChip: true`.
  */
-export async function asUser(browser, key, { desktop = false, ...contextOptions } = {}) {
+export async function asUser(browser, key, { desktop = false, helpChip = false, ...contextOptions } = {}) {
   const context = await browser.newContext({ ...(desktop ? {} : PHONE), storageState: stateFile(key), locale: 'ar-EG', ...contextOptions })
   await context.addInitScript(installInlineConfirmAnswerer, `UAT-${WS} done`)
+  if (!helpChip) await context.addInitScript(hideHelpChip, HELP_CHIP)
   const page = await context.newPage()
   page.on('dialog', d => d.accept(d.type() === 'prompt' ? `UAT-${WS} done` : undefined).catch(() => {}))
   await ensureSignedIn(page, key, 'at the start')

@@ -19,7 +19,7 @@ import { gotoSettled } from '../../lib/page.js'
 import { finding } from '../../lib/findings.js'
 import {
   WS, HOME, TWINS_B, asUser, live, allows, registry, requireRoleReviewCopy, flag, step, call, raw,
-  mustRefuse, mustAllow, clickFor, field, tag, FAKE_PHONE, BASE, idOf, rows,
+  mustRefuse, mustAllow, clickFor, field, tag, FAKE_PHONE, BASE, idOf, rows, HELP_CHIP,
 } from '../_w8.js'
 
 test.use({ trace: 'off' })
@@ -27,6 +27,13 @@ test.describe.configure({ timeout: 15 * 60_000 })
 
 const REG = registry()
 const QA_WRITE = ['create', 'edit', 'approve', 'finalize', 'export']   // apps/qa/views.py _QA_WRITE
+// each create endpoint's POST rule (the views, not the middleware): any of these grants is allowed
+const POST_RULE = {
+  reservations: ['create', 'edit', 'approve', 'finalize'],   // apps/reservations/views.py ReservationsPermission
+  demand: ['create', 'edit', 'approve', 'finalize'],         // apps/demand/views.py DEMAND
+  transfers: ['create', 'edit', 'approve', 'finalize'],      // apps/transfers/views.py TRANSFERS
+  shortage: ['create', 'edit', 'approve'],                   // apps/shortage/views.py SHORTAGE_LISTS
+}
 const branchOf = key => (userByKey(key).shape === 'twinB' ? BRANCH_B : BRANCH_A)
 const otherOf = key => (branchOf(key).id === BRANCH_A.id ? BRANCH_B : BRANCH_A)
 const canPick = l => l.role === 'admin' || !!l.me.can_pick_any_branch
@@ -102,7 +109,7 @@ for (const key of MOBILE_USERS) {
 // ── creates + branch picker ───────────────────────────────────────────────────────────────────────
 const AREAS = {
   reservations: {
-    allowed: l => allows(l, 'reservations', 'create'),
+    allowed: l => allows(l, 'reservations', POST_RULE.reservations),
     newRoute: '/m/reservations/new',
     submitSel: '[data-tour="reservations-new-submit"]',
     pickerSel: '[data-tour="reservations-mnew-details"] select',
@@ -123,7 +130,7 @@ const AREAS = {
     get: id => `/api/reservations/${id}/`,
   },
   demand: {
-    allowed: l => allows(l, 'demand', 'create'),
+    allowed: l => allows(l, 'demand', POST_RULE.demand),
     newRoute: '/m/demand/new',
     submitSel: '[data-tour="demand-mobile-new-submit"]',
     pickerSel: '[data-tour="demand-mobile-new-details"] select',
@@ -141,7 +148,7 @@ const AREAS = {
     get: id => `/api/demand/${id}/`,
   },
   transfers: {
-    allowed: l => allows(l, 'transfers', 'create'),
+    allowed: l => allows(l, 'transfers', POST_RULE.transfers),
     newRoute: '/m/transfers/new',
     submitSel: '[data-tour="transfers-new-submit"] button.btn-primary',
     pickerSel: '[data-tour="transfers-new-branches"] select',
@@ -164,7 +171,7 @@ const AREAS = {
     get: id => `/api/transfers/${id}/`,
   },
   shortage: {
-    allowed: l => allows(l, 'shortage', 'create'),
+    allowed: l => allows(l, 'shortage', POST_RULE.shortage),
     newRoute: '/m/shortage/new',
     submitSel: '[data-tour="shortage-mobile-create"]',
     pickerSel: '[data-tour="shortage-mobile-form"] select',
@@ -287,6 +294,47 @@ for (const key of MOBILE_USERS) {
   })
 }
 
+// ── the «جديد هنا؟» chip never covers a phone form's submit (W8 triage REAL P3 4) ───────────────────
+// asUser hides the chip for every other test (its showing depends on localStorage and timing); this
+// one test shows it on purpose and judges the overlap, so the finding stays checked.
+test('chip: the help offer does not cover a phone form submit', async ({ browser }) => {
+  const { page, context, close } = await asUser(browser, 'admin', { helpChip: true })
+  try {
+    // forget what was offered before (once per context), so the chip is offered on the next screen
+    await context.addInitScript(() => {
+      try {
+        if (!sessionStorage.getItem('uat-w8-help-reset')) {
+          localStorage.removeItem('elrezeiky-help'); sessionStorage.setItem('uat-w8-help-reset', '1')
+        }
+      } catch { /* storage blocked */ }
+    })
+    const forms = [['/m/reservations/new', '[data-tour="reservations-new-submit"]'],
+      ['/m/demand/new', '[data-tour="demand-mobile-new-submit"]']]
+    for (const [route, submitSel] of forms) {
+      await gotoSettled(page, route)
+      const chip = page.locator(HELP_CHIP).first()
+      const offered = await chip.waitFor({ state: 'visible', timeout: 6_000 }).then(() => true).catch(() => false)
+      if (!offered) {
+        test.info().annotations.push({ type: 'note', description: `${route}: chip not offered (nothing to judge)` })
+        continue
+      }
+      const submit = page.locator(submitSel).first()
+      await submit.scrollIntoViewIfNeeded()
+      for (const where of ['scrolled to the submit', 'bottom of the page']) {
+        if (where === 'bottom of the page') await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 1e6))
+        const [a, b] = [await chip.boundingBox(), await submit.boundingBox()]
+        const overlap = a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        if (overlap) {
+          flag({ key: 'admin', route, kind: 'screen', severity: 'P3',
+            expected: 'the «جديد هنا؟» chip never covers the form submit on the phone',
+            actual: `chip over ${submitSel} (${where})` })
+        }
+      }
+      await page.locator(`${HELP_CHIP} button[aria-label]`).first().click().catch(() => {})   // ✕: not now
+    }
+  } finally { await close() }
+})
+
 // ── reservation cancel follows reservations:edit ─────────────────────────────────────────────────
 for (const key of HOME.filter(k => userByKey(k).role !== 'delivery')) {
   test(`cancel: ${key} — mobile reservation cancel follows reservations:edit`, async ({ browser }) => {
@@ -294,7 +342,8 @@ for (const key of HOME.filter(k => userByKey(k).role !== 'delivery')) {
     let id
     try {
       const l = await live(api)
-      const view = allows(l, 'reservations', 'view'), edit = allows(l, 'reservations', 'edit')
+      // change-status (cancel included) is a POST: ReservationsPermission takes any of the POST grants
+      const view = allows(l, 'reservations', 'view'), edit = allows(l, 'reservations', POST_RULE.reservations)
       test.skip(view === null || edit === null, 'reservations has no matrix rows on this copy')
       test.skip(!view, `${key} has no reservations view`)
       const note = tag(`cancel-${key}`)
@@ -310,7 +359,7 @@ for (const key of HOME.filter(k => userByKey(k).role !== 'delivery')) {
       const shown = await cancelBtn.isVisible().catch(() => false)
       if (shown !== edit) {
         flag({ key, route: '/m/reservations/:id', kind: 'button', severity: edit ? 'P2' : 'P3',
-          expected: `«إلغاء» ${edit ? 'offered' : 'not offered'} (reservations:edit=${edit}, role review decision 6)`,
+          expected: `«إلغاء» ${edit ? 'offered' : 'not offered'} (reservations change-status grant=${edit}, role review decision 6)`,
           actual: `«إلغاء» ${shown ? 'offered' : 'not offered'} on a pending reservation` })
       }
       if (edit && shown) {

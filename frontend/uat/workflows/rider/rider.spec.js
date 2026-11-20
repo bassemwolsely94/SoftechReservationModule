@@ -11,10 +11,9 @@
 // the cash completion runs through the rider's proof-of-delivery sheet.
 import { test, expect } from '@playwright/test'
 import { BRANCH_A, userByKey } from '../../lib/users.js'
-import { gotoSettled } from '../../lib/page.js'
-import { finding } from '../../lib/findings.js'
+import { gotoSettled, REFUSED_TEXT } from '../../lib/page.js'
 import {
-  WS, HOME, TWINS_B, asUser, live, allows, requireRoleReviewCopy, flag, step, call, raw, clickFor,
+  HOME, TWINS_B, asUser, live, allows, requireRoleReviewCopy, flag, step, call, raw, clickFor,
   tag, FAKE_PHONE, BASE, scrub, rows, idOf,
 } from '../_w8.js'
 import { assertReaderCopy } from '../../lib/guard.js'
@@ -40,12 +39,21 @@ for (const key of HOME) {
       const want = allows(l, 'rider', 'view')
       test.skip(want === null, 'rider has no matrix rows on this copy')
       const r = await gotoSettled(page, '/rider')
+      // Judge the gate by what the screen did, not by API 403s (W8 triage 1e): /api/delivery/app/*
+      // answers 403 «ليس لديك ملف سائق مرتبط.» to every rider-module holder without a driver
+      // profile, and classify() counted that as a refusal. RequireRole refuses by sending the user to
+      // /dashboard; an opened screen stays on /rider and shows the rider header.
       const stayed = /^\/rider\/?$/.test(r.finalUrl)
+      const header = stayed && await page.locator('[data-tour="delivery-driver-header"]').first()
+        .isVisible({ timeout: 5_000 }).catch(() => false)
+      const bodyText = (await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')) || ''
+      const refusedText = REFUSED_TEXT.test(bodyText)
+      const opened = stayed && header && !refusedText
       if (r.status === 'crash') {
         flag({ key, route: '/rider', kind: 'crash', severity: 'P1', expected: '/rider opens or refuses calmly', actual: `crash (${scrub(r.consoleErrors[0] || '')})` })
-      } else if (want && (!stayed || r.status === 'refused')) {
-        flag({ key, route: '/rider', kind: 'screen', severity: 'P1', expected: `/rider opens (rider:view for ${l.role})`, actual: `${r.status}, landed on ${r.finalUrl}` })
-      } else if (!want && stayed && r.status === 'ok') {
+      } else if (want && !opened) {
+        flag({ key, route: '/rider', kind: 'screen', severity: 'P1', expected: `/rider opens (rider:view for ${l.role})`, actual: `landed on ${r.finalUrl}, header ${header ? 'shown' : 'missing'}${refusedText ? ', refusal text' : ''}` })
+      } else if (!want && opened) {
         flag({ key, route: '/rider', kind: 'screen', severity: 'P1', expected: `/rider refused or redirected (no rider:view for ${l.role})`, actual: 'the rider screen rendered' })
       }
       const mine = await raw(api, 'GET', '/api/delivery/app/my-orders/')
@@ -53,13 +61,17 @@ for (const key of HOME) {
       if (!want && mine.status === 200) {
         flag({ key, route: '/api/delivery/app/my-orders/', kind: 'workflow', severity: 'P1', expected: 'refused without rider:view', actual: 'HTTP 200' })
       }
-      if (want && l.role !== 'delivery' && mine.status === 403 && stayed) {
-        // a rider-module holder with no driver profile: the server says so (403 «ليس لديك ملف سائق»);
-        // the screen must say it calmly, not sit blank
-        const text = (await page.locator('main, #root').first().innerText({ timeout: 5_000 }).catch(() => '')).trim()
-        if (text.length < 20) {
-          finding({ ws: WS, key, route: '/rider', kind: 'screen', severity: 'P3',
-            expected: 'a rider-module holder without a driver profile is told so on /rider', actual: `near-empty screen (${text.length} chars)` })
+      if (want && opened && mine.status === 403) {
+        // a rider-module holder with no driver profile: the server says so (403 «ليس لديك ملف سائق
+        // مرتبط.»); the screen must show those words, not «لا توجد مهام حالياً» (W8 triage, REAL P3 5)
+        const note = page.locator('[data-tour="delivery-driver-no-profile"]').first()
+        const shown = await note.isVisible({ timeout: 5_000 }).catch(() => false)
+        const detail = typeof mine.body?.detail === 'string' ? mine.body.detail.trim() : ''
+        const says = shown && (!detail || (await note.innerText().catch(() => '')).includes(detail))
+        if (!says) {
+          flag({ key, route: '/rider', kind: 'screen', severity: 'P3',
+            expected: "a rider-module holder without a driver profile sees the server's «no driver profile» words on /rider",
+            actual: shown ? 'note shown without the server text' : 'no no-profile note (the screen says there are no tasks)' })
         }
       }
     } finally { await close() }

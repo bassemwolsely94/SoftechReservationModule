@@ -237,8 +237,10 @@ test.describe(`2FA for ${KEY} (${U.role})`, () => {
   })
 
   test(ENFORCE ? 'enrolment is forced at sign-in while enforcement is on' : 'enrolment from «أمان الحساب»', async ({ browser }) => {
-    if (!ENFORCE) { const me = await asUser(browser, KEY); await me.close() }   // a live session in the state file
-    const context = await browser.newContext({ locale: 'ar-EG', ...(ENFORCE ? {} : { storageState: stateFile(KEY) }) })
+    // A fresh browser of its own, never stateFile(KEY) (W8 triage 1d): restoreAll retires this
+    // browser's device, and it used to be the device uat/.auth/<KEY>.json signs in with, so every
+    // later spec for this user got 401 on a retired device.
+    const context = await browser.newContext({ locale: 'ar-EG' })
     const page = await context.newPage()
     const admin = await asUser(browser, 'admin', { desktop: true })
     try {
@@ -253,6 +255,9 @@ test.describe(`2FA for ${KEY} (${U.role})`, () => {
           await restoreSetting(admin.api)
         }
       } else {
+        await step(KEY, '/login', 'password sign-in (2FA still off)', async () => {
+          expect(await uiLogin(page), 'a user without 2FA signs in with the password').toBe('in')
+        })
         await page.goto('/security')
         await page.locator('[data-tour="general-security-enable"]').click()
       }
@@ -366,9 +371,16 @@ test.describe(`2FA for ${KEY} (${U.role})`, () => {
         flag({ key: KEY, route: '/login', kind: 'workflow', severity: 'P2', expected: 'an approved, remembered device signs in without a code (30 days)', actual: `sign-in: ${remembered}` })
       }
       // c: admin «إلغاء الأجهزة المحفوظة» → the code is asked again
-      await step('admin', '/users', 'forget the user\'s saved devices', async () => {
-        await call(admin.api, 'POST', `/api/users/${S.profileId}/forget-devices/`)
-      })
+      // soft (W8 triage 4): a failing forget is recorded and the serial tail (lockout, admin reset,
+      // 2FA off) still runs. The server bumps the device epoch before the audit row, so the check
+      // below still means something when only the audit write failed (users 0063 drift repair).
+      const forget = await raw(admin.api, 'POST', `/api/users/${S.profileId}/forget-devices/`)
+      if (forget.status !== 200) {
+        finding({ ws: WS, key: 'admin', route: '/api/users/:id/forget-devices/', kind: forget.status >= 500 ? 'crash' : 'workflow',
+          severity: 'P1', expected: 'the admin «إلغاء الأجهزة المحفوظة» answers 200 and is audited',
+          actual: `HTTP ${forget.status} ${scrub(JSON.stringify(forget.body)).slice(0, 200)}` })
+        test.info().annotations.push({ type: 'finding', description: `forget-devices answered ${forget.status} (recorded P1, continuing)` })
+      }
       await signOut(page)
       const after = await uiLogin(page)
       if (after !== 'verify') {
