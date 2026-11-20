@@ -415,6 +415,10 @@ quality_manager POST /api/incentives/targets/
 # finalized payroll settlement needs an admin and a written reason, audited before/after
 purchasing POST /api/incentives/settlements/987654321/unlock/
 quality_manager POST /api/incentives/settlements/987654321/unlock/
+# reason: C22 (owner 2026-11-20) - a finalized rider payout period is unlocked by an admin only
+# (IsAdminRole), with a written reason, audited before/after - the same D-16 rule as incentive settlements
+pharmacist POST /api/delivery/payouts/periods/987654321/unlock/
+supervisor POST /api/delivery/payouts/periods/987654321/unlock/
 # reason: Z-9b — a near-expiry markdown request is a price-change request (approvals, Z-6);
 # the near_expiry_markdown_enabled switch is off, so every role — admin too — is refused today
 quality_manager POST /api/batches/purchase-expiry/request-markdown/

@@ -613,6 +613,29 @@ SCREENS = [
              'body': T('توزيع الطلبات على ساعات اليوم وساعة الذروة — لتحديد عدد السائقين في كل وردية.', 'Orders by hour of day and the peak hour — to plan drivers per shift.')},
             {'key': 'csat', 'title': T('⭐ رضا العملاء', '⭐ Customer satisfaction'),
              'body': T('متوسط تقييم العملاء بعد التسليم، توزيع التقييمات، والتقييمات المنخفضة (1-2) لمتابعتها.', 'Average customer rating after delivery, the distribution, and low ratings (1-2) to follow up.')},
+            {'key': 'payouts', 'title': T('💵 أجور الطيارين', '💵 Rider payouts'),
+             'body': T(
+                 'سجل داخلي لأجر كل طيار عن كل رحلة — لا يصرف فلوس ولا يكتب في SOFTECH ولا في المرتبات، ولا يغيّر تحصيل النقدية.\n'
+                 '• كل رحلة سطر: الطيار، الطلبات، التاريخ، المسافة لو معروفة، والأجر. الأجر بقاعدة ثابتة من الإعدادات: أجر ثابت لكل توصيلة '
+                 '+ أجر لكل كم لو المسافة معروفة (من غير المسافة = الأجر الثابت بس) + استكمال حد أدنى يومي لو متفعّل.\n'
+                 '• «تسجيل رحلة»: الكاشير يسجّل في آخر الوردية الطيار وعدد التوصيلات وأرقام الطلبات. «بناء من الطلبات» يضيف '
+                 'طلبات التوصيل المُسلَّمة اللي عليها طيار — تشغيله مرتين لا يكرر أي رحلة.\n'
+                 '• «الفترات»: لكل طيار في كل فرع كل شهر ملخص (رحلات، حد أدنى، إضافات/خصومات بسبب، الإجمالي). المدير يعتمدها بملاحظة '
+                 'فتتقفل: لا إعادة احتساب ولا رحلة ولا إضافة عليها إلا لو مدير النظام فتح الاعتماد بسبب مكتوب. كل اعتماد وفتح وإضافة '
+                 'وإلغاء متسجّل (مين، إمتى، ليه، قبل/بعد).\n'
+                 '• الطيار يشوف سطوره بس ولا يعدّل حاجة؛ المدير يشوف فروعه.',
+                 'An internal record of what each rider is owed per ride — it pays nothing, writes nothing to SOFTECH or payroll, '
+                 'and does not change cash collection.\n'
+                 '• One row per ride: rider, orders, date, distance when known, and the pay. The pay follows a fixed rule from the '
+                 'settings: a flat fee per delivery + a per-km fee when the distance is known (no distance = the flat fee only) '
+                 '+ a daily-minimum top-up when it is switched on.\n'
+                 '• "Record a ride": at shift end the cashier records the rider, the number of deliveries and the order numbers. '
+                 '"Build from orders" adds delivered orders that carry a rider — running it twice never repeats a ride.\n'
+                 '• "Periods": one summary per rider, branch and month (rides, minimum, extras/deductions with a reason, total). '
+                 'A manager finalizes it with a note and it locks: no recalculation, ride or adjustment touches it until an admin '
+                 'unlocks it with a written reason. Every finalize, unlock, adjustment and void is logged (who, when, why, '
+                 'before/after).\n'
+                 '• A rider sees only their own rows and changes nothing; a manager sees their branches.')},
         ],
         'related': ['delivery.dashboard'],
         'tour': [
@@ -623,9 +646,9 @@ SCREENS = [
              'more': T(
                  'بيقصر كل الأرقام على طلبات الفروع المعلّمة بس (مجموعهم معاً).\n• قارن الفروع ببعض بإنك تبدّل الفرع وتبص على نفس التبويب.',
                  "Limits every figure to the ticked branches' orders (added together).\n• Compare branches by switching the branch while looking at the same tab.")},
-            {'target': 'delivery-analytics-tabs', 'label': T('السائقين · المناطق · الورديات · الرضا', 'Drivers · Areas · Shifts · CSAT'),
-             'text': T('أربع تقارير: أداء السائقين، الطلبات حسب المنطقة، توزيع الساعات، ورضا العملاء.',
-                       'Four reports: driver performance, orders by area, orders by hour, and customer satisfaction.'),
+            {'target': 'delivery-analytics-tabs', 'label': T('السائقين · المناطق · الورديات · الأجور', 'Drivers · Areas · Shifts · Pay'),
+             'text': T('خمس تبويبات: أداء السائقين، المناطق، الساعات، رضا العملاء، وأجور الطيارين.',
+                       'Five tabs: driver performance, areas, hours, customer satisfaction and rider payouts.'),
              'more': T(
                  '• «أداء السائقين»: الطلبات والمُسلَّم ومعدل النجاح ومتوسط الوقت والنقد المحصَّل لكل سائق.\n• «خريطة المناطق»: الطلبات حسب المحافظة وأكتر المناطق طلباً.\n• «تقرير الورديات»: الطلبات على ساعات اليوم وساعة الذروة.\n• «رضا العملاء»: متوسط التقييم والتقييمات المنخفضة لمتابعتها.',
                  '• "Driver performance": orders, delivered, success rate, average time and cash collected per driver.\n• "Area map": orders by governorate and the busiest areas.\n• "Shift report": orders by hour of day and the peak hour.\n• "Customer satisfaction": the average rating and low ratings to follow up.')},
@@ -648,8 +671,9 @@ SCREENS = [
                  'شاشة قراءة بس — مفيش فيها أي تعديل على الطلبات.\n• استخدمها في مراجعة الأسبوع أو الشهر: مين من السائقين محتاج متابعة، وأي منطقة أو ساعة محتاجة سائقين أكتر.',
                  'A read-only screen — it changes nothing on the orders.\n• Use it in the weekly or monthly review: which drivers need follow-up, and which area or hour needs more drivers.')},
         ],
-        'updated': '2026-11-12',
-        'change_note': T('فلتر الفرع يقبل أكثر من فرع معاً', 'The branch filter takes several branches at once'),
+        'updated': '2026-11-20',
+        'change_note': T('تبويب جديد «أجور الطيارين»: أجر كل رحلة وفترات شهرية تُعتمد وتتقفل',
+                         'New "Rider payouts" tab: pay per ride and monthly periods that are finalized and locked'),
     },
     {
         'key': 'delivery.mobile_board',

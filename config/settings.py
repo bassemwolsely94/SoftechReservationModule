@@ -215,6 +215,7 @@ INSTALLED_APPS = [
     'apps.commerce',
     'apps.purchasing',
     'apps.delivery',
+    'apps.rider_payouts',  # C22 / P-48 rider payout ledger — internal record, no money moves
     'apps.payments',
     'apps.analytics',
     'apps.tasks',

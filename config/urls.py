@@ -41,6 +41,7 @@ urlpatterns = [
     path('api/insurance/', include('apps.insurance.urls')),
     path('api/commerce/', include('apps.commerce.urls')),
     path('api/purchasing/', include('apps.purchasing.urls')),
+    path('api/delivery/payouts/', include('apps.rider_payouts.urls')),   # C22 rider payout ledger (module delivery)
     path('api/delivery/',  include('apps.delivery.urls')),
     path('api/payments/',  include('apps.payments.urls')),
     path('api/analytics/', include('apps.analytics.urls')),

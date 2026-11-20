@@ -127,6 +127,21 @@ def cover_tiers_export():
     return _get('/api/purchasing/cover-tiers/lines/?format=xlsx')
 
 
+def rider_payouts_export():
+    """C22 rider payout periods workbook (/delivery/analytics → 💵 أجور الطيارين → تصدير). Its rows are the
+    riders' periods, so one ride is recorded in the new branch '230' first."""
+    import datetime as dt
+
+    from apps.branches.models import Branch
+    from apps.delivery.models import DeliveryDriver
+    from apps.rider_payouts import ledger
+
+    branch = Branch.objects.get(softech_branch_id='230')
+    driver = DeliveryDriver.objects.create(full_name='طيار قيمة جديدة', mobile='0109990230', branch=branch)
+    ledger.add_ride(driver=driver, branch=branch, ride_date=dt.date(2026, 10, 5), deliveries=1)
+    return _get('/api/delivery/payouts/periods/export/?month=2026-10')
+
+
 # Not registered by design: the call-center old-vs-crew comparison (apps/crews/cc_comparison.py,
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
@@ -143,4 +158,6 @@ EXPORTS = [
     ('analytics_branch_contribution', analytics_branch_contribution, ABSENT_ALL),
     ('eta_recon_export', eta_recon_export, ABSENT_ALL),
     ('cover_tiers_export', cover_tiers_export, ABSENT_ALL),
+    # its branches come from the riders' periods (one ride planted, into '230'): presence only
+    ('rider_payouts_export', rider_payouts_export, frozenset()),
 ]

@@ -1,6 +1,6 @@
 /**
  * DeliveryAnalyticsPage.jsx
- * F10 Driver Performance | F11 Area Heatmap | F12 Shift Report | F14 CSAT
+ * F10 Driver Performance | F11 Area Heatmap | F12 Shift Report | F14 CSAT | C22 Rider payouts
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -9,6 +9,7 @@ import useHelpTab from '../help/useHelpTab'
 import SortTh from '../components/SortTh'
 import useSortableRows from '../hooks/useSortableRows'
 import BranchMultiSelect from '../components/BranchMultiSelect'
+import RiderPayoutsTab from './delivery/RiderPayoutsTab'
 
 const fmt     = (n, d = 0) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const _today  = () => new Date().toISOString().slice(0, 10)
@@ -305,6 +306,7 @@ const TABS = [
   { id: 'heatmap',  label: '🗺️ خريطة المناطق',   component: AreaHeatmapTab      },
   { id: 'shifts',   label: '⏰ تقرير الورديات',   component: ShiftReportTab      },
   { id: 'csat',     label: '⭐ رضا العملاء',      component: CSATTab             },
+  { id: 'payouts',  label: '💵 أجور الطيارين',   component: RiderPayoutsTab     },   // C22 / P-48
 ]
 
 export default function DeliveryAnalyticsPage() {
