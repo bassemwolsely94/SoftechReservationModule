@@ -42,7 +42,9 @@ DOMAINS = {
     'expiry':    {'label_ar': 'صلاحية المخزون',   'source': 'expiry',    'cadence_min': 1440, 'kind': 'snapshot'},
     'purchases': {'label_ar': 'المشتريات والوارد', 'source': 'purchases', 'cadence_min': 1440, 'kind': 'snapshot'},
     'purchase_expiry': {'label_ar': 'صلاحيات الشراء', 'source': 'purchase_expiry', 'cadence_min': 1440, 'kind': 'snapshot'},
-    'attendance': {'label_ar': 'الحضور والبصمة', 'source': 'attendance', 'cadence_min': 60, 'kind': 'snapshot'},
+    # The agent reads the machines once a night (collector.COLLECT_WINDOW, 02:00-05:00) plus any
+    # «تجميع الآن»: a daily cadence, so the bar is not stale all day after a good night.
+    'attendance': {'label_ar': 'الحضور والبصمة', 'source': 'attendance', 'cadence_min': 1440, 'kind': 'snapshot'},
     'stock_audit': {'label_ar': 'حركات المخزون (التدقيق)', 'source': 'stock_audit', 'cadence_min': 120, 'kind': 'snapshot'},
     'gl_drafting': {'label_ar': 'ترحيل القيود من سوفتيك', 'source': 'gl_drafting', 'cadence_min': 1440, 'kind': 'snapshot'},
     'gl_compare': {'label_ar': 'مقارنة الحسابات بسوفتيك', 'source': 'gl_compare', 'cadence_min': 1440, 'kind': 'snapshot'},

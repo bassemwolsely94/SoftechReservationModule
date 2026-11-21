@@ -1535,3 +1535,8 @@ class NightWindowTests(TempDirTestCase):
     def test_zk_timeout_is_a_protocol_error(self):
         from attendance_agent.zk_client import ZkTimeout
         self.assertTrue(issubclass(ZkTimeout, ZkProtocolError))
+
+    def test_freshness_cadence_matches_the_nightly_window(self):
+        # Machines are read once a night, so the freshness bar must not go stale an hour later.
+        from apps.sync.freshness import DOMAINS
+        self.assertGreaterEqual(DOMAINS['attendance']['cadence_min'], 24 * 60)
