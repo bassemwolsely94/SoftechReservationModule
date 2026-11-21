@@ -192,3 +192,74 @@ class ColumnWidthDriftTests(TestCase):
         self.assertEqual(stop.exception.code, 1)
         self.assertEqual([d['column'] for d in json.loads(out.getvalue())], ['action'])
         self.assertTrue(all(x['sql'].lstrip().upper().startswith('SELECT') for x in q.captured_queries))
+
+
+class ErpUserAndNotificationWidthRepairTests(TestCase):
+    """2FA reset review F2 (2026-11-21): on the office database users_erpuser.branch_code is
+    varchar(10) / user_group varchar(20) (model 20 / 50) and
+    notifications_notification.notification_type varchar(30) (model 40). users 0064 and
+    notifications 0051 widen them to the model's width, only where narrower."""
+
+    CASES = (
+        ('apps.users.migrations.0064_repair_erpuser_column_widths', 'users_erpuser',
+         {'branch_code': 10, 'user_group': 20}),
+        ('apps.notifications.migrations.0051_repair_notification_type_width', 'notifications_notification',
+         {'notification_type': 30}),
+    )
+
+    @staticmethod
+    def _module(path):
+        import importlib
+        return importlib.import_module(path)
+
+    @staticmethod
+    def _model_width(table, column):
+        from django.apps import apps
+        model = next(m for m in apps.get_models() if m._meta.db_table == table)
+        return model._meta.get_field(column).max_length
+
+    def _narrow(self, table, widths):
+        with connection.cursor() as cur:
+            cur.execute(f'DELETE FROM "{table}"')
+            for column, width in widths.items():
+                cur.execute(f'ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE varchar({width})')
+
+    def test_model_widths_are_the_expected_ones(self):
+        self.assertEqual(self._model_width('users_erpuser', 'branch_code'), 20)
+        self.assertEqual(self._model_width('users_erpuser', 'user_group'), 50)
+        self.assertEqual(self._model_width('notifications_notification', 'notification_type'), 40)
+
+    def test_narrowed_columns_are_repaired_and_the_repair_is_idempotent(self):
+        for path, table, narrow in self.CASES:
+            with self.subTest(table=table):
+                self._narrow(table, narrow)
+                repair = self._module(path)
+                repair.forwards(None, connection.schema_editor())
+                for column in narrow:
+                    self.assertEqual(_width(table, column), self._model_width(table, column))
+                repair.forwards(None, connection.schema_editor())        # run twice
+                for column in narrow:
+                    self.assertEqual(_width(table, column), self._model_width(table, column))
+        widths = {(d['table'], d['column']) for d in collect_drift() if d['kind'] == 'column_width'}
+        self.assertFalse({k for k in widths if k[0] in ('users_erpuser', 'notifications_notification')})
+
+    def test_repairs_never_narrow(self):
+        for path, table, narrow in self.CASES:
+            with self.subTest(table=table):
+                wide = {c: self._model_width(table, c) + 20 for c in narrow}
+                with connection.cursor() as cur:
+                    for column, width in wide.items():
+                        cur.execute(f'ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE varchar({width})')
+                self._module(path).forwards(None, connection.schema_editor())
+                for column, width in wide.items():
+                    self.assertEqual(_width(table, column), width)
+
+    def test_repairs_are_a_noop_on_a_fresh_database(self):
+        from django.test.utils import CaptureQueriesContext
+        for path, table, narrow in self.CASES:
+            with self.subTest(table=table):
+                with CaptureQueriesContext(connection) as q:
+                    self._module(path).forwards(None, connection.schema_editor())
+                self.assertFalse([x['sql'] for x in q.captured_queries if 'ALTER' in x['sql'].upper()])
+                for column in narrow:
+                    self.assertEqual(_width(table, column), self._model_width(table, column))

@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('users', '0062_role_review_modules'),
+        ('users', '0064_repair_erpuser_column_widths'),
     ]
 
     operations = [
