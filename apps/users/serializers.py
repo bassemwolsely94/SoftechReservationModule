@@ -67,10 +67,19 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(read_only=True)
     role_label  = serializers.CharField(source='get_role_display', read_only=True)
     login_locked_until = serializers.SerializerMethodField()
+    mfa_enabled = serializers.SerializerMethodField()
 
     def get_login_locked_until(self, obj):
         from .lockout import locked_until
         return locked_until(obj)
+
+    def get_mfa_enabled(self, obj):
+        """2FA on? — admins only (it drives their «reset 2FA» button); null for everyone else."""
+        request = self.context.get('request')
+        if request is None:
+            return None
+        from core.permissions import IsAdminRole
+        return bool(obj.mfa_enabled) if IsAdminRole().has_permission(request, None) else None
 
     class Meta:
         model  = StaffProfile
@@ -84,7 +93,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'external_export', 'external_softech_write',
             'alerts_only', 'phone_alerts_enabled',
             'login_locked_until',
-            'mfa_enabled',          # 2FA on? — shows the admin «reset 2FA» button (yes/no only)
+            'mfa_enabled',          # admins only (get_mfa_enabled); null for other viewers
         ]
 
 

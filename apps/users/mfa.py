@@ -128,15 +128,17 @@ def forget_devices(profile, by_profile, ip) -> int:
     return epoch
 
 
-def reset_mfa(profile, by_profile, request, reason: str) -> None:
+def reset_mfa(profile, by_profile, request, reason: str) -> int:
     """An admin clears a user's 2FA (lost phone AND backup codes; UAT 2026-11-21): 2FA off, the
-    secret and every backup code gone, every remembered device forgotten — one transaction, one
-    `mfa_reset` activity row with the reason. Password, role, device approvals and the login
+    secret and every backup code gone, every remembered device forgotten, every session ended
+    (returns how many) — one transaction, one `mfa_reset` activity row with the reason and that
+    count. Password, role, device approvals and the login
     lockout are left as they are. A role that requires 2FA is sent to enrolment at its next
     sign-in (login_view: not enrolled + mfa_required_for → mfa_setup_required)."""
     from django.db import transaction
     from core.client_ip import client_ip
     from .models import UserActivityLog
+    from .sessions import end_sessions
     from .views import _request_network_fields
     with transaction.atomic():
         profile.mfa_enabled = False
@@ -145,9 +147,12 @@ def reset_mfa(profile, by_profile, request, reason: str) -> None:
         profile.mfa_confirmed_at = None
         profile.save(update_fields=['mfa_enabled', 'mfa_secret', 'mfa_backup_codes', 'mfa_confirmed_at'])
         _bump_device_epoch(profile)
+        # A lost phone may still hold a signed-in session: blacklist every refresh token so none
+        # renews (the refresh cookie then answers 401); an access token dies within its 1 hour.
+        ended = end_sessions(profile.user)
         UserActivityLog.objects.create(target_user=profile, changed_by=by_profile, action='mfa_reset',
                                        ip_address=client_ip(request),
-                                       note=f'إعادة ضبط المصادقة الثنائية — السبب: {reason}',
+                                       note=f'إعادة ضبط المصادقة الثنائية — السبب: {reason} · أُنهيت {ended} جلسة',
                                        **_request_network_fields(request))
     # The used-code marker belongs to the old secret (it would refuse the new phone's codes for up
     # to 2 minutes). A login token already handed out dies at /2fa/verify/ (2FA is off now) and
@@ -157,6 +162,7 @@ def reset_mfa(profile, by_profile, request, reason: str) -> None:
         limits_cache.delete(f'mfa-last-step:{profile.pk}')
     except Exception:
         pass
+    return ended
 
 
 # ── TOTP + backup codes ──────────────────────────────────────────────────────────

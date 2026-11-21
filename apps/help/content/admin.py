@@ -341,8 +341,10 @@ SCREENS = [
              'warn': T('بيتسجّل باسمك والسبب في سجل النشاط. لو دوره يتطلب المصادقة هيربط موبايله من جديد عند دخوله التالي.',
                        'Logged under your name with the reason. If their role requires it, they link a phone again at their next login.'),
              'more': T('الزرار بيظهر للمدير بس، وعلى صف موظف المصادقة عنده مفعّلة. حسابك إنت تديره من صفحة الأمان.\n'
+                       'كل جلسات الموظف المفتوحة بتنتهي (خلال ساعة على الأكثر) فيدخل من جديد.\n'
                        'كلمة المرور والدور وإيقاف الدخول والأجهزة المعتمدة بيفضلوا زي ما هم.',
                        'Shown to admins only, on the row of an employee who has two-factor on. Your own account is managed from the security page.\n'
+                       'Every open session of the employee ends (within an hour at most), so they sign in again.\n'
                        'The password, role, login pause and approved devices stay as they are.'),
              'open_hint': _ROW},
             {'target': 'admin-users-activity-log', 'label': T('📋 سجل النشاط', '📋 Activity log'),

@@ -85,6 +85,39 @@ class AdminMfaResetTests(TestCase):
         self.assertTrue(row.ip_address)
         self.assertLessEqual(len('mfa_reset'), 20)    # the office column is still varchar(20)
 
+    def test_reset_ends_every_session(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+        raws = [str(RefreshToken.for_user(self.user)) for _ in range(2)]
+        self.assertEqual(OutstandingToken.objects.filter(user=self.user).count(), 2)
+
+        r = self.admin.post(_url(self.profile), {'reason': 'ضاع الموبايل'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['sessions_ended'], 2)
+        self.assertEqual(BlacklistedToken.objects.filter(token__user=self.user).count(), 2)
+        for raw in raws:
+            renew = APIClient().post('/api/auth/refresh/', {'refresh': raw}, format='json')
+            self.assertEqual(renew.status_code, 401)
+        rows = UserActivityLog.objects.filter(target_user=self.profile, action='mfa_reset')
+        self.assertEqual(rows.count(), 1)
+        self.assertIn('أُنهيت 2 جلسة', rows.get().note)
+        # the admin's own session is untouched
+        self.assertFalse(BlacklistedToken.objects.filter(token__user=self.admin_user).exists())
+
+    def test_mfa_enabled_shown_to_admin_only(self):
+        mine = self.admin.get('/api/users/staff/', {'search': 'r2fa_target'})
+        self.assertEqual(mine.status_code, 200)
+        row = next(x for x in mine.data['results'] if x['id'] == self.profile.pk)
+        self.assertIs(row['mfa_enabled'], True)
+
+        _u, _p, sup = make_user('r2fa_sup_list', role='supervisor', password=PASSWORD)
+        theirs = sup.get('/api/users/staff/', {'search': 'r2fa_target'})
+        self.assertEqual(theirs.status_code, 200)
+        rows = theirs.data['results'] if isinstance(theirs.data, dict) else theirs.data
+        self.assertTrue(rows)
+        for x in rows:
+            self.assertIsNone(x.get('mfa_enabled'), x)
+
     def test_reason_required(self):
         for body in ({}, {'reason': ''}, {'reason': '   '}):
             r = self.admin.post(_url(self.profile), body, format='json')

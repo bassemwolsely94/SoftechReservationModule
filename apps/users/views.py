@@ -223,9 +223,10 @@ def reset_mfa_admin_view(request, pk):
     if profile.user_id == request.user.id:
         return Response({'error': 'لا يمكنك إعادة ضبط مصادقتك الثنائية من هنا — استخدم صفحة الأمان'},
                         status=status.HTTP_400_BAD_REQUEST)
-    mfa.reset_mfa(profile, actor, request, reason[:300])
+    ended = mfa.reset_mfa(profile, actor, request, reason[:300])
     return Response({'detail': f'تمت إعادة ضبط المصادقة الثنائية لـ {profile.full_name or profile.user.username}'
-                               ' — سيُطلب منه ربط هاتفه من جديد إن كان دوره يتطلبها'})
+                               f' وأُنهيت جلساته ({ended}) — سيُطلب منه ربط هاتفه من جديد إن كان دوره يتطلبها',
+                     'sessions_ended': ended})
 
 
 @api_view(['POST'])
