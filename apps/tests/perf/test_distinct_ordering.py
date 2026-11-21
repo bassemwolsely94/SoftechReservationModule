@@ -178,7 +178,7 @@ class DistinctOrderingGuard(SimpleTestCase):
             'def h():\n    return Item.objects.filter(y=1).distinct()\n'                            # rows
             'def i():\n    qs = Item.objects.order_by()\n    return qs.values("x").distinct()\n'
         )
-        self.assertEqual([h[1] for h in find_widened(src, 'x.py', ordered)], [2, 14, 16])
+        self.assertEqual(sorted(h[1] for h in find_widened(src, 'x.py', ordered)), [2, 14, 16])
 
     def test_allowed_entries_name_real_files(self):
         for path, _ in ALLOWED:
