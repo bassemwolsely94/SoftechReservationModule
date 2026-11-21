@@ -163,7 +163,8 @@ def store_punches(device, rows, today=None) -> tuple[int, int]:
                        .values_list('user_code', 'raw_stamp', 'state'))
         new = [punch for key, punch in punches.items() if key not in existing]
         AttendancePunch.objects.bulk_create(new, ignore_conflicts=True)
-    # Duplicates too: the agent resends the whole log hourly, so an ID added since heals by itself.
+    # Duplicates too: the agent resends the whole log on every read (nightly, or «تجميع الآن»), so an
+    # ID added since heals by itself.
     _resolve_all({punch.user_code for punch in punches.values()})
     if new and not device.is_active:
         # Stored like any other (they are evidence); someone is still using a machine marked closed.
