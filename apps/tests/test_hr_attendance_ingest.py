@@ -18,6 +18,8 @@ from rest_framework.test import APIClient
 
 from apps.audit.models import AuditLog
 from apps.hr.attendance import agent_auth, ingest, resolve
+from apps.notifications.models import Notification
+from apps.tests.factories import make_user
 from apps.hr.models import (AttendanceAgent, AttendanceDevice, AttendancePunch, CollectionRun,
                             DeviceUser, Employee)
 
@@ -122,7 +124,7 @@ class ConfigTests(IngestBase):
         AttendanceDevice.objects.create(serial='SN3', name='٣', agent=self.agent, is_active=False)
         body = self.api.get(f'{PREFIX}config/').json()
         server_time = body.pop('server_time')
-        self.assertEqual(body, {'agent': 'office', 'collect_now': False, 'devices': [
+        self.assertEqual(body, {'agent': 'office', 'collect_now': False, 'linkedgates': False, 'devices': [
             {'serial': 'SN1', 'name': 'جهاز ١', 'ip': '192.168.3.15', 'port': 4370}]})
         # an aware ISO time within a minute of now, which the agent measures its PC clock against
         moment = _dt.datetime.fromisoformat(server_time)
@@ -624,3 +626,37 @@ class IssueCommandTests(TestCase):
         secret = out.getvalue().strip().splitlines()[-1].strip()
         entry = AuditLog.objects.filter(action='hr_attendance_agent_issue').get()
         self.assertNotIn(secret, str(entry.__dict__))
+
+
+class DeviceAlertTests(IngestBase):
+    """Closed machines still store punches (and tell HR once a day); a falling log count alerts."""
+
+    def alerts(self, title):
+        return Notification.objects.filter(notification_type='attendance_alert', title=title)
+
+    def setUp(self):
+        super().setUp()
+        make_user('ing_admin', role='admin')
+
+    def test_closed_device_punch_alerts(self):
+        AttendanceDevice.objects.filter(pk=self.device.pk).update(is_active=False)
+        first = self.send([punch(raw_stamp=1)])
+        self.assertEqual(first.json(), {'accepted': 1, 'duplicate': 0})        # stored, never refused
+        self.assertEqual(AttendancePunch.objects.count(), 1)
+        self.assertEqual(self.alerts('جهاز مغلق أرسل بصمات').count(), 1)
+        self.send([punch(raw_stamp=2)])                                          # same day: no second
+        self.assertEqual(AttendancePunch.objects.count(), 2)
+        self.assertEqual(self.alerts('جهاز مغلق أرسل بصمات').count(), 1)
+
+    def test_live_device_punch_does_not_alert(self):
+        self.send([punch(raw_stamp=1)])
+        self.assertFalse(self.alerts('جهاز مغلق أرسل بصمات').exists())
+
+    def test_log_count_drop_is_left_to_health(self):
+        # A falling log count is health.py's 'log_fall' alert (test_hr_attendance_health); the ingest
+        # adds no second one.
+        self.post('runs', self.run_body())                                       # 3906
+        self.post('runs', self.run_body(started_at='2026-10-01T11:00:00', finished_at='2026-10-01T11:01:00',
+                                        device_log_count=120))
+        self.assertFalse(Notification.objects.filter(notification_type='attendance_alert').exists())
+        self.assertEqual(AttendanceDevice.objects.get(pk=self.device.pk).last_log_count, 120)

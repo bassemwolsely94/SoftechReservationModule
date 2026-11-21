@@ -3351,6 +3351,11 @@ export const hrAttendanceApi = {
   unignoreUnknown:(code)            => api.post(`/hr-attendance/unknown-ids/${encodeURIComponent(code)}/unignore/`),
   confirmConflict:(code, data)     => api.post(`/hr-attendance/conflicts/${encodeURIComponent(code)}/confirm/`, data),
   collectNow:     ()                => api.post('/hr-attendance/collect-now/'),
+  // Linked Gates trial (read-only copy of its punches): comparison, its file, and the machine mapping
+  lgCompare:      (params = {})     => api.get('/hr-attendance/linkedgates/compare/', { params }),
+  exportLgCompare:(params = {})     => api.get('/hr-attendance/linkedgates/compare/export/', { params, responseType: 'blob' }),
+  lgDevices:      ()                => api.get('/hr-attendance/linkedgates/devices/'),
+  mapLgDevice:    (lgId, deviceId)  => api.post(`/hr-attendance/linkedgates/devices/${lgId}/map/`, { device_id: deviceId }),
   agents:         ()                => api.get('/hr-attendance/agents/'),
   issueAgent:     (name)            => api.post('/hr-attendance/agents/issue/', { name }),
   revokeAgent:    (id)              => api.post(`/hr-attendance/agents/${id}/revoke/`),

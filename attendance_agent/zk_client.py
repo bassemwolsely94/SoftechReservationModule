@@ -91,6 +91,10 @@ class ZkProtocolError(ZkError):
     raw_table = None
 
 
+class ZkTimeout(ZkProtocolError):
+    """The machine stopped answering in the middle of a session (busy or unreachable)."""
+
+
 class ClockInvalid(ZkProtocolError):
     """The machine's clock holds an impossible date. Its logs are still readable."""
 
@@ -335,7 +339,7 @@ class ZkClient:
         remaining = size
         while remaining:
             if self._deadline is not None and time.monotonic() > self._deadline:
-                raise ZkProtocolError('the machine took too long to answer')
+                raise ZkTimeout('the machine took too long to answer')
             chunk = self._sock.recv(min(remaining, 65536))
             if not chunk:
                 raise ZkProtocolError('connection closed by the machine')

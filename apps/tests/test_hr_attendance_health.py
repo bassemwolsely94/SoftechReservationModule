@@ -49,14 +49,22 @@ class HealthBase(TestCase):
 
 class SilenceTests(HealthBase):
 
-    def test_machine_silent_24h_alerts(self):
-        self.dev.last_contact_at = ago(hours=24, minutes=1)
+    def test_machine_silent_30h_alerts(self):
+        self.assertEqual(health.MACHINE_SILENT, _dt.timedelta(hours=30))
+        self.dev.last_contact_at = ago(hours=30, minutes=1)
         self.dev.save()
         health.check_attendance_health(now=NOW)
         self.assertEqual(self.alerts(self.admin_p).count(), 1)
 
     def test_machine_silent_not_at_23h(self):
         self.dev.last_contact_at = ago(hours=23)
+        self.dev.save()
+        health.check_attendance_health(now=NOW)
+        self.assertEqual(self.alerts().count(), 0)
+
+    def test_next_nights_read_a_bit_over_24h_is_quiet(self):
+        # nightly reads: 02:10 one night, 02:40 the next = 24 h 30 min, still on time
+        self.dev.last_contact_at = ago(hours=24, minutes=30)
         self.dev.save()
         health.check_attendance_health(now=NOW)
         self.assertEqual(self.alerts().count(), 0)
@@ -272,32 +280,32 @@ class NeverSucceededTests(HealthBase):
     def kinds(self):
         return [a['kind'] for a in health.check_attendance_health(now=NOW)['alerts']]
 
-    def test_failing_for_over_24_hours_from_day_one_alerts(self):
-        self.run_rec(None, status='failed', started_at=ago(hours=25))
+    def test_failing_for_over_30_hours_from_day_one_alerts(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=31))
         self.run_rec(None, status='failed', started_at=ago(hours=1))
         self.assertEqual(self.kinds(), ['silent_device'])
         self.assertEqual(self.alerts(self.admin_p).count(), 1)
         self.assertIn('لم ينجح أي تجميع', self.alerts(self.admin_p).get().body)
 
-    def test_failing_for_under_24_hours_is_quiet(self):
-        self.run_rec(None, status='failed', started_at=ago(hours=23))
+    def test_failing_for_under_30_hours_is_quiet(self):
+        self.run_rec(None, status='failed', started_at=ago(hours=29))
         self.assertEqual(self.kinds(), [])
 
     def test_no_run_at_all_stays_quiet(self):
         self.assertEqual(self.kinds(), [])
 
     def test_unassigned_machine_stays_quiet(self):
-        self.run_rec(None, status='failed', started_at=ago(hours=30))
+        self.run_rec(None, status='failed', started_at=ago(hours=31))
         AttendanceDevice.objects.filter(pk=self.dev.pk).update(agent=None)
         self.assertEqual(self.kinds(), [])
 
     def test_inactive_machine_stays_quiet(self):
-        self.run_rec(None, status='failed', started_at=ago(hours=30))
+        self.run_rec(None, status='failed', started_at=ago(hours=31))
         AttendanceDevice.objects.filter(pk=self.dev.pk).update(is_active=False)
         self.assertEqual(self.kinds(), [])
 
     def test_once_it_succeeds_the_contact_time_governs(self):
-        self.run_rec(None, status='failed', started_at=ago(hours=30))
+        self.run_rec(None, status='failed', started_at=ago(hours=31))
         AttendanceDevice.objects.filter(pk=self.dev.pk).update(last_contact_at=ago(minutes=10))
         self.assertEqual(self.kinds(), [])
 

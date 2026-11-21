@@ -14,6 +14,7 @@ import re
 from functools import wraps
 from io import BytesIO
 
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
@@ -28,11 +29,14 @@ from apps.catalog.wildcard import wq
 from apps.audit.models import AuditLog
 from apps.hr.assignments import record_assignment, validate_extensions
 from apps.hr.models import (AttendanceAccess, AttendanceAgent, AttendanceDevice, CollectionRun,
-                            ConflictConfirmation, DeviceUser, Employee, UnknownIdDecision)
+                            ConflictConfirmation, DeviceUser, Employee, LinkedGatesDevice,
+                            UnknownIdDecision)
 from apps.users.models import StaffProfile
 from core.export_safety import neutralise_formulas
 from core.sort_ordering import explicit_order_by
 
+from . import compare
+from .compare import lg_enabled, official_source
 from . import days as day_engine
 from . import issues as issue_list
 from . import export, links, resolve
@@ -107,6 +111,9 @@ def _order(qs, request, allowed, default):
 
 def _month(request):
     raw = (request.query_params.get('month') or '').strip()
+    year = (request.query_params.get('year') or '').strip()
+    if year and raw.isdigit():          # ?year=2026&month=11 reads as 2026-11
+        raw = f'{year}-{int(raw):02d}'
     if not raw:
         today = timezone.localdate()
         return today.year, today.month
@@ -199,7 +206,8 @@ def me(request):
 
 
 MONTH_SORT = ('hr_number', 'name_ar', 'department', 'days_with_punches', 'worked_hours',
-              'expected_hours', 'days_needing_review', 'days_no_punches')
+              'expected_hours', 'days_needing_review', 'days_no_punches', 'lg_days_with_punches',
+              'lg_worked_hours')
 
 
 @api_view(['GET'])
@@ -210,8 +218,12 @@ def month(request, acc):
     if request.query_params.get('status') in ('active', 'left'):
         employees = employees.filter(status=request.query_params['status'])
     employees = list(employees.order_by('hr_number')[:MAX_ROWS])
+    lg_on = lg_enabled()
+    official = official_source()
+    lg_totals = compare.lg_month_totals(employees, year, mon) if lg_on else {}
     rows = []
     for e, _days, totals in day_engine.month_rows(employees, year, mon):
+        lg = lg_totals.get(e.pk)
         rows.append({
             'id': e.pk, 'hr_number': e.hr_number, 'name_ar': e.name_ar, 'department': e.department,
             'job_title': e.job_title, 'branch_name': _branch_name(e.branch), 'status': e.status,
@@ -219,6 +231,12 @@ def month(request, acc):
             'days_with_punches': totals.days_with_punches, 'worked_hours': totals.worked_hours,
             'expected_hours': totals.expected_hours, 'days_needing_review': totals.days_needing_review,
             'days_no_punches': totals.days_no_punches,
+            # both sources side by side during the Linked Gates trial; `official` marks «المعتمد»
+            'ours': {'days_with_punches': totals.days_with_punches, 'worked_hours': totals.worked_hours},
+            'lg': lg,
+            'lg_days_with_punches': lg['days_with_punches'] if lg else None,
+            'lg_worked_hours': lg['worked_hours'] if lg else None,
+            'official': official,
         })
     raw = (request.query_params.get('ordering') or '').strip()
     key, desc = raw.lstrip('-'), raw.startswith('-')
@@ -230,7 +248,8 @@ def month(request, acc):
         rows = filled + empty
     elif key == 'hr_number' and desc:
         rows.reverse()
-    return Response({'month': f'{year:04d}-{mon:02d}', 'rows': rows})
+    return Response({'month': f'{year:04d}-{mon:02d}', 'rows': rows, 'lg_enabled': lg_on,
+                     'official': official})
 
 
 @api_view(['GET'])
@@ -258,7 +277,7 @@ def month_export(request):
 def employee_days(request, acc, pk):
     emp = get_object_or_404(Employee.objects.select_related('branch', 'staff__user'), pk=pk)
     year, mon = _month(request)
-    punches = day_engine.punches_for_month([emp.pk], year, mon).get(emp.pk, [])
+    punches = day_engine.punches_for_month([emp.pk], year, mon, lead_days=1).get(emp.pk, [])
     info = day_engine.leave_info([emp], year, mon).get(emp.pk, {})
     rows = day_engine.build_days(punches, emp.day_boundary, emp.daily_hours, year, mon, info)
     totals = day_engine.month_totals(rows)
@@ -268,6 +287,9 @@ def employee_days(request, acc, pk):
         'punch_count': d.punch_count, 'machines': d.machines, 'info': d.info,
         'raw': [{'at': r['at'], 'machine': r['machine'], 'state': r['state'], 'counted': r['counted']}
                 for r in d.raw],
+        # work sessions on this date (session mode only; empty with a fixed day boundary)
+        'sessions': [{'first_in': s.first_in, 'last_out': s.last_out, 'worked_minutes': s.worked_minutes,
+                      'needs_review': s.needs_review} for s in d.sessions],
     } for d in rows]
     return Response({
         'month': f'{year:04d}-{mon:02d}',
@@ -350,6 +372,75 @@ def devices(request, acc):
     return Response({'rows': rows, 'agents': [
         {'id': a.pk, 'name': a.name, 'last_seen_at': a.last_seen_at,
          'collect_requested_at': a.collect_requested_at} for a in agents]})
+
+
+def _lg_compare_payload(year, mon):
+    employees = list(Employee.objects.order_by('hr_number')[:MAX_ROWS])
+    by_id = {e.pk: e for e in employees}
+    days = []
+    for d in compare.compare_month(employees, year, mon):
+        e = by_id[d['employee_id']]
+        days.append({**d, 'hr_number': e.hr_number, 'name_ar': e.name_ar,
+                     'minutes_diff': d['ours']['minutes'] - d['lg']['minutes']})
+    return {
+        'enabled': True, 'month': f'{year:04d}-{mon:02d}',
+        'machines': compare.machine_day_counts(year, mon),
+        'days': days,
+        'day_source': compare.day_source(),
+        'official': official_source(),
+        'categories': compare.CATEGORY_LABELS,
+        'reasons': compare.REASON_LABELS,
+        'no_reason': compare.NO_REASON_LABEL,
+    }
+
+
+@api_view(['GET'])
+@gate('view')
+def lg_compare(request, acc):
+    """The Linked Gates trial comparison for a month (design 2026-11-20 §5.4): punches per machine
+    and day by category, then the employee-days whose figures differ, with reason codes."""
+    if not lg_enabled():
+        return Response({'enabled': False})
+    year, mon = _month(request)
+    return Response(_lg_compare_payload(year, mon))
+
+
+@api_view(['GET'])
+def lg_compare_export(request):
+    """The comparison as an Excel file through the shared formula neutraliser; audited."""
+    acc = Access(request)
+    if not acc.can_export:
+        return Response(_DENIED, status=403)
+    if not lg_enabled():        # same answer as the comparison itself: nothing to export
+        return Response({'enabled': False})
+    year, mon = _month(request)
+    wb = export.build_lg_compare_workbook(year, mon)
+    buf = BytesIO()
+    neutralise_formulas(wb).save(buf)       # the builder already did; the save site says so
+    AuditLog.log('hr_attendance_lg_compare_export', user=acc.profile, request=request,
+                 extra={'month': f'{year:04d}-{mon:02d}'}, note='Linked Gates comparison export')
+    resp = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="attendance-lg-compare-{year:04d}-{mon:02d}.xlsx"'
+    return resp
+
+
+def _lg_device_json(d, acc):
+    row = {'lg_device_id': d.lg_device_id, 'name': d.name, 'lg_status': d.lg_status,
+           'device': d.device_id, 'device_name': d.device.name if d.device_id else None}
+    if acc.can_admin:       # network details are for the admin, as on the machines tab
+        row['ip'] = d.ip
+    return row
+
+
+@api_view(['GET'])
+@gate('view')
+def lg_devices(request, acc):
+    """Linked Gates' machines and which of ours each one is (changed at manage level)."""
+    rows = [_lg_device_json(d, acc)
+            for d in LinkedGatesDevice.objects.select_related('device').order_by('lg_device_id')]
+    return Response({'rows': rows, 'enabled': lg_enabled()})
 
 
 # ── manage level ─────────────────────────────────────────────────────────────────────────────────
@@ -599,6 +690,33 @@ def collect_now(request, acc):
     AuditLog.log('hr_attendance_collect_now', user=acc.profile, request=request,
                  extra={'agents': ids}, note='Collect now requested')
     return Response({'agents': len(ids)})
+
+
+@api_view(['POST'])
+@gate('manage')
+def lg_device_map(request, acc, lg_device_id):
+    """Tie a Linked Gates machine to one of ours, or clear it with device_id null. Audited with the
+    before and after; the comparison and the merged days read the mapping on every request."""
+    lg_dev = get_object_or_404(LinkedGatesDevice.objects.select_related('device'), lg_device_id=lg_device_id)
+    body = _body(request)
+    if 'device_id' not in body:
+        raise ValidationError({'device_id': 'الماكينة مطلوبة (أو null لفك الربط)'})
+    device = None
+    if body['device_id'] is not None:
+        device = AttendanceDevice.objects.filter(pk=_int(body, 'device_id')).first()
+        if device is None:
+            raise ValidationError({'device_id': 'ماكينة غير موجودة'})
+    before = (lg_dev.device_id, lg_dev.device.name if lg_dev.device_id else None)
+    after = (device.pk if device else None, device.name if device else None)
+    if before[0] != after[0]:
+        with transaction.atomic():      # the mapping and its audit row land together or not at all
+            lg_dev.device = device
+            lg_dev.save(update_fields=['device'])
+            AuditLog.log('hr_attendance_lg_device_map', user=acc.profile, obj=lg_dev, request=request,
+                         changes={'device': [before[0], after[0]], 'device_name': [before[1], after[1]]},
+                         extra={'lg_device_id': lg_dev.lg_device_id},
+                         note='Linked Gates machine mapped' if device else 'Linked Gates machine unmapped')
+    return Response(_lg_device_json(lg_dev, acc))
 
 
 # ── admin level ──────────────────────────────────────────────────────────────────────────────────

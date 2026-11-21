@@ -15,3 +15,18 @@ secret = paste-the-agent-secret-here
 [comm_keys]
 # Only for a machine that asks for a comm key: <machine serial> = <number>
 # SERIALNUMBER = 12345
+
+# Optional: also read punches from the Linked Gates HR portal (SQL Server on this PC).
+# Read-only. Needs ODBC Driver 18 for SQL Server and `pip install pyodbc`. Leave the
+# whole section out on an agent that does not use Linked Gates.
+# [linkedgates]
+# server = .\SQLEXPRESS
+# database = Linked_ERP_HR_v1
+# trusted = yes
+# With trusted = yes, this agent's Windows account must be granted only db_datareader plus
+# the column DENYs from the IT note, and must never be an owner.
+# With trusted = no, give a SQL login that can only read:
+# user = readonly_login
+# password = its-password
+# The first load starts from this date (default: the 1st of last month).
+# first_load_from = 2026-10-01

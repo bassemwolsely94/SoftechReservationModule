@@ -1,6 +1,8 @@
 /**
  * MonthTab — one row per employee with the month's totals (display only, no pay).
  * A row click opens that employee's Days tab in place (no modal). The server sorts.
+ * During the Linked Gates trial (server `lg_enabled`) both hours columns show — ours and Linked
+ * Gates' — and «المعتمد» marks the one the server says is official; that column comes first.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -10,7 +12,9 @@ import useServerSort from '../../hooks/useServerSort'
 import { BTN, Empty, Notice, TH, blobErrText, download, errText, hours } from './shared'
 
 const SORT_KEYS = ['hr_number', 'name_ar', 'department', 'days_with_punches', 'worked_hours',
-                   'expected_hours', 'days_needing_review', 'days_no_punches']
+                   'expected_hours', 'days_needing_review', 'days_no_punches', 'lg_days_with_punches',
+                   'lg_worked_hours']
+const OFFICIAL = <span className="ms-1 text-[10px] font-bold text-primary">المعتمد</span>
 
 export default function MonthTab({ month, setMonth, access, onOpen }) {
   const [status, setStatus] = useState('active')
@@ -24,6 +28,18 @@ export default function MonthTab({ month, setMonth, access, onOpen }) {
     queryFn: () => hrAttendanceApi.month(params).then(r => r.data),
   })
   const rows = data?.rows || []
+  const both = !!data?.lg_enabled
+  const lgFirst = both && data?.official === 'lg'
+  const ourHead = (
+    <SortTh className={TH} {...headerProps('worked_hours', 'number')}>
+      {both ? 'ساعات نظامنا' : 'ساعات العمل'}{both && !lgFirst && OFFICIAL}</SortTh>
+  )
+  const lgHead = both && (
+    <>
+      <SortTh className={TH} {...headerProps('lg_worked_hours', 'number')}>ساعات لينكد جيتس{lgFirst && OFFICIAL}</SortTh>
+      <SortTh className={TH} {...headerProps('lg_days_with_punches', 'number')}>أيام لينكد جيتس</SortTh>
+    </>
+  )
 
   async function exportXlsx() {
     setExporting(true); setExportErr('')
@@ -66,7 +82,7 @@ export default function MonthTab({ month, setMonth, access, onOpen }) {
               <SortTh className={TH} {...headerProps('name_ar', 'text')}>الاسم</SortTh>
               <SortTh className={TH} {...headerProps('department', 'text')}>القسم</SortTh>
               <SortTh className={TH} {...headerProps('days_with_punches', 'number')}>أيام بها بصمات</SortTh>
-              <SortTh className={TH} {...headerProps('worked_hours', 'number')}>ساعات العمل</SortTh>
+              {lgFirst ? <>{lgHead}{ourHead}</> : <>{ourHead}{lgHead}</>}
               <SortTh className={TH} {...headerProps('expected_hours', 'number')}>الساعات المتوقعة</SortTh>
               <SortTh className={TH} {...headerProps('days_needing_review', 'number')}>تحتاج مراجعة</SortTh>
               <SortTh className={TH} {...headerProps('days_no_punches', 'number')}>بدون بصمات</SortTh>
@@ -81,7 +97,7 @@ export default function MonthTab({ month, setMonth, access, onOpen }) {
                 <td className="px-3 py-2 font-medium text-gray-900">{r.name_ar}</td>
                 <td className="px-3 py-2 text-gray-600">{r.department || '—'}</td>
                 <td className="px-3 py-2 tabular-nums">{r.days_with_punches}</td>
-                <td className="px-3 py-2 tabular-nums">{hours(r.worked_hours)}</td>
+                {lgFirst ? <><LgCells r={r} />{ourCell(r)}</> : <>{ourCell(r)}{both && <LgCells r={r} />}</>}
                 <td className="px-3 py-2 tabular-nums text-gray-600">{hours(r.expected_hours)}</td>
                 <td className={`px-3 py-2 tabular-nums ${r.days_needing_review ? 'text-amber-700 font-bold' : 'text-gray-400'}`}>
                   {r.days_needing_review}</td>
@@ -95,5 +111,17 @@ export default function MonthTab({ month, setMonth, access, onOpen }) {
         {!isLoading && !error && rows.length === 0 && <Empty>لا يوجد موظفون بهذه الفلاتر</Empty>}
       </div>
     </div>
+  )
+}
+
+const ourCell = r => <td className="px-3 py-2 tabular-nums">{hours(r.worked_hours)}</td>
+
+function LgCells({ r }) {
+  const differs = r.lg && Number(r.lg_worked_hours) !== Number(r.worked_hours)
+  return (
+    <>
+      <td className={`px-3 py-2 tabular-nums ${differs ? 'text-amber-700' : ''}`}>{hours(r.lg_worked_hours)}</td>
+      <td className="px-3 py-2 tabular-nums text-gray-600">{r.lg_days_with_punches ?? '—'}</td>
+    </>
   )
 }

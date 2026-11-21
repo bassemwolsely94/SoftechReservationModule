@@ -1,6 +1,7 @@
 /**
  * DaysTab — one employee, one month, day by day: first punch, last punch, hours, flags.
- * A row expands inline to the raw punches and the machine each came from.
+ * A row expands inline to the raw punches and the machine each came from, and — in session mode
+ * (no fixed day start) — to that day's work sessions (in → out, hours, review mark).
  *
  * A day with no punches is neutral text («بدون بصمات»). Today with no punches yet is shown muted
  * as today — it is not a problem. This page never says «absent»: that is HR's decision.
@@ -25,9 +26,10 @@ function Flags({ d, today }) {
       : <span className="text-gray-500">بدون بصمات</span>
   }
   if (!d.punch_count) return <span className="text-gray-400">—</span>
-  return d.needs_review
-    ? <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">بصمة واحدة — تحتاج مراجعة</span>
-    : <span className="text-gray-400">—</span>
+  if (!d.needs_review) return <span className="text-gray-400">—</span>
+  // session mode: an odd punch count or one very long pair; fixed day start: a single punch
+  const why = d.sessions?.length ? 'تحتاج مراجعة' : 'بصمة واحدة — تحتاج مراجعة'
+  return <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">{why}</span>
 }
 
 export default function DaysTab({ employeeId, month, setMonth, employees, onPick }) {
@@ -79,6 +81,8 @@ export default function DaysTab({ employeeId, month, setMonth, employees, onPick
             <span className="font-bold text-gray-900">{emp.name_ar}</span>
             <span className="text-gray-500">{emp.hr_number}</span>
             {emp.branch_name && <span className="text-gray-500">{emp.branch_name}</span>}
+            <span className="text-gray-500 text-xs">
+              {emp.day_boundary ? `اليوم يبدأ ${String(emp.day_boundary).slice(0, 5)}` : 'جلسات عمل'}</span>
             {emp.hold_resolution && <span className="text-amber-700 text-xs">بصماته معلّقة: {emp.hold_reason}</span>}
             <span className="ms-auto text-xs text-gray-600">
               أيام بها بصمات {totals.days_with_punches} · ساعات {hours(totals.worked_hours)}
@@ -128,6 +132,18 @@ export default function DaysTab({ employeeId, month, setMonth, employees, onPick
                       {open.has(d.work_date) && (
                         <tr className="bg-gray-50/70 border-b border-gray-100">
                           <td colSpan={7} className="px-6 py-2">
+                            {d.sessions?.length > 0 && (
+                              <ul className="flex flex-wrap gap-x-6 gap-y-1 mb-1.5 text-xs text-gray-800" data-tour="hr-attendance-days-sessions">
+                                {d.sessions.map((s, n) => (
+                                  <li key={n}>
+                                    <span className="text-gray-500">جلسة {n + 1}:</span>{' '}
+                                    <span className="tabular-nums">{clock(s.first_in)} ← {s.last_out ? clock(s.last_out) : '—'}</span>
+                                    {' · '}<span className="tabular-nums">{s.last_out ? hm(s.worked_minutes) : '—'}</span>
+                                    {s.needs_review && <span className="ms-1 text-amber-700">تحتاج مراجعة</span>}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                             <ul className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700" data-tour="hr-attendance-days-raw">
                               {d.raw.map((r, n) => (
                                 <li key={n} className={r.counted ? '' : 'text-gray-400 line-through'}

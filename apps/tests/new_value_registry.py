@@ -182,6 +182,11 @@ def out_here_export():
 # crews piece 2b) is a single-scope report (the call-center crew) with no per-branch rows, so it
 # has no branch to show or hide (spec 2026-11-13 §6.8: a crew shows as its own block).
 
+# Not registered by design: the HR attendance Linked Gates comparison export
+# (/api/hr-attendance/linkedgates/compare/export/, apps/hr/attendance/export.py) is company-level by
+# decision (attendance access.py, 2026-11-07): its rows are fingerprint machines and employees, with
+# no branch column, so there is no branch to show or hide.
+
 EXPORTS = [
     # the KPI board has a call-center block by design: only pending / closed must be absent
     # the call-center block comes from the call-center crew now, never from a branch

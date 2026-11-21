@@ -4,7 +4,7 @@ apps/hr/attendance/health.py — alerts for the HR head about the fingerprint co
 Checks, all on our own tables (CollectionRun and the device / agent rows the ingest keeps
 current). Nothing here talks to a machine or to SOFTECH:
 
-  • a machine with no successful collection for more than 24 hours (kind 'silent_device'); one
+  • a machine with no successful collection for more than 30 hours (kind 'silent_device'); one
     that never succeeded counts from its oldest run
   • the collection agent silent for more than 3 hours (kind 'silent_agent')
   • a machine clock off by more than 5 minutes from the server, as the agent measured it
@@ -26,7 +26,9 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 NOTIFICATION_TYPE = 'attendance_alert'
-MACHINE_SILENT = _dt.timedelta(hours=24)
+# 30 h, not 24: machines are read once a night (02:00-05:00), so a read at 02:40 after the previous
+# night's 02:10 is a little over 24 h and still on time.
+MACHINE_SILENT = _dt.timedelta(hours=30)
 AGENT_SILENT = _dt.timedelta(hours=3)
 DRIFT_WARNING_SECONDS = 300
 SPOOL_WAITING = _dt.timedelta(hours=3)
