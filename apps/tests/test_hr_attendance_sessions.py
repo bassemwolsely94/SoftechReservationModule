@@ -90,6 +90,24 @@ class SessionTests(SimpleTestCase):
         self.assertEqual([st.machine for st in s.stamps], ['A', 'B'])
 
 
+    def test_long_pair_needs_review(self):
+        # A forgotten check-out at 16:30 pairs with the next morning: 15.5 h is no real pair.
+        s = self.one([S(0, '08:00'), S(0, '16:00'), S(0, '16:30'), S(1, '08:00')])
+        self.assertTrue(s.needs_review)
+        self.assertEqual(s.worked_minutes, 480 + 930)
+
+    def test_long_pair_threshold(self):
+        twelve = self.one([S(0, '08:00'), S(0, '20:00')])               # exactly 12 h: fine
+        self.assertFalse(twelve.needs_review)
+        longer = self.one([S(0, '08:00'), S(0, '20:01')])
+        self.assertTrue(longer.needs_review)
+        relaxed = build_sessions([S(0, '08:00'), S(0, '20:01')], long_pair_hours=13)
+        self.assertFalse(relaxed[0].needs_review)
+
+    def test_long_pair_setting_reaches_days(self):
+        with self.settings(HR_ATTENDANCE_LONG_PAIR_HOURS=20):
+            self.assertEqual(days._session_hours()[2], 20)
+
 class SessionDaysTests(SimpleTestCase):
 
     def setUp(self):

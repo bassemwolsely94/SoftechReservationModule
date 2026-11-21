@@ -19,6 +19,7 @@ ours only -> ``not_yet_in_lg`` (under 24 h old at ``now``) or ``missing_in_lg``.
 import bisect
 import calendar
 import datetime
+import logging
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
@@ -57,6 +58,7 @@ NO_REASON_LABEL = {
     'ar': 'راجع البصمات (مثل فترات الراحة: نحن نجمع الفترات، ولينكد جيتس يأخذ من أول حضور لآخر انصراف)',
     'en': 'See the punches (e.g. breaks: we add up the pairs, Linked Gates takes first in to last out)',
 }
+logger = logging.getLogger('elrezeiky.hr_attendance')
 _ONE_DAY = datetime.timedelta(days=1)
 
 
@@ -65,13 +67,29 @@ def lg_enabled() -> bool:
     return bool(getattr(settings, 'HR_ATTENDANCE_LINKEDGATES_ENABLED', False))
 
 
+DAY_SOURCES = ('linkedgates', 'sessions')
+_warned_sources: set = set()
+
+
+def day_source() -> str:
+    """HR_ATTENDANCE_DAY_SOURCE, validated: 'linkedgates' or 'sessions'. Anything else is read as
+    'linkedgates' (the safe default), with one warning per process per value, never a crash."""
+    value = str(getattr(settings, 'HR_ATTENDANCE_DAY_SOURCE', 'linkedgates') or '').strip().lower()
+    if value in DAY_SOURCES:
+        return value
+    if value not in _warned_sources:
+        _warned_sources.add(value)
+        logger.warning("HR_ATTENDANCE_DAY_SOURCE is not 'linkedgates' or 'sessions'; using 'linkedgates'")
+    return 'linkedgates'
+
+
 def official_source() -> str:
     """Which column is «المعتمد» (and comes first): 'lg' while Linked Gates counts, 'ours' once the
     owner sets HR_ATTENDANCE_DAY_SOURCE to 'sessions'. With the Linked Gates switch off there is no
     Linked Gates column, so ours is the only one."""
     if not lg_enabled():
         return 'ours'
-    return 'ours' if getattr(settings, 'HR_ATTENDANCE_DAY_SOURCE', 'linkedgates') == 'sessions' else 'lg'
+    return 'ours' if day_source() == 'sessions' else 'lg'
 
 
 def _month_bounds(year, month):

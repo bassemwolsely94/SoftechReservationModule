@@ -230,3 +230,24 @@ class ReasonCodeTests(SimpleTestCase):
     def test_no_shifttype_only(self):
         stamps = [self.stamp('2026-11-10', '08:00')]
         self.assertEqual(reason_codes(self.row(stamps), None, stamps, None), ['lg_no_shifttype'])
+
+
+class DaySourceTests(SimpleTestCase):
+    """HR_ATTENDANCE_DAY_SOURCE is validated: an unknown value reads as 'linkedgates', warns once."""
+
+    def setUp(self):
+        compare._warned_sources.clear()
+
+    def test_known_values(self):
+        for value in ('linkedgates', 'sessions', ' Sessions '):
+            with self.subTest(value=value), self.settings(HR_ATTENDANCE_DAY_SOURCE=value):
+                self.assertEqual(compare.day_source(), value.strip().lower())
+
+    def test_unknown_value_falls_back_and_warns_once(self):
+        with self.settings(HR_ATTENDANCE_DAY_SOURCE='session', HR_ATTENDANCE_LINKEDGATES_ENABLED=True):
+            with self.assertLogs('elrezeiky.hr_attendance', level='WARNING') as captured:
+                self.assertEqual(compare.day_source(), 'linkedgates')
+                self.assertEqual(compare.official_source(), 'lg')
+            self.assertEqual(len(captured.output), 1)
+            with self.assertNoLogs('elrezeiky.hr_attendance', level='WARNING'):
+                compare.day_source()

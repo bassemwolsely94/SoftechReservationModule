@@ -383,7 +383,7 @@ def _lg_compare_payload(year, mon):
         'enabled': True, 'month': f'{year:04d}-{mon:02d}',
         'machines': compare.machine_day_counts(year, mon),
         'days': days,
-        'day_source': getattr(settings, 'HR_ATTENDANCE_DAY_SOURCE', 'linkedgates'),
+        'day_source': compare.day_source(),
         'official': official_source(),
         'categories': compare.CATEGORY_LABELS,
         'reasons': compare.REASON_LABELS,

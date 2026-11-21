@@ -90,10 +90,11 @@ def to_stamps(punches) -> list:
 
 
 def _session_hours() -> tuple:
-    """(gap_hours, max_shift_hours) from settings."""
+    """(gap_hours, max_shift_hours, long_pair_hours) from settings."""
     from django.conf import settings
     return (int(getattr(settings, 'HR_ATTENDANCE_SESSION_GAP_HOURS', 6)),
-            int(getattr(settings, 'HR_ATTENDANCE_MAX_SHIFT_HOURS', 16)))
+            int(getattr(settings, 'HR_ATTENDANCE_MAX_SHIFT_HOURS', 16)),
+            int(getattr(settings, 'HR_ATTENDANCE_LONG_PAIR_HOURS', 12)))
 
 
 def build_days(stamps, boundary, daily_hours, year, month, info_by_date=None):

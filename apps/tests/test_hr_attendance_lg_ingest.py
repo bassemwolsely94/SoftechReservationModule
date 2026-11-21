@@ -49,6 +49,15 @@ class StoreTests(TestCase):
         self.assertEqual(LinkedGatesPunch.objects.get(lg_check_id=1).employee_id, emp.pk)
         self.assertIsNone(LinkedGatesPunch.objects.get(lg_check_id=2).employee_id)
 
+    def test_leading_zero_hr_number_does_not_link(self):
+        # Only the canonical code is an EnrollNo ('01001' is not 1001), as compare._canonical_enroll.
+        Employee.objects.create(name_ar='م', hr_number='01001')
+        self.store([row(1, 1001)])
+        resolve.resolve_user_code('01001')
+        self.assertIsNone(LinkedGatesPunch.objects.get(lg_check_id=1).employee_id)
+        self.assertIsNone(resolve._lg_enroll_no('01001'))
+        self.assertEqual(resolve._lg_enroll_no('1001'), 1001)
+
     def test_resend_is_idempotent(self):
         rows = [row(1), row(2), row(3)]
         self.store(rows)

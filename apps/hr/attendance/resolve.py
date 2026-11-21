@@ -3,8 +3,10 @@ apps/hr/attendance/resolve.py — which employee a machine ID belongs to.
 
 The HR number is the machine number (owner), so an ID resolves when it equals an employee's HR
 number, unless a guard stops it. resolve_user_code recalculates from the current facts, so a punch
-can also become unresolved again. Only AttendancePunch.employee changes here, and only through
-queryset.update(): the punch's own data is never touched.
+can also become unresolved again. It links both sources: AttendancePunch.employee (ZK machines) and
+LinkedGatesPunch.employee (Linked Gates, by EnrollNo = the canonical HR number only: '01001' is not
+1001). Only those employee fields change here, and only through queryset.update(): the punch's own
+data is never touched.
 """
 import datetime
 from collections import defaultdict
@@ -117,7 +119,10 @@ def lg_eligible_q(employee) -> Q:
 
 
 def _lg_enroll_no(code):
-    if isinstance(code, str) and code.isascii() and code.isdigit() and int(code) <= 2147483647:
+    """The Linked Gates EnrollNo for a machine ID, only when the ID is that number written the
+    canonical way (compare._canonical_enroll): '01001' and 1001 would otherwise flip-flop."""
+    if (isinstance(code, str) and code.isascii() and code.isdigit() and str(int(code)) == code
+            and int(code) <= 2147483647):
         return int(code)
     return None
 
