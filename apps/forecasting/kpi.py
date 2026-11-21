@@ -330,13 +330,13 @@ class KpiResolver:
             from apps.customers.models import PurchaseHistory
             period = (self._ph_qs(branch_ids, start, end, softech_user)
                       .filter(doc_code='115').exclude(softech_phcode='')
-                      .values_list('softech_phcode', flat=True).distinct())
+                      .values_list('softech_phcode', flat=True).order_by().distinct())
             period = set(period)
             if not period:
                 return Decimal('0')
             prior = set(PurchaseHistory.objects.filter(
                 invoice_date__date__lt=start, doc_code='115', softech_phcode__in=period)
-                .values_list('softech_phcode', flat=True).distinct())
+                .values_list('softech_phcode', flat=True).order_by().distinct())
             return Decimal(len(period - prior))
         return Decimal('0')
 

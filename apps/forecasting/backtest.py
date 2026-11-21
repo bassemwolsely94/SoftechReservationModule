@@ -75,7 +75,7 @@ class BacktestService:
         # branch rows only: the chain actual is Σ branches, so a month the call-center crew
         # alone has (crew rows, branch NULL) is not testable
         have = set(KpiActualRollup.objects.filter(metric=metric, branch__isnull=False)
-                   .values_list('year', 'month').distinct())
+                   .values_list('year', 'month').order_by().distinct())
         cur = current_ym()
         out = []
         for (y, m) in sorted(have):

@@ -144,7 +144,7 @@ def _build_audience_qs(target_filter: dict):
             PurchaseHistory.objects
             .filter(invoice_date__gte=cutoff, doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         qs = qs.filter(id__in=bought_ids)
 
@@ -155,7 +155,7 @@ def _build_audience_qs(target_filter: dict):
             PurchaseHistory.objects
             .filter(invoice_date__gte=cutoff, doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         qs = qs.exclude(id__in=recent_ids)
 
@@ -165,7 +165,7 @@ def _build_audience_qs(target_filter: dict):
             PurchaseHistory.objects
             .filter(lines__item_id=item_id, doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         qs = qs.filter(id__in=bought_item_ids)
 

@@ -208,12 +208,12 @@ def stock_expiry_report(mode='near', within_days=180, branch_codes=None,
     codes = list(per.keys())
     # branches / stores per item
     br_by_item, st_by_item = {}, {}
-    for ic, bc in qs.values_list('item_code', 'branch_code').distinct():
+    for ic, bc in qs.values_list('item_code', 'branch_code').order_by().distinct():
         br_by_item.setdefault(ic, set()).add(bc)
-    for ic, sc in qs.values_list('item_code', 'store_code').distinct():
+    for ic, sc in qs.values_list('item_code', 'store_code').order_by().distinct():
         if sc:
             st_by_item.setdefault(ic, set()).add(sc)
-    names = dict(qs.exclude(item_name='').values_list('item_code', 'item_name').distinct())
+    names = dict(qs.exclude(item_name='').values_list('item_code', 'item_name').order_by('item_code', 'item_name').distinct())
     attrs = _item_attr_map(codes)
 
     out = []
@@ -268,7 +268,7 @@ def stock_expiry_stores(branch_codes=None):
     if branch_codes:
         qs = qs.filter(branch_code__in=list(branch_codes))
     seen = {}
-    for bc, sc, role in qs.values_list('branch_code', 'store_code', 'store_role').distinct():
+    for bc, sc, role in qs.values_list('branch_code', 'store_code', 'store_role').order_by('branch_code', 'store_code', 'store_role').distinct():
         seen[(bc, sc)] = role or LIVE
     return sorted(
         [{'branch_code': bc, 'store_code': sc, 'is_quarantine': seen[(bc, sc)] in QUARANTINE_ROLES,

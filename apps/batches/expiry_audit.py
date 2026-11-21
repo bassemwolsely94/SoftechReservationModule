@@ -577,10 +577,10 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
     names = dict(
         qs.exclude(item_name='')
           .values_list('item_code', 'item_name')
-          .distinct()
+          .order_by('item_code', 'item_name').distinct()
     )
     suppliers_by_item = {}
-    for ic, sname in qs.values_list('item_code', 'supplier_name').distinct():
+    for ic, sname in qs.values_list('item_code', 'supplier_name').order_by().distinct():
         if sname:
             suppliers_by_item.setdefault(ic, set()).add(sname)
 
@@ -600,7 +600,7 @@ def audit_candidates(period_from, period_to, branch_codes=None, categories=None,
             .values_list('softech_branch_id', flat=True)
         )
         if not scope_branches:   # fallback (e.g. tests without Branch rows)
-            scope_branches = list(qs.values_list('branch_code', flat=True).distinct())
+            scope_branches = list(qs.values_list('branch_code', flat=True).order_by('branch_code').distinct())
 
     stock_map = {}
     if only_in_stock:
@@ -1059,7 +1059,7 @@ def expiry_prone_items(months_back=12, short_dated_months=SHORT_DATED_MONTHS,
         return []
 
     codes = list(per.keys())
-    names = dict(qs.exclude(item_name='').values_list('item_code', 'item_name').distinct())
+    names = dict(qs.exclude(item_name='').values_list('item_code', 'item_name').order_by('item_code', 'item_name').distinct())
     branch_codes = list(Branch.objects.live()
                         .values_list('softech_branch_id', flat=True))
     vel_map, _ = _velocity_map(codes, branch_codes)
