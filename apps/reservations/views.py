@@ -395,11 +395,11 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
     # ── Gap-6: Valid status transition graph ──────────────────────────────────
     # Maps current_status → set of allowed next statuses.
-    # Terminal states (fulfilled, cancelled, expired) have no forward transitions.
-    # 'expired' can be reopened to 'pending' so a patient who calls back can be
-    # re-served without creating a duplicate reservation.
-    # Admins and call-center get one extra escape hatch: they can move any
-    # non-terminal status directly to 'cancelled' (override for corrections).
+    # fulfilled and cancelled have no moves; 'expired' can only be reopened to 'pending' so a
+    # patient who calls back can be re-served without creating a duplicate reservation.
+    # _ADMIN_OVERRIDE_ROLES get one extra escape hatch: 'cancelled' from ANY other status —
+    # fulfilled and expired included — as a correction (allowed_transitions at the end of this
+    # module). The phone screen hides moves on fulfilled/cancelled like the desktop does.
     _VALID_TRANSITIONS = {
         'pending':   {'available', 'cancelled', 'expired'},
         'available': {'contacted', 'confirmed', 'cancelled', 'expired'},
@@ -429,24 +429,23 @@ class ReservationViewSet(viewsets.ModelViewSet):
         if new_status == 'cancelled' and not (note or '').strip():
             return Response({'detail': CANCEL_REASON_REQUIRED}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Gap-6: Enforce the transition graph.
-        # Admins/call-center/managers get the full graph PLUS direct cancellation
-        # from any state (escape hatch for corrections).
-        allowed = self._VALID_TRANSITIONS.get(old_status, set())
-        is_privileged = staff and staff.role in self._ADMIN_OVERRIDE_ROLES
+        # Gap-6: Enforce the transition graph. Admins/call-center/managers also get direct
+        # cancellation (escape hatch for corrections). One helper, shared with bulk change-status
+        # and the detail answer's `allowed_transitions`, so the screen and this check never
+        # disagree (UAT W8).
+        allowed = allowed_transitions(staff, old_status)
         if new_status not in allowed:
-            if not (is_privileged and new_status == 'cancelled'):
-                STATUS_LABELS = dict(Reservation.STATUS_CHOICES)
-                return Response(
-                    {
-                        'detail': (
-                            f'لا يمكن الانتقال من «{STATUS_LABELS.get(old_status, old_status)}» '
-                            f'إلى «{STATUS_LABELS.get(new_status, new_status)}»'
-                        ),
-                        'allowed_transitions': sorted(allowed),
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            STATUS_LABELS = dict(Reservation.STATUS_CHOICES)
+            return Response(
+                {
+                    'detail': (
+                        f'لا يمكن الانتقال من «{STATUS_LABELS.get(old_status, old_status)}» '
+                        f'إلى «{STATUS_LABELS.get(new_status, new_status)}»'
+                    ),
+                    'allowed_transitions': allowed,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         STATUS_LABELS = dict(Reservation.STATUS_CHOICES)
 
@@ -1290,12 +1289,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
             STATUS_LABELS = dict(Reservation.STATUS_CHOICES)
             updated = 0
             skipped = 0
+            granted = can_change_status(staff)          # the matrix grant once per request, not per row
             for r in qs:
-                allowed = ReservationViewSet._VALID_TRANSITIONS.get(r.status, set())
-                is_privileged = staff and staff.role in ReservationViewSet._ADMIN_OVERRIDE_ROLES
-                can_transit = (new_status_val in allowed) or \
-                              (is_privileged and new_status_val == 'cancelled')
-                if not can_transit:
+                if new_status_val not in allowed_transitions(staff, r.status, granted=granted):
                     skipped += 1
                     continue
                 old_status = r.status
@@ -1610,3 +1606,33 @@ class ReservationViewSet(viewsets.ModelViewSet):
                 'created_at': r.created_at.isoformat(),
             })
         return Response(result)
+
+
+# ── Status transitions: one rule for change-status, bulk change-status and the detail answer ──────
+_CHANGE_STATUS_ACTIONS = ('create', 'edit', 'approve', 'finalize')   # ReservationsPermission: POST
+
+
+def can_change_status(profile) -> bool:
+    """The change-status grant: the matrix rule ReservationsPermission applies to the POST."""
+    from core.permissions import matrix_allows
+    return profile is not None and matrix_allows(profile, 'reservations', *_CHANGE_STATUS_ACTIONS)
+
+
+def allowed_transitions(profile, current_status, granted=None):
+    """The statuses `profile` may move a reservation in `current_status` to, as a sorted list.
+
+    Exactly what change_status enforces: the Gap-6 graph (ReservationViewSet._VALID_TRANSITIONS),
+    plus 'cancelled' from any other status for ReservationViewSet._ADMIN_OVERRIDE_ROLES (the
+    correction escape hatch, unchanged), and nothing at all without the change-status grant (the
+    matrix rule ReservationsPermission applies to the POST). The detail answer ships it as
+    `allowed_transitions` so the phone offers only these (UAT W8, 2026-11-20). `granted`: the
+    can_change_status(profile) answer when the caller already has it (bulk: once per request)."""
+    if granted is None:
+        granted = can_change_status(profile)
+    if profile is None or not granted:
+        return []
+    allowed = set(ReservationViewSet._VALID_TRANSITIONS.get(current_status, set()))
+    if profile.role in ReservationViewSet._ADMIN_OVERRIDE_ROLES:
+        allowed.add('cancelled')
+    allowed.discard(current_status)
+    return sorted(allowed)

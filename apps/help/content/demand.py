@@ -551,7 +551,6 @@ SCREENS = [
         ],
         'tips': [T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.'),
                  T('موظف الفرع بيشوف طلبات فرعه (وأي فرع إضافي متاح له) بس، ومينفعش يسجّل طلب على فرع تاني. المشرف ومدير الجودة بيشوفوا كل الفروع.', "Branch staff see their branch's requests (and any extra branch they are given) only, and cannot record a request for another branch. Supervisors and the quality manager see every branch."),
-                 
             T('علامة «تجاوز» تعني أن الطلب تخطى زمن SLA — عالجه فوراً.', 'The "breached" mark means the request passed its SLA time — handle it now.'),
             T('سجّل الطلب حتى لو العميل سيمشي؛ الطلب المسجّل باسم عميل حقيقي هو «خسارة مؤكدة» وهي أقوى إشارة للمشتريات.',
               'Record the request even if the customer is leaving; a request under a real customer is a "confirmed loss", the strongest signal for purchasing.'),
@@ -1109,7 +1108,8 @@ SCREENS = [
             T('ابحث عن الصنف وأضفه، أو اكتب اسم صنف غير مكوَّد ثم «إضافة».', 'Search and add the item, or type an uncoded item name then "Add".'),
             T('الفرع يُختار تلقائياً (فرعك). حدد الأولوية والمصدر ثم «تسجيل الطلب».', 'The branch defaults to yours. Set priority and source, then "Record request".'),
         ],
-        'tips': [T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.')],
+        'tips': [T('لو دورك ما عندوش صلاحية الإنشاء هنا، الشاشة بتقول «ليس لديك صلاحية الإنشاء هنا» بدل النموذج — اطلب الصلاحية من المدير.', 'If your role has no create permission here, the screen says so instead of showing the form — ask your manager for the permission.'),
+                 T('بعد ما تختار صنف، خانة البحث بتفضى وتفضل جاهزة — اكتب الصنف اللي بعده على طول من غير ما تدوس على حاجة.', 'After you pick an item the search box clears and stays ready — type the next item right away, no extra click.')],
         'tour': [
             {'target': 'demand-mobile-new-customer', 'label': T('👤 العميل', '👤 Customer'),
              'text': T('رقم الهاتف إجباري والاسم اختياري.', 'The phone is required and the name is optional.'),
@@ -1160,7 +1160,8 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('اختيار الفرع لأي دور له صلاحية كل الفروع', 'Any role with all-branch access picks the branch'),
+        'change_note': T('اللي ما عندوش صلاحية الإنشاء بيشوف سطر هادي بدل نموذج كان السيرفر هيرفضه، وزر «جديد هنا؟» بقى فوق تحت العنوان على الموبايل · اختيار الفرع لأي دور له صلاحية كل الفروع',
+                         'Without the create permission you see a calm line instead of a form the server would refuse; on the phone the «New here?» chip now sits at the top, under the header · Any role with all-branch access picks the branch'),
     },
     {
         'key': 'demand.mobile_detail',
