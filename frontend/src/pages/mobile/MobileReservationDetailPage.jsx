@@ -3,15 +3,16 @@
  * (route: /m/reservations/:id).
  *
  * Shows the core reservation info, branch stock availability, and a status
- * timeline. Status actions mirror the server-side transition graph
- * (ReservationViewSet._VALID_TRANSITIONS) so only valid next states are offered;
- * anyone holding reservations:edit also gets a cancel escape hatch.
+ * timeline. Status actions are exactly the detail answer's `allowed_transitions` — the moves the
+ * server's change-status accepts from THIS user (views.allowed_transitions: the graph, the override
+ * roles' cancel, nothing without the grant). A role without the grant sees the status only, no
+ * buttons — cancel included (UAT W8, role review decision 6).
  */
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { reservationsApi } from '../../api/client'
-import { usePermission } from '../../hooks/usePermission'
+import { useModuleAction } from '../../hooks/usePermission'
 import { StatusBadge, PriorityBadge } from '../../components/StatusBadge'
 import PhoneAlertStatusChip from '../../components/PhoneAlertStatusChip'
 import MobileChatter from '../../components/MobileChatter'
@@ -19,17 +20,7 @@ import { MobileLoading, MobileError } from '../../components/mobileUi'
 import { format } from 'date-fns'
 import { ba } from '../../utils/flowArrow'
 import CancelReasonPicker, { cancelNote, EMPTY_CANCEL } from '../../components/CancelReasonPicker'
-
-// Mirror of the backend transition graph. Keep in sync with views.py.
-const TRANSITIONS = {
-  pending:   ['available', 'cancelled', 'expired'],
-  available: ['contacted', 'confirmed', 'cancelled', 'expired'],
-  contacted: ['confirmed', 'available', 'cancelled', 'expired'],
-  confirmed: ['fulfilled', 'cancelled', 'expired'],
-  expired:   ['pending'],
-  fulfilled: [],
-  cancelled: [],
-}
+import { WRITE_ACTIONS, offeredTransitions, isFinalReservationStatus } from './mobileWriteGates'
 
 const ACTION_STYLE = {
   available: 'bg-orange-500',
@@ -62,7 +53,8 @@ export default function MobileReservationDetailPage() {
   const { id }   = useParams()
   const navigate = useNavigate()
   const qc       = useQueryClient()
-  const canCancel = usePermission('reservations', 'edit')   // role review decision 6: same as desktop
+  // the change-status endpoint's own rule (cancel included) — role review decision 6, UAT W8
+  const canChangeStatus = useModuleAction('reservations', WRITE_ACTIONS.reservations)
 
   const { data: r, isLoading, isError, refetch } = useQuery({
     queryKey: ['m-reservation', id],
@@ -103,10 +95,8 @@ export default function MobileReservationDetailPage() {
     .filter(a => !a.is_deleted && a.message)
     .map(a => ({ id: a.id, text: a.message, who: a.created_by_name, when: a.created_at }))
 
-  let allowed = [...(TRANSITIONS[r.status] || [])]
-  if (canCancel && !['fulfilled', 'cancelled'].includes(r.status) && !allowed.includes('cancelled')) {
-    allowed.push('cancelled')
-  }
+  // the server's own list for this user (UAT W8); the local graph only for an older server
+  const allowed = offeredTransitions(r, canChangeStatus)
 
   return (
     <div className="p-3 space-y-3">
@@ -208,8 +198,10 @@ export default function MobileReservationDetailPage() {
             ))}
           </div>
         </div>
-      ) : (
+      ) : isFinalReservationStatus(r.status) ? (
         <div data-tour="reservations-mdetail-status" className="text-center text-xs text-gray-400 py-2">هذا الحجز في حالة نهائية</div>
+      ) : (
+        <div data-tour="reservations-mdetail-status" className="text-center text-xs text-gray-400 py-2">عرض فقط — تغيير الحالة يحتاج صلاحية تعديل الحجوزات</div>
       )}
 
       {/* Confirm sheet */}

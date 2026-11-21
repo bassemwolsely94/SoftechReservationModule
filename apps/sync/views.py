@@ -390,3 +390,48 @@ def writer_switches(request):
             'code_default': False,
         } for flag, info in WRITER_FLAGS.items()],
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, RouteModulePermission])
+def delta_shadow(request):
+    """
+    Delta sync SHADOW report (doc 40 §6.1): per stream over the last ?days= (default 7, max 30) — runs,
+    total / max missed rows, rows read by the delta vs the full read, read times — plus the watermark,
+    the switch per stream and the last 20 runs. A stream may go ON only after 7 days with 0 missed and the
+    owner's sign-off (S2). Codes only, no names or phones. Admin only.
+    """
+    from datetime import timedelta
+    from django.conf import settings
+    from django.db.models import Avg, Count, Max, Sum
+    from django.utils import timezone
+    from apps.users.permissions import IsAdminRole
+    from . import delta
+    from .models import DeltaShadowRun, SyncWatermark
+
+    if not IsAdminRole().has_permission(request, None):
+        return Response({'detail': 'admin only'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        days = max(1, min(int(request.query_params.get('days', 7)), 30))
+    except (TypeError, ValueError):
+        days = 7
+    since = timezone.now() - timedelta(days=days)
+    runs = DeltaShadowRun.objects.filter(at__gte=since).exclude(note='seed')
+    streams = []
+    for agg in (runs.values('stream').annotate(
+            runs=Count('id'), missed_total=Sum('missed'), missed_max=Max('missed'),
+            missed_new_total=Sum('missed_new'), changed_total=Sum('rows_changed'),
+            delta_rows_avg=Avg('rows_delta'), full_rows_avg=Avg('rows_full'),
+            delta_ms_avg=Avg('delta_ms'), full_ms_avg=Avg('full_ms')).order_by('stream')):
+        clean_days = {r.date() for r in runs.filter(stream=agg['stream']).values_list('at', flat=True)}
+        streams.append({**{k: (round(v) if isinstance(v, float) else v) for k, v in agg.items()},
+                        'days_with_runs': len(clean_days)})
+    watermarks = [{'stream': w.stream, 'value_ts': w.value_ts, 'mode': w.mode,
+                   'last_delta_at': w.last_delta_at, 'rows_last_delta': w.rows_last_delta,
+                   'misses_last_shadow': w.misses_last_shadow} for w in SyncWatermark.objects.all()]
+    recent = [{'stream': r.stream, 'at': r.at, 'rows_full': r.rows_full, 'rows_changed': r.rows_changed,
+               'rows_delta': r.rows_delta, 'missed': r.missed, 'missed_new': r.missed_new,
+               'missed_sample': r.missed_sample, 'delta_ms': r.delta_ms, 'full_ms': r.full_ms, 'note': r.note}
+              for r in DeltaShadowRun.objects.order_by('-at')[:20]]
+    return Response({'days': days, 'mode': {'stkbal': delta.stock_mode()},
+                     'streams': streams, 'watermarks': watermarks, 'recent': recent})

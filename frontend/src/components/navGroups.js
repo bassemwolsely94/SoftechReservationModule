@@ -210,6 +210,18 @@ export function moduleActionAllowed({ role, perms, seeded } = {}, module, action
   return [].concat(actions).some(a => !!grant[a])
 }
 
+/** The role list a screen falls back to while its module has no matrix rows: the menu item's
+ *  `legacyRoles`, else its plain `roles` (items the role review left on a role list, e.g.
+ *  /reservations, /transfers, /demand). Write gates on those screens use it so an unseeded
+ *  database (the server fails open for the legacy roles) keeps today's controls (UAT W8 review I1). */
+export function menuRolesFor(path) {
+  for (const g of NAV_GROUPS) {
+    const it = g.items.find(i => i.to === path)
+    if (it) return it.legacyRoles || it.roles || undefined
+  }
+  return undefined
+}
+
 /** The pre-review role list of the menu item for `path` (its `legacyRoles`), so route guards and
  *  in-page write gates reuse the one list instead of repeating role literals. */
 export function legacyRolesFor(path) {

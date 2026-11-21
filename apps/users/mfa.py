@@ -109,17 +109,96 @@ def _device_fingerprint(user) -> str:
     return salted_hmac('mfa-device-fingerprint', material).hexdigest()[:24]
 
 
+def _bump_device_epoch(profile) -> int:
+    """Move the device epoch on: every "remember this device" of `profile` stops matching."""
+    from django.db.models import F
+    StaffProfile.objects.filter(pk=profile.pk).update(mfa_device_epoch=F('mfa_device_epoch') + 1)
+    profile.refresh_from_db(fields=['mfa_device_epoch'])
+    return profile.mfa_device_epoch
+
+
 def forget_devices(profile, by_profile, ip) -> int:
     """Cancel every "remember this device" of `profile` (the epoch is part of the fingerprint the
     approved-device remember stores); returns the new epoch (N0/H7)."""
-    from django.db.models import F
     from .models import UserActivityLog
-    StaffProfile.objects.filter(pk=profile.pk).update(mfa_device_epoch=F('mfa_device_epoch') + 1)
-    profile.refresh_from_db(fields=['mfa_device_epoch'])
+    epoch = _bump_device_epoch(profile)
     UserActivityLog.objects.create(target_user=profile, changed_by=by_profile,
                                    action='mfa_devices_forgotten', ip_address=ip,
                                    note='إلغاء الأجهزة المحفوظة')
-    return profile.mfa_device_epoch
+    return epoch
+
+
+MAX_RESET_REASON = 200       # the activity note must fit varchar(255) on the office DB
+
+
+def _clear_mfa(profile, extra_fields=None) -> None:
+    """2FA off: no secret, no backup codes, no confirmation date (self-disable and admin reset)."""
+    profile.mfa_enabled = False
+    profile.mfa_secret = ''
+    profile.mfa_backup_codes = []
+    profile.mfa_confirmed_at = None
+    fields = ['mfa_enabled', 'mfa_secret', 'mfa_backup_codes', 'mfa_confirmed_at']
+    for name, value in (extra_fields or {}).items():
+        setattr(profile, name, value)
+        fields.append(name)
+    profile.save(update_fields=fields)
+
+
+def session_predates_reset(request, profile) -> bool:
+    """True when the request's session was signed in before the admin's last 2FA reset (or has no
+    token to tell) — such a session may not enrol a new authenticator (lost phone, I3)."""
+    reset_at = getattr(profile, 'mfa_reset_at', None)
+    if not reset_at:
+        return False
+    from apps.access.session_policy import auth_at_of
+    token = getattr(request, 'auth', None)
+    try:
+        auth_at = auth_at_of(token) if token is not None else None
+    except Exception:
+        auth_at = None
+    # auth_at is whole seconds: a sign-in in the same second as the reset counts as after it
+    return auth_at is None or auth_at < int(reset_at.timestamp())
+
+
+_STALE_SESSION_MESSAGE = 'أعد تسجيل الدخول لتفعيل المصادقة الثنائية'
+
+
+def reset_mfa(profile, by_profile, request, reason: str) -> int:
+    """An admin clears a user's 2FA (lost phone AND backup codes; UAT 2026-11-21): 2FA off, the
+    secret and every backup code gone, every remembered device forgotten, every session ended
+    (returns how many) — one transaction, one `mfa_reset` activity row with the reason and that
+    count. Password, role, device approvals and the login
+    lockout are left as they are. A role that requires 2FA is sent to enrolment at its next
+    sign-in (login_view: not enrolled + mfa_required_for → mfa_setup_required)."""
+    from django.db import transaction
+    from core.client_ip import client_ip
+    from .audit import request_network_fields
+    from .models import UserActivityLog
+    from .sessions import end_sessions
+    with transaction.atomic():
+        # one reset at a time per user; the row is re-read under the lock
+        profile = StaffProfile.objects.select_for_update().get(pk=profile.pk)
+        _clear_mfa(profile, extra_fields={'mfa_reset_at': timezone.now()})
+        _bump_device_epoch(profile)
+        # A lost phone may still hold a signed-in session: blacklist every refresh token so none
+        # renews (the refresh cookie then answers 401); an access token dies within its 1 hour,
+        # and meanwhile cannot enrol a new authenticator (session_predates_reset).
+        ended = end_sessions(profile.user, on_commit=True)
+        # The action names the reset; the note stays short (reason ≤ MAX_RESET_REASON, office
+        # column varchar(255) until PR #288).
+        UserActivityLog.objects.create(target_user=profile, changed_by=by_profile, action='mfa_reset',
+                                       ip_address=client_ip(request),
+                                       note=f'السبب: {reason} · أُنهيت {ended} جلسة',
+                                       **request_network_fields(request))
+    # The used-code marker belongs to the old secret (it would refuse the new phone's codes for up
+    # to 2 minutes). A login token already handed out dies at /2fa/verify/ (2FA is off now) and
+    # its wrong-code counter expires with it. The reset is committed by now, so a cache outage
+    # must not turn it into an error — the marker runs out on its own after 120 s.
+    try:
+        limits_cache.delete(f'mfa-last-step:{profile.pk}')
+    except Exception:
+        pass
+    return ended
 
 
 # ── TOTP + backup codes ──────────────────────────────────────────────────────────
@@ -379,6 +458,8 @@ def setup_2fa_view(request):
         refused = enrol_refusal_response(request, user, session_policy.request_zone(request))
         if refused is not None:
             return refused
+    elif session_predates_reset(request, profile):   # a session from before an admin reset (I3)
+        return Response({'error': _STALE_SESSION_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
     if profile.mfa_enabled:      # never replace a working authenticator (A-1) — disable it first
         return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل — أوقفها أولاً لربط هاتف جديد'},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -414,6 +495,8 @@ def enable_2fa_view(request):
                    or enrol_refusal_response(request, user, zone))
         if refused is not None:
             return refused
+    elif session_predates_reset(request, profile):   # a session from before an admin reset (I3)
+        return Response({'error': _STALE_SESSION_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
     if profile.mfa_enabled:      # A-1: no second set of backup codes / no login through here
         return Response({'error': 'المصادقة الثنائية مفعّلة بالفعل'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -456,11 +539,7 @@ def disable_2fa_view(request):
     if not (verify_totp(profile, code) or consume_backup_code(profile, code)):
         return Response({'error': 'رمز التحقق غير صحيح'}, status=status.HTTP_400_BAD_REQUEST)
 
-    profile.mfa_enabled = False
-    profile.mfa_secret = ''
-    profile.mfa_backup_codes = []
-    profile.mfa_confirmed_at = None
-    profile.save(update_fields=['mfa_enabled', 'mfa_secret', 'mfa_backup_codes', 'mfa_confirmed_at'])
+    _clear_mfa(profile)
     _log('mfa_disabled', profile, request)
     return Response({'detail': 'تم إيقاف المصادقة الثنائية'})
 

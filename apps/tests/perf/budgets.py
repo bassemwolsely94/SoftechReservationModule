@@ -93,4 +93,5 @@ BUDGETS: dict[str, Budget] = {
                                                  'no export query (+ auth)'),
     # ── tracking ─────────────────────────────────────────────────────────────────
     'audit/screen-view': Budget('track', 5, 'measured 3 on 2026-11-19'),
+    'sync/delta-shadow': Budget('report', 12, 'doc 40 shadow report, 2026-11-20: aggregates + watermarks + last 20 (+ auth)'),
 }

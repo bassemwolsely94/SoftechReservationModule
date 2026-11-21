@@ -797,7 +797,8 @@ SCREENS = [
     {
         'key': 'hr.qa',
         'routes': ['/m/qa', '/m/qa/:id'],
-        'tips': [T('تعديل زيارة الجودة بعد حفظها لمن يملك صلاحية «تعديل» في الموارد البشرية.', 'Editing a saved quality visit needs the HR «edit» permission.')],
+        'tips': [T('زر «+» (مراجعة جديدة) يظهر فقط لمن له صلاحية كتابة في الموارد البشرية ودوره من أدوار مراجعة الجودة.', 'The «+» (new visit) shows only to a role with an HR write grant that is one of the quality-review roles.'),
+                 T('تعديل زيارة الجودة بعد حفظها لمن يملك صلاحية «تعديل» في الموارد البشرية.', 'Editing a saved quality visit needs the HR «edit» permission.')],
         'title': T('مراجعات الجودة للفروع', 'Branch quality inspections'),
         'summary': T('جولة جودة في الفرع من الموبايل: «مراجعة جديدة» باختيار القالب والفرع ← لكل بند: مطابق / مخالفة (مع ملاحظة) / لا ينطبق ← «حفظ كمسودة» أو «إرسال» فتُحسب الدرجة.',
                      'A quality walk-through at the branch on the phone: "New inspection" with a template and branch → per item: compliant / violation (with a note) / not applicable → "Save draft" or "Submit" to compute the score.'),
@@ -891,8 +892,8 @@ SCREENS = [
              'open_hint': _QA_OPEN},
         ],
         'updated': '2026-11-20',
-        'change_note': T('جديد: قالب «تجهيز زيارة هيئة الدواء» وزرار «سجل حرارة الثلاجة» فوق القائمة · اختيار الفرع لأي دور له صلاحية كل الفروع',
-                         'New: the "EDA visit readiness" template and a "Fridge temperature log" button above the list · Any role with all-branch access picks the branch'),
+        'change_note': T('زر «+» بقى يظهر بس للي السيرفر يسمح له يبدأ مراجعة · جديد: قالب «تجهيز زيارة هيئة الدواء» وزرار «سجل حرارة الثلاجة» فوق القائمة · اختيار الفرع لأي دور له صلاحية كل الفروع',
+                         '«+» now shows only to those the server lets start a visit · New: the "EDA visit readiness" template and a "Fridge temperature log" button above the list · Any role with all-branch access picks the branch'),
     },
     {
         'key': 'hr.qa_fridge',

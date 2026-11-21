@@ -136,3 +136,20 @@ describe('useConfirm (non-modal bar)', () => {
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1)
   })
 })
+
+describe('ConfirmBar reason length (admin 2FA reset)', () => {
+  it('caps the input at maxLength and shows a counter', () => {
+    render(<Harness mode="ask" onResult={() => {}} opts={{ input: { required: true, maxLength: 200 } }} />)
+    fireEvent.click(screen.getByText('go'))
+    const input = document.querySelector('[role="alertdialog"] input')
+    expect(input.getAttribute('maxlength')).toBe('200')
+    fireEvent.change(input, { target: { value: 'ضاع الهاتف' } })
+    expect(screen.getByTestId('confirm-bar-counter').textContent).toBe('10/200')
+  })
+
+  it('shows no counter without maxLength', () => {
+    render(<Harness mode="ask" onResult={() => {}} opts={{ input: {} }} />)
+    fireEvent.click(screen.getByText('go'))
+    expect(screen.queryByTestId('confirm-bar-counter')).toBeNull()
+  })
+})
