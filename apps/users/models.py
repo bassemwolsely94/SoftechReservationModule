@@ -264,6 +264,9 @@ class StaffProfile(models.Model):
     mfa_secret       = models.CharField(max_length=64, blank=True, default='', verbose_name='سر TOTP')
     mfa_backup_codes = models.JSONField(default=list, blank=True, verbose_name='رموز الاسترجاع (مجزّأة)')
     mfa_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='تاريخ تفعيل المصادقة الثنائية')
+    # Set by the admin 2FA reset: a session signed in before it may not enrol a new authenticator
+    # (a lost phone's still-valid token must not register the finder's app) — sign in again first.
+    mfa_reset_at     = models.DateTimeField(null=True, blank=True, verbose_name='آخر إعادة ضبط للمصادقة الثنائية')
     # Bumped by "forget saved devices"; part of the device-token fingerprint (N0/H7).
     mfa_device_epoch = models.PositiveIntegerField(default=0, verbose_name='رقم إصدار الأجهزة المحفوظة')
 

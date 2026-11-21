@@ -327,7 +327,7 @@ def invalidate_signal(sender, instance, **kwargs):
 def _request_fields(request):
     if request is None:
         return {}
-    from apps.users.views import _request_network_fields
+    from apps.users.audit import request_network_fields as _request_network_fields
     fields = _request_network_fields(request)
     ip = _client_ip(request)
     if ip:

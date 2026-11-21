@@ -21,17 +21,27 @@ def account_active(user) -> bool:
     return profile is None or bool(profile.is_active)
 
 
-def end_sessions(user) -> int:
-    """Blacklist every outstanding refresh token of `user`. Returns how many were revoked."""
+def end_sessions(user, on_commit=False) -> int:
+    """Blacklist every outstanding refresh token of `user`. Returns how many were revoked.
+    `on_commit=True` (a caller inside a transaction): the socket re-check is pushed only after the
+    commit, so it never sees the state from before it."""
     from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
     revoked = 0
     for token in OutstandingToken.objects.filter(user=user):
         _, created = BlacklistedToken.objects.get_or_create(token=token)
         revoked += int(created)
     logger.info('[sessions] user=%s — %d refresh token(s) revoked', user.pk, revoked)
+    if on_commit:
+        from django.db import transaction
+        transaction.on_commit(lambda: _push_recheck(user.pk))
+    else:
+        _push_recheck(user.pk)
+    return revoked
+
+
+def _push_recheck(user_pk):
     try:
         from apps.access.ws import push_recheck
-        push_recheck([user.pk])
+        push_recheck([user_pk])
     except Exception:
-        logger.warning('[sessions] user=%s - socket re-check push failed', user.pk, exc_info=True)
-    return revoked
+        logger.warning('[sessions] user=%s - socket re-check push failed', user_pk, exc_info=True)

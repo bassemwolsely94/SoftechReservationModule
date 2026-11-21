@@ -43,6 +43,7 @@ from core.client_ip import client_ip
 from core.multi_filter import filter_in, multi_values
 from core.stable_ordering import StableOrderingMixin
 from .passwords import password_problem
+from .audit import request_network_fields
 from core.permissions import IsAdminRole, MatrixPermission, matrix_allows, matrix_permission
 
 
@@ -163,21 +164,8 @@ def _resolve_user(identifier: str):
     return None
 
 
-def _request_network_fields(request):
-    """The network label and browser of a request, for the activity log (blank without one)."""
-    if request is None:
-        return {}
-    try:
-        from apps.access.network import request_network
-        acc = getattr(request, 'access', None)
-        net = acc.network if acc else request_network(request)
-        return {
-            'network': net.zone,
-            'network_site': net.site.name if net.site else '',
-            'user_agent': (request.META.get('HTTP_USER_AGENT') or '')[:300],
-        }
-    except Exception:
-        return {}
+# Moved to apps/users/audit.py; the old name stays for existing callers.
+_request_network_fields = request_network_fields
 
 
 def _log_auth(action: str, profile, ip: str, note: str = '', request=None, device=None):
@@ -219,11 +207,16 @@ def reset_mfa_admin_view(request, pk):
     reason = str(request.data.get('reason') or '').strip()
     if not reason:
         return Response({'error': 'اكتب سبب إعادة ضبط المصادقة الثنائية'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(reason) > mfa.MAX_RESET_REASON:
+        return Response({'error': f'السبب طويل — {mfa.MAX_RESET_REASON} حرف كحد أقصى'},
+                        status=status.HTTP_400_BAD_REQUEST)
     actor = getattr(request.user, 'staff_profile', None)
     if profile.user_id == request.user.id:
         return Response({'error': 'لا يمكنك إعادة ضبط مصادقتك الثنائية من هنا — استخدم صفحة الأمان'},
                         status=status.HTTP_400_BAD_REQUEST)
-    ended = mfa.reset_mfa(profile, actor, request, reason[:300])
+    if not profile.mfa_enabled and not profile.mfa_secret:      # nothing to reset
+        return Response({'error': 'المصادقة الثنائية غير مفعّلة'}, status=status.HTTP_400_BAD_REQUEST)
+    ended = mfa.reset_mfa(profile, actor, request, reason)
     return Response({'detail': f'تمت إعادة ضبط المصادقة الثنائية لـ {profile.full_name or profile.user.username}'
                                f' وأُنهيت جلساته ({ended}) — سيُطلب منه ربط هاتفه من جديد إن كان دوره يتطلبها',
                      'sessions_ended': ended})

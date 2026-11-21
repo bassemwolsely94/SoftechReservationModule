@@ -10,7 +10,7 @@ import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import MultiSelectFilter from '../components/MultiSelectFilter'
 import { askBar, notify } from '../components/ui'
-import { canResetMfa } from '../utils/mfaReset'
+import { canResetMfa, MFA_RESET_REASON_MAX } from '../utils/mfaReset'
 
 // Server-side ordering (paged list): DRF `ordering` whitelist on /users/staff/.
 const USER_SORT_KEYS = ['user__first_name', 'role', 'branch__name', 'softech_username', 'is_active']
@@ -677,9 +677,11 @@ export default function UserManagementPage() {
   const askResetMfa = async (u) => {
     const reason = await askBar(
       `إعادة ضبط المصادقة الثنائية لـ ${u.full_name || u.username}؟\n`
-      + 'تُلغى المصادقة وأكواد الاحتياط والأجهزة المحفوظة، ويربط هاتفه من جديد عند دخوله التالي إن كان دوره يتطلبها.',
+      + 'تُلغى المصادقة وأكواد الاحتياط والأجهزة المحفوظة، وتنتهي جلساته المفتوحة خلال ساعة على الأكثر، '
+      + 'ويربط هاتفه من جديد عند دخوله التالي إن كان دوره يتطلبها.',
       { title: 'إعادة ضبط المصادقة الثنائية', tone: 'danger', confirmLabel: 'إعادة الضبط',
-        input: { required: true, placeholder: 'السبب (مطلوب) — مثلاً: ضاع الهاتف وأكواد الاحتياط' } },
+        input: { required: true, maxLength: MFA_RESET_REASON_MAX,
+                 placeholder: 'السبب (مطلوب) — مثلاً: ضاع الهاتف وأكواد الاحتياط' } },
     )
     if (reason && reason.trim()) resetMfaMutation.mutate({ id: u.id, reason: reason.trim() })
   }
