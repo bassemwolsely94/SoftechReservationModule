@@ -12,6 +12,7 @@
  *                has «👋 ابدأ من هنا»). No modal; ✕ or leaving the screen hides it.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import useLangStore from '../store/langStore'
@@ -19,6 +20,7 @@ import useHelpStore from './helpStore'
 import { useCurrentHelp } from './useHelpIndex'
 import { startScreenTour } from './Tour'
 import { pick } from './text'
+import { helpChipPosition } from './chipPlacement'
 
 const BRAND = 'var(--c-brand-400)'
 const WARN = '245 158 11'          // amber-500, as the tour ring
@@ -68,6 +70,7 @@ export function HintsLayer() {
 
 function HintsBody({ steps }) {
   const toggleHints = useHelpStore((s) => s.toggleHints)
+  const chipPos = helpChipPosition(useLocation().pathname)
   const lang = useLang()
   const en = lang === 'en'
   const tr = (ar, e) => (en ? e : ar)
@@ -154,7 +157,7 @@ function HintsBody({ steps }) {
         </div>
       )}
       <div dir={en ? 'ltr' : 'rtl'}
-           className="no-print fixed bottom-24 sm:bottom-4 start-4 z-[94] flex items-center gap-2 rounded-full bg-brand-600 text-white text-xs shadow-lg ps-3 pe-1 py-1">
+           className={`no-print fixed ${chipPos} z-[94] flex items-center gap-2 rounded-full bg-brand-600 text-white text-xs shadow-lg ps-3 pe-1 py-1`}>
         <span>💡 {steps.size
           ? tr(`تلميحات الأزرار شغالة — ${steps.size} عنصر مشروح هنا`, `Button hints on — ${steps.size} explained here`)
           : tr('تلميحات الأزرار شغالة — مفيش شرح أزرار للشاشة دي', 'Button hints on — none for this screen')}</span>
@@ -170,6 +173,7 @@ function HintsBody({ steps }) {
 
 export function TourOffer() {
   const { screen } = useCurrentHelp()
+  const { pathname } = useLocation()
   const { tour, isOpen, hints, seen, offered, markOffered } = useHelpStore()
   const lang = useLang()
   const en = lang === 'en'
@@ -191,7 +195,7 @@ export function TourOffer() {
 
   return (
     <div dir={en ? 'ltr' : 'rtl'} data-tour="general-help-center-offer"
-         className="no-print fixed bottom-24 sm:bottom-4 start-4 z-[94] flex items-center gap-2 rounded-xl bg-surface border border-brand-300 shadow-lg ps-3 pe-1.5 py-1.5 text-xs animate-fade-in">
+         className={`no-print fixed ${helpChipPosition(pathname)} z-[94] flex items-center gap-2 rounded-xl bg-surface border border-brand-300 shadow-lg ps-3 pe-1.5 py-1.5 text-xs animate-fade-in`}>
       <span className="text-content">{en ? 'New here?' : 'جديد هنا؟'}</span>
       <button type="button" onClick={() => { setShown(null); startScreenTour(key).catch(() => {}) }}
               className="bg-brand-600 text-white rounded-lg px-3 py-1 hover:bg-brand-700">

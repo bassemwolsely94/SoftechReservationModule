@@ -670,7 +670,8 @@ SCREENS = [
         'summary': T('تسجيل النواقص من بين الأرفف: افتح قائمة (أو أنشئ واحدة بعنوان اختياري)، أضف الصنف الناقص بسرعة، أو الصق قائمة، أو بالصوت، أو بصورة، ثم «إرسال القائمة». يعمل بدون إنترنت مؤقتاً.',
                      'Record shortages in the aisle: open a list (or create one with an optional title), add missing items quickly, or paste a list, use voice or a photo, then "Submit list". Works briefly offline.'),
         'audience': T('موظفو الفروع، وكل من له صلاحية النواقص.', 'Branch staff, and anyone with shortage access.'),
-        'tips': [T('بتشوف قوائم فرعك بس.', "You see your own branch's lists only.")],
+        'tips': [T('لو دورك ما عندوش صلاحية الإنشاء هنا، الشاشة بتقول «ليس لديك صلاحية الإنشاء هنا» بدل النموذج — اطلب الصلاحية من المدير.', 'If your role has no create permission here, the screen says so instead of showing the form — ask your manager for the permission.'),
+                 T('بتشوف قوائم فرعك بس.', "You see your own branch's lists only.")],
         'steps': [
             T('«قائمة نواقص جديدة» ← «إنشاء وبدء التسجيل».', '"New shortage list" → "Create and start".'),
             T('اكتب اسم الصنف الناقص ← «إضافة» (يبقى المؤشر في الخانة للإضافة السريعة).', 'Type the missing item name → "Add" (the cursor stays for quick entry).'),
@@ -750,6 +751,7 @@ SCREENS = [
              'open_hint': T('اضغط «📋 لصق قائمة» في قائمة مفتوحة.', 'Tap "📋 Paste a list" in an open list.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('اختيار الفرع لأي دور له صلاحية كل الفروع', 'Any role with all-branch access picks the branch'),
+        'change_note': T('اللي ما عندوش صلاحية الإنشاء بيشوف سطر هادي بدل نموذج كان السيرفر هيرفضه، وزر «جديد هنا؟» بقى فوق تحت العنوان على الموبايل · اختيار الفرع لأي دور له صلاحية كل الفروع',
+                         'Without the create permission you see a calm line instead of a form the server would refuse; on the phone the «New here?» chip now sits at the top, under the header · Any role with all-branch access picks the branch'),
     },
 ]

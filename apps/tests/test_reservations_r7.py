@@ -225,6 +225,84 @@ class StatusTransitionRuleTests(_Base):
         self.assertEqual(r.status_code, 200)
 
 
+# ── allowed_transitions: one rule for the detail answer and change-status (UAT W8) ──────────────────
+
+class AllowedTransitionsTests(_Base):
+    """The detail answer's `allowed_transitions` is views.allowed_transitions, and change-status
+    accepts exactly those moves — so the phone never offers a move the server refuses."""
+
+    STATUSES = ('pending', 'available', 'contacted', 'confirmed', 'fulfilled', 'cancelled', 'expired')
+
+    def setUp(self):
+        super().setUp()
+        _, self.viewer, self.viewer_c = make_user('r7res_viewer', role='viewer', branch=self.branch)
+        _, self.cc, self.cc_c = make_user('r7res_cc', role='call_center', branch=self.branch)
+
+    def _server_accepts(self, client, current):
+        ok = []
+        for new in self.STATUSES:
+            if new == current:
+                continue
+            res = self.res(status=current)
+            r = client.post(_u(res.id, 'change-status'), {'status': new, 'note': 'UAT W8'}, format='json')
+            if r.status_code == 200:
+                ok.append(new)
+        return sorted(ok)
+
+    def test_helper_matches_change_status(self):
+        from apps.reservations.views import allowed_transitions
+        cases = [(self.pharm, self.pharm_c, 'pending'), (self.pharm, self.pharm_c, 'expired'),
+                 (self.pharm, self.pharm_c, 'fulfilled'), (self.admin, self.admin_c, 'expired'),
+                 (self.admin, self.admin_c, 'confirmed'), (self.admin, self.admin_c, 'fulfilled'),
+                 (self.cc, self.cc_c, 'pending'), (self.cc, self.cc_c, 'expired'),
+                 (self.viewer, self.viewer_c, 'pending')]
+        for profile, client, current in cases:
+            with self.subTest(role=profile.role, status=current):
+                self.assertEqual(allowed_transitions(profile, current), self._server_accepts(client, current))
+
+    def test_admin_gets_cancel_from_expired(self):
+        from apps.reservations.views import allowed_transitions
+        self.assertEqual(allowed_transitions(self.admin, 'expired'), ['cancelled', 'pending'])
+        self.assertEqual(allowed_transitions(self.pharm, 'expired'), ['pending'])
+
+    def test_override_roles_keep_cancel_on_fulfilled(self):
+        # the server list is the full truth; the phone hides moves on fulfilled (desktop parity)
+        from apps.reservations.views import allowed_transitions
+        self.assertEqual(allowed_transitions(self.admin, 'fulfilled'), ['cancelled'])
+        self.assertEqual(allowed_transitions(self.cc, 'fulfilled'), ['cancelled'])
+        self.assertEqual(allowed_transitions(self.cc, 'expired'), ['cancelled', 'pending'])
+        self.assertEqual(allowed_transitions(self.admin, 'cancelled'), [])
+        self.assertEqual(allowed_transitions(self.pharm, 'fulfilled'), [])
+
+    def test_bulk_cancel_uses_the_same_rule(self):
+        a = self.res(status='cancelled')
+        b = self.res(status='fulfilled')
+        c = self.res(status='pending')
+        r = self.admin_c.post(_u('bulk'), {'action': 'change_status', 'ids': [a.id, b.id, c.id],
+                                           'status': 'cancelled', 'note': 'تصحيح'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, {'updated': 2, 'skipped': 1})       # already cancelled: skipped
+        self.assertEqual(ReservationStatusLog.objects.filter(reservation__in=[a, b, c]).count(), 2)
+        self.assertFalse(ReservationStatusLog.objects.filter(reservation=a).exists())
+        b.refresh_from_db()
+        c.refresh_from_db()
+        self.assertEqual((b.status, c.status), ('cancelled', 'cancelled'))
+
+    def test_viewer_gets_nothing(self):
+        from apps.reservations.views import allowed_transitions
+        for st in self.STATUSES:
+            self.assertEqual(allowed_transitions(self.viewer, st), [])
+        self.assertEqual(allowed_transitions(None, 'pending'), [])
+
+    def test_detail_answer_carries_the_requesters_moves(self):
+        res = self.res(status='expired')
+        self.assertEqual(self.admin_c.get(_u(res.id)).data['allowed_transitions'], ['cancelled', 'pending'])
+        self.assertEqual(self.pharm_c.get(_u(res.id)).data['allowed_transitions'], ['pending'])
+        r = self.viewer_c.get(_u(res.id))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['allowed_transitions'], [])
+
+
 # ── ERP match ─────────────────────────────────────────────────────────────────
 
 class ErpMatchTests(_Base):

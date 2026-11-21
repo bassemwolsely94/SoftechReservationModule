@@ -10,8 +10,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { shortageApi, branchesApi } from '../../api/client'
 import useAuthStore from '../../store/authStore'
 import { canPickAnyBranch } from '../../utils/branchAccess'
+import useMobileCreateGate from './useMobileCreateGate'
+import MobileNoPermission, { MobileGateLoading } from '../../components/MobileNoPermission'
+import { menuRolesFor } from '../../components/navGroups'
 
 export default function MobileNewShortagePage() {
+  // the create endpoint's own POST rule (UAT W8): no form the server would refuse; an unseeded
+  // module falls back to the menu's role list, as the server fails open there
+  const gate = useMobileCreateGate('shortage', menuRolesFor('/shortage'))
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
@@ -43,6 +49,9 @@ export default function MobileNewShortagePage() {
       setBusy(false)
     }
   }
+
+  if (gate === 'loading') return <MobileGateLoading />
+  if (gate === 'denied') return <div className="p-3"><MobileNoPermission /></div>
 
   return (
     <div className="p-3 space-y-3">

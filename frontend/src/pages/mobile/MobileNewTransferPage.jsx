@@ -14,8 +14,14 @@ import { canPickAnyBranch } from '../../utils/branchAccess'
 import ItemSearchWidget from '../../components/ItemSearchWidget'
 import PhoneAlertToggle from '../../components/PhoneAlertToggle'
 import useTransferPrefill from '../../hooks/useTransferPrefill'
+import useMobileCreateGate from './useMobileCreateGate'
+import MobileNoPermission, { MobileGateLoading } from '../../components/MobileNoPermission'
+import { menuRolesFor } from '../../components/navGroups'
 
 export default function MobileNewTransferPage() {
+  // the create endpoint's own POST rule (UAT W8): no form the server would refuse; an unseeded
+  // module falls back to the menu's role list, as the server fails open there
+  const gate = useMobileCreateGate('transfers', menuRolesFor('/transfers'))
   const navigate = useNavigate()
   const qc       = useQueryClient()
   const { user } = useAuthStore()
@@ -66,6 +72,9 @@ export default function MobileNewTransferPage() {
       setBusy('')
     }
   }
+
+  if (gate === 'loading') return <MobileGateLoading />
+  if (gate === 'denied') return <div className="p-3"><MobileNoPermission /></div>
 
   return (
     <div className="p-3 space-y-3">

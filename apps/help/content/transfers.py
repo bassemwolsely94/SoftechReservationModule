@@ -610,7 +610,6 @@ SCREENS = [
             T('اضغط رقم الطلب لفتح تفاصيله واتخاذ الإجراء.', 'Click a request number to open it and act.'),
         ],
         'tips': [T('الفرع بيشوف التحويل لو هو الطالب أو المورّد. المشرف ومدير الجودة بيشوفوا كل التحويلات، لكن الموافقة والإرسال والاستلام بتفضل لموظفي الفرعين والإدارة. تعديل أو حذف الطلب للفرع الطالب بس.', "A branch sees a transfer when it is the requesting or the supplying side. Supervisors and the quality manager see every transfer, but approving, sending and receiving stay with the two branches' staff and HQ. Only the requesting branch edits or deletes the request."),
-                 
             T('الطلب لا يؤثر على المخزون حتى يُصدر فعلاً في SOFTECH.', 'A request does not affect stock until it is actually issued in SOFTECH.'),
         ],
         'related': ['transfers.new', 'transfers.detail', 'transfers.transits'],
@@ -684,7 +683,8 @@ SCREENS = [
             T('«📲 نبّه على الموبايل» (يظهر لو الإدارة فعّلته): يصل واتساب لمسؤول صرف تحويلات المخزن الرئيسي، ثم تنبيهات تغيّر الحالة لموبايل الفرع.',
               '"📲 Alert by phone" (shown when management enabled it): a WhatsApp message reaches the HQ dispatch owner, then status-change alerts go to the branch mobile.'),
         ],
-        'tips': [T('بعد ما تختار أو تمسح صنف، المؤشر بيروح لخانة كميته — اكتب الكمية واضغط Enter يرجع لخانة البحث للصنف اللي بعده.', 'After you pick or scan an item the cursor goes to its quantity — type it and press Enter to go back to the search for the next item.'),
+        'tips': [T('لو دورك ما عندوش صلاحية الإنشاء هنا، الشاشة بتقول «ليس لديك صلاحية الإنشاء هنا» بدل النموذج — اطلب الصلاحية من المدير.', 'If your role has no create permission here, the screen says so instead of showing the form — ask your manager for the permission.'),
+                 T('بعد ما تختار أو تمسح صنف، المؤشر بيروح لخانة كميته — اكتب الكمية واضغط Enter يرجع لخانة البحث للصنف اللي بعده.', 'After you pick or scan an item the cursor goes to its quantity — type it and press Enter to go back to the search for the next item.'),
             T('«حفظ وتقديم» متعلّم من الأول، فالطلب بيوصل للفرع المصدر بضغطة واحدة. شيل العلامة لو عايزه مسودة. ولو التقديم اترفض ما بيتحفظش حاجة، فالضغط تاني مش بيعمل طلب مكرر.',
               '"Save & submit" is ticked from the start, so one press sends the request. Untick it to keep a draft. A refused submit saves nothing, so pressing again never makes a duplicate.'),
             T('لو صنف «لا يوجد مخزون في أي فرع» فالتحويل لن يفيد — سجّله كطلب ضائع أو نقص للمشتريات.',
@@ -747,7 +747,8 @@ SCREENS = [
              'when': T('لو اخترت صنف غلط أو العميل غيّر رأيه.', 'When you picked the wrong item or the customer changed their mind.')},
         ],
         'updated': '2026-11-20',
-        'change_note': T('اختيار الفرع الطالب لأي دور له صلاحية كل الفروع', 'Any role with all-branch access picks the requesting branch'),
+        'change_note': T('اللي ما عندوش صلاحية الإنشاء بيشوف سطر هادي بدل نموذج كان السيرفر هيرفضه، وزر «جديد هنا؟» بقى فوق تحت العنوان على الموبايل · اختيار الفرع الطالب لأي دور له صلاحية كل الفروع',
+                         'Without the create permission you see a calm line instead of a form the server would refuse; on the phone the «New here?» chip now sits at the top, under the header · Any role with all-branch access picks the requesting branch'),
     },
     {
         'key': 'transfers.detail',

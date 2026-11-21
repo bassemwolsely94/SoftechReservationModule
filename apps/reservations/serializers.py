@@ -367,6 +367,17 @@ class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Rec
     contract_subtype_label = serializers.SerializerMethodField()
     channel_display      = serializers.SerializerMethodField()
     can_check_erp_match  = serializers.SerializerMethodField()
+    allowed_transitions  = serializers.SerializerMethodField()
+
+    def get_allowed_transitions(self, obj):
+        """The statuses THIS requester may move the reservation to: the same helper change-status
+        enforces (views.allowed_transitions), so the screen offers exactly what the server accepts
+        (UAT W8). Empty without a request or without the change-status grant."""
+        request = self.context.get('request')
+        if not request:
+            return []
+        from .views import allowed_transitions
+        return allowed_transitions(getattr(request.user, 'staff_profile', None), obj.status)
 
     def get_can_check_erp_match(self, obj):
         """True when admin/pharmacist can trigger ERP match on a fulfilled reservation."""
@@ -502,6 +513,7 @@ class ReservationDetailSerializer(RetentionNoteMixin, PhoneAlertStatusMixin, Rec
             'erp_match_trans_time', 'erp_match_store_code', 'erp_matched_items',
             'erp_receipt_lines', 'erp_customer_info',
             'can_check_erp_match',
+            'allowed_transitions',
             'lines',
             'phone_alert', 'phone_alert_status', 'phone_alert_remark',
         ]

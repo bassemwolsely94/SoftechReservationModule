@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { deliveryApi } from '../api/client'
+import { driverRefusal, retryUnlessRefused, NO_TASKS_TEXT } from './driverApp'
 
 const STATUS = {
   assigned:        { label: 'مكلّف', next: 'accept', nextLabel: 'قبول الطلب', color: 'bg-blue-50' },
@@ -29,16 +30,20 @@ export default function DriverDeliveryApp() {
   const qc = useQueryClient()
   const [podFor, setPodFor] = useState(null)
 
-  const { data: route, isLoading } = useQuery({
+  const { data: route, isLoading, error: routeError } = useQuery({
     queryKey: ['my-route'],
     queryFn: () => deliveryApi.myRoute().then(r => r.data),
     refetchInterval: 30_000,
+    retry: retryUnlessRefused,
   })
-  const { data: looseOrders = [] } = useQuery({
+  const { data: looseOrders = [], error: ordersError } = useQuery({
     queryKey: ['my-orders'],
     queryFn: () => deliveryApi.myOrders().then(r => Array.isArray(r.data) ? r.data : (r.data.results || [])),
     refetchInterval: 30_000,
+    retry: retryUnlessRefused,
   })
+  // the server's own words when it has no driver profile for this user (UAT W8)
+  const refusal = driverRefusal(routeError, ordersError)
 
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
@@ -85,7 +90,14 @@ export default function DriverDeliveryApp() {
       )}
 
       {isLoading ? <div className="text-center py-16 text-gray-400">جارٍ التحميل…</div>
-        : stops.length === 0 ? <div className="text-center py-16 text-gray-400">لا توجد مهام حالياً</div>
+        : refusal ? (
+          <div data-tour="delivery-driver-no-profile" className="text-center py-12 px-4 space-y-1.5">
+            <div className="text-2xl">🪪</div>
+            <div className="text-sm font-medium text-gray-700">{refusal}</div>
+            <div className="text-xs text-gray-400">هذه الشاشة لمهام السائق. اطلب من المدير ربط حسابك بملف سائق إن كنت تقوم بالتوصيل.</div>
+          </div>
+        )
+        : stops.length === 0 ? <div className="text-center py-16 text-gray-400">{NO_TASKS_TEXT}</div>
         : (
         <div className="space-y-2.5" data-tour="delivery-driver-stops">
           {stops.map((s, i) => {
