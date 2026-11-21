@@ -652,18 +652,11 @@ class DeviceAlertTests(IngestBase):
         self.send([punch(raw_stamp=1)])
         self.assertFalse(self.alerts('جهاز مغلق أرسل بصمات').exists())
 
-    def test_log_count_drop_alerts(self):
+    def test_log_count_drop_is_left_to_health(self):
+        # A falling log count is health.py's 'log_fall' alert (test_hr_attendance_health); the ingest
+        # adds no second one.
         self.post('runs', self.run_body())                                       # 3906
-        self.assertFalse(self.alerts('سجل الجهاز اتمسح').exists())
         self.post('runs', self.run_body(started_at='2026-10-01T11:00:00', finished_at='2026-10-01T11:01:00',
                                         device_log_count=120))
-        self.assertEqual(self.alerts('سجل الجهاز اتمسح').count(), 1)
-        self.post('runs', self.run_body(started_at='2026-10-01T12:00:00', finished_at='2026-10-01T12:01:00',
-                                        device_log_count=50))                    # same day: still one
-        self.assertEqual(self.alerts('سجل الجهاز اتمسح').count(), 1)
-
-    def test_log_count_growth_does_not_alert(self):
-        self.post('runs', self.run_body(device_log_count=100))
-        self.post('runs', self.run_body(started_at='2026-10-01T11:00:00', device_log_count=100))
-        self.post('runs', self.run_body(started_at='2026-10-01T12:00:00', device_log_count=130))
-        self.assertFalse(self.alerts('سجل الجهاز اتمسح').exists())
+        self.assertFalse(Notification.objects.filter(notification_type='attendance_alert').exists())
+        self.assertEqual(AttendanceDevice.objects.get(pk=self.device.pk).last_log_count, 120)

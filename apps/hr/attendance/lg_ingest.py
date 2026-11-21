@@ -32,6 +32,12 @@ def _opt_int(value):
     return value
 
 
+def _int_or_none(value):
+    """An in-range int, else None: for portal fields that only inform (a shift type of the wrong
+    type must not refuse the whole reference upload)."""
+    return value if _is_int(value) and _INT_MIN <= value <= _INT_MAX else None
+
+
 def _moment(value):
     """Naive Cairo time from the agent -> aware datetime, or None when it is NULL or unreadable."""
     if not isinstance(value, str):
@@ -113,7 +119,7 @@ def store_lg_punches(rows, reread, today=None, window=None) -> dict:
         for check_id, version in (LinkedGatesPunch.objects.filter(lg_check_id__in=ids)
                                   .order_by('lg_check_id', 'version').values_list('lg_check_id', 'version')):
             latest[check_id] = version
-        new_rows, supersede, revive = [], [], []
+        new_rows, supersede, revive, new_lg_devices = [], [], [], set()
         for check_id, clean in batch.items():
             cur = current.get(check_id)
             if cur is not None and _same(cur, clean):
@@ -126,6 +132,8 @@ def store_lg_punches(rows, reread, today=None, window=None) -> dict:
                 counts['versioned'] += 1
             else:
                 counts['new'] += 1
+                if clean['lg_device_id'] is not None:
+                    new_lg_devices.add(clean['lg_device_id'])
             bad = is_bad_date(timezone.localtime(clean['check_time']).date(), today)
             new_rows.append(LinkedGatesPunch(
                 version=latest.get(check_id, 0) + 1, flag=FLAG_BAD_DATE if bad else '', **clean))
@@ -146,7 +154,21 @@ def store_lg_punches(rows, reread, today=None, window=None) -> dict:
             counts['removed'] = gone.update(lg_removed=True)
     # The employee link is derived: the shared resolver (employment dates included) sets it.
     ingest_module._resolve_all({str(c['enroll_no']) for c in batch.values()})
+    _alert_closed_machines(new_lg_devices)
     return counts
+
+
+def _alert_closed_machines(lg_device_ids) -> None:
+    """New Linked Gates punches from a portal machine tied to one of ours that is marked closed:
+    the same once-a-day alert as a ZK punch from that machine (ingest.alert_closed_device)."""
+    if not lg_device_ids:
+        return
+    closed = {}
+    for lg in (LinkedGatesDevice.objects.filter(lg_device_id__in=lg_device_ids, device__isnull=False,
+                                                device__is_active=False).select_related('device')):
+        closed[lg.device.pk] = lg.device
+    for device in closed.values():
+        ingest_module.alert_closed_device(device)
 
 
 def _text(value, limit) -> str:
@@ -184,7 +206,7 @@ def store_lg_reference(body) -> dict:
                           'first_name': _text(emp.get('first_name'), 120),
                           'last_name': _text(emp.get('last_name'), 120),
                           'lg_department_id': dept_id, 'department_name': dept_names.get(dept_id, ''),
-                          'shift_type': _opt_int(emp.get('shift_type')),
+                          'shift_type': _int_or_none(emp.get('shift_type')),
                           'is_manager': bool(emp.get('is_manager', False)),
                           'lg_status': bool(emp.get('status', True))})
         mapped = _automap()

@@ -13,6 +13,8 @@ from rest_framework.test import APIClient
 from apps.hr.attendance import agent_auth, lg_ingest, resolve
 from apps.hr.models import (AttendanceAgent, AttendanceDevice, Employee, LinkedGatesDevice,
                             LinkedGatesEmployee, LinkedGatesPunch)
+from apps.notifications.models import Notification
+from apps.tests.factories import make_user
 
 SECRET = 'test-agent-secret'
 HEADER = 'HTTP_X_ELR_ATTENDANCE_AGENT'
@@ -209,6 +211,51 @@ class ReferenceTests(TestCase):
         self.assertEqual(out['employees'], 1)
         self.assertEqual(LinkedGatesEmployee.objects.count(), 1)
         self.assertEqual(LinkedGatesEmployee.objects.get().department_name, 'الصيدلية')
+
+    def test_non_int_shift_type_stored_as_none(self):
+        # A portal text/decimal shift type informs only: stored as None, the upload is not refused.
+        base = {'lg_employee_id': 7, 'enroll_no': 1001, 'hr_code': 'H1', 'first_name': 'أ', 'last_name': 'ب',
+                'department_id': 3, 'is_manager': False, 'status': True}
+        out = self.ref([], [dict(base, shift_type='1'), dict(base, lg_employee_id=8, shift_type=None)])
+        self.assertEqual(out['employees'], 2)
+        self.assertEqual(list(LinkedGatesEmployee.objects.order_by('lg_employee_id')
+                              .values_list('shift_type', flat=True)), [None, None])
+
+
+class ClosedMachineAlertTests(TestCase):
+    """New Linked Gates punches from a portal machine tied to one of ours marked closed alert HR once
+    a day, the same alert a ZK punch from that machine raises."""
+
+    TITLE = 'جهاز مغلق أرسل بصمات'
+
+    def setUp(self):
+        make_user('lg_alert_admin', role='admin')
+        self.ours = AttendanceDevice.objects.create(serial='S1', name='a', ip='192.168.30.15', is_active=False)
+        LinkedGatesDevice.objects.create(lg_device_id=5, name='d', ip='192.168.30.15', device=self.ours)
+
+    def alerts(self):
+        return Notification.objects.filter(notification_type='attendance_alert', title=self.TITLE)
+
+    def store(self, rows):
+        return lg_ingest.store_lg_punches(rows, False, today=TODAY)
+
+    def test_new_punch_from_closed_machine_alerts_once_a_day(self):
+        self.assertEqual(self.store([row(1)])['new'], 1)                 # stored, never refused
+        self.assertEqual(self.alerts().count(), 1)
+        self.store([row(2, check_time='2026-11-10T17:00:00')])           # same day: still one
+        self.assertEqual(self.alerts().count(), 1)
+
+    def test_resend_does_not_alert(self):
+        AttendanceDevice.objects.filter(pk=self.ours.pk).update(is_active=True)
+        self.store([row(1)])
+        AttendanceDevice.objects.filter(pk=self.ours.pk).update(is_active=False)
+        self.store([row(1)])                                             # unchanged: not a new punch
+        self.assertFalse(self.alerts().exists())
+
+    def test_open_or_unmapped_machine_does_not_alert(self):
+        AttendanceDevice.objects.filter(pk=self.ours.pk).update(is_active=True)
+        self.store([row(1), row(2, device=99)])
+        self.assertFalse(self.alerts().exists())
 
 
 @override_settings(HR_ATTENDANCE_ENABLED=True, HR_ATTENDANCE_LINKEDGATES_ENABLED=True)

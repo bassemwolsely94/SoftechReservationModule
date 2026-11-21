@@ -119,7 +119,6 @@ def _resolve_all(codes) -> None:
 
 
 CLOSED_DEVICE_TITLE = 'جهاز مغلق أرسل بصمات'
-LOG_CLEARED_TITLE = 'سجل الجهاز اتمسح'
 
 
 def _device_alert(device, kind, title, body) -> None:
@@ -143,6 +142,12 @@ def _label(device) -> str:
     return f'{device.name} ({device.location_label})' if device.location_label else device.name
 
 
+def alert_closed_device(device) -> None:
+    """New punches from a machine marked closed (either source): tell HR once per machine a day."""
+    _device_alert(device, 'closed_device', CLOSED_DEVICE_TITLE,
+                  f'الجهاز {_label(device)} مسجل كمغلق وأرسل بصمات.')
+
+
 def store_punches(device, rows, today=None) -> tuple[int, int]:
     """Store a batch, all or nothing. Returns (accepted, duplicate), which add up to len(rows)."""
     today = today or timezone.localdate()
@@ -162,8 +167,7 @@ def store_punches(device, rows, today=None) -> tuple[int, int]:
     _resolve_all({punch.user_code for punch in punches.values()})
     if new and not device.is_active:
         # Stored like any other (they are evidence); someone is still using a machine marked closed.
-        _device_alert(device, 'closed_device', CLOSED_DEVICE_TITLE,
-                      f'الجهاز {_label(device)} مسجل كمغلق وأرسل بصمات.')
+        alert_closed_device(device)
     return len(new), len(rows) - len(new)
 
 
@@ -231,10 +235,6 @@ def _update_device(device, run, finished_at, now) -> None:
             fields['last_contact_at'] = contact
         fields['last_drift_seconds'] = run.drift_seconds
         if run.device_log_count is not None:
-            if device.last_log_count is not None and run.device_log_count < device.last_log_count:
-                _device_alert(device, 'log_cleared', LOG_CLEARED_TITLE,
-                              f'عدد السجلات في {_label(device)} كان {device.last_log_count} '
-                              f'وأصبح {run.device_log_count}.')
             fields['last_log_count'] = run.device_log_count
     AttendanceDevice.objects.filter(pk=device.pk).update(**fields)
 
