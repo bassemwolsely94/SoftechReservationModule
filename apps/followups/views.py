@@ -476,7 +476,7 @@ class FollowUpTaskViewSet(viewsets.ModelViewSet):
         # Distinct indications present among items that have follow-up tasks
         task_item_ids = (
             FollowUpTask.objects.exclude(item__isnull=True)
-            .values_list('item_id', flat=True).distinct()
+            .values_list('item_id', flat=True).order_by().distinct()
         )
         indications = list(
             Item.objects.filter(id__in=task_item_ids)

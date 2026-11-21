@@ -195,7 +195,7 @@ def list_tiers():
     def _tiers(code_field, name_field, name_ar_field=None):
         fields = [code_field, name_field] + ([name_ar_field] if name_ar_field else [])
         seen = {}
-        for r in Item.objects.exclude(**{code_field: ''}).values(*fields).distinct():
+        for r in Item.objects.exclude(**{code_field: ''}).values(*fields).order_by(*fields).distinct():
             code = r.get(code_field)
             if not code:
                 continue

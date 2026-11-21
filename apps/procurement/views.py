@@ -1016,14 +1016,14 @@ def procurement_filter_options(request):
 
     item_ids = (
         PurchaseLine.objects.exclude(item__isnull=True)
-        .values_list('item_id', flat=True).distinct()
+        .values_list('item_id', flat=True).order_by().distinct()
     )
     base = Item.objects.filter(id__in=item_ids)
 
     def _codelist(code_field, name_field, name_ar_field=None):
         fields = [code_field, name_field] + ([name_ar_field] if name_ar_field else [])
         seen = {}
-        for r in base.exclude(**{code_field: ''}).values(*fields).distinct():
+        for r in base.exclude(**{code_field: ''}).values(*fields).order_by(*fields).distinct():
             code = r.get(code_field)
             if not code:
                 continue

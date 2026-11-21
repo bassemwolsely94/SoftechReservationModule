@@ -883,7 +883,7 @@ def classify_supplier_segments(run: ProcurementEngineRun) -> int:
         PurchaseLine.objects
         .exclude(supplier_code__in=known_codes)
         .values_list('supplier_code', flat=True)
-        .distinct()
+        .order_by().distinct()
     )
 
     # Load existing segmentations (manual overrides must not be touched)

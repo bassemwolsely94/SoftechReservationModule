@@ -826,7 +826,7 @@ def _run_branches(run) -> list:
         return []
     from apps.branches.models import Branch
     from apps.purchasing.models import ItemDemandMetrics
-    ids = ItemDemandMetrics.objects.filter(run=run).values_list('branch_id', flat=True).distinct()
+    ids = ItemDemandMetrics.objects.filter(run=run).values_list('branch_id', flat=True).order_by().distinct()
     return [{'id': b.id, 'name': b.name, 'code': b.softech_branch_id}
             for b in Branch.objects.filter(pk__in=list(ids)).order_by('softech_branch_id')]
 

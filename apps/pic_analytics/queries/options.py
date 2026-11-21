@@ -41,7 +41,7 @@ def filter_options(f, access) -> dict:
     pics = facts.exclude(pic='').values('pic').distinct()
     types = {}
     for code, label in (Customer.objects.filter(softech_pic__in=pics).exclude(softech_ptclassifcode='')
-                        .values_list('softech_ptclassifcode', 'person_classif_label').distinct()):
+                        .values_list('softech_ptclassifcode', 'person_classif_label').order_by('softech_ptclassifcode', 'person_classif_label').distinct()):
         if not types.get(code):
             types[code] = label
     customer_types = [{'code': c, 'label': types[c] or c} for c in sorted(types)]
@@ -53,7 +53,7 @@ def filter_options(f, access) -> dict:
         'frequency': [{'code': k, 'label': v} for k, v in FREQUENCY_LABELS],
     }
     if access.sees_calls_tabs:
-        exts = sorted(set(calls_qs(base).exclude(agent_ext='').values_list('agent_ext', flat=True).distinct()))
+        exts = sorted(set(calls_qs(base).exclude(agent_ext='').values_list('agent_ext', flat=True).order_by().distinct()))
         labels = agent_labels(exts)
         out['agents'] = [{'ext': x, 'label': labels[x]} for x in exts]
     return out

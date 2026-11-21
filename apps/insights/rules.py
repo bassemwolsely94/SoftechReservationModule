@@ -552,12 +552,12 @@ def rule_branch_no_new_customer(ctx, threshold):
     from apps.customers.models import PurchaseHistory
     cur = _ph(ctx, ctx.start, ctx.end).filter(doc_code='115').exclude(softech_phcode='')
     seen_by_branch = {}
-    for bid, phc in cur.values_list('branch_id', 'softech_phcode').distinct():
+    for bid, phc in cur.values_list('branch_id', 'softech_phcode').order_by().distinct():
         seen_by_branch.setdefault(bid, set()).add(phc)
     # PICs that existed before the period (chain-wide)
     prior_pics = set(PurchaseHistory.objects.filter(
         invoice_date__date__lt=ctx.start, doc_code='115').exclude(softech_phcode='')
-        .values_list('softech_phcode', flat=True).distinct())
+        .values_list('softech_phcode', flat=True).order_by().distinct())
     out = []
     for b in ctx.branches:
         pics = seen_by_branch.get(b.id, set())
@@ -3217,7 +3217,7 @@ def rule_customer_mix(ctx, threshold):
     from collections import defaultdict
     from apps.customers.models import PurchaseHistory
     triples = (_ph(ctx, ctx.start, ctx.end).filter(doc_code='115').exclude(softech_phcode='')
-               .values_list('branch_id', 'softech_user', 'softech_phcode').distinct())
+               .values_list('branch_id', 'softech_user', 'softech_phcode').order_by().distinct())
     br_pics = defaultdict(set); us_pics = defaultdict(set); all_pics = set()
     for bid, u, pic in triples:
         br_pics[bid].add(pic)
@@ -3228,7 +3228,7 @@ def rule_customer_mix(ctx, threshold):
         return []
     prior = set(PurchaseHistory.objects.filter(
         invoice_date__date__lt=ctx.start, doc_code='115').exclude(softech_phcode='')
-        .values_list('softech_phcode', flat=True).distinct())
+        .values_list('softech_phcode', flat=True).order_by().distinct())
     bmap = _branch_map(ctx)
     out = []
     b_new, b_ret, per_branch = [], [], {}
@@ -3507,11 +3507,11 @@ def rule_salesperson_profile(ctx, threshold):
     discval = {r['purchase__softech_user']: (D(r['g']) - D(r['n'])) for r in drows}
     # customers served / new / returning
     us_pics = defaultdict(set)
-    for u, pic in ph.filter(doc_code='115').exclude(softech_phcode='').values_list('softech_user', 'softech_phcode').distinct():
+    for u, pic in ph.filter(doc_code='115').exclude(softech_phcode='').values_list('softech_user', 'softech_phcode').order_by().distinct():
         if u:
             us_pics[u].add(pic)
     prior = set(PurchaseHistory.objects.filter(invoice_date__date__lt=ctx.start, doc_code='115')
-                .exclude(softech_phcode='').values_list('softech_phcode', flat=True).distinct())
+                .exclude(softech_phcode='').values_list('softech_phcode', flat=True).order_by().distinct())
     # beauty attach
     tot_inv = dict(ph.filter(doc_code='115').exclude(softech_user='').values_list('softech_user').annotate(n=Count('id')))
     bty = {}
@@ -3526,7 +3526,7 @@ def rule_salesperson_profile(ctx, threshold):
     from django.db.models.functions import ExtractHour
     hrs = {}
     for r in (ph.filter(doc_code='115', trans_time__isnull=False).exclude(softech_user='')
-              .annotate(h=ExtractHour('trans_time')).values('softech_user', 'h').distinct()):
+              .annotate(h=ExtractHour('trans_time')).values('softech_user', 'h').order_by().distinct()):
         hrs[r['softech_user']] = hrs.get(r['softech_user'], 0) + 1
     # active reps (period-aware minimum so daily lists everyone who worked that day)
     active = [u for u, c in txn.items() if (c or 0) >= ctx.min_active and u not in ctx.cc_agents]
@@ -3739,7 +3739,7 @@ def rule_lapsed_customers(ctx, threshold):
         return []
     recent = set(PurchaseHistory.objects.filter(
         invoice_date__date__gte=recent_from, invoice_date__date__lte=ctx.end,
-        doc_code='115').exclude(softech_phcode='').values_list('softech_phcode', flat=True).distinct())
+        doc_code='115').exclude(softech_phcode='').values_list('softech_phcode', flat=True).order_by().distinct())
     lapsed = regulars - recent
     if not lapsed:
         return []
@@ -4202,13 +4202,13 @@ def rule_new_customer_trend(ctx, threshold):
     from apps.customers.models import PurchaseHistory
     periods = _trailing_periods(ctx, 4)
     prior = set(PurchaseHistory.objects.filter(invoice_date__date__lt=periods[0][0], doc_code='115')
-                .exclude(softech_phcode='').values_list('softech_phcode', flat=True).distinct())
+                .exclude(softech_phcode='').values_list('softech_phcode', flat=True).order_by().distinct())
     series = defaultdict(list)
     for (s, e) in periods:
         seen = defaultdict(set)
         for bid, pic in (PurchaseHistory.objects.filter(invoice_date__date__gte=s, invoice_date__date__lte=e,
                          doc_code='115', branch_id__in=ctx.branch_ids).exclude(softech_phcode='')
-                         .values_list('branch_id', 'softech_phcode').distinct()):
+                         .values_list('branch_id', 'softech_phcode').order_by().distinct()):
             seen[bid].add(pic)
         wpics = set()
         for b in ctx.branches:
