@@ -84,6 +84,7 @@ class StaffProfileListSerializer(serializers.ModelSerializer):
             'external_export', 'external_softech_write',
             'alerts_only', 'phone_alerts_enabled',
             'login_locked_until',
+            'mfa_enabled',          # 2FA on? — shows the admin «reset 2FA» button (yes/no only)
         ]
 
 

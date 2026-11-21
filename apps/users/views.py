@@ -208,6 +208,27 @@ def forget_devices_admin_view(request, pk):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def reset_mfa_admin_view(request, pk):
+    """Admin clears another user's 2FA when they lost both the phone and the backup codes (UAT
+    2026-11-21). A reason is required; the admin's own 2FA is managed on the security page."""
+    from . import mfa
+    profile = StaffProfile.objects.select_related('user').filter(pk=pk).first()
+    if not profile:
+        return Response({'error': 'المستخدم غير موجود'}, status=status.HTTP_404_NOT_FOUND)
+    reason = str(request.data.get('reason') or '').strip()
+    if not reason:
+        return Response({'error': 'اكتب سبب إعادة ضبط المصادقة الثنائية'}, status=status.HTTP_400_BAD_REQUEST)
+    actor = getattr(request.user, 'staff_profile', None)
+    if profile.user_id == request.user.id:
+        return Response({'error': 'لا يمكنك إعادة ضبط مصادقتك الثنائية من هنا — استخدم صفحة الأمان'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    mfa.reset_mfa(profile, actor, request, reason[:300])
+    return Response({'detail': f'تمت إعادة ضبط المصادقة الثنائية لـ {profile.full_name or profile.user.username}'
+                               ' — سيُطلب منه ربط هاتفه من جديد إن كان دوره يتطلبها'})
+
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([LoginRateThrottle])
 def login_view(request):

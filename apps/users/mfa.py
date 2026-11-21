@@ -109,17 +109,54 @@ def _device_fingerprint(user) -> str:
     return salted_hmac('mfa-device-fingerprint', material).hexdigest()[:24]
 
 
+def _bump_device_epoch(profile) -> int:
+    """Move the device epoch on: every "remember this device" of `profile` stops matching."""
+    from django.db.models import F
+    StaffProfile.objects.filter(pk=profile.pk).update(mfa_device_epoch=F('mfa_device_epoch') + 1)
+    profile.refresh_from_db(fields=['mfa_device_epoch'])
+    return profile.mfa_device_epoch
+
+
 def forget_devices(profile, by_profile, ip) -> int:
     """Cancel every "remember this device" of `profile` (the epoch is part of the fingerprint the
     approved-device remember stores); returns the new epoch (N0/H7)."""
-    from django.db.models import F
     from .models import UserActivityLog
-    StaffProfile.objects.filter(pk=profile.pk).update(mfa_device_epoch=F('mfa_device_epoch') + 1)
-    profile.refresh_from_db(fields=['mfa_device_epoch'])
+    epoch = _bump_device_epoch(profile)
     UserActivityLog.objects.create(target_user=profile, changed_by=by_profile,
                                    action='mfa_devices_forgotten', ip_address=ip,
                                    note='إلغاء الأجهزة المحفوظة')
-    return profile.mfa_device_epoch
+    return epoch
+
+
+def reset_mfa(profile, by_profile, request, reason: str) -> None:
+    """An admin clears a user's 2FA (lost phone AND backup codes; UAT 2026-11-21): 2FA off, the
+    secret and every backup code gone, every remembered device forgotten — one transaction, one
+    `mfa_reset` activity row with the reason. Password, role, device approvals and the login
+    lockout are left as they are. A role that requires 2FA is sent to enrolment at its next
+    sign-in (login_view: not enrolled + mfa_required_for → mfa_setup_required)."""
+    from django.db import transaction
+    from core.client_ip import client_ip
+    from .models import UserActivityLog
+    from .views import _request_network_fields
+    with transaction.atomic():
+        profile.mfa_enabled = False
+        profile.mfa_secret = ''
+        profile.mfa_backup_codes = []
+        profile.mfa_confirmed_at = None
+        profile.save(update_fields=['mfa_enabled', 'mfa_secret', 'mfa_backup_codes', 'mfa_confirmed_at'])
+        _bump_device_epoch(profile)
+        UserActivityLog.objects.create(target_user=profile, changed_by=by_profile, action='mfa_reset',
+                                       ip_address=client_ip(request),
+                                       note=f'إعادة ضبط المصادقة الثنائية — السبب: {reason}',
+                                       **_request_network_fields(request))
+    # The used-code marker belongs to the old secret (it would refuse the new phone's codes for up
+    # to 2 minutes). A login token already handed out dies at /2fa/verify/ (2FA is off now) and
+    # its wrong-code counter expires with it. The reset is committed by now, so a cache outage
+    # must not turn it into an error — the marker runs out on its own after 120 s.
+    try:
+        limits_cache.delete(f'mfa-last-step:{profile.pk}')
+    except Exception:
+        pass
 
 
 # ── TOTP + backup codes ──────────────────────────────────────────────────────────

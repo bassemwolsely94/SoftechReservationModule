@@ -9,6 +9,8 @@ import { networkBadgeParts } from '../components/NetworkBadge'
 import SortTh from '../components/SortTh'
 import useServerSort from '../hooks/useServerSort'
 import MultiSelectFilter from '../components/MultiSelectFilter'
+import { askBar, notify } from '../components/ui'
+import { canResetMfa } from '../utils/mfaReset'
 
 // Server-side ordering (paged list): DRF `ordering` whitelist on /users/staff/.
 const USER_SORT_KEYS = ['user__first_name', 'role', 'branch__name', 'softech_username', 'is_active']
@@ -525,6 +527,7 @@ const ACTION_LABELS = {
   permissions_changed: 'تغيير الصلاحيات',
   created:             'إنشاء المستخدم',
   mfa_devices_forgotten: 'إلغاء الأجهزة المحفوظة',
+  mfa_reset:           'إعادة ضبط المصادقة الثنائية',
 }
 
 const ACTION_ICON = {
@@ -539,6 +542,7 @@ const ACTION_ICON = {
   permissions_changed: '🔒',
   created:          '👤',
   mfa_devices_forgotten: '📵',
+  mfa_reset:        '🔓',
 }
 
 function ActivityLogModal({ user, onClose }) {
@@ -659,6 +663,26 @@ export default function UserManagementPage() {
     mutationFn: (id) => usersApi.forgetDevices(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   })
+
+  const resetMfaMutation = useMutation({
+    mutationFn: ({ id, reason }) => usersApi.resetMfa(id, reason),
+    onSuccess: (r) => {
+      notify.success(r?.data?.detail || 'تمت إعادة ضبط المصادقة الثنائية')
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: (e) => notify.error(e?.response?.data?.error || e?.response?.data?.detail || 'تعذّر إعادة ضبط المصادقة الثنائية'),
+  })
+
+  // Inline bar with a required reason (no native dialog, no modal — D-25 / rule 11).
+  const askResetMfa = async (u) => {
+    const reason = await askBar(
+      `إعادة ضبط المصادقة الثنائية لـ ${u.full_name || u.username}؟\n`
+      + 'تُلغى المصادقة وأكواد الاحتياط والأجهزة المحفوظة، ويربط هاتفه من جديد عند دخوله التالي إن كان دوره يتطلبها.',
+      { title: 'إعادة ضبط المصادقة الثنائية', tone: 'danger', confirmLabel: 'إعادة الضبط',
+        input: { required: true, placeholder: 'السبب (مطلوب) — مثلاً: ضاع الهاتف وأكواد الاحتياط' } },
+    )
+    if (reason && reason.trim()) resetMfaMutation.mutate({ id: u.id, reason: reason.trim() })
+  }
 
   const openCreate = () => { setEditUser(null); setDrawerOpen(true) }
   const openEdit   = (u)  => { setEditUser(u);  setDrawerOpen(true) }
@@ -853,6 +877,19 @@ export default function UserManagementPage() {
                       >
                         {forgetDevicesMutation.isSuccess && forgetDevicesMutation.variables === u.id ? '✓' : '📵'}
                       </button>
+
+                      {/* Reset 2FA (lost phone AND backup codes) — reason required, audited */}
+                      {canResetMfa(currentUser, u) && (
+                        <button data-tour="admin-users-reset-2fa"
+                          onClick={() => askResetMfa(u)}
+                          disabled={resetMfaMutation.isPending}
+                          title="إعادة ضبط المصادقة الثنائية (ضاع الهاتف وأكواد الاحتياط)"
+                          aria-label="إعادة ضبط المصادقة الثنائية"
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          🔓
+                        </button>
+                      )}
 
                       {/* Activity log */}
                       <button data-tour="admin-users-activity-log"
