@@ -787,7 +787,7 @@ SCREENS = [
              'open_hint': T('تبويب «مقارنة لينكد جيتس».', '"Linked Gates comparison" tab.')},
             {'target': 'hr-attendance-lg-map', 'label': T('ربط الماكينات', 'Machine mapping'),
              'text': T('يربط كل ماكينة في لينكد جيتس بماكينة عندنا حتى تُقارن البصمات على نفس الماكينة. اختر الماكينة ثم «حفظ» (أو Enter)، و«تراجع» يلغي الاختيار. كل تغيير يُسجَّل.',
-                       'Ties each Linked Gates machine to one of ours so punches are compared on the same machine. Choose the machine, then "Save" (or Enter); "Undo" drops the choice. Every change is recorded.'),
+                       'Ties each Linked Gates machine to one of ours for the comparison. Pick one, then "Save" (or Enter); "Undo" drops it. Every change is recorded.'),
              'open_hint': T('تبويب «مقارنة لينكد جيتس» بصلاحية الإدارة.', '"Linked Gates comparison" tab with manage access.')},
         ],
         'updated': '2026-11-21',
