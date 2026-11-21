@@ -15,7 +15,7 @@ from pathlib import Path
 from .lg_reader import LinkedGatesReader, LinkedGatesSync, make_lg_connect
 from .spool import Spool
 from .uploader import Uploader, UploadError
-from .zk_client import ZkClient, ZkError, ZkProtocolError
+from .zk_client import ZkClient, ZkError, ZkProtocolError, ZkTimeout
 
 logger = logging.getLogger('attendance_agent')
 
@@ -281,8 +281,10 @@ def _spool_results(serial, users, logs, spool, run):
 
 
 def _is_busy_error(exc) -> bool:
-    """A refused connection or a timeout: the machine is busy or unreachable right now."""
-    return isinstance(exc, (ConnectionRefusedError, TimeoutError))   # socket.timeout is TimeoutError
+    """A refused or reset connection, or a timeout (at connect or mid-session): the machine is
+    busy or unreachable right now."""
+    # socket.timeout is TimeoutError; ZkTimeout is the client's own session deadline.
+    return isinstance(exc, (ConnectionRefusedError, ConnectionResetError, TimeoutError, ZkTimeout))
 
 
 def collect_device(device, client_factory, spool, now, collect_done=False, pc_offset=None) -> bool:
@@ -474,7 +476,10 @@ class AgentLoop:
             self._collect_done_file = pending[-1] if pending else None
         drain(self._spool, self._uploader, clock=self._clock, held=self._held)
         if self._lg_sync is not None and self._lg_enabled:
-            self._lg_sync.run(self._uploader)
+            if collect_now:
+                self._lg_sync.run(self._uploader, force=True)   # collect-now skips the 15-minute gap
+            else:
+                self._lg_sync.run(self._uploader)
 
     def _should_run_all(self, devices, collect_now, clock):
         """A collect-now request stays set until collect_done reaches the ERP. So once

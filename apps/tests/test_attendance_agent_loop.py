@@ -1517,3 +1517,21 @@ class NightWindowTests(TempDirTestCase):
         loop = self.make_loop(FakeUploader(), (3, 0), broken)
         loop.tick()
         self.assertEqual(loop._next_due['SN1'], collector.COLLECT_EVERY_SECONDS)
+
+    def test_mid_session_timeout_and_reset_use_the_busy_backoff(self):
+        # A machine that stops answering mid-session (the client's own deadline) or resets the
+        # connection is busy too: 600 s, not the hourly cadence.
+        from attendance_agent import collector
+        from attendance_agent.zk_client import ZkTimeout
+        for error in (ZkTimeout('the machine took too long to answer'), ConnectionResetError('reset')):
+            with self.subTest(error=type(error).__name__):
+                def failing(target, error=error):
+                    raise error
+
+                loop = self.make_loop(FakeUploader(), (3, 0), failing)
+                loop.tick()
+                self.assertEqual(loop._next_due['SN1'], collector.BUSY_BACKOFF_SECONDS)
+
+    def test_zk_timeout_is_a_protocol_error(self):
+        from attendance_agent.zk_client import ZkTimeout
+        self.assertTrue(issubclass(ZkTimeout, ZkProtocolError))

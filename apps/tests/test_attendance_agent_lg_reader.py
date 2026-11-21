@@ -184,6 +184,22 @@ class ReaderTests(SimpleTestCase):
         self.assertEqual(ref['departments'], [{'department_id': 2, 'name': 'Sales'}])
 
 
+    def test_reference_values_are_coerced(self):
+        # ShiftType may be text or junk in the portal; flags may come back as 0/1 or text.
+        db = FakeDatabase()
+        db.answer = lambda name, params: {
+            'devices': [(3, 'Gate', '10.0.0.5', 0), (4, 'Gate 2', '10.0.0.6', None)],
+            'employees': [(11, 7001, 'H', 'A', 'B', 2, '2', 1, '0'),
+                          (12, 7002, 'H', 'A', 'B', 2, 'Night', 'true', None),
+                          (13, 7003, 'H', 'A', 'B', 2, None, 0, 1)],
+            'departments': [],
+        }[name]
+        ref = db.reader().read_reference()
+        self.assertEqual([d['status'] for d in ref['devices']], [False, True])
+        self.assertEqual([(e['shift_type'], e['is_manager'], e['status']) for e in ref['employees']],
+                         [(2, True, False), (None, True, True), (None, False, True)])
+        json.dumps(ref)    # what the uploader sends must stay plain JSON
+
 class SyncTests(TempTestCase):
     def test_incremental_batches(self):
         db = FakeDatabase(total=6200)
@@ -270,6 +286,65 @@ class SyncTests(TempTestCase):
         self.assertTrue(uploader.of('lg_punches'))
         self.assertIn('RuntimeError', ' '.join(captured.output))
         self.assertNotIn('SECRET', ' '.join(captured.output))
+
+    def test_refused_reference_does_not_block_punches_or_repeat(self):
+        class Refusing(FakeUploader):
+            def send(self, kind, payload):
+                self.attempts += 1
+                if kind == 'lg_reference':
+                    raise UploadError('HTTP 400', permanent=True)
+                self.sent.append((kind, payload))
+
+        db = FakeDatabase(total=3)
+        first = Refusing()
+        with self.assertLogs('attendance_agent', level='WARNING') as captured:
+            self.sync(db).run(first)
+        self.assertTrue(first.of('lg_punches'))                   # the punches still went
+        self.assertIn('UploadError', ' '.join(captured.output))
+        self.assertEqual(self.cursor()['last_reference'], NOW.date().isoformat())
+        second = Refusing()
+        self.sync(db).run(second)
+        self.assertEqual(second.attempts, len(second.sent))       # no second reference attempt today
+
+    def test_unreachable_erp_on_reference_still_stops_the_pass(self):
+        class Down(FakeUploader):
+            def send(self, kind, payload):
+                raise UploadError('URLError')
+
+        db = FakeDatabase(total=3)
+        self.sync(db).run(Down())
+        self.assertNotIn('last_reference', json.loads(self.state.read_text()) if self.state.exists() else {})
+
+    def test_query_timeout_is_set(self):
+        made = []
+
+        def fake_connect(connection_string, **kwargs):
+            conn = mock.Mock()
+            made.append((conn, kwargs))
+            return conn
+        with mock.patch.dict('sys.modules', {'pyodbc': mock.Mock(connect=fake_connect)}):
+            lg_reader.make_lg_connect(
+                {'server': 's', 'database': 'd', 'trusted': True, 'user': '', 'password': ''})()
+        conn, kwargs = made[0]
+        self.assertEqual(kwargs['timeout'], 15)                    # login
+        self.assertEqual(conn.timeout, lg_reader.QUERY_TIMEOUT_SECONDS)   # each query
+        self.assertEqual(lg_reader.QUERY_TIMEOUT_SECONDS, 60)
+
+    def test_run_is_throttled_to_once_per_15_minutes(self):
+        db = FakeDatabase(total=3)
+        ticks = [0]
+        sync = LinkedGatesSync(db.reader(), self.state, lambda: NOW, clock=lambda: ticks[0])
+        sync.run(FakeUploader())
+        reads = len(db.executed)
+        for ticks[0] in (60, 899):
+            sync.run(FakeUploader())
+        self.assertEqual(len(db.executed), reads)                  # skipped inside 15 minutes
+        sync.run(FakeUploader(), force=True)                       # collect-now goes through
+        self.assertGreater(len(db.executed), reads)
+        reads = len(db.executed)
+        ticks[0] = 899 + 900
+        sync.run(FakeUploader())
+        self.assertGreater(len(db.executed), reads)
 
     def test_connection_string_wraps_values(self):
         seen = []
