@@ -400,6 +400,20 @@ class MonthTests(Base):
         self.assertEqual(body['totals']['days_with_punches'], 2)
         self.assertEqual(body['employee']['hr_number'], '1001')
 
+    def test_days_endpoint_lists_each_days_sessions(self):
+        # Spec 5.3: session mode (no fixed day boundary) shows each day's sessions inline.
+        self.punch(stamp=4, date=_dt.date(2026, 10, 2), time=_dt.time(17, 0), employee=self.emp)
+        self.punch(stamp=5, date=_dt.date(2026, 10, 2), time=_dt.time(20, 0), employee=self.emp)
+        days = self.viewer.get(URL + f'employees/{self.emp.pk}/days/?month=2026-10').json()['days']
+        self.assertEqual(days[0]['sessions'], [{'first_in': '2026-10-01T09:00:00', 'last_out': '2026-10-01T17:30:00',
+                                                'worked_minutes': 510, 'needs_review': False}])
+        self.assertEqual(days[1]['sessions'], [{'first_in': '2026-10-02T09:00:00', 'last_out': '2026-10-02T20:00:00',
+                                                'worked_minutes': 480, 'needs_review': True}])
+        self.assertEqual(days[2]['sessions'], [])
+        Employee.objects.filter(pk=self.emp.pk).update(day_boundary=_dt.time(4, 0))
+        fixed = self.viewer.get(URL + f'employees/{self.emp.pk}/days/?month=2026-10').json()['days']
+        self.assertEqual(fixed[0]['sessions'], [])                      # a fixed boundary has none
+
     def test_days_for_unknown_employee_is_404(self):
         self.assertEqual(self.viewer.get(URL + 'employees/999999/days/?month=2026-10').status_code, 404)
 

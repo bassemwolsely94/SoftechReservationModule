@@ -287,6 +287,9 @@ def employee_days(request, acc, pk):
         'punch_count': d.punch_count, 'machines': d.machines, 'info': d.info,
         'raw': [{'at': r['at'], 'machine': r['machine'], 'state': r['state'], 'counted': r['counted']}
                 for r in d.raw],
+        # work sessions on this date (session mode only; empty with a fixed day boundary)
+        'sessions': [{'first_in': s.first_in, 'last_out': s.last_out, 'worked_minutes': s.worked_minutes,
+                      'needs_review': s.needs_review} for s in d.sessions],
     } for d in rows]
     return Response({
         'month': f'{year:04d}-{mon:02d}',
@@ -706,12 +709,13 @@ def lg_device_map(request, acc, lg_device_id):
     before = (lg_dev.device_id, lg_dev.device.name if lg_dev.device_id else None)
     after = (device.pk if device else None, device.name if device else None)
     if before[0] != after[0]:
-        lg_dev.device = device
-        lg_dev.save(update_fields=['device'])
-        AuditLog.log('hr_attendance_lg_device_map', user=acc.profile, obj=lg_dev, request=request,
-                     changes={'device': [before[0], after[0]], 'device_name': [before[1], after[1]]},
-                     extra={'lg_device_id': lg_dev.lg_device_id},
-                     note='Linked Gates machine mapped' if device else 'Linked Gates machine unmapped')
+        with transaction.atomic():      # the mapping and its audit row land together or not at all
+            lg_dev.device = device
+            lg_dev.save(update_fields=['device'])
+            AuditLog.log('hr_attendance_lg_device_map', user=acc.profile, obj=lg_dev, request=request,
+                         changes={'device': [before[0], after[0]], 'device_name': [before[1], after[1]]},
+                         extra={'lg_device_id': lg_dev.lg_device_id},
+                         note='Linked Gates machine mapped' if device else 'Linked Gates machine unmapped')
     return Response(_lg_device_json(lg_dev, acc))
 
 

@@ -4,7 +4,8 @@
  * Punches per machine and day by category, then the employee-days whose figures differ from ours,
  * each with its reason in plain words (the server sends the words with the codes). Display only:
  * the server computes every figure and category; this tab sorts and shows them. The machine
- * mapping (Manage) is an inline select per row — no modal; the server checks the level and audits.
+ * mapping (Manage) is an inline select per row with its own «حفظ» — choosing (or arrowing through
+ * the list) changes nothing until saved; no modal; the server checks the level and audits.
  */
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -203,6 +204,7 @@ function DaysGrid({ rows, reasons, noReason, official, onOpenDays }) {
 function DeviceMapping() {
   const qc = useQueryClient()
   const [msg, setMsg] = useState({})
+  const [draft, setDraft] = useState({})   // lg_device_id -> chosen '' | id (string), not yet saved
   const lg = useQuery({ queryKey: ['hr-attendance', 'lg-devices'],
                         queryFn: () => hrAttendanceApi.lgDevices().then(r => r.data.rows) })
   const ours = useQuery({ queryKey: ['hr-attendance', 'devices'],
@@ -212,6 +214,7 @@ function DeviceMapping() {
     mutationFn: ({ lgId, deviceId }) => hrAttendanceApi.mapLgDevice(lgId, deviceId),
     onSuccess: (_r, v) => {
       setMsg(m => ({ ...m, [v.lgId]: { ok: 'حُفظ' } }))
+      setDraft(d => { const next = { ...d }; delete next[v.lgId]; return next })
       qc.invalidateQueries({ queryKey: ['hr-attendance'] })
     },
     onError: (e, v) => setMsg(m => ({ ...m, [v.lgId]: { err: errText(e) } })),
@@ -234,24 +237,44 @@ function DeviceMapping() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map(r => (
+            {sorted.map(r => {
+              const saved = r.device == null ? '' : String(r.device)
+              const chosen = draft[r.lg_device_id] ?? saved
+              const changed = chosen !== saved
+              const save = () => map.mutate({ lgId: r.lg_device_id, deviceId: chosen ? Number(chosen) : null })
+              return (
               <tr key={r.lg_device_id} className="border-b border-gray-100">
                 <td className="px-3 py-1.5 tabular-nums">{r.lg_device_id}</td>
                 <td className="px-3 py-1.5">{r.name || '—'}{!r.lg_status && <span className="ms-1 text-xs text-gray-400">(غير فعّالة هناك)</span>}</td>
                 <td className="px-3 py-1.5">
-                  <select value={r.device ?? ''} disabled={map.isPending}
-                    onChange={e => map.mutate({ lgId: r.lg_device_id, deviceId: e.target.value ? Number(e.target.value) : null })}
+                  <select value={chosen} disabled={map.isPending}
+                    onChange={e => {
+                      const value = e.target.value
+                      setDraft(d => ({ ...d, [r.lg_device_id]: value }))
+                      setMsg(m => ({ ...m, [r.lg_device_id]: {} }))
+                    }}
+                    onKeyDown={e => { if (e.key === 'Enter' && changed) save() }}
                     className="border border-gray-200 rounded-md px-2 py-1 text-sm bg-white">
                     <option value="">— غير مربوطة —</option>
-                    {options.map(d => <option key={d.id} value={d.id}>{d.name}{d.is_active ? '' : ' (مغلقة)'}</option>)}
+                    {options.map(d => <option key={d.id} value={String(d.id)}>{d.name}{d.is_active ? '' : ' (مغلقة)'}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-1.5">
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  {changed && (
+                    <>
+                      <button type="button" onClick={save} disabled={map.isPending}
+                        className="px-2 py-1 rounded-md bg-primary text-white text-xs disabled:opacity-50">حفظ</button>
+                      <button type="button" disabled={map.isPending}
+                        onClick={() => setDraft(d => { const next = { ...d }; delete next[r.lg_device_id]; return next })}
+                        className="ms-1 px-2 py-1 rounded-md text-gray-500 text-xs hover:bg-gray-100">تراجع</button>
+                    </>
+                  )}
                   <Notice kind="ok">{msg[r.lg_device_id]?.ok}</Notice>
                   <Notice>{msg[r.lg_device_id]?.err}</Notice>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
         {lg.isLoading && <Empty>جاري التحميل…</Empty>}

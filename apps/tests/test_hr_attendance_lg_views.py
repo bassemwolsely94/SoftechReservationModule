@@ -138,6 +138,15 @@ class DeviceMapTests(LgViewsBase):
         self.post(self.mgr, 'linkedgates/devices/7/map/', {'device_id': other.pk})
         self.assertEqual(AuditLog.objects.filter(action='hr_attendance_lg_device_map').count(), 1)
 
+    def test_device_map_and_audit_are_one_transaction(self):
+        from unittest import mock
+        other = AttendanceDevice.objects.create(serial='SN2', name='Zahar', ip='192.168.5.15')
+        with mock.patch.object(AuditLog, 'log', side_effect=RuntimeError('audit down')):
+            with self.assertRaises(RuntimeError):
+                self.post(self.mgr, 'linkedgates/devices/7/map/', {'device_id': other.pk})
+        self.lg_dev.refresh_from_db()
+        self.assertEqual(self.lg_dev.device_id, self.device.pk)       # no mapping without its audit row
+
     def test_device_map_rejects_unknown_machine_and_missing_key(self):
         self.assertEqual(self.post(self.mgr, 'linkedgates/devices/7/map/', {'device_id': 99999}).status_code, 400)
         self.assertEqual(self.post(self.mgr, 'linkedgates/devices/7/map/', {}).status_code, 400)
@@ -234,3 +243,9 @@ class BudgetTests(LgViewsBase):
             self.n += 100
         assert_budget(self, 'hr-attendance-lg-devices', self.admin, URL + 'linkedgates/devices/',
                       grow=grow, min_rows=12, rows_of=lambda r: len(r.json()['rows']))
+
+    def test_month_budget(self):
+        # The month screen with both sources: query count flat as employees and punches grow.
+        self._grow(2)
+        assert_budget(self, 'hr-attendance-month', self.admin, URL + f'month/?month={MONTH}',
+                      grow=self._grow, min_rows=12, rows_of=lambda r: len(r.json()['rows']))

@@ -62,6 +62,9 @@ BUDGETS: dict[str, Budget] = {
     'hr-attendance-lg-devices': Budget('list', 5, 'HR Linked Gates task 7, 2026-11-20: measured 3 (access + one joined '
                                                   'device query); CI confirms'),
     # ── reports on screen ────────────────────────────────────────────────────────
+    'hr-attendance-month': Budget('report', 16, 'HR Linked Gates final review, 2026-11-21: not measured yet '
+                                                '(test slot closed); access + employees + LG month totals + '
+                                                'month_rows punches/leave, flat as employees grow; CI confirms'),
     'hr-attendance-lg-compare': Budget('report', 13, 'HR Linked Gates task 7, 2026-11-20: measured 11 (access + employees + '
                                                      'compare_month 5 + machine_day_counts 3); CI '
                                                      'confirms'),
