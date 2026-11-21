@@ -28,8 +28,8 @@ _RESET_ACTIONS = ('login_success', 'mfa_verified', 'login_unlocked')
 
 
 def _network_fields(request):
-    from .views import _request_network_fields
-    return _request_network_fields(request)
+    from .audit import request_network_fields
+    return request_network_fields(request)
 
 
 def _logs():

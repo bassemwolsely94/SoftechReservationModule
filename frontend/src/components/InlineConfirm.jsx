@@ -96,8 +96,14 @@ function ConfirmBar({ req, onDone }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={req.input.placeholder || ''}
+          maxLength={req.input.maxLength || undefined}
           className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-2 py-1.5"
         />
+      )}
+      {req.input?.maxLength > 0 && (
+        <div className="mt-0.5 text-xs text-gray-400 text-left" dir="ltr" data-testid="confirm-bar-counter">
+          {text.length}/{req.input.maxLength}
+        </div>
       )}
       <div className="mt-2 flex gap-2 justify-end">
         <button type="button" onClick={cancel}

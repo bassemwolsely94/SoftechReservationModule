@@ -1514,6 +1514,7 @@ export const usersApi = {
   toggleActive:  (id) => api.post(`/users/staff/${id}/toggle-active/`),
   unlockLogin:   (id) => api.post(`/users/${id}/unlock-login/`),
   forgetDevices: (id) => api.post(`/users/${id}/forget-devices/`),
+  resetMfa:      (id, reason) => api.post(`/users/${id}/reset-2fa/`, { reason }),
   activityLog:   (id) => api.get(`/users/staff/${id}/activity-log/`),
 
   // Self-service
