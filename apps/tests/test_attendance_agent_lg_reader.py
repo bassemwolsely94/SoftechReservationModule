@@ -8,6 +8,7 @@ import logging
 import re
 import shutil
 import tempfile
+import types
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
@@ -351,7 +352,7 @@ class SyncTests(TempTestCase):
 
         def fake_connect(connection_string, **kwargs):
             seen.append(connection_string)
-            return object()
+            return types.SimpleNamespace()   # settable, like a pyodbc connection (.timeout)
         fake = mock.Mock(connect=fake_connect)
         with mock.patch.dict('sys.modules', {'pyodbc': fake}):
             lg_reader.make_lg_connect({
