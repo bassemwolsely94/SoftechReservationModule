@@ -59,6 +59,10 @@ class CampaignDispatcher:
             )
             return 0
 
+        if self.campaign.template_missing():    # P-05 templates only (the views refuse it too)
+            logger.warning('CampaignDispatcher.enqueue: campaign %d has no approved template — skipped',
+                           self.campaign.pk)
+            return 0
         customers = self._resolve_audience()
         if not customers:
             logger.info('Campaign %d: no matching customers', self.campaign.pk)
@@ -210,6 +214,14 @@ def release_due_scheduled_campaigns(now=None) -> int:
     return released
 
 
+OUTSIDE_WINDOW_MSG = 'خارج نافذة الـ 24 ساعة — الحملات تحتاج قالب واتساب معتمد (لم تُرسل)'
+
+
+def _templates_only():
+    from django.conf import settings
+    return bool(getattr(settings, 'CAMPAIGN_TEMPLATES_ONLY', True))
+
+
 def drain_queue():
     """
     Send up to DRAIN_BATCH pending WAMessageQueue items via WhatsApp Cloud API.
@@ -248,18 +260,34 @@ def drain_queue():
                 continue
             item.status = 'processing'
 
+            # P-05: a campaign (priority 3) free-text row outside the customer's 24-hour window is never
+            # sent — Meta rejects it; only an approved template may start the conversation.
+            if (item.message_type == 'text' and item.priority == 3 and _templates_only()
+                    and not item.conversation.window_open):
+                item.status, item.last_error = 'failed', OUTSIDE_WINDOW_MSG
+                item.save(update_fields=['status', 'last_error'])
+                _sync_campaign_message(item.conversation, 'skipped', OUTSIDE_WINDOW_MSG)
+                continue
+
             try:
-                result = sender.send_text(
-                    wa_id=item.conversation.wa_id,
-                    body=item.body,
-                )
+                if item.message_type == 'template':
+                    tv = item.template_vars if isinstance(item.template_vars, dict) else {'params': item.template_vars}
+                    result = sender.send_template(
+                        wa_id=item.conversation.wa_id, template_name=item.template_name,
+                        language=tv.get('language') or 'ar', variables=tv.get('params') or None,
+                    )
+                else:
+                    result = sender.send_text(
+                        wa_id=item.conversation.wa_id,
+                        body=item.body,
+                    )
                 wamid = result.get('messages', [{}])[0].get('id', '')
 
                 # Create WAMessage record
                 msg = WAMessage.objects.create(
                     conversation=item.conversation,
                     direction='outbound',
-                    message_type='text',
+                    message_type=item.message_type if item.message_type in ('text', 'template') else 'text',
                     status='sent',
                     wamid=wamid,
                     body=item.body,
@@ -309,6 +337,9 @@ def _sync_campaign_message(conversation, status: str, error: str = ''):
             cm.mark_sent()
         elif status == 'failed':
             cm.mark_failed(error)
+        elif status == 'skipped':
+            cm.status, cm.error_message = 'skipped', (error or '')[:500]
+            cm.save(update_fields=['status', 'error_message'])
     except Exception:
         pass
 

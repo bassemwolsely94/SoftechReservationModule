@@ -524,6 +524,11 @@ SCREENS = [
              'more': T(
                  'آخر 30 يوم: اتبعت كام، نسبة الرد، كام اختار «تجهيز في الفرع» وكام «توصيل للمنزل»، كام حجز اتعمل من الردود، كام فشل، وكام عميل أوقف التذكيرات.\n• «فشل الإرسال» بالأحمر يعني رقم غلط أو مشكلة اتصال — راجعه في السجل.',
                  'The last 30 days: how many were sent, the reply rate, how many chose "Branch pickup" and "Home delivery", reservations created from replies, failures, and customers who opted out.\n• "Send failed" in red means a wrong number or a connection problem — check it in the log.')},
+            {'target': 'followups-reminders-consent', 'label': T('موافقة العملاء', 'Customer consent'),
+             'text': T('كام عميل وافق على تذكيرات الصرف، كام رفض، وكام لسه ما اتسألش.',
+                       'How many customers agreed to refill reminders, how many refused, and how many were never asked.'),
+             'when': T('قبل تفعيل الإرسال: التذكيرات بتروح للي وافقوا بس، فلو «لم يُسألوا بعد» كبير اسألهم في نقطة البيع الأول.',
+                       'Before switching sending on: reminders go only to those who agreed, so if "never asked" is large, ask them at the POS first.')},
             {'target': 'followups-reminders-tabs', 'label': T('سجل التذكيرات · التشغيل القادم', 'Reminder log · Next run'),
              'text': T('بدّل بين اللي اتبعت فعلاً واللي هيتبعت في التشغيل الجاي.', 'Switch between what was sent and what the next run will send.'),
              'more': T(
@@ -550,7 +555,7 @@ SCREENS = [
                  'بيشغّل دفعة النهارده فوراً بدل ما تستنى الميعاد التلقائي، وبيظهر بعدها «أُرسل X · فشل Y».\n• لو الإرسال متوقف بيقولك بس كان هيبعت كام تذكير — مفيش رسالة بتطلع.\n• الزر بيظهر للمدير والمشرف بس.',
                  'It runs today\'s batch right away instead of waiting for the automatic time, then shows "sent X · failed Y".\n• If sending is off, it only tells you how many reminders it would have sent — no message goes out.\n• The button shows for admins and supervisors only.')},
         ],
-        'updated': '2026-11-15',
-        'change_note': T('موافقة التواصل (P-05): تذكيرات الصرف والعروض محتاجة موافقة العميل', "Contact consent (P-05): refill reminders and offers need the customer's yes"),
+        'updated': '2026-11-22',
+        'change_note': T('كروت موافقة العملاء: وافقوا، رفضوا، لم يُسألوا بعد', 'Customer consent cards: agreed, refused, never asked'),
     },
 ]

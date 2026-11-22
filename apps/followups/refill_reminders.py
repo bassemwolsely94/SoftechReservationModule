@@ -345,7 +345,14 @@ def summary(days=30):
     return {'days': days, 'by_status': by_status, 'by_choice': by_choice, 'sent': sent,
             'reply_rate': round(100 * by_status.get('replied', 0) / sent, 1) if sent else 0,
             'reservations': qs.exclude(reservation=None).count(),
-            'opt_outs': _refill_withdrawn_count(ContactConsent)}
+            'opt_outs': _refill_withdrawn_count(ContactConsent),
+            'consent': _consent_coverage()}
+
+
+def _consent_coverage():
+    """P-05 measurement: how many reachable customers agreed to refill reminders (C10 switch-on readiness)."""
+    from apps.customers import consent
+    return consent.coverage(consent.REFILL)
 
 
 def _refill_withdrawn_count(ContactConsent):
