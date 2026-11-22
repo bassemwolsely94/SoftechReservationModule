@@ -4,13 +4,15 @@
  * wrong for a reservation, right for a purchase request). The note hints (NoteHints)
  * then point out an avoided word in a «إيه الجديد» note and in the help text being
  * edited. Each row shows how many screens still use an avoided word — click to open
- * one in the editor. Edits are inline; every change is kept in the history.
+ * one in the editor; «📖 طبّق القاموس على الكل» (GlossaryAudit) checks screens, workflow tours
+ * and quizzes together. Edits are inline; every change is kept in the history.
  * Data: /api/help/glossary/ (writes need help/edit — checked on the server).
  */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { helpApi } from '../api/client'
 import { pick } from './text'
+import GlossaryAudit from './GlossaryAudit'
 
 const empty = { preferred: '', avoid: '', modules: [], why: '' }
 const input = 'text-sm border border-line rounded-lg px-2 py-1 bg-surface text-content'
@@ -85,6 +87,7 @@ export default function Glossary({ index, go }) {
         )}
       </div>
       <p className="text-xs text-faint">كلمة واحدة معتمدة لكل حاجة. وإنت بتكتب الشرح أو سطر «إيه الجديد» هيظهر «💡» لو استخدمت كلمة من «نتجنّب».</p>
+      {data?.can_edit && data.terms.length > 0 && <GlossaryAudit go={go} />}
       {editing === 'new' && Form}
       {data && data.terms.length === 0 && editing !== 'new' && <div className="text-sm text-faint">القاموس فاضي — ابدأ بأكتر كلمتين بيحصل فيهم لخبطة.</div>}
       <div className="divide-y divide-line">

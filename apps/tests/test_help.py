@@ -1640,6 +1640,58 @@ class GlossaryApplyTests(TestCase):
         self.t.post('/api/help/glossary/', {'preferred': 'حجز', 'avoid': ['طلب', 'أمر بيع'],
                                             'modules': ['reservations']}, format='json')
 
+    def test_audit_whole_help(self):
+        """«طبّق القاموس على الكل»: every screen, workflow tour and quiz checked at once,
+        grouped per item with counts and a sample; module-limited terms only in their
+        module; trainers' edits included; nothing saved."""
+        from apps.help import glossary, notecheck, registry
+        from apps.help.models import HelpRevision, HelpTrainingOverride
+        url = '/api/help/glossary/audit/'
+        self.assertEqual(self.ph.get(url).status_code, 403)
+        # a word that is in the current help text everywhere
+        self.t.post('/api/help/glossary/', {'preferred': 'الصفحة', 'avoid': ['الشاشة']}, format='json')
+        r = self.t.get(url)
+        self.assertEqual(r.status_code, 200, r.content)
+        body = r.json()
+        self.assertEqual(body['terms'], 3)
+        kinds = {i['kind'] for i in body['items']}
+        self.assertIn('screen', kinds)
+        self.assertEqual(body['total'], sum(i['count'] for i in body['items']))
+        counts = [i['count'] for i in body['items']]
+        self.assertEqual(counts, sorted(counts, reverse=True))
+        first = body['items'][0]
+        self.assertEqual(sum(w['n'] for w in first['words']), first['count'])
+        self.assertTrue(first['samples'] and first['samples'][0]['match'])
+        # same numbers as the matcher run item by item
+        _, screens = registry.load()
+        terms = glossary.terms()
+        for it in body['items'][:5]:
+            if it['kind'] == 'screen':
+                eff = registry.effective(screens[it['key']])
+                draft = {f: eff.get(f) for f in registry.EDITABLE_FIELDS}
+                self.assertEqual(len(notecheck.scan(draft, terms, screens[it['key']]['module'])), it['count'])
+        # a trainer's quiz and tour wording is what gets checked
+        q = {'q': {'ar': 'فين الخزنة؟', 'en': 'x'}, 'options': [{'ar': 'أ', 'en': 'a'}, {'ar': 'ب', 'en': 'b'}],
+             'answer': 0, 'explain': {'ar': 'لأن', 'en': 'b'}}
+        self.assertEqual(self.t.put('/api/help/training/quiz/pos/', {'data': {'questions': [q]}},
+                                    format='json').status_code, 200)
+        flow_url = '/api/help/training/flow/purchasing.cycle/'
+        cur = self.t.get(flow_url).json()['current']
+        cur['title'] = {'ar': 'دورة الطلب للمورد', 'en': 'x'}
+        self.assertEqual(self.t.put(flow_url, {'data': cur}, format='json').status_code, 200)
+        items = {(i['kind'], i['key']): i for i in self.t.get(url).json()['items']}
+        quiz = items[('quiz', 'pos')]
+        self.assertEqual([(w['avoid'], w['n']) for w in quiz['words']], [('الخزنة', 1)])
+        self.assertEqual(quiz['samples'][0]['path'], ['questions', 0, 'q', 'ar'])
+        # «طلب» is only avoided in reservations: the purchasing tour's new title is fine
+        pur = items.get(('flow', 'purchasing.cycle'))
+        self.assertFalse(pur and any(w['avoid'] == 'طلب' for w in pur['words']))
+        # read-only: only the trainer's own saves above are in the history
+        n = HelpRevision.objects.count()
+        self.t.get(url)
+        self.assertEqual(HelpRevision.objects.count(), n)
+        self.assertEqual(HelpTrainingOverride.objects.count(), 2)
+
     def test_scan_workflow_tour_and_quiz_drafts(self):
         """Same scan for the training editor: workflow-tour title / summary / step text and
         explanation, quiz question / options / explanation; module-limited terms follow the

@@ -71,6 +71,61 @@ def uses(rows=None):
     return out
 
 
+def _flow_draft(data):
+    """The texts of a workflow tour the glossary checks: title, summary, each step's text + more."""
+    steps = data.get('steps') if isinstance(data.get('steps'), list) else []
+    return {'title': data.get('title'), 'summary': data.get('summary'),
+            'steps': [{f: st.get(f) for f in ('text', 'more')} if isinstance(st, dict) else {} for st in steps]}
+
+
+def _quiz_draft(data):
+    """The texts of a quiz the glossary checks: each question, its options and explanation."""
+    qs = data.get('questions') if isinstance(data.get('questions'), list) else []
+    return {'questions': [{f: q.get(f) for f in ('q', 'options', 'explain')} if isinstance(q, dict) else {}
+                          for q in qs]}
+
+
+def audit_all(rows=None):
+    """«طبّق القاموس على الكل»: every avoided word in the CURRENT help (trainers' edits
+    included) — each screen, workflow tour and quiz — grouped per item, most first:
+    [{'kind', 'key', 'title', 'module', 'count', 'words': [{'avoid', 'preferred', 'n'}],
+      'samples': first 3 {path, match, replacement, before, after}}]. Read-only; the
+    trainer opens each item and replaces there with «📖 طبّق القاموس»."""
+    from . import training
+    rows = terms() if rows is None else rows
+    if not rows:
+        return []
+    modules, screens = registry.load()
+    ov = _overrides()
+    found = []
+    for k, sc in screens.items():
+        eff = registry.effective(sc, ov.get(k))
+        draft = {f: eff.get(f) for f in registry.EDITABLE_FIELDS}
+        found.append(('screen', k, eff['title'], sc['module'], notecheck.scan(draft, rows, sc['module'])))
+    for fid, f in training.flows_effective(modules).items():
+        found.append(('flow', fid[5:], f['title'], f['module'], notecheck.scan(_flow_draft(f), rows, f['module'])))
+    for mk, qs in training.quizzes().items():
+        if mk not in modules or not qs:
+            continue
+        t = modules[mk]['title']
+        found.append(('quiz', mk, {'ar': f"اختبار {t['ar']}", 'en': f"{t['en']} quiz"}, mk,
+                      notecheck.scan(_quiz_draft({'questions': qs}), rows, mk)))
+    out = []
+    for kind, key, title, module, items in found:
+        if not items:
+            continue
+        words = {}
+        for it in items:
+            words[(it['avoid'], it['preferred'])] = words.get((it['avoid'], it['preferred']), 0) + 1
+        out.append({'kind': kind, 'key': key, 'title': title, 'module': module, 'count': len(items),
+                    'words': [{'avoid': a, 'preferred': p, 'n': n}
+                              for (a, p), n in sorted(words.items(), key=lambda x: -x[1])],
+                    'samples': [{f: it[f] for f in ('path', 'match', 'replacement', 'before', 'after')}
+                                for it in items[:3]]})
+    out.sort(key=lambda x: (-x['count'], x['kind'], x['key']))
+    return out
+
+
 def _audit(term_id, action, before, after, profile):
     HelpRevision.objects.create(screen_key=f'glossary:{term_id}', action=action,
                                 before=before, after=after, staff=profile)
@@ -156,20 +211,25 @@ def scan(request):
         from . import training
         if training.base_flow(key) is None:
             return Response({'detail': 'not found'}, status=404)
-        steps = data.get('steps') if isinstance(data.get('steps'), list) else []
-        draft = {'title': data.get('title'), 'summary': data.get('summary'),
-                 'steps': [{f: st.get(f) for f in ('text', 'more')} if isinstance(st, dict) else {}
-                           for st in steps]}
-        return Response({'items': notecheck.scan(draft, terms(), key.split('.')[0])})
+        return Response({'items': notecheck.scan(_flow_draft(data), terms(), key.split('.')[0])})
     if kind == 'quiz':
         if key not in modules:
             return Response({'detail': 'not found'}, status=404)
-        qs = data.get('questions') if isinstance(data.get('questions'), list) else []
-        draft = {'questions': [{f: q.get(f) for f in ('q', 'options', 'explain')} if isinstance(q, dict) else {}
-                               for q in qs]}
-        return Response({'items': notecheck.scan(draft, terms(), key)})
+        return Response({'items': notecheck.scan(_quiz_draft(data), terms(), key)})
     s = screens.get(str(body.get('screen_key') or ''))
     if s is None:
         return Response({'detail': 'not found'}, status=404)
     draft = {f: data.get(f) for f in registry.EDITABLE_FIELDS if f in data}
     return Response({'items': notecheck.scan(draft, terms(), s['module'])})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def audit(request):
+    """GET (help/edit) → {'items': audit_all(), 'total', 'terms'}: where the whole help
+    still uses words the glossary says to avoid. Read-only."""
+    if not _can_edit(_profile(request)):
+        return Response({'detail': 'ليس لديك صلاحية'}, status=403)
+    rows = terms()
+    items = audit_all(rows)
+    return Response({'items': items, 'total': sum(i['count'] for i in items), 'terms': len(rows)})

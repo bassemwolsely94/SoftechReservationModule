@@ -31,6 +31,7 @@ urlpatterns = [
     path('glossary/', glossary.glossary, name='help-glossary'),
     path('glossary/<int:pk>/', glossary.glossary_term, name='help-glossary-term'),
     path('glossary/scan/', glossary.scan, name='help-glossary-scan'),
+    path('glossary/audit/', glossary.audit, name='help-glossary-audit'),
     path('training/<str:kind>/<str:key>/', ob.training_edit, name='help-training-edit'),
     path('quizzes/<str:module_key>/', ob.quiz, name='help-quiz'),
     path('quizzes/<str:module_key>/submit/', ob.quiz_submit, name='help-quiz-submit'),

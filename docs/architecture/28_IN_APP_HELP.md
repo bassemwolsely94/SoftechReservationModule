@@ -58,6 +58,12 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   with `target={kind, key}` → `POST /api/help/glossary/scan/ {kind: 'flow'|'quiz', key, data}`;
   flow drafts are scanned on title / summary / step `text` + `more`, quizzes on question / options /
   explanation; module-limited terms follow the tour's or quiz's module. Read-only, as for screens.
+- **«📖 طبّق القاموس على الكل»** (2026-11-22; `GlossaryAudit.jsx` in the glossary box, trainers only):
+  `GET /api/help/glossary/audit/` → `glossary.audit_all()` runs the same matcher over the current help
+  (trainers' edits included) — every screen, workflow tour and quiz — and returns one row per item with
+  its count, avoided → agreed words and up to 3 sample sentences, most first. Read-only: «افتح وطبّق ←»
+  opens that item's editor (screen editor, or the training editor via `?tkind=&tkey=`) where
+  «📖 طبّق القاموس» replaces word by word.
 - **Elaborate tours (2026-10-25).** Every tour step — screen `tour` and module `flows` — has a one-line
   headline (`text`) and a longer explanation (`more`: what the button does, when to use it, what
   happens next, what to watch for), checked by `TourExplanationTests` (≥ 60 Arabic chars + English).

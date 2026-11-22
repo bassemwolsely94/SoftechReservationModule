@@ -486,6 +486,7 @@ export const helpApi = {
   deleteTerm: (id)               => api.delete(`/help/glossary/${id}/`),
   scanGlossary: (screen_key, data) => api.post('/help/glossary/scan/', { screen_key, data }),
   scanTrainingGlossary: (kind, key, data) => api.post('/help/glossary/scan/', { kind, key, data }),
+  glossaryAudit: () => api.get('/help/glossary/audit/'),
   firstDay:   (mobile = false)   => api.get('/help/first-day/', { params: mobile ? { mobile: 1 } : {} }),
   hideFirstDay: (hidden = true)  => api.post('/help/first-day/', { hidden }),
   tourEvent:  (payload)          => api.post('/help/tour-event/', payload),
