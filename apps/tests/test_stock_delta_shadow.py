@@ -188,6 +188,20 @@ class ShadowTests(TestCase):
         self.assertEqual(ItemStock.objects.get(item=self.a).quantity_on_hand, 8)
         self.assertIn('error', DeltaShadowRun.objects.latest('id').note)
 
+    def test_a_small_step_back_within_the_overlap_is_not_a_reset(self):
+        # 2026-11-22 12:48 on the office: the newest-stamped row had just sold out, so the full read (nowqty > 0
+        # only) saw a maximum 43 s below the watermark. That is not a clock reset: the delta still runs.
+        self.seed()
+        back = T0 - datetime.timedelta(seconds=43)
+        full = [row('A1', 5, back), row('B1', 7, back), row('C1', 2, back)]
+        conn = _Conn(full, delta_rows=[])
+        with override_settings(SYNC_DELTA_STOCK='shadow'):
+            run(conn)
+        self.assertEqual(len(conn.delta_calls), 1)
+        self.assertNotIn('S6', DeltaShadowRun.objects.latest('id').note)
+        wm = SyncWatermark.objects.get(stream='stkbal')
+        self.assertEqual(timezone.localtime(wm.value_ts).replace(tzinfo=None), T0)   # never moves back
+
     def test_a_backwards_watermark_reseeds_and_is_noted(self):
         self.seed()
         earlier = T0 - datetime.timedelta(days=2)                       # SOFTECH clock/sequence reset (S6)
