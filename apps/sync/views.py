@@ -433,5 +433,9 @@ def delta_shadow(request):
                'rows_delta': r.rows_delta, 'missed': r.missed, 'missed_new': r.missed_new,
                'missed_sample': r.missed_sample, 'delta_ms': r.delta_ms, 'full_ms': r.full_ms, 'note': r.note}
               for r in DeltaShadowRun.objects.order_by('-at')[:20]]
+    from .models import StockFullCheck
+    full_checks = [{'at': c.at, 'reason': c.reason, 'rows_full': c.rows_full, 'corrected': c.corrected,
+                    'zeroed': c.zeroed, 'per_branch': c.per_branch, 'ok': c.ok, 'full_ms': c.full_ms, 'note': c.note}
+                   for c in StockFullCheck.objects.order_by('-at')[:14]]
     return Response({'days': days, 'mode': {'stkbal': delta.stock_mode()},
-                     'streams': streams, 'watermarks': watermarks, 'recent': recent})
+                     'streams': streams, 'watermarks': watermarks, 'recent': recent, 'full_checks': full_checks})

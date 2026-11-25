@@ -195,6 +195,14 @@ def prune_slow_requests(days=SLOW_REQUEST_DAYS):
     return _batched_delete(SlowRequest.objects.filter(at__lt=cutoff))
 
 
+def prune_delta_records(shadow_days=30, check_days=90):
+    """Delta sync records (doc 40): SHADOW comparisons (~288 a day) after 30 days, daily full-read checks
+    after 90. The 7-day sign-off reads the last week only."""
+    from apps.sync.models import DeltaShadowRun, StockFullCheck
+    now = timezone.now()
+    return (_batched_delete(DeltaShadowRun.objects.filter(at__lt=now - datetime.timedelta(days=shadow_days)))
+            + _batched_delete(StockFullCheck.objects.filter(at__lt=now - datetime.timedelta(days=check_days))))
+
 def prune_screen_views():
     """P-57 usage telemetry — 12 months. No-op until that model exists."""
     try:
@@ -341,6 +349,7 @@ def run_daily_retention():
         ('retention:pbx_events', prune_pbx_events),
         ('retention:audit_log', prune_audit_log),
         ('retention:slow_requests', prune_slow_requests),
+        ('retention:delta_records', prune_delta_records),
         ('retention:idempotency_keys', prune_idempotent_requests),
         ('retention:screen_views', prune_screen_views),
         ('retention:table_sizes', _snapshot_table_sizes),
