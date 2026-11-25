@@ -85,7 +85,10 @@ def shadow_stock(conn, *, changed_keys, new_keys, item_map, branch_map, full_max
         wm.save()
         shadow.save()
         return shadow
-    if full_max < stored:
+    # A small step back is normal: the full read only sees nowqty > 0, so when the newest-stamped row has just
+    # sold out its maximum falls a little (43 s on 2026-11-22). Only a move further back than the overlap is a
+    # SOFTECH clock or sequence reset (S6); within it the delta read still covers the gap.
+    if full_max < stored - OVERLAP:
         logger.error('stkbal watermark moved backwards (stored %s, SOFTECH max %s) — re-seeded (doc 40 S6)',
                      stored, full_max)
         wm.value_ts = _aware(full_max)
