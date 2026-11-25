@@ -77,9 +77,16 @@ reading, so they can only be relaxed later.
 - The campaign audience preview shows `excluded_by_consent`: in the segment but left out (no yes to offers,
   or a closed / deceased / entity / merged code).
 
+## Customer portal (BUILT 2026-11-25)
+
+- `GET/POST /api/portal/consent/` `{purpose, granted}` is scoped to the portal session's customer (a customer
+  id is never accepted) and recorded with `source='portal'`.
+- On the portal home page, «الرسائل اللي توصلك منّا» has one switch per kind, saved on each tap. Service
+  messages show as on unless the customer turned them off.
+
 ## Still open
 
-- Portal capture (`source='portal'`) and SMS.
+- SMS (no SMS provider chosen yet).
 - Counter script and training.
 - Counsel confirmation.
 

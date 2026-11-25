@@ -158,3 +158,26 @@ class ReorderTests(PortalTestBase):
     def test_reorder_requires_an_item(self):
         r = self.client.post(reverse('portal-reorder'), {}, **self.session_headers())
         self.assertEqual(r.status_code, 400)
+
+
+class ConsentTests(PortalTestBase):
+    """P-05: the customer sets their own contact choices; scoped to the session's customer."""
+
+    def test_read_and_change_own_choices(self):
+        from apps.customers import consent as C
+        from apps.customers.models import ContactConsent
+        url = reverse('portal-consent')
+        r = self.client.get(url, **self.session_headers())
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['purposes']['refill'], {'granted': None, 'allowed': False})
+        self.assertTrue(r.data['purposes']['service']['allowed'])
+        r = self.client.post(url, {'purpose': 'refill', 'granted': True}, format='json', **self.session_headers())
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data['purposes']['refill']['allowed'])
+        row = ContactConsent.objects.get(customer=self.customer)
+        self.assertEqual((row.source, row.recorded_by), ('portal', None))
+        self.assertFalse(ContactConsent.objects.filter(customer=self.other).exists())   # never another customer
+        self.assertTrue(C.can_contact(self.customer, C.REFILL))
+        bad = self.client.post(url, {'purpose': 'refill', 'granted': 'yes'}, format='json', **self.session_headers())
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(self.client.get(url).status_code, 401)                          # needs a portal session

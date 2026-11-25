@@ -4,6 +4,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { portalApi } from '../../portal/portalApi'
+import PortalConsentCard from './PortalConsentCard'
 
 function fmt(d) {
   if (!d) return ''
@@ -71,6 +72,8 @@ export default function PortalHomePage() {
           <div className="mt-2 text-xs text-gray-400">{r.branch} · {fmt(r.created_at)}</div>
         </Card>
       ))}
+
+      <PortalConsentCard />
     </div>
   )
 }

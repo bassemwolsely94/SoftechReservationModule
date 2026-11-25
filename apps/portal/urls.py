@@ -13,5 +13,6 @@ urlpatterns = [
     path('orders/',   views.orders,   name='portal-orders'),
     path('loyalty/',  views.loyalty,  name='portal-loyalty'),
     path('refills/',  views.refills,  name='portal-refills'),
+    path('consent/',  views.consent,  name='portal-consent'),
     path('reorder/',  views.reorder,  name='portal-reorder'),
 ]

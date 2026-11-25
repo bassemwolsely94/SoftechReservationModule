@@ -240,6 +240,22 @@ def loyalty(request):
     })
 
 
+@api_view(['GET', 'POST'])
+@_portal
+def consent(request):
+    """The customer's own contact choices (P-05): GET reads them, POST {purpose, granted} changes one.
+    Scoped to the session's customer; the rule is apps/customers/consent.py; recorded with source 'portal'."""
+    from apps.customers import consent as C
+    c = request.user.customer
+    if request.method == 'POST':
+        purpose, granted = request.data.get('purpose'), request.data.get('granted')
+        if purpose not in C.PURPOSES or not isinstance(granted, bool):
+            return Response({'detail': 'اختيار غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+        C.record(c, purpose, granted, source='portal', note='customer portal')
+    return Response({'purposes': {p: {'granted': v['granted'], 'allowed': v['allowed']}
+                                  for p, v in C.summary_for(c).items()}})
+
+
 @api_view(['GET'])
 @_portal
 def refills(request):
