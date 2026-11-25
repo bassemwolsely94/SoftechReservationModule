@@ -147,7 +147,7 @@ def _build(crew, cc, *, cdr_rows_by_month, today, focus_month, seeds_crew) -> di
     if _nothing_to_move(cc):
         plan.update(month_count=0, nothing_to_move=True)
         return plan
-    months = set(K.objects.filter(branch=cc).values_list('year', 'month').distinct())
+    months = set(K.objects.filter(branch=cc).values_list('year', 'month').order_by().distinct())
     cur = (today.year, today.month)
     m_start, m_end = date(*cur, 1), date(*cur, monthrange(*cur)[1])
     if crew is not None and identities(crew, m_start, m_end):

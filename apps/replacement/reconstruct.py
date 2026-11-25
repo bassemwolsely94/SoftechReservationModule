@@ -208,7 +208,7 @@ def _voucher_day_patients(inv, candidate_phcodes) -> frozenset:
     seen = (PurchaseHistory.objects.filter(branch__softech_branch_id=inv.branchcode, doc_code='115',
                                            invoice_date__date__in=days, softech_phcode__in=candidate_phcodes)
             .exclude(sales_channel__in=C.contract_channels())
-            .values_list('softech_phcode', flat=True).distinct())
+            .values_list('softech_phcode', flat=True).order_by().distinct())
     return frozenset(p.strip() for p in seen)
 
 

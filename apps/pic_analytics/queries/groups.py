@@ -123,7 +123,7 @@ def category_names(codes) -> dict:
     from apps.catalog.models import Item
     names = {}
     for code, ar, en in (Item.objects.filter(medicine_type__in=list(codes))
-                         .values_list('medicine_type', 'medicine_type_name_ar', 'medicine_type_name').distinct()):
+                         .values_list('medicine_type', 'medicine_type_name_ar', 'medicine_type_name').order_by('medicine_type', 'medicine_type_name_ar', 'medicine_type_name').distinct()):
         if ar or en:
             names.setdefault(code, ar or en)
     return names

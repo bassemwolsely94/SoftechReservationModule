@@ -53,7 +53,7 @@ def contract_personcodes(days=365):
     from apps.customers.models import PurchaseHistory
     since = timezone.now() - dt.timedelta(days=days)
     codes = (PurchaseHistory.objects.filter(sales_channel=CONTRACT_CHANNEL, invoice_date__gte=since)
-             .exclude(softech_personcode='').values_list('softech_personcode', flat=True).distinct())
+             .exclude(softech_personcode='').values_list('softech_personcode', flat=True).order_by().distinct())
     return sorted({str(c).strip() for c in codes if str(c).strip()})
 
 

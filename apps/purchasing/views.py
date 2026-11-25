@@ -909,7 +909,7 @@ def _export_xlsx_pivot(run, request, filename):
         ItemDemandMetrics.objects
         .filter(run=run)
         .values_list('branch_id', flat=True)
-        .distinct()
+        .order_by().distinct()
     )
     branches = list(
         Branch.objects.live()
@@ -1993,7 +1993,7 @@ def filter_options(request):
             ItemDemandMetrics.objects
             .filter(run=run)
             .values_list('item_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         base_qs = Item.objects.filter(id__in=item_ids)
     else:
@@ -2066,7 +2066,7 @@ def filter_options(request):
         base_qs
         .exclude(category__isnull=True)
         .values_list('category_id', flat=True)
-        .distinct()
+        .order_by().distinct()
     )
     categories = list(
         Category.objects
@@ -2374,7 +2374,7 @@ def transfer_rec_summary(request):
             TransferRequest.objects
             .filter(source_recommendation__run=rec_run)
             .values_list('source_recommendation_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         adoption_count = len(actioned_rec_ids)
         total_pending  = status_map.get('pending', 0) + status_map.get('approved', 0)
@@ -2737,7 +2737,7 @@ def advanced_pivot_export(request):
         qs = qs.filter(item__supplier_code=supplier)
     only_buy = request.GET.get('only_buy', '1') != '0'
 
-    branch_ids = list(qs.values_list('branch_id', flat=True).distinct())
+    branch_ids = list(qs.values_list('branch_id', flat=True).order_by().distinct())
     branches = list(Branch.objects.filter(id__in=branch_ids).order_by('softech_branch_id'))
 
     CLASS_AR = {'smooth': 'منتظم', 'erratic': 'متذبذب', 'intermittent': 'متقطع',

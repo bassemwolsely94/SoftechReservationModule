@@ -299,7 +299,7 @@ def filter_options():
     def pairs(code_f, *label_fs):
         seen = {}
         for row in base.exclude(**{code_f: ''}).exclude(**{f'{code_f}__isnull': True}) \
-                .values_list(code_f, *label_fs).distinct():
+                .values_list(code_f, *label_fs).order_by(code_f, *label_fs).distinct():
             code = str(row[0]).strip()
             label = next((str(x).strip() for x in row[1:] if x and str(x).strip()), '')
             if code and code not in seen:

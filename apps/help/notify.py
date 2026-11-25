@@ -59,7 +59,7 @@ def quiz_changed(module_key, old_version, new_version, revision_id, note=''):
         from . import registry
         from .models import HelpQuizAttempt
         ids = (HelpQuizAttempt.objects.filter(module_key=module_key, version=old_version, passed=True)
-               .values_list('staff_id', flat=True).distinct())
+               .values_list('staff_id', flat=True).order_by().distinct())
         modules, _ = registry.load()
         title = modules.get(module_key, {}).get('title', {}).get('ar', module_key)
         return _send(

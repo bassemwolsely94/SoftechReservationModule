@@ -303,7 +303,7 @@ def calendar(today=None, month=None, supplier=None, location=None, branch_codes=
         names = dict(SupplierProfile.objects.filter(supplier_code__in=codes).exclude(supplier_name='')
                      .values_list('supplier_code', 'supplier_name'))
         names.update(PurchaseExpiryEntry.objects.filter(supplier_code__in=codes)
-                     .exclude(supplier_name='').values_list('supplier_code', 'supplier_name').distinct())
+                     .exclude(supplier_name='').values_list('supplier_code', 'supplier_name').order_by('supplier_code', 'supplier_name').distinct())
     return {
         'today': ref.isoformat(),
         'lead_days': lead.days,

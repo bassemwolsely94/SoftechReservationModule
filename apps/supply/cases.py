@@ -292,7 +292,7 @@ def _statistical_items() -> set:
     return set(DemandSignal.objects
                .filter(status=DemandSignal.STATUS_OPEN, item__isnull=False,
                        provenance_class=DemandSignal.CLASS_STATISTICAL)
-               .values_list('item_id', flat=True).distinct())
+               .values_list('item_id', flat=True).order_by().distinct())
 
 
 def candidate_pairs(*, scope=None) -> list:
@@ -303,7 +303,7 @@ def candidate_pairs(*, scope=None) -> list:
         DemandSignal.objects
         .filter(status=DemandSignal.STATUS_OPEN, item__isnull=False, branch__isnull=False,
                 provenance_class__in=[DemandSignal.CLASS_CUSTOMER, DemandSignal.CLASS_BRANCH])
-        .values_list('item_id', 'branch_id').distinct()
+        .values_list('item_id', 'branch_id').order_by().distinct()
     )
     items_with_branch_need = {i for i, _ in branch_pairs}
     stat = _statistical_items()

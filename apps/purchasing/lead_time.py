@@ -118,7 +118,7 @@ def estimate_lead_times(days_back: int = 365, min_samples: int = 3) -> dict:
     from apps.catalog.models import Item
     name_map = dict(
         Item.objects.exclude(supplier_code='')
-        .values_list('supplier_code', 'supplier_name').distinct()
+        .values_list('supplier_code', 'supplier_name').order_by('supplier_code', 'supplier_name').distinct()
     )
 
     updated = 0

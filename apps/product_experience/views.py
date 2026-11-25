@@ -461,7 +461,7 @@ def product_filter_options(request):
     shapes_raw = {}
     for r in (
         Item.objects.filter(is_active=True, shape_code__gt='')
-        .values('shape_code', 'shape_name_ar', 'shape_name').distinct()
+        .values('shape_code', 'shape_name_ar', 'shape_name').order_by('shape_code', 'shape_name_ar', 'shape_name').distinct()
     ):
         code = r['shape_code']
         name = r['shape_name_ar'] or r['shape_name'] or ''
@@ -475,7 +475,7 @@ def product_filter_options(request):
     effects_raw = {}
     for r in (
         Item.objects.filter(is_active=True, effect_code__gt='')
-        .values('effect_code', 'effect_name_ar', 'effect_name').distinct()
+        .values('effect_code', 'effect_name_ar', 'effect_name').order_by('effect_code', 'effect_name_ar', 'effect_name').distinct()
     ):
         code = r['effect_code']
         name = r['effect_name_ar'] or r['effect_name'] or ''
@@ -489,7 +489,7 @@ def product_filter_options(request):
     origins_raw = {}
     for r in (
         Item.objects.filter(is_active=True, origin_code__gt='')
-        .values('origin_code', 'origin_name_ar', 'origin_name').distinct()
+        .values('origin_code', 'origin_name_ar', 'origin_name').order_by('origin_code', 'origin_name_ar', 'origin_name').distinct()
     ):
         code = r['origin_code']
         name = r['origin_name_ar'] or r['origin_name'] or ''

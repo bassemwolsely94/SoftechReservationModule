@@ -193,7 +193,7 @@ def no_serial_lines(branch='', days=30, limit=500):
     from core.multi_filter import filter_in, multi_values
     qs = CouponEvent.objects.filter(serial_id=None, kind='redeem',
                                     docdate__gte=dt.date.today() - dt.timedelta(days=int(days)))
-    all_branches = sorted({str(b) for b in qs.values_list('branchcode', flat=True).distinct() if b})
+    all_branches = sorted({str(b) for b in qs.values_list('branchcode', flat=True).order_by().distinct() if b})
     codes = multi_values({'b': branch or ''}, 'b')    # str, comma list or list → distinct codes
     qs = filter_in(qs, 'branchcode', codes)
     by_branch = qs.values('branchcode').annotate(lines=Count('id'), qty=Sum('qty')).order_by('-qty')

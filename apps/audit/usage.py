@@ -139,7 +139,7 @@ def usage_report(request):
                 .order_by('-visits', 'route'))
     known = [route_pattern(k) for k in (request.query_params.get('known') or '').split(',') if k.strip()]
     used = set(qs.filter(at__gte=now - datetime.timedelta(days=ZERO_USE_DAYS))
-               .values_list('route', flat=True).distinct())
+               .values_list('route', flat=True).order_by().distinct())
     zero_use = sorted({k for k in known
                        if not any(u == k or u.startswith(k.rstrip('/') + '/') for u in used)})
     return Response({'days': days, 'rows': rows, 'zero_use': zero_use})

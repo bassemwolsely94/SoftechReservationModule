@@ -344,7 +344,7 @@ class CustomerHealthEngine:
             PurchaseHistory.objects
             .filter(doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
 
         processed = errors = 0

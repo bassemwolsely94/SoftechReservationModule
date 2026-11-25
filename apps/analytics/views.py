@@ -426,7 +426,7 @@ def _get_channel_label_map() -> dict:
             .exclude(softech_ptclassifcode='')
             .exclude(person_classif_label='')
             .values('softech_ptclassifcode', 'person_classif_label')
-            .distinct()
+            .order_by('softech_ptclassifcode', 'person_classif_label').distinct()
         )
         for r in rows:
             code  = r['softech_ptclassifcode']
@@ -464,7 +464,7 @@ def _get_person_type_label_map() -> dict:
             .exclude(softech_ptcode='')
             .exclude(person_type_label='')
             .values('softech_ptcode', 'person_type_label')
-            .distinct()
+            .order_by('softech_ptcode', 'person_type_label').distinct()
         )
         for r in rows:
             if r['softech_ptcode'] and r['person_type_label']:
@@ -536,7 +536,7 @@ def filter_options(request):
         own_ph
         .exclude(softech_user='')
         .values_list('softech_user', flat=True)
-        .distinct()
+        .order_by().distinct()
     )
     users = sorted(
         [
