@@ -1071,6 +1071,9 @@ WHATSAPP_PHONE_NUMBER_ID = config('WHATSAPP_PHONE_NUMBER_ID', default='')
 WHATSAPP_APP_SECRET      = config('WHATSAPP_APP_SECRET', default='')
 WHATSAPP_VERIFY_TOKEN    = config('WHATSAPP_VERIFY_TOKEN', default='')
 WHATSAPP_API_VERSION     = config('WHATSAPP_API_VERSION', default='v19.0')
+# P-05: campaigns go out only with a Meta-approved template (free text is delivered only inside a customer's
+# 24-hour window). On by default; campaign free text outside the window is skipped, never retried.
+CAMPAIGN_TEMPLATES_ONLY  = config('CAMPAIGN_TEMPLATES_ONLY', default=True, cast=bool)
 
 # ── SMS (core/sms.py) — off until an SMS company is chosen; 'http' = any HTTP gateway ─────────
 SMS_PROVIDER          = config('SMS_PROVIDER', default='')
