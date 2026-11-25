@@ -24,18 +24,18 @@ REREAD_DAYS = 45             # the nightly re-read covers this many days back
 MIN_RUN_GAP_SECONDS = 900    # one pass per 15 minutes at most (a collect-now request skips it)
 QUERY_TIMEOUT_SECONDS = 60   # a query that runs longer is cancelled; the login has its own 15 s
 
-_PUNCH_COLUMNS = (
-    'EmployeeCheckID, EnrollNo, INOutMode, CheckTime, DeviceID, CreatedBy, EditBy, EditOn'
-)
-
+# The TOP in the two punch queries below is the literal 5000 (= BATCH_LIMIT; a test
+# pins them together): the allow-list is plain literals so no SQL is ever built.
 ALLOWED_QUERIES = {
     'punches_after': (
-        f'SELECT TOP {BATCH_LIMIT} {_PUNCH_COLUMNS} FROM dbo.EmployeeCheck '
+        'SELECT TOP 5000 EmployeeCheckID, EnrollNo, INOutMode, CheckTime, DeviceID, '
+        'CreatedBy, EditBy, EditOn FROM dbo.EmployeeCheck '
         'WHERE EmployeeCheckID > ? ORDER BY EmployeeCheckID'
     ),
     # Paged by id as well, so a long window is read in batches without a gap.
     'punches_since': (
-        f'SELECT TOP {BATCH_LIMIT} {_PUNCH_COLUMNS} FROM dbo.EmployeeCheck '
+        'SELECT TOP 5000 EmployeeCheckID, EnrollNo, INOutMode, CheckTime, DeviceID, '
+        'CreatedBy, EditBy, EditOn FROM dbo.EmployeeCheck '
         'WHERE CheckTime >= ? AND EmployeeCheckID > ? ORDER BY EmployeeCheckID'
     ),
     'devices': 'SELECT DeviceID, DeviceName, IPAddress, Status FROM dbo.Device',

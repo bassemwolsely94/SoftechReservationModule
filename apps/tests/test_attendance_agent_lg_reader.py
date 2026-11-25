@@ -517,3 +517,12 @@ class ConfigAndLoopTests(TempTestCase):
             now=lambda: NOW, clock=lambda: 0, cache_path=self.root / 'devices.json',
         ).tick()
         self.assertEqual(Spy.calls, 0)
+
+
+class AllowListLiteralTests(SimpleTestCase):
+    """The punch queries are plain literals (bandit B608); their TOP must equal BATCH_LIMIT."""
+
+    def test_top_matches_batch_limit(self):
+        from attendance_agent import lg_reader
+        for key in ('punches_after', 'punches_since'):
+            self.assertIn(f'SELECT TOP {lg_reader.BATCH_LIMIT} ', lg_reader.ALLOWED_QUERIES[key])

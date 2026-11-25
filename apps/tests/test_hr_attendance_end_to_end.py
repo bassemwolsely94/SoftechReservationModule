@@ -109,7 +109,7 @@ class EndToEndBase(TestCase):
         self.log = []
         self.loop = AgentLoop(
             uploader=self.uploader, spool=self.spool, client_factory=self.client_factory,
-            now=self.pc_now, clock=lambda: self.monotonic, cache_path=self.root / 'devices.json')
+            now=self.pc_now, clock=lambda: self.monotonic, cache_path=self.root / 'devices.json', collect_window=None)
 
     # the agent PC's naive wall clock, as datetime.now() would give it: Cairo time minus its skew.
     # The PC's own zone doesn't enter into it, only what its clock reads.
