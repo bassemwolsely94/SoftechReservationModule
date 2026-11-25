@@ -93,6 +93,16 @@ export default function RefillRemindersPage() {
         <Card label="أوقفوا التذكيرات" value={ov.opt_outs} sub="الإجمالي" />
       </div>
 
+      {ov.consent && (
+        <div className="flex flex-wrap gap-3" data-tour="followups-reminders-consent">
+          <Card label="وافقوا على التذكيرات" value={ov.consent.yes} tone="text-emerald-700"
+                sub={`من ${ov.consent.reachable} عميل يمكن مراسلته`} />
+          <Card label="رفضوا" value={ov.consent.no} sub={`نسبة الرفض ${ov.consent.opt_out_pct}%`} />
+          <Card label="لم يُسألوا بعد" value={ov.consent.not_asked} tone="text-amber-700"
+                sub={`سُئل ${ov.consent.asked_pct}%`} />
+        </div>
+      )}
+
       <div className="flex gap-1" data-tour="followups-reminders-tabs">
         {[['log', 'سجل التذكيرات'], ['preview', `التشغيل القادم (${pv ? pv.to_send.length : '…'})`]].map(([k, l]) => (
           <button key={k} onClick={() => setView(k)}

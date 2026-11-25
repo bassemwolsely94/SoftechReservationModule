@@ -43,6 +43,7 @@ class CampaignWorkflowTests(TestCase):
     def _campaign(self, status):
         return WhatsAppCampaign.objects.create(
             name='حملة', message_template='مرحبا {{customer_name}}', status=status,
+            wa_template_name='summer_offer', wa_template_vars=['customer_name'],     # P-05 templates only
         )
 
     def _url(self, c, action):
@@ -152,3 +153,79 @@ class CampaignWorkflowTests(TestCase):
         self.assertEqual(release_due_scheduled_campaigns(now=when + timedelta(minutes=5)), 0)
         self.assertFalse(WAMessageQueue.objects.exists())
         self.assertFalse(CampaignMessage.objects.filter(campaign=c, status='pending').exists())
+
+
+@override_settings(WHATSAPP_TOKEN='test-token')
+class TemplatesOnlyTests(TestCase):
+    """P-05: campaigns go out only with a Meta-approved template."""
+
+    def setUp(self):
+        module_access.clear_cache()
+        for role, actions in GRANTS.items():
+            for a in actions:
+                RoleModuleAccess.objects.create(role=role, module='campaigns', action=a)
+        self.branch = make_branch()
+        self.cc = make_user('tpl_cc', role='call_center', branch=self.branch, access_all=True)[2]
+        self.sup = make_user('tpl_sup', role='supervisor', branch=self.branch, access_all=True)[2]
+        from apps.customers import consent
+        self.cust = make_customer('منى', '01033333333')
+        consent.record(self.cust, consent.MARKETING, True, source='counter')
+
+    def tearDown(self):
+        module_access.clear_cache()
+
+    def test_no_template_blocks_approval_and_queue(self):
+        c = WhatsAppCampaign.objects.create(name='x', message_template='مرحبا', status='draft')
+        r = self.cc.post(f'/api/campaigns/{c.pk}/request-approval/', {}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('قالب واتساب معتمد', r.data['detail'])
+        WhatsAppCampaign.objects.filter(pk=c.pk).update(status='approved')     # approved before the rule
+        r = self.sup.post(f'/api/campaigns/{c.pk}/queue/', {}, format='json')
+        self.assertEqual(r.status_code, 400)
+        with override_settings(CAMPAIGN_TEMPLATES_ONLY=False):
+            WhatsAppCampaign.objects.filter(pk=c.pk).update(status='draft')
+            self.assertEqual(self.cc.post(f'/api/campaigns/{c.pk}/request-approval/', {}, format='json')
+                             .status_code, 200)
+
+    def test_template_rows_are_sent_with_send_template(self):
+        from unittest import mock
+        from apps.campaigns.dispatcher import drain_queue
+        c = WhatsAppCampaign.objects.create(name='x', message_template='مرحبا {{customer_name}}', status='approved',
+                                            wa_template_name='summer_offer', wa_template_vars=['customer_name', 'branch_name'])
+        self.assertEqual(self.sup.post(f'/api/campaigns/{c.pk}/queue/', {}, format='json').status_code, 200)
+        row = WAMessageQueue.objects.get()
+        self.assertEqual((row.message_type, row.template_name), ('template', 'summer_offer'))
+        self.assertEqual(row.template_vars['params'], [{'type': 'text', 'text': 'منى'}, {'type': 'text', 'text': '—'}])
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WS:
+            WS.return_value.is_configured = True
+            WS.return_value.send_template.return_value = {'messages': [{'id': 'wamid.t1'}]}
+            drain_queue()
+        WS.return_value.send_template.assert_called_once()
+        self.assertEqual(WS.return_value.send_template.call_args.kwargs['template_name'], 'summer_offer')
+        WS.return_value.send_text.assert_not_called()
+        row.refresh_from_db()
+        self.assertEqual(row.status, 'sent')
+
+    def test_free_text_campaign_row_outside_window_is_skipped_not_sent(self):
+        from unittest import mock
+        from apps.campaigns.dispatcher import drain_queue
+        from apps.campaigns.models import CampaignMessage
+        from apps.whatsapp.models import WAConversation
+        c = WhatsAppCampaign.objects.create(name='old', message_template='hi', status='running')
+        conv = WAConversation.objects.create(wa_id='201033333333', customer=self.cust, status='open')
+        CampaignMessage.objects.create(campaign=c, customer=self.cust, phone_number=self.cust.phone, message_text='hi',
+                                       status='pending')
+        WAMessageQueue.objects.create(conversation=conv, message_type='text', body='hi', priority=3)
+        with mock.patch('apps.whatsapp.sender.WhatsAppSender') as WS:
+            WS.return_value.is_configured = True
+            drain_queue()
+        WS.return_value.send_text.assert_not_called()
+        self.assertEqual(WAMessageQueue.objects.get().status, 'failed')
+        self.assertEqual(CampaignMessage.objects.get().status, 'skipped')
+
+    def test_template_vars_are_validated(self):
+        r = self.cc.post('/api/campaigns/', {'name': 'x', 'message_template': 'm', 'wa_template_name': 'Bad Name',
+                                             'wa_template_vars': ['phone']}, format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('wa_template_name', r.data)
+        self.assertIn('wa_template_vars', r.data)

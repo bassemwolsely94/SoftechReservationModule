@@ -139,3 +139,40 @@ class MigrationTests(TestCase):
         mig.forward(apps, None)
         self.assertEqual(C.decisions([a.pk], C.REFILL)[a.pk], False)
         self.assertEqual(C.decisions([a.pk], C.REFILL, 'call')[a.pk], False)
+
+
+class MeasurementTests(TestCase):
+    def test_coverage_counts_only_reachable_customers(self):
+        yes, no, _never = cust('H1'), cust('H2'), cust('H3')
+        cust('H4', softech_status='0')                       # closed: not reachable, not counted
+        Customer.objects.create(name='g', phone='', softech_pic='H5')   # no phone: not counted
+        C.record(yes, C.REFILL, True, source='counter')
+        C.record(no, C.REFILL, True, source='counter')
+        C.record(no, C.REFILL, False, source='whatsapp_reply')
+        got = C.coverage(C.REFILL)
+        self.assertEqual((got['reachable'], got['yes'], got['no'], got['not_asked']), (3, 1, 1, 1))
+        self.assertEqual((got['asked_pct'], got['opt_out_pct']), (66.7, 50.0))
+        self.assertEqual(got['recorded_30d'], {'counter': 2, 'whatsapp_reply': 1})
+
+    def test_reminders_summary_carries_coverage(self):
+        from apps.followups import refill_reminders as RR
+        C.record(cust('J1'), C.REFILL, True, source='counter')
+        self.assertEqual(RR.summary()['consent']['yes'], 1)
+
+    def test_campaign_preview_shows_who_is_left_out(self):
+        from apps.campaigns.models import WhatsAppCampaign
+        from apps.tests.factories import make_user
+        from apps.users.models import RoleModuleAccess
+        from core.middleware import module_access
+        module_access.clear_cache()
+        self.addCleanup(module_access.clear_cache)
+        for act in ('view', 'create', 'edit'):
+            RoleModuleAccess.objects.create(role='call_center', module='campaigns', action=act)
+        _, _, api = make_user('meas_cc', role='call_center', access_all=True)
+        a, _b, _c = cust('K1'), cust('K2'), cust('K3', softech_status='5')
+        C.record(a, C.MARKETING, True, source='counter')
+        camp = WhatsAppCampaign.objects.create(name='p', message_template='m')
+        r = api.post(f'/api/campaigns/{camp.pk}/preview-audience/', {'target_filter': {}}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['total_customers'], 1)
+        self.assertGreaterEqual(r.data['excluded_by_consent'], 2)                 # K2 (no yes) + K3 (deceased)

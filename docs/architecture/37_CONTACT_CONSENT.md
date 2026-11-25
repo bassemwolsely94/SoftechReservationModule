@@ -54,13 +54,34 @@ reading, so they can only be relaxed later.
 - **Refill reminders** are still OFF (`REFILL_REMINDER_SEND_ENABLED`). When switched on they go only to
   customers who agreed. The WhatsApp template still needs Meta approval.
 
-## Not in this batch (next)
+## Templates only + measurement (BUILT 2026-11-22)
 
-- Campaign "templates only" switch (Meta rejects free text outside the 24-hour window).
-- Measurement screen: % of active customers with a decision, opt-out rate, messages blocked by
-  suppression.
+**Templates only** (`CAMPAIGN_TEMPLATES_ONLY`, default True):
+- A campaign names its Meta-approved template (`wa_template_name`, `wa_template_language`) and the template's
+  variables in order (`wa_template_vars` ⊂ customer_name / item_name / branch_name — never the phone).
+  Migration `campaigns/0004`.
+- Without a template, a campaign cannot be sent for approval or queued (400 with the reason). This covers
+  campaigns approved before the rule too.
+- The queue stores template rows (`message_type='template'`, params per customer). The drain sends them with
+  `send_template`.
+- A leftover free-text campaign row (priority 3) is not sent while the customer's 24-hour window is closed:
+  the queue row is `failed` and the campaign message `skipped`, with the reason. Meta would reject it.
+- The wa.me click-to-chat links that staff open by hand are unchanged.
+
+**Measurement:**
+- `consent.coverage(purpose)` counts the customers we could message (named, with a phone, not
+  closed / deceased / entity) by answer: yes / no / never asked. It also gives the share asked, the opt-out
+  rate, and records in the last 30 days by source.
+- The refill-reminders screen shows it for `refill` (cards: agreed / refused / never asked). This is the C10
+  switch-on readiness check.
+- The campaign audience preview shows `excluded_by_consent`: in the segment but left out (no yes to offers,
+  or a closed / deceased / entity / merged code).
+
+## Still open
+
 - Portal capture (`source='portal'`) and SMS.
 - Counter script and training.
+- Counsel confirmation.
 
 Tests: `apps/tests/test_contact_consent.py` (rules, bulk filters, the STOP reply, restock, API +
 permission, data migration). Updated: refill reminders, call lists, campaign workflow, account-state

@@ -142,3 +142,24 @@ def withdraw_by_phone(wa_id, *, source='whatsapp_reply'):
         for p in PURPOSES:
             record(c, p, False, channel='whatsapp', source=source, note='STOP reply')
     return len(found)
+
+
+def coverage(purpose, channel='whatsapp'):
+    """How far consent collection has got for one purpose (P-05 measurement): among customers we could message
+    (named, with a phone, not closed / deceased / entity) — how many said yes, no, or were never asked."""
+    from django.db.models import Count
+    from django.utils import timezone
+    from . import account_state
+    from .models import ContactConsent, Customer
+    base = (Customer.objects.filter(is_guest=False, is_account_placeholder=False).exclude(phone='')
+            .filter(account_state.outreach_q()))
+    latest = Subquery(ContactConsent.objects.filter(customer=OuterRef('pk'), purpose=purpose, channel=channel)
+                      .order_by('-created_at', '-pk').values('granted')[:1])
+    counts = dict(base.annotate(_c=latest).values_list('_c').annotate(n=Count('pk')).values_list('_c', 'n'))
+    yes, no, total = counts.get(True, 0), counts.get(False, 0), sum(counts.values())
+    since = timezone.now() - timezone.timedelta(days=30)
+    by_source = dict(ContactConsent.objects.filter(purpose=purpose, channel=channel, created_at__gte=since)
+                     .values_list('source').annotate(n=Count('pk')).values_list('source', 'n'))
+    return {'purpose': purpose, 'channel': channel, 'reachable': total, 'yes': yes, 'no': no,
+            'not_asked': total - yes - no, 'asked_pct': round(100 * (yes + no) / total, 1) if total else 0,
+            'opt_out_pct': round(100 * no / (yes + no), 1) if (yes + no) else 0, 'recorded_30d': by_source}

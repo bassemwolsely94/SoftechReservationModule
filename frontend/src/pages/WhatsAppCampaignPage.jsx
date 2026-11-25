@@ -147,11 +147,21 @@ function CampaignList({ selectedId, onSelect, onNew }) {
   )
 }
 
+// order = the approved template's {{1}}, {{2}}… (the backend allows only these; never the phone)
+const WA_TEMPLATE_VARS = [
+  { key: 'customer_name', label: 'اسم العميل' },
+  { key: 'item_name', label: 'الصنف' },
+  { key: 'branch_name', label: 'الفرع' },
+]
+
 // ── Campaign form (create / edit) ─────────────────────────────────────────────
 const EMPTY_FORM = {
   name: '',
   description: '',
   message_template: '',
+  wa_template_name: '',
+  wa_template_language: 'ar',
+  wa_template_vars: [],
   featured_item: '',
   scheduled_at: '',
   target_filter: {
@@ -185,6 +195,9 @@ function CampaignForm({ campaign, onSave, onCancel }) {
         name: campaign.name || '',
         description: campaign.description || '',
         message_template: campaign.message_template || '',
+        wa_template_name: campaign.wa_template_name || '',
+        wa_template_language: campaign.wa_template_language || 'ar',
+        wa_template_vars: campaign.wa_template_vars || [],
         featured_item: campaign.featured_item || '',
         scheduled_at: campaign.scheduled_at
           ? campaign.scheduled_at.slice(0, 16) : '',
@@ -232,6 +245,9 @@ function CampaignForm({ campaign, onSave, onCancel }) {
       name: form.name,
       description: form.description,
       message_template: form.message_template,
+      wa_template_name: form.wa_template_name.trim(),
+      wa_template_language: form.wa_template_language || 'ar',
+      wa_template_vars: form.wa_template_vars,
       featured_item: form.featured_item ? Number(form.featured_item) : null,
       scheduled_at: form.scheduled_at || null,
       target_filter: tf,
@@ -344,6 +360,39 @@ function CampaignForm({ campaign, onSave, onCancel }) {
           placeholder="مرحباً {{customer_name}}، ..."
         />
         <p className="text-xs text-gray-400 mt-1">انقر على متغير لإضافته للرسالة</p>
+      </div>
+
+      {/* Approved Meta template (P-05: campaigns go out only with an approved template) */}
+      <div className="border border-gray-200 rounded-xl p-3 space-y-2" data-tour="omni-campaigns-wa-template">
+        <div className="text-sm font-medium text-gray-700">قالب واتساب المعتمد</div>
+        <p className="text-xs text-gray-500">
+          الحملة تُرسل بقالب معتمد من Meta فقط (الرسالة الحرة لا تصل خارج نافذة الـ 24 ساعة). النص أعلاه للسجل والمعاينة.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input value={form.wa_template_name} dir="ltr" placeholder="template_name"
+                 onChange={e => setForm(f => ({ ...f, wa_template_name: e.target.value }))}
+                 className="flex-1 min-w-[12rem] px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-mono" />
+          <select value={form.wa_template_language}
+                  onChange={e => setForm(f => ({ ...f, wa_template_language: e.target.value }))}
+                  className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm">
+            <option value="ar">عربي</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          <span className="text-gray-500">متغيرات القالب بالترتيب ({'{{1}}'}، {'{{2}}'}…):</span>
+          {WA_TEMPLATE_VARS.map(v => {
+            const idx = form.wa_template_vars.indexOf(v.key)
+            return (
+              <button key={v.key} type="button"
+                      onClick={() => setForm(f => ({ ...f, wa_template_vars: idx >= 0
+                        ? f.wa_template_vars.filter(k => k !== v.key) : [...f.wa_template_vars, v.key] }))}
+                      className={`px-2 py-0.5 rounded border ${idx >= 0 ? 'bg-green-100 border-green-300 text-green-800' : 'bg-white border-gray-200 text-gray-600'}`}>
+                {idx >= 0 ? `${idx + 1}. ` : ''}{v.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Target audience */}
@@ -508,6 +557,12 @@ function CampaignForm({ campaign, onSave, onCancel }) {
             <p className="text-blue-700">
               لديهم رقم هاتف: <strong>{preview.has_phone?.toLocaleString('en-US')}</strong>
             </p>
+            {preview.excluded_by_consent > 0 && (
+              <p className="text-amber-700 text-xs mt-1">
+                مستبعدون: {preview.excluded_by_consent.toLocaleString('en-US')} عميل بدون موافقة على العروض
+                (أو حساب مغلق / متوفى / جهة) — اسألهم في نقطة البيع.
+              </p>
+            )}
             {preview.sample_names?.length > 0 && (
               <p className="text-blue-600 text-xs mt-1">
                 أمثلة: {preview.sample_names.slice(0, 5).join('، ')}
@@ -902,6 +957,16 @@ function CampaignDetail({ campaignId, onClose }) {
               <pre className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm whitespace-pre-wrap font-sans leading-relaxed text-gray-800">
                 {campaign.message_template}
               </pre>
+            </div>
+            <div className="text-sm">
+              {campaign.wa_template_name ? (
+                <span className="text-gray-700">قالب واتساب: <span className="font-mono" dir="ltr">{campaign.wa_template_name}</span>
+                  {' '}({campaign.wa_template_language}){campaign.wa_template_vars?.length ? ` · متغيرات: ${campaign.wa_template_vars.join('، ')}` : ''}</span>
+              ) : campaign.template_missing ? (
+                <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">
+                  لا يمكن طلب الاعتماد أو الإرسال قبل كتابة اسم قالب واتساب المعتمد (الحملات بقالب معتمد فقط).
+                </span>
+              ) : null}
             </div>
 
             {/* Timeline */}
