@@ -38,6 +38,7 @@ export default function Glossary({ index, go }) {
     try {
       await fn()
       qc.invalidateQueries({ queryKey: ['help', 'glossary'] })
+      qc.invalidateQueries({ queryKey: ['help', 'index'] })   // the «📖 N جديد» badge on the trainers tab
       setEditing(null); setConfirmDel(null)
     } catch (e) {
       const d = e?.response?.data
@@ -87,6 +88,11 @@ export default function Glossary({ index, go }) {
         )}
       </div>
       <p className="text-xs text-faint">كلمة واحدة معتمدة لكل حاجة. وإنت بتكتب الشرح أو سطر «إيه الجديد» هيظهر «💡» لو استخدمت كلمة من «نتجنّب».</p>
+      {data?.can_edit && data.terms.some((t) => t.is_new) && (
+        <p className="text-xs text-amber-800">
+          📖 جديد في القاموس: {data.terms.filter((t) => t.is_new).length} مصطلح الأسبوع ده — شغّل «طبّق القاموس على الكل» عشان تشوف الشرح القديم اللي محتاج يتعدّل.
+        </p>
+      )}
       {data?.can_edit && data.terms.length > 0 && <GlossaryAudit go={go} />}
       {editing === 'new' && Form}
       {data && data.terms.length === 0 && editing !== 'new' && <div className="text-sm text-faint">القاموس فاضي — ابدأ بأكتر كلمتين بيحصل فيهم لخبطة.</div>}
@@ -95,6 +101,7 @@ export default function Glossary({ index, go }) {
           <div key={t.id} className="py-2 flex flex-wrap items-start gap-x-3 gap-y-1 text-sm">
             <div className="flex-1 min-w-[220px]">
               <span className="font-bold text-emerald-700">✓ {t.preferred}</span>
+              {t.is_new && <span className="ms-1 text-[10px] font-semibold rounded bg-amber-100 text-amber-800 px-1">جديد</span>}
               <span className="text-muted"> — مش </span>
               {t.avoid.map((a) => <span key={a} className="text-red-700 line-through decoration-red-300 me-1.5">{a}</span>)}
               {t.modules.length > 0 && (

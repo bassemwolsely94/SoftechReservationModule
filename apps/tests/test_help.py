@@ -1592,6 +1592,20 @@ class GlossaryTests(TestCase):
     def _add(self, **data):
         return self.t.post('/api/help/glossary/', data, format='json')
 
+    def test_new_terms_badge(self):
+        """Terms added in the last 7 days: counted in the help index for trainers (the
+        «📖 N جديد» badge on the trainers tab) and flagged «جديد» in the glossary list."""
+        from django.utils import timezone
+        from apps.help.models import HelpGlossaryTerm
+        self.assertEqual(self.t.get('/api/help/').json()['glossary_new'], 0)
+        old = self._add(preferred='الكاشير', avoid='الخزنة').json()['id']
+        self._add(preferred='حجز', avoid='طلب')
+        HelpGlossaryTerm.objects.filter(pk=old).update(created_at=timezone.now() - timezone.timedelta(days=8))
+        self.assertEqual(self.t.get('/api/help/').json()['glossary_new'], 1)
+        self.assertEqual(self.ph.get('/api/help/').json()['glossary_new'], 0)       # not a trainer
+        flags = {t['preferred']: t['is_new'] for t in self.t.get('/api/help/glossary/').json()['terms']}
+        self.assertEqual(flags, {'الكاشير': False, 'حجز': True})
+
     def test_crud_validation_permissions_and_history(self):
         from apps.help.models import HelpRevision
         self.assertEqual(self.ph.post('/api/help/glossary/', {'preferred': 'x', 'avoid': 'y'}, format='json').status_code, 403)

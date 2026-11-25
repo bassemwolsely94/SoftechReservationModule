@@ -86,6 +86,14 @@ export default function HelpCenterPage() {
               <button key={k} type="button" onClick={() => go({ tab: k })}
                       className={`px-4 py-2 text-sm border-b-2 -mb-px ${tab === k ? 'border-brand-600 text-brand-700 font-semibold' : 'border-transparent text-muted hover:text-content'}`}>
                 {t}
+                {k === 'trainers' && index?.glossary_new > 0 && (
+                  // glossary terms added this week: a reminder to run «طبّق القاموس على الكل»
+                  <span data-tour="general-help-glossary-new-badge"
+                        title={lang === 'en' ? 'Glossary terms added this week' : 'مصطلحات اتضافت للقاموس الأسبوع ده'}
+                        className="ms-1.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5">
+                    📖 {index.glossary_new} {lang === 'en' ? 'new' : 'جديد'}
+                  </span>
+                )}
               </button>
             ))}
           </div>

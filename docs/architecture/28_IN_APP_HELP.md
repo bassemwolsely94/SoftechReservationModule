@@ -67,6 +67,9 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   The supervisors' weekly digest (2026-11-25, `digest.week_glossary()`, computed once per send) adds
   «📖 لسه N كلمة مش على القاموس في M مكان: …» with the top 3 places, only while N > 0; a failing
   check is logged and the digest goes out without the line.
+  Terms added in the last `glossary.NEW_DAYS` (7) days: `GET /api/help/` returns `glossary_new` (one count
+  query, trainers only, else 0) for a «📖 N جديد» badge on the «للمدربين» tab, and the glossary list flags
+  them `is_new` («جديد») with a nudge to run «طبّق القاموس على الكل».
 - **Elaborate tours (2026-10-25).** Every tour step — screen `tour` and module `flows` — has a one-line
   headline (`text`) and a longer explanation (`more`: what the button does, when to use it, what
   happens next, what to watch for), checked by `TourExplanationTests` (≥ 60 Arabic chars + English).

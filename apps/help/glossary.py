@@ -14,16 +14,30 @@ from .models import HelpGlossaryTerm, HelpRevision
 from .views import _can_edit, _overrides, _profile, _staff_name
 
 MAX_AVOID = 10
+NEW_DAYS = 7          # a term added within this many days is «جديد» (badge on the trainers tab)
+
+
+def _new_since():
+    from django.utils import timezone
+    return timezone.now() - timezone.timedelta(days=NEW_DAYS)
+
+
+def new_count():
+    """How many terms were added in the last NEW_DAYS days (one count query)."""
+    return HelpGlossaryTerm.objects.filter(created_at__gte=_new_since()).count()
 
 
 def terms():
     """All terms as plain dicts (what notecheck works with)."""
-    return [_row(t) for t in HelpGlossaryTerm.objects.select_related('updated_by__user')]
+    since = _new_since()
+    return [_row(t, since) for t in HelpGlossaryTerm.objects.select_related('updated_by__user')]
 
 
-def _row(t):
+def _row(t, since=None):
+    since = since or _new_since()
     return {'id': t.id, 'preferred': t.preferred, 'avoid': list(t.avoid or []), 'modules': list(t.modules or []),
-            'why': t.why, 'updated_at': t.updated_at, 'updated_by': _staff_name(t.updated_by)}
+            'why': t.why, 'updated_at': t.updated_at, 'updated_by': _staff_name(t.updated_by),
+            'is_new': bool(t.created_at and t.created_at >= since)}
 
 
 def _split(v):

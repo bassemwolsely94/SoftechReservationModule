@@ -121,6 +121,8 @@ def _product_tour_steps(jid):
 def index(request):
     """Everything the panel needs to find the help for the current page + the help
     center: modules (grouped), screens (key, routes, title, updated, tab keys)."""
+    from . import glossary
+    can_edit = _can_edit(_profile(request))
     modules, screens = registry.load()
     ov = _overrides()
     notes = change_notes(screens, ov)
@@ -141,7 +143,9 @@ def index(request):
         } for s in screens.values()],
         'flows': [{'id': fid, 'module': f['module'], 'title': f['title'], 'mobile': bool(f.get('mobile'))}
                   for fid, f in _flows_effective(modules).items()],
-        'can_edit': _can_edit(_profile(request)),
+        'can_edit': can_edit,
+        # glossary terms added this week → «📖 N جديد» on the trainers tab (trainers only)
+        'glossary_new': glossary.new_count() if can_edit else 0,
     })
 
 
