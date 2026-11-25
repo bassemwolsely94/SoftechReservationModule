@@ -1038,6 +1038,10 @@ GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS = config('GAMIFICATION_BRANCH_OF_MONTH_
 # pic_capture_day, and the minimum invoices that day for it to count.
 GAMIFICATION_PIC_CAPTURE_PCT = config('GAMIFICATION_PIC_CAPTURE_PCT', default=70, cast=int)
 GAMIFICATION_PIC_CAPTURE_MIN_INVOICES = config('GAMIFICATION_PIC_CAPTURE_MIN_INVOICES', default=10, cast=int)
+# Attendance points (owner decision 2026-11-22): minutes of grace on shift start / end, and how
+# many closed days are re-checked on every run while attendance machines upload late.
+GAMIFICATION_ATTENDANCE_GRACE_MINUTES = config('GAMIFICATION_ATTENDANCE_GRACE_MINUTES', default=10, cast=int)
+GAMIFICATION_ATTENDANCE_LOOKBACK_DAYS = config('GAMIFICATION_ATTENDANCE_LOOKBACK_DAYS', default=3, cast=int)
 GAMIFICATION_CHAMPION_EXCLUDED_ROLES = config('GAMIFICATION_CHAMPION_EXCLUDED_ROLES', default='admin,viewer',
                                               cast=lambda v: [r.strip() for r in v.split(',') if r.strip()])
 CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']

@@ -39,7 +39,8 @@ const PERIODS = [
   ['quarter', 'الربع', 'Quarter'], ['year', 'السنة', 'Year'], ['all', 'الكل', 'All time'],
 ]
 const CATEGORY = {
-  sales: ['المبيعات', 'Sales'], customers: ['العملاء (PIC)', 'Customers (PIC)'], reservations: ['الحجوزات', 'Reservations'],
+  sales: ['المبيعات', 'Sales'], customers: ['العملاء (PIC)', 'Customers (PIC)'],
+  attendance: ['الحضور والانصراف', 'Attendance'], reservations: ['الحجوزات', 'Reservations'],
   demand: ['الطلب الضائع والمتابعة', 'Demand & follow-ups'],
   transfers: ['التحويلات وطلبات الفروع', 'Transfers & branch requests'],
   inventory: ['المخزون والجرد والنواقص', 'Inventory & counts'], tasks: ['المهام', 'Tasks'],

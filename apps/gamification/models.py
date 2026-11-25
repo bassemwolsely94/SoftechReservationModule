@@ -29,6 +29,7 @@ CATEGORY_CHOICES = [
     ('tasks',        'المهام'),
     ('discipline',   'الالتزام (لا تترك شيئاً خلفك)'),
     ('manual',       'تقدير يدوي'),
+    ('attendance',   'الحضور والانصراف'),
     ('champion',     'بطل الشهر'),   # monthly titles — count for XP/wallet, NOT for rankings
     ('team',         'تحديات الفروع'),  # team-challenge bonuses — same: XP/wallet, NOT rankings
 ]
@@ -431,6 +432,7 @@ class TeamChallenge(models.Model):
     METRIC_AVG_POINTS  = 'avg_points'
     METRIC_PIC_CAPTURE = 'pic_capture_rate'
     METRIC_NEW_PICS    = 'new_pics_per_member'
+    METRIC_ON_TIME     = 'on_time_rate'
     METRIC_CHOICES = [
         (METRIC_LEFT_BEHIND, 'لا شيء متأخر — أقصى عدد بنود متأخرة'),
         (METRIC_CLEAN_DAYS,  'نسبة الأيام النظيفة %'),
@@ -439,6 +441,7 @@ class TeamChallenge(models.Model):
         (METRIC_AVG_POINTS,  'متوسط نقاط الموظف'),
         (METRIC_PIC_CAPTURE, 'نسبة الفواتير على أكواد العملاء %'),
         (METRIC_NEW_PICS,    'عملاء جدد لكل موظف'),
+        (METRIC_ON_TIME,     'نسبة أيام الحضور في الموعد %'),
     ]
     LOWER_IS_BETTER = {METRIC_LEFT_BEHIND}
 
