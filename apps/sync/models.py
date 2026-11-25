@@ -203,3 +203,27 @@ class DeltaShadowRun(models.Model):
 
     def __str__(self):
         return f'{self.stream} {self.at:%Y-%m-%d %H:%M} missed={self.missed}'
+
+
+class StockFullCheck(models.Model):
+    """One FULL stock read while the delta switch is `on` (doc 40 §3.3): the daily safety net (first fast run after
+    04:00), a manual / full-lane run, a first run without a watermark, or a fallback after a failed delta read.
+    `corrected` + `zeroed` = rows the delta runs had left different from SOFTECH (0 on a clean day); per_branch
+    breaks them down by SOFTECH branch code. This is the count-and-total check of doc 40 §6.2 for ON."""
+    at = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='الوقت')
+    reason = models.CharField(max_length=20, blank=True, default='', verbose_name='السبب')
+    rows_full = models.PositiveIntegerField(default=0, verbose_name='صفوف القراءة الكاملة')
+    corrected = models.PositiveIntegerField(default=0, verbose_name='صفوف تم تصحيحها')
+    zeroed = models.PositiveIntegerField(default=0, verbose_name='صفوف نفدت وتم تصفيرها')
+    per_branch = models.JSONField(default=dict, blank=True, verbose_name='حسب الفرع')
+    ok = models.BooleanField(default=True, verbose_name='سليمة')
+    full_ms = models.PositiveIntegerField(default=0, verbose_name='الزمن (مللي)')
+    note = models.CharField(max_length=200, blank=True, default='', verbose_name='ملاحظة')
+
+    class Meta:
+        ordering = ['-at']
+        verbose_name = 'مطابقة مخزون كاملة'
+        verbose_name_plural = 'مطابقات المخزون الكاملة'
+
+    def __str__(self):
+        return f'{self.at:%Y-%m-%d %H:%M} {self.reason} corrected={self.corrected} zeroed={self.zeroed}'
