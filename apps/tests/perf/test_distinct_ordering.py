@@ -32,15 +32,6 @@ CONSUMED = {'count', 'exists'}            # Django clears the ordering before ru
 ALLOWED = {
     ('apps/sync/maintenance.py', 'alert_failing_lanes'):
         'widened (SyncRun -started_at); fixed by PR 291, which adds the .order_by() here',
-    ('apps/offers/usage.py', 'precheck_order'):
-        'widened (one offer id per order line) but harmless: the same offer is re-checked. POS '
-        'checkout path - change held for owner approval (CLAUDE.md: stop and ask)',
-    ('apps/offers/usage.py', 'consume_offer_uses'):
-        'widened (one offer id per order line) but harmless: a repeat is skipped by the '
-        'idempotency check. POS checkout path - change held for owner approval (CLAUDE.md)',
-    ('apps/vouchers/coupon_guard.py', 'open_orders_holding'):
-        'widened (SoftechSalesOrderLine id): an order holding the serial on 2 lines is listed '
-        'twice in held_by_orders. POS order validation - change held for owner approval (CLAUDE.md)',
     ('apps/rpa/portal/queue.py', '_pull_other_baskets'):
         'selects pk: the extra job_id/seq columns belong to the same row, so no extra rows; '
         'keeps the (job, seq) processing order',

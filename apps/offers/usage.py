@@ -52,7 +52,7 @@ def precheck_order(order, customer=None):
     """
     from .models import Offer
     offer_ids = (order.lines.filter(discount_source='offer', applied_offer__isnull=False)
-                 .values_list('applied_offer_id', flat=True).distinct())
+                 .values_list('applied_offer_id', flat=True).order_by('applied_offer_id').distinct())
     for oid in offer_ids:
         offer = Offer.objects.get(pk=oid)
         exhausted, scope = offer_exhausted(offer, customer, exclude_order=order)
@@ -73,7 +73,7 @@ def consume_offer_uses(order, *, customer=None):
 
     offer_ids = list(
         order.lines.filter(discount_source='offer', applied_offer__isnull=False)
-        .values_list('applied_offer_id', flat=True).distinct())
+        .values_list('applied_offer_id', flat=True).order_by('applied_offer_id').distinct())
 
     consumed = []
     for oid in offer_ids:
