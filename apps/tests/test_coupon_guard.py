@@ -128,6 +128,20 @@ class PosHookTests(TestCase):
         self.assertEqual(g.open_orders_holding('27301-abc123', exclude_order_id=o.pk), [other.pk])
         self.assertEqual(g.open_orders_holding('27301-ABC123', exclude_order_id=other.pk), [])
 
+    def test_order_holding_on_several_lines_is_listed_once(self):
+        # SoftechSalesOrderLine.Meta.ordering ('id') used to join the DISTINCT: one entry per line.
+        other = _order(softech_pic='04HD731', status='pushed')
+        for _ in range(3):
+            _coupon_line(other, '27301-ABC123')
+        second = _order(softech_pic='04HD731', status='pushed')
+        _coupon_line(second, '27301-ABC123')
+        o = _order(softech_pic='04HD731')
+        self.assertEqual(g.open_orders_holding('27301-ABC123', exclude_order_id=o.pk),
+                         sorted([other.pk, second.pk]))
+        errs = g.evaluate('27301-ABC123', hist(), D(1), '04HD731',
+                          g.open_orders_holding('27301-ABC123', exclude_order_id=o.pk))
+        self.assertTrue(any(f'#{other.pk}, #{second.pk}' in e for e in errs))
+
 
 class CheckEndpointTests(TestCase):
     URL = '/api/vouchers/coupons/check/'

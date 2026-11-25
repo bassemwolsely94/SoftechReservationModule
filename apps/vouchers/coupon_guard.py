@@ -109,7 +109,7 @@ def open_orders_holding(serial, exclude_order_id=None):
                   order__status__in=_OPEN_ORDER_STATUSES))
     if exclude_order_id:
         qs = qs.exclude(order_id=exclude_order_id)
-    return list(qs.values_list('order_id', flat=True).distinct())
+    return list(qs.values_list('order_id', flat=True).order_by('order_id').distinct())
 
 
 # ── rules (pure) ───────────────────────────────────────────────────────────────
