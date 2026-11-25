@@ -62,6 +62,20 @@ def exchange_magic_link(token: str):
     return login.customer, make_session_token(login.customer.softech_pic, login.session_key)
 
 
+def _keep_wamid(token, result):
+    """Delivery checker: remember which WhatsApp message carried this login link (apps/whatsapp/delivery.py)."""
+    try:
+        from apps.portal.models import PortalLogin
+        from apps.portal.tokens import read_magic_token
+        msgs = result.get('messages') if isinstance(result, dict) else None
+        wamid = msgs[0].get('id', '') if isinstance(msgs, list) and msgs and isinstance(msgs[0], dict) else ''
+        claims = read_magic_token(token)
+        if isinstance(wamid, str) and wamid and claims:
+            PortalLogin.objects.filter(nonce=claims[1]).update(wamid=wamid)
+    except Exception:  # noqa: BLE001 — tracking must never break the login flow
+        logger.warning('portal magic-link: could not keep the message id')
+
+
 def send_magic_link(customer: Customer, token: str) -> bool:
     """
     Send the magic-link to the customer's WhatsApp. Returns True on success.
@@ -84,8 +98,9 @@ def send_magic_link(customer: Customer, token: str) -> bool:
     try:
         from apps.whatsapp.sender import WhatsAppSender
         # the inbox keeps a placeholder — staff reading it must not be able to log in as the customer
-        WhatsAppSender().send_text(wa_id=wa_phone, body=body, preview_url=False,
-                                   record_body='[رابط دخول بوابة العملاء — مخفي]')
+        result = WhatsAppSender().send_text(wa_id=wa_phone, body=body, preview_url=False,
+                                            record_body='[رابط دخول بوابة العملاء — مخفي]')
+        _keep_wamid(token, result)
         return True
     except Exception as exc:  # noqa: BLE001 — delivery must not break the flow
         logger.warning('portal magic-link send failed for %s: %s', customer.pk, exc)

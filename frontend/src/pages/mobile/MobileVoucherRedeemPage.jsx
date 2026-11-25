@@ -7,6 +7,7 @@
  * Reuses the existing voucher OTP endpoints (never stores plain OTP).
  */
 import { useState } from 'react'
+import OtpDeliveryStatus from '../../components/OtpDeliveryStatus'
 import { useQuery } from '@tanstack/react-query'
 import { vouchersApi } from '../../api/client'
 import { MobileLoading, MobileError, MobileEmpty } from '../../components/mobileUi'
@@ -158,6 +159,7 @@ export default function MobileVoucherRedeemPage() {
       {step === 'otp' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
           <p className="text-sm text-gray-500 text-center">أُرسل رمز للعميل على {phone}. أدخله للتأكيد.</p>
+          <OtpDeliveryStatus voucherId={voucher?.id} otpId={otpInfo?.otp_id} />
           {otpInfo?.whatsapp_url && (
             <a data-tour="vouchers-mobile-whatsapp" href={otpInfo.whatsapp_url} target="_blank" rel="noreferrer"
               className="block text-center text-sm bg-green-50 text-green-700 border border-green-200 rounded-xl py-2 font-medium">💬 إرسال عبر واتساب</a>

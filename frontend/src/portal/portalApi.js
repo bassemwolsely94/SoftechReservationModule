@@ -58,6 +58,8 @@ export const portalApi = {
   orders:      ()      => portal.get('/orders/'),
   loyalty:     ()      => portal.get('/loyalty/'),
   refills:     ()      => portal.get('/refills/'),
+  consent:     ()      => portal.get('/consent/'),
+  setConsent:  (purpose, granted) => portal.post('/consent/', { purpose, granted }),
   reorder:     (data)  => portal.post('/reorder/', data),
 }
 

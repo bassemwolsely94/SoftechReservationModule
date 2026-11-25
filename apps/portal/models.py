@@ -23,6 +23,8 @@ class PortalLogin(models.Model):
     created_at  = models.DateTimeField(auto_now_add=True)
     used_at     = models.DateTimeField(null=True, blank=True, verbose_name='استُخدم الرابط')
     revoked_at  = models.DateTimeField(null=True, blank=True, verbose_name='أُنهيت الجلسة')
+    # The WhatsApp message that carried the login link (apps/whatsapp/delivery.py reads its receipts)
+    wamid       = models.CharField(max_length=200, blank=True, default='', db_default='', db_index=True)
 
     class Meta:
         ordering = ['-created_at']

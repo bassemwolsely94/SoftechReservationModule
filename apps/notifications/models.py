@@ -40,6 +40,7 @@ class Notification(models.Model):
         ('monthly_report',            '📈 تقرير شهري'),
         ('coupon_digest',             '🎟️ رقابة كوبونات الهدايا'),
         ('customer_status_drift',     '⚠️ اختلاف حالة العملاء بين الرئيسي والفروع'),
+        ('message_delivery',          '📵 رسائل OTP / روابط لم تصل للعميل'),
         # ── Transfer ─────────────────────────────────────────────────────────
         ('transfer_request',          '🔀 طلب تحويل جديد'),
         ('transfer_response',         '↩️ رد على طلب تحويل'),
@@ -200,6 +201,7 @@ class Notification(models.Model):
         'ap_review_digest': CATEGORY_REPORTS,
         'receipt_check_digest': CATEGORY_REPORTS,
         'customer_status_drift': CATEGORY_MONITORING,
+        'message_delivery':      CATEGORY_MONITORING,
         # ── Personal @-mentions → 💬 mentions feed (quiet) ────────────────────
         'mention':              CATEGORY_MENTIONS,
         'chatter_mention':      CATEGORY_MENTIONS,
