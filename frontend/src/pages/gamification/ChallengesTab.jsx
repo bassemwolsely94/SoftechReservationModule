@@ -20,6 +20,7 @@ const METRIC_TEXT = {
   avg_points:       ['متوسط النقاط', 'Average points', 'نقطة لكل موظف على الأقل', 'points per employee at least'],
   pic_capture_rate: ['فواتير على أكواد العملاء', 'Invoices on customer codes', '% من فواتير الفرع على الأقل', '% of the branch\'s invoices at least'],
   new_pics_per_member: ['عملاء جدد', 'New customers', 'عميل جديد لكل موظف على الأقل', 'new customers per employee at least'],
+  on_time_rate:     ['الحضور في الموعد', 'On-time attendance', '% من أيام الحضور في الموعد على الأقل', '% of attendance days on time at least'],
 }
 const metricName = (m, t) => t(...(METRIC_TEXT[m] || [m, m]).slice(0, 2))
 const goalText = (c, t) => {

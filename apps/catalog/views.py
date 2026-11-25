@@ -388,7 +388,7 @@ class ItemViewSet(viewsets.ReadOnlyModelViewSet):
         medicine_types = sorted(med_seen.values(), key=lambda x: x['code'])
 
         # ── Categories ─────────────────────────────────────────────────────────
-        cat_ids = base_qs.exclude(category__isnull=True).values_list('category_id', flat=True).distinct()
+        cat_ids = base_qs.exclude(category__isnull=True).values_list('category_id', flat=True).order_by().distinct()
         categories = list(
             Category.objects.filter(id__in=cat_ids)
             .values('id', 'softech_id', 'name', 'name_ar')

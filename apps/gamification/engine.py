@@ -606,6 +606,10 @@ def run(days=1, today=None, finalize=True):
     sc = Scorer()
     for i in range(days, -1, -1):
         score_day(today - timedelta(days=i), sc)
+    # Attendance (closed days only, re-checked while machine data arrives) — before the day
+    # close so yesterday's verdicts count toward its clean day when the data is already in.
+    from .attendance import judge_recent
+    att_judged = judge_recent(sc, today)
     if finalize:
         yesterday = today - timedelta(days=1)
         # older days: clean-day/streak only (their open items are no longer knowable)
@@ -616,6 +620,10 @@ def run(days=1, today=None, finalize=True):
         staff = sc.staff.get(sid)
         if staff:
             _write_daily(staff, today)
+    for sid, d in att_judged:                 # attendance lands on past days: refresh their totals
+        staff = sc.staff.get(sid)
+        if staff:
+            _write_daily(staff, d)
     promoted = refresh_players(sc.touched)
     from .rewards import reconcile
     result = {'awarded': sc.awarded, 'players': len(sc.touched), 'promotions': promoted,

@@ -370,7 +370,7 @@ def operational_branches():
     if run is None:
         return []
     return list(ItemDemandMetrics.objects.filter(run=run)
-                .values_list('branch_id', 'branch__code').distinct())
+                .values_list('branch_id', 'branch__code').order_by('branch_id').distinct())
 
 
 def branch_availability(item_ids):

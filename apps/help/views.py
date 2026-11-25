@@ -580,7 +580,7 @@ def usage(request):
     since = timezone.now() - timezone.timedelta(days=days)
     modules, screens = registry.load()
     opened = set(HelpEvent.objects.filter(kind=HelpEvent.KIND_OPEN, created_at__gte=since)
-                 .values_list('screen_key', flat=True).distinct())
+                 .values_list('screen_key', flat=True).order_by().distinct())
     unopened = [k for k in screens if k not in opened]
     path_ov = training.overrides('path')
     on_path = {}

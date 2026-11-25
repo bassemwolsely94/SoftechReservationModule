@@ -14,6 +14,7 @@ Metrics are deterministic reads of data the platform already keeps:
   avg_points        net points (bonus categories excluded) ÷ active members
   pic_capture_rate  sale invoices on a (non-excluded) customer code ÷ all sale invoices × 100
   new_pics_per_member  new customers (pic_new events) ÷ active members
+  on_time_rate      judged attendance days that were on time ÷ judged days × 100
 A branch with no data for the metric (e.g. no incoming requests) is "not applicable":
 no bonus, never a failure.
 
@@ -97,6 +98,14 @@ def metric_value(ch, branch, start, end, member_ids):
         from .pic import branch_capture_rate
         total, on_pic = branch_capture_rate(branch, start, end)
         return _q(Decimal(on_pic) * 100 / total) if total else None
+    if m == TeamChallenge.METRIC_ON_TIME:
+        judged = PointEvent.objects.filter(staff_id__in=member_ids, day__gte=start, day__lte=end,
+                                           category='attendance')
+        days = judged.values('staff_id', 'day').distinct().count()
+        if not days:
+            return None
+        on_time = judged.filter(rule_key='attendance_on_time').count()
+        return _q(Decimal(on_time) * 100 / days)
     if m == TeamChallenge.METRIC_NEW_PICS:
         if not member_ids:
             return None

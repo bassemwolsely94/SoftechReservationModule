@@ -1046,6 +1046,10 @@ GAMIFICATION_BRANCH_OF_MONTH_MIN_PLAYERS = config('GAMIFICATION_BRANCH_OF_MONTH_
 # pic_capture_day, and the minimum invoices that day for it to count.
 GAMIFICATION_PIC_CAPTURE_PCT = config('GAMIFICATION_PIC_CAPTURE_PCT', default=70, cast=int)
 GAMIFICATION_PIC_CAPTURE_MIN_INVOICES = config('GAMIFICATION_PIC_CAPTURE_MIN_INVOICES', default=10, cast=int)
+# Attendance points (owner decision 2026-11-22): minutes of grace on shift start / end, and how
+# many closed days are re-checked on every run while attendance machines upload late.
+GAMIFICATION_ATTENDANCE_GRACE_MINUTES = config('GAMIFICATION_ATTENDANCE_GRACE_MINUTES', default=10, cast=int)
+GAMIFICATION_ATTENDANCE_LOOKBACK_DAYS = config('GAMIFICATION_ATTENDANCE_LOOKBACK_DAYS', default=3, cast=int)
 GAMIFICATION_CHAMPION_EXCLUDED_ROLES = config('GAMIFICATION_CHAMPION_EXCLUDED_ROLES', default='admin,viewer',
                                               cast=lambda v: [r.strip() for r in v.split(',') if r.strip()])
 CUSTOMER_MERGE_ROLES         = ['admin', 'supervisor', 'call_center']
@@ -1079,6 +1083,9 @@ WHATSAPP_PHONE_NUMBER_ID = config('WHATSAPP_PHONE_NUMBER_ID', default='')
 WHATSAPP_APP_SECRET      = config('WHATSAPP_APP_SECRET', default='')
 WHATSAPP_VERIFY_TOKEN    = config('WHATSAPP_VERIFY_TOKEN', default='')
 WHATSAPP_API_VERSION     = config('WHATSAPP_API_VERSION', default='v19.0')
+# P-05: campaigns go out only with a Meta-approved template (free text is delivered only inside a customer's
+# 24-hour window). On by default; campaign free text outside the window is skipped, never retried.
+CAMPAIGN_TEMPLATES_ONLY  = config('CAMPAIGN_TEMPLATES_ONLY', default=True, cast=bool)
 
 # ── SMS (core/sms.py) — off until an SMS company is chosen; 'http' = any HTTP gateway ─────────
 SMS_PROVIDER          = config('SMS_PROVIDER', default='')

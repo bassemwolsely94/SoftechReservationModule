@@ -34,6 +34,9 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
+TEMPLATE_REQUIRED_MSG = ('الحملات تُرسل بقالب واتساب معتمد فقط — اكتب اسم القالب المعتمد من Meta ومتغيراته '
+                         'في الحملة أولاً.')
+
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,7 +52,7 @@ def _detail(campaign, request):
     return WhatsAppCampaignDetailSerializer(campaign, context={'request': request}).data
 
 
-def _build_audience_qs(target_filter: dict):
+def _build_audience_qs(target_filter: dict, apply_consent: bool = True):
     """
     Apply target_filter dict to Customer queryset.
     Returns a queryset of matching Customer objects.
@@ -144,7 +147,7 @@ def _build_audience_qs(target_filter: dict):
             PurchaseHistory.objects
             .filter(invoice_date__gte=cutoff, doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         qs = qs.filter(id__in=bought_ids)
 
@@ -155,7 +158,7 @@ def _build_audience_qs(target_filter: dict):
             PurchaseHistory.objects
             .filter(invoice_date__gte=cutoff, doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         qs = qs.exclude(id__in=recent_ids)
 
@@ -165,13 +168,15 @@ def _build_audience_qs(target_filter: dict):
             PurchaseHistory.objects
             .filter(lines__item_id=item_id, doc_code='115')
             .values_list('customer_id', flat=True)
-            .distinct()
+            .order_by().distinct()
         )
         qs = qs.filter(id__in=bought_item_ids)
 
     # P-05 + B7 (one rule, apps/customers/consent.py): only customers who said yes to offers — to
     # health-targeted offers when the audience picks a health condition — and never closed / deceased /
     # entity / merged codes. The dispatcher applies the same rule.
+    if not apply_consent:                    # only for the preview's "left out" count — never for sending
+        return qs
     from apps.customers import consent
     health = bool(has_condition or has_conditions or chronic_category)
     return consent.filter_allowed(qs, consent.MARKETING_HEALTH if health else consent.MARKETING)
@@ -258,13 +263,25 @@ def _enqueue_to_wa_queue(campaign: WhatsAppCampaign):
                 },
             )
 
-            WAMessageQueue.objects.get_or_create(
-                conversation=conversation,
-                message_type='text',
-                body=cm.message_text,
-                status='pending',
-                defaults={'priority': 3},
-            )
+            if campaign.wa_template_name:        # P-05: the approved template, filled per customer
+                WAMessageQueue.objects.get_or_create(
+                    conversation=conversation,
+                    message_type='template',
+                    body=cm.message_text,            # the record / cancel match; Meta gets the template
+                    status='pending',
+                    defaults={'priority': 3, 'template_name': campaign.wa_template_name,
+                              'template_vars': {'language': campaign.wa_template_language or 'ar',
+                                                'params': campaign.template_params(cm.customer)
+                                                if cm.customer else []}},
+                )
+            else:
+                WAMessageQueue.objects.get_or_create(
+                    conversation=conversation,
+                    message_type='text',
+                    body=cm.message_text,
+                    status='pending',
+                    defaults={'priority': 3},
+                )
             created += 1
         except Exception as exc:
             logger.warning('_enqueue_to_wa_queue: skip cm=%d error=%s', cm.pk, exc)
@@ -359,6 +376,9 @@ def preview_audience(request, pk):
 
     qs = _build_audience_qs(target_filter)
     total = qs.count()
+    # P-05 measurement: how many of the segment are left out (no "yes" to offers, or a closed / deceased /
+    # entity / merged code)
+    excluded = _build_audience_qs(target_filter, apply_consent=False).count() - total
     has_phone = qs.exclude(phone='').filter(phone__isnull=False).count()
     sample_names = list(
         qs.exclude(phone='').filter(phone__isnull=False)
@@ -374,6 +394,7 @@ def preview_audience(request, pk):
         'has_phone': has_phone,
         'sample_names': sample_names,
         'filter_summary': target_filter,
+        'excluded_by_consent': max(excluded, 0),
     }
     return Response(AudiencePreviewSerializer(payload).data)
 
@@ -385,6 +406,8 @@ def preview_audience(request, pk):
 def request_approval(request, pk):
     """Draft → pending_approval"""
     campaign = _get_campaign_or_404(pk)
+    if campaign.status == 'draft' and campaign.template_missing():
+        return Response({'detail': TEMPLATE_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
     if not campaign.can_request_approval():
         return Response(
             {'detail': 'الحملة ليست في حالة مسودة أو ليس لها نص رسالة.'},
@@ -447,6 +470,8 @@ def queue_campaign(request, pk):
     scheduled_at (see apps/campaigns/dispatcher.py → drain_queue).
     """
     campaign = _get_campaign_or_404(pk)
+    if campaign.template_missing():          # approved before the templates-only rule, or the rule was turned on
+        return Response({'detail': TEMPLATE_REQUIRED_MSG}, status=status.HTTP_400_BAD_REQUEST)
     if not campaign.can_queue():
         return Response(
             {'detail': 'الحملة ليست في حالة معتمدة.'},

@@ -1,6 +1,8 @@
 """
 apps/campaigns/serializers.py
 """
+import re
+
 from rest_framework import serializers
 from .models import WhatsAppCampaign, CampaignMessage
 
@@ -77,12 +79,16 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
     my_can_cancel        = serializers.SerializerMethodField()
     queued_by_name       = serializers.SerializerMethodField()
     cancelled_by_name    = serializers.SerializerMethodField()
+    # P-05 templates only: the rule's state and whether this campaign is blocked by it
+    templates_only       = serializers.SerializerMethodField()
+    template_missing     = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = WhatsAppCampaign
         fields = [
             'id', 'name', 'description', 'status', 'status_label',
             'message_template', 'target_filter',
+            'wa_template_name', 'wa_template_language', 'wa_template_vars', 'templates_only', 'template_missing',
             'featured_item', 'featured_item_name',
             'scheduled_at', 'estimated_reach',
             'messages_queued', 'messages_sent', 'messages_delivered', 'messages_failed',
@@ -96,7 +102,7 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'approved_at', 'queued_at', 'completed_at',
         ]
         read_only_fields = [
-            'id', 'status', 'status_label',
+            'id', 'status', 'status_label', 'templates_only', 'template_missing',
             'estimated_reach', 'messages_queued', 'messages_sent',
             'messages_delivered', 'messages_failed', 'delivery_rate',
             'created_by', 'created_by_name',
@@ -106,6 +112,21 @@ class WhatsAppCampaignDetailSerializer(serializers.ModelSerializer):
             'can_request_approval', 'can_approve', 'can_queue', 'can_cancel', 'my_can_approve', 'my_can_cancel',
             'created_at', 'updated_at', 'approved_at', 'queued_at', 'completed_at',
         ]
+
+    def get_templates_only(self, obj):
+        return obj.templates_only()
+
+    def validate_wa_template_vars(self, value):
+        allowed = set(WhatsAppCampaign.TEMPLATE_VARS)
+        if not isinstance(value, list) or any(v not in allowed for v in value):
+            raise serializers.ValidationError('المتغيرات المسموحة: ' + '، '.join(WhatsAppCampaign.TEMPLATE_VARS))
+        return value
+
+    def validate_wa_template_name(self, value):
+        value = (value or '').strip()
+        if value and not re.fullmatch(r'[a-z0-9_]{1,100}', value):
+            raise serializers.ValidationError('اسم القالب كما هو في Meta: حروف إنجليزية صغيرة وأرقام و _ فقط.')
+        return value
 
     def _my(self, *actions):
         from core.permissions import _get_profile, matrix_allows
@@ -148,6 +169,7 @@ class AudiencePreviewSerializer(serializers.Serializer):
     has_phone        = serializers.IntegerField()
     sample_names     = serializers.ListField(child=serializers.CharField())
     filter_summary   = serializers.DictField()
+    excluded_by_consent = serializers.IntegerField(default=0)   # P-05: in the segment but not messaged
 
 
 class ApproveSerializer(serializers.Serializer):

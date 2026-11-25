@@ -45,6 +45,14 @@ class WhatsAppCampaign(models.Model):
         help_text='متغيرات: {{customer_name}}, {{item_name}}, {{branch_name}}',
     )
 
+    # ── Approved WhatsApp template (P-05 "templates only") ───────────────────
+    # Meta delivers free text only inside a customer's 24-hour window; a cold campaign must use a template
+    # approved in Meta Business Manager. Variables fill the template's {{1}}, {{2}}… in this order.
+    TEMPLATE_VARS = ('customer_name', 'item_name', 'branch_name')     # never the phone (privacy)
+    wa_template_name = models.CharField(max_length=100, blank=True, default='', db_default='', verbose_name='اسم قالب واتساب المعتمد')
+    wa_template_language = models.CharField(max_length=10, default='ar', db_default='ar', verbose_name='لغة القالب')
+    wa_template_vars = models.JSONField(default=list, db_default=[], blank=True, verbose_name='متغيرات القالب بالترتيب')
+
     # ── Target audience filter ────────────────────────────────────────────────
     # JSON object — keys (all optional):
     #   segment: list[str]                e.g. ["vip","loyal"]
@@ -161,8 +169,28 @@ class WhatsAppCampaign(models.Model):
             clean = '20' + clean[1:]
         return f'https://wa.me/{clean}?text={urllib.parse.quote(message)}'
 
+    def _vars(self, customer, item=None):
+        item_obj = item or self.featured_item
+        return {'customer_name': customer.name or '',
+                'item_name': item_obj.name if item_obj else '',
+                'branch_name': customer.preferred_branch.name_ar if customer.preferred_branch_id else ''}
+
+    def template_params(self, customer, item=None):
+        """The template's body parameters for one customer, in wa_template_vars order (Meta format)."""
+        values = self._vars(customer, item)
+        return [{'type': 'text', 'text': values.get(k, '') or '—'} for k in (self.wa_template_vars or [])]
+
+    @staticmethod
+    def templates_only():
+        from django.conf import settings
+        return bool(getattr(settings, 'CAMPAIGN_TEMPLATES_ONLY', True))
+
+    def template_missing(self):
+        """True when the templates-only rule blocks this campaign (no approved template named)."""
+        return self.templates_only() and not (self.wa_template_name or '').strip()
+
     def can_request_approval(self):
-        return self.status == 'draft' and bool(self.message_template.strip())
+        return self.status == 'draft' and bool(self.message_template.strip()) and not self.template_missing()
 
     def can_approve(self):
         return self.status == 'pending_approval'

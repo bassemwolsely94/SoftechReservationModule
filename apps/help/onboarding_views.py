@@ -411,7 +411,7 @@ def _done_tours(profile):
     """Tour ids (screen keys / flow ids) this person finished at least once."""
     from .models import HelpEvent
     return set(HelpEvent.objects.filter(kind=HelpEvent.KIND_TOUR, staff=profile, query='done')
-               .values_list('screen_key', flat=True).distinct())
+               .values_list('screen_key', flat=True).order_by().distinct())
 
 
 @api_view(['GET', 'POST'])

@@ -124,6 +124,21 @@ RULES = [
     ('pic_capture_day', 'customers', 5, 'يوم تسجيل العملاء', 'Customer-code day',
      'يوم سجّلت فيه معظم فواتيرك على أكواد العملاء (70% أو أكثر من 10 فواتير على الأقل)',
      'A day with most of your invoices on customer codes (70% or more, at least 10 invoices)', {}),
+    # ── Attendance (owner decision 2026-11-22 — apps/gamification/attendance.py). Judged only with
+    #    a linked HR employee, a shift that day, machine data through the next day; approved
+    #    leave skips the day, an approved permit skips late / early / missing punch ──
+    ('attendance_on_time', 'attendance', 3, 'حضور وانصراف في الموعد', 'On time',
+     'حضرت في موعد الشيفت وانصرفت في موعده (بسماح 10 دقائق)',
+     'You arrived and left on time for your shift (10-minute grace)', {}),
+    ('attendance_late', 'attendance', -2, 'تأخير في الحضور', 'Late arrival',
+     'أول بصمة بعد بداية الشيفت بأكثر من 10 دقائق', 'First punch more than 10 minutes after the shift start', {}),
+    ('attendance_early_leave', 'attendance', -1, 'انصراف مبكر', 'Left early',
+     'آخر بصمة قبل نهاية الشيفت بأكثر من 10 دقائق', 'Last punch more than 10 minutes before the shift end', {}),
+    ('attendance_missing_punch', 'attendance', -1, 'بصمة ناقصة', 'Missing punch',
+     'بصمة واحدة فقط في يوم الشيفت (حضور أو انصراف ناقص)', 'Only one punch on a shift day (in or out missing)', {}),
+    ('attendance_absent', 'attendance', -3, 'غياب', 'Absent',
+     'يوم شيفت بلا بصمات وبلا إجازة معتمدة (والجهاز أرسل بياناته)',
+     'A shift day with no punches and no approved leave (and the machine did report)', {}),
     ('team_challenge', 'team', 0, 'تحدي الفرع', 'Branch team challenge',
      'مكافأة كل أعضاء الفرع الذي حقق هدف تحدي الفروع (لا تدخل في الترتيب)',
      'Bonus for every member of a branch that met a team-challenge goal (not counted in rankings)', {}),
@@ -196,6 +211,11 @@ BADGES = [
      'إعادة 50 عميلاً بعد انقطاع', '50 customers won back'),
     ('pic_capture_20', '🎯', 'rule_count', 'pic_capture_day', 20, 'كل فاتورة لها صاحب', 'Every invoice has a name',
      '20 يوماً بنسبة تسجيل عالية', '20 high customer-code days'),
+    # ── Attendance milestones ──
+    ('punctual_20', '⏰', 'rule_count', 'attendance_on_time', 20, 'منضبط', 'Punctual',
+     '20 يوماً في الموعد', '20 days on time'),
+    ('punctual_100', '🕰️', 'rule_count', 'attendance_on_time', 100, 'ساعة الفرع', 'The branch clock',
+     '100 يوم في الموعد', '100 days on time'),
 ]
 
 

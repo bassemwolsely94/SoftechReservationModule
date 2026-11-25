@@ -1,6 +1,6 @@
 # 29 — Gamification (التحفيز: النقاط والمستويات)
 
-**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر). Phase 4 BUILT (2026-11-10) — daily-count points, per-role points, branch team challenges. Phase 5 BUILT (2026-11-10) — customer codes (PIC).
+**Status:** Phase 1 BUILT (2026-10-10) — points, levels, badges, rankings. Phase 2 BUILT (2026-10-10) — reward catalog. Phase 3 BUILT (2026-10-10) — monthly champion (بطل الشهر). Phase 4 BUILT (2026-11-10) — daily-count points, per-role points, branch team challenges. Phase 5 BUILT (2026-11-10) — customer codes (PIC). Phase 6 BUILT (2026-11-22) — attendance (lateness rules).
 **App:** `apps/gamification` · **API:** `/api/gamification/` · **Screens:** card on `/dashboard` + `/me`, `/gamification`, `/m/gamification`
 
 ## Decisions (agreed with the owner)
@@ -97,6 +97,20 @@ Members = active staff of the branch whose role is not in `GAMIFICATION_CHAMPION
 | `pic_capture_day` | +5 | judged at **day close** only: ≥ `GAMIFICATION_PIC_CAPTURE_PCT` (70)% of ≥ `GAMIFICATION_PIC_CAPTURE_MIN_INVOICES` (10) sale invoices carry a customer code. |
 
 A sale is "on a PIC" when `PurchaseHistory.softech_phcode` is set; `pic_analytics.PicExclusion` codes (shared / house) never count anywhere. Milestones: badges at 10/50/200/500 new customers, 100/1,000/5,000 customer visits, 10/50 won back, 20 capture days. «👥 عملائي» panel on «ملفي» (today / month: new, served, won back, capture %; next milestones) via `me.pic`; «عملاء جدد اليوم» on the dashboard card; report block `pic` (new, won back, visits, chain capture %, top 10 by new customers). Team-challenge metrics `pic_capture_rate` and `new_pics_per_member`. Reads the PostgreSQL mirror only.
+
+## Phase 6 — attendance (2026-11-22)
+
+**Owner decision 2026-11-22: "full lateness rules"** in gamification. The HR attendance module stays DISPLAY ONLY (its own 2026-11-07 design: no pay / lateness / absence verdicts on the HR screens); the verdicts live in `apps/gamification/attendance.py`, which reuses `apps.hr.attendance.days` (`build_days` — work-day boundary, 2-minute duplicate merge, single punch = needs review; `leave_info` — approved leave / permits) and never changes a punch or an HR figure. New category `attendance` («الحضور والانصراف»).
+
+| Rule | Points | When |
+|---|---|---|
+| `attendance_on_time` | +3 | first in ≤ shift start + grace and last out ≥ shift end − grace |
+| `attendance_late` | −2 | first in > start + grace |
+| `attendance_early_leave` | −1 | last out < end − grace |
+| `attendance_missing_punch` | −1 | a single punch (in or out missing) |
+| `attendance_absent` | −3 | scheduled, no punches, machine data present, no approved leave |
+
+A day is judged only with an active HR `Employee` linked to the staff account, a `ShiftAssignment` covering the date (valid range + `days_of_week`, shift active; overnight shifts end the next day) and a successful `CollectionRun` of a branch machine with `newest_date` > day — a late upload is never an absence. Approved leave skips the day; an approved permit skips late / early / missing punch. Grace `GAMIFICATION_ATTENDANCE_GRACE_MINUTES` (10). Punches are immutable, so each run re-checks the last `GAMIFICATION_ATTENDANCE_LOOKBACK_DAYS` (3) closed days before the day close (late uploads still count; yesterday's verdicts count toward its clean day when the data is in); one event per person, day and rule (`att:{day}`), and those days' DailyScore totals are refreshed. Badges `punctual_20` / `punctual_100`; team-challenge metric `on_time_rate` (on-time ÷ judged attendance days). Deductions affect rankings only, never levels.
 
 ## Known limits (Phase 1)
 
