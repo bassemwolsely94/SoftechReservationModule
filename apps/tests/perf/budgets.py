@@ -60,6 +60,8 @@ BUDGETS: dict[str, Budget] = {
                                              'first measured in CI'),
     'finance/gl/exceptions/mixed-patterns': Budget('list', 9, 'measured 7 on 2026-11-20'),
     # ── reports on screen ────────────────────────────────────────────────────────
+    'help/glossary/audit': Budget('report', 10, 'measured 8 on 2026-11-25: terms, screen / tour / quiz '
+                                                'edits read once (+ auth); help text is from the code'),
     'batches/stock-expiry/summary': Budget('report', 7, 'measured 33 on 2026-11-19; 2 core queries after Stage 3 (+ auth)'),
     'delivery/small-orders': Budget('report', 8, 'C20, 2026-11-20: invoice heads + one grouped line query '
                                                   '(+ auth); not measured locally, CI is the first run'),
