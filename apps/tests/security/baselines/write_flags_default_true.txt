@@ -10,3 +10,6 @@ CUSTOMER_STATUS_DRIFT_CHECK_ENABLED
 GAMIFICATION_ENABLED
 REPLACEMENT_DAILY_CHECK_ENABLED
 STOCK_AUDIT_ENABLED
+
+# reason: daily delivery checker for OTPs / portal links (doc 41) — reads Meta receipts in our own tables, never SOFTECH; its only write is an in-app notice
+MESSAGE_DELIVERY_CHECK_ENABLED
