@@ -347,8 +347,13 @@ class VoucherOTP(models.Model):
     expires_at    = models.DateTimeField(verbose_name='ينتهي في')
     created_at    = models.DateTimeField(auto_now_add=True)
     used_at       = models.DateTimeField(null=True, blank=True)
+    # whatsapp_api = Meta accepted the send (wamid below) · qr = not sent, shown as QR / wa.me at the counter
     sent_via      = models.CharField(max_length=20, default='whatsapp',
                                       verbose_name='أُرسل عبر')
+    # The WhatsApp message that carried it — its receipts (sent / delivered / read / failed) say whether the
+    # OTP actually reached the customer (apps/whatsapp/delivery.py). Empty = never handed to WhatsApp.
+    wamid         = models.CharField(max_length=200, blank=True, default='', db_default='', db_index=True,
+                                      verbose_name='معرف رسالة واتساب')
     retry_count   = models.PositiveSmallIntegerField(default=0,
                                                       verbose_name='عدد المحاولات')
     resend_count  = models.PositiveSmallIntegerField(default=0,

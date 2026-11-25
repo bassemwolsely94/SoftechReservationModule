@@ -300,19 +300,26 @@ class VoucherViewSet(viewsets.ModelViewSet):
         qr_base64 = _make_otp_qr(plain_code)
 
         # Auto-send OTP via WhatsApp Cloud API (non-blocking — failure still returns QR)
-        wa_sent = False
+        wa_sent, wamid = False, ''
         try:
             from apps.whatsapp.sender import WhatsAppSender
             from django.conf import settings
             if getattr(settings, 'WHATSAPP_TOKEN', ''):
-                WhatsAppSender().send_otp(
+                result = WhatsAppSender().send_otp(
                     wa_id=phone,
                     otp_display=plain_code,
                 )
+                msgs = result.get('messages') if isinstance(result, dict) else None
+                wamid = (msgs[0].get('id', '') if isinstance(msgs, list) and msgs and isinstance(msgs[0], dict)
+                         else '')
+                wamid = wamid if isinstance(wamid, str) else ''
                 wa_sent = True
                 logger.info(f'[OTP] WhatsApp Cloud API send OK for voucher={voucher.code}')
         except Exception as wa_err:
             logger.warning(f'[OTP] WhatsApp Cloud API send failed (QR fallback active): {wa_err}')
+        # Delivery checker (apps/whatsapp/delivery.py): keep which WhatsApp message carried it, and the real channel
+        otp.sent_via, otp.wamid = ('whatsapp_api' if wa_sent else 'qr'), wamid
+        otp.save(update_fields=['sent_via', 'wamid'])
 
         logger.info(f'[OTP] Generated for voucher={voucher.code} phone={phone[-4:]}****')
 
@@ -324,6 +331,21 @@ class VoucherViewSet(viewsets.ModelViewSet):
             'qr_code':      qr_base64,      # counter display — customer scans
             'sent_via':     'whatsapp_api' if wa_sent else 'manual',
         })
+
+    # ── Delivery checker: did the OTP reach the customer? ──────────────────────
+    @action(detail=True, methods=['get'], url_path='otp-status')
+    def otp_status(self, request, pk=None):
+        """GET ?otp_id= → the OTP's WhatsApp delivery state (apps/whatsapp/delivery.py): sent / delivered / read /
+        failed (with reason) / no receipt / not sent. Same access as generating the OTP; never the code."""
+        from apps.whatsapp import delivery
+        voucher = self.get_object()
+        try:
+            otp = voucher.otps.get(pk=int(request.query_params.get('otp_id', '')))
+        except (ValueError, VoucherOTP.DoesNotExist):
+            return Response({'detail': 'OTP غير موجود لهذه القسيمة.'}, status=status.HTTP_404_NOT_FOUND)
+        st = delivery.status(otp.wamid)
+        return Response({'otp_id': otp.pk, 'sent_via': otp.sent_via, 'expires_at': otp.expires_at,
+                         'is_used': otp.is_used, **st})
 
     # ── MODULE 3: Verify OTP → Create Document ─────────────────────────────────
 

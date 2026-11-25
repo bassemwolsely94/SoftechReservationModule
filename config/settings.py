@@ -1074,6 +1074,8 @@ WHATSAPP_API_VERSION     = config('WHATSAPP_API_VERSION', default='v19.0')
 # P-05: campaigns go out only with a Meta-approved template (free text is delivered only inside a customer's
 # 24-hour window). On by default; campaign free text outside the window is skipped, never retried.
 CAMPAIGN_TEMPLATES_ONLY  = config('CAMPAIGN_TEMPLATES_ONLY', default=True, cast=bool)
+# Delivery checker (apps/whatsapp/delivery.py): daily read-only report of OTPs / portal links that did not arrive.
+MESSAGE_DELIVERY_CHECK_ENABLED = config('MESSAGE_DELIVERY_CHECK_ENABLED', default=True, cast=bool)
 
 # ── SMS (core/sms.py) — off until an SMS company is chosen; 'http' = any HTTP gateway ─────────
 SMS_PROVIDER          = config('SMS_PROVIDER', default='')

@@ -8,6 +8,7 @@
  *   Tab 4 — تقارير     : usage report
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
+import OtpDeliveryStatus from '../components/OtpDeliveryStatus'
 import { useSearchParams } from 'react-router-dom'
 import { vouchersApi, customersApi, branchesApi } from '../api/client'
 import RefreshButton from '../components/RefreshButton'
@@ -897,6 +898,7 @@ function RedemptionFlow({ voucher, onClose }) {
           {/* ─ Step 3: OTP delivery + verification ─ */}
           {step === 3 && (
             <div className="space-y-3">
+              <OtpDeliveryStatus voucherId={voucher.id} otpId={otpId} />
 
               {/* Mode switcher */}
               <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium" data-tour="vouchers-main-otp-mode">

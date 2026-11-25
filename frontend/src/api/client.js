@@ -1194,6 +1194,8 @@ export const vouchersApi = {
   // Generate OTP — returns { otp_id, expires_at, whatsapp_url }
   // data = { phone, order_amount? }
   generateOtp: (id, data)    => api.post(`/vouchers/vouchers/${id}/generate-otp/`, data),
+  // Delivery checker — did the OTP reach the customer's WhatsApp? (state, label, error)
+  otpStatus:   (id, otpId)   => api.get(`/vouchers/vouchers/${id}/otp-status/`, { params: { otp_id: otpId } }),
 
   // Verify OTP — returns VoucherRedemptionDocument on success
   // data = { code, phone, order_amount? }

@@ -2982,6 +2982,23 @@ def _run_customer_status_drift():
         logger.error('[APScheduler] customer status drift failed: %s', exc)
 
 
+def _run_message_delivery_check():
+    """Daily READ-ONLY delivery checker: yesterday's voucher OTPs and portal login links that failed, got no
+    receipt, or were never handed to WhatsApp, plus whether Meta's receipts reach our webhook at all
+    (apps/whatsapp/delivery.py). Notifies the coupon digest roles only when something did not arrive.
+    Off with MESSAGE_DELIVERY_CHECK_ENABLED=False."""
+    from django.conf import settings as _s
+    if not getattr(_s, 'MESSAGE_DELIVERY_CHECK_ENABLED', True):
+        return
+    try:
+        from apps.whatsapp import delivery
+        rep = delivery.report()
+        logger.info('[APScheduler] message delivery: total=%s problems=%s silent=%s notified=%s',
+                    rep['total'], len(rep['problems']), rep['webhook_silent'], delivery.notify(rep))
+    except Exception as exc:
+        logger.error('[APScheduler] message delivery check failed: %s', exc)
+
+
 def _run_gamification(close_day=False):
     """Gamification (recognition only): award points for recorded work. Every 30 min scores
     today; nightly also closes yesterday (penalties for what was left behind, clean day,
@@ -4272,6 +4289,11 @@ def start_scheduler():
     # Customer status HQ vs branch nodes (B7, read-only) — 06:40.
     _scheduler.add_job(
         _run_customer_status_drift, 'cron', hour=6, minute=40, id='customer_status_drift',
+        replace_existing=True, max_instances=1, misfire_grace_time=3600,
+    )
+    # Delivery checker — yesterday's OTPs / portal links that did not reach the customer (read-only) — 07:10.
+    _scheduler.add_job(
+        _run_message_delivery_check, 'cron', hour=7, minute=10, id='message_delivery_check',
         replace_existing=True, max_instances=1, misfire_grace_time=3600,
     )
     # Duplicate customer-code merge queue (B7, read-only) — Saturday 05:30.
