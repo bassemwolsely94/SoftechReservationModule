@@ -114,6 +114,18 @@ class SyncFailureAlertTests(TestCase):
         alert_failing_lanes()
         self.assertEqual(self._alerts(), 1)
 
+    def test_query_count_does_not_grow_with_runs(self):
+        # 2026-11-21 pg_stat_statements: SyncRun.Meta.ordering ('-started_at') widened the DISTINCT lane
+        # list to one row per run, so the once-a-minute heartbeat ran ~3,000 queries instead of ~5.
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.sync.maintenance import alert_failing_lanes
+        for lane in ('fast', 'slow'):
+            self._runs(*(['success'] * 30), lane=lane)
+        with CaptureQueriesContext(connection) as ctx:
+            alert_failing_lanes()
+        self.assertLessEqual(len(ctx.captured_queries), 3)      # one lanes query + one per lane
+
     def test_two_failures_do_not_alert(self):
         from apps.sync.maintenance import alert_failing_lanes
         self._runs('failed', 'failed', 'success', 'failed', 'failed')

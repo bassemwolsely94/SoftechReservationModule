@@ -227,8 +227,10 @@ def alert_failing_lanes(in_a_row=FAILURES_IN_A_ROW):
     failed. Deduped per lane per day, so the heartbeat can call this every minute.
     Returns the lanes alerted."""
     from apps.sync.models import SyncRun
+    # order_by() clears SyncRun.Meta.ordering: otherwise DISTINCT also runs over started_at and returns one
+    # row per run (~3,000 queries a minute on the office, found by pg_stat_statements 2026-11-21)
     lanes = (SyncRun.objects.exclude(lane='').exclude(status='running')
-             .values_list('lane', flat=True).distinct())
+             .values_list('lane', flat=True).order_by().distinct())
     today = timezone.localdate().isoformat()
     alerted = []
     for lane in lanes:
