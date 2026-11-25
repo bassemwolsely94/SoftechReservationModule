@@ -111,6 +111,83 @@ class ConsumeTests(TestCase):
             consume_offer_uses(second)
 
 
+class SeveralLinesOneOfferTests(TestCase):
+    """One offer on several lines of an order (one OfferApplication, as order_attach writes it).
+    SoftechSalesOrderLine.Meta.ordering ('id') used to join the DISTINCT offer-id list, so each
+    offer came back once per line and was locked / re-checked once per line."""
+
+    def setUp(self):
+        self.branch = make_branch()
+        self.items = [_item(c) for c in ('A', 'B', 'C')]
+
+    def _order_with_lines(self, offer, n):
+        order = _order(self.branch)
+        for it in self.items[:n]:
+            SoftechSalesOrderLine.objects.create(
+                order=order, item=it, softech_itemcode=it.softech_id, qty=1, item_sale_price=100,
+                cust_discp=100, discount_source='offer', applied_offer=offer)
+        OfferApplication.objects.create(offer=offer, pos_order=order, branch=order.branch,
+                                        was_applied=False, discount_amount=Decimal('300'))
+        return order
+
+    def _queries(self, fn):
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            result = fn()
+        return result, len(ctx.captured_queries)
+
+    def test_consume_query_count_does_not_grow_with_lines(self):
+        one = self._order_with_lines(_offer(max_uses_total=5), 1)
+        three = self._order_with_lines(_offer(max_uses_total=5), 3)
+        r1, q1 = self._queries(lambda: consume_offer_uses(one))
+        r3, q3 = self._queries(lambda: consume_offer_uses(three))
+        self.assertEqual(len(r1), 1)
+        self.assertEqual(len(r3), 1)
+        self.assertEqual(q3, q1)
+
+    def test_precheck_query_count_does_not_grow_with_lines(self):
+        from apps.offers.usage import precheck_order
+        one = self._order_with_lines(_offer(max_uses_total=5), 1)
+        three = self._order_with_lines(_offer(max_uses_total=5), 3)
+        r1, q1 = self._queries(lambda: precheck_order(one))
+        r3, q3 = self._queries(lambda: precheck_order(three))
+        self.assertIsNone(r1)
+        self.assertIsNone(r3)
+        self.assertEqual(q3, q1)
+
+    def test_amounts_uses_and_idempotency_unchanged(self):
+        o = _offer(max_uses_total=5)
+        order = self._order_with_lines(o, 3)
+        self.assertEqual(consume_offer_uses(order), [o.pk])
+        self.assertEqual(committed_uses(o)[0], 1)                   # one use per order, not per line
+        app = OfferApplication.objects.get(offer=o, pos_order=order)
+        self.assertTrue(app.was_applied)
+        self.assertEqual(app.discount_amount, Decimal('300'))
+        self.assertEqual(consume_offer_uses(order), [])              # re-run is a no-op
+        self.assertEqual(committed_uses(o)[0], 1)
+
+    def test_two_offers_locked_in_offer_id_order(self):
+        first, second = _offer(max_uses_total=5), _offer(max_uses_total=5)
+        order = _order(self.branch)
+        for it, off in ((self.items[0], second), (self.items[1], first), (self.items[2], second)):
+            SoftechSalesOrderLine.objects.create(
+                order=order, item=it, softech_itemcode=it.softech_id, qty=1, item_sale_price=100,
+                cust_discp=100, discount_source='offer', applied_offer=off)
+        for off in (first, second):
+            OfferApplication.objects.create(offer=off, pos_order=order, branch=order.branch,
+                                            was_applied=False, discount_amount=Decimal('100'))
+        self.assertEqual(consume_offer_uses(order), sorted([first.pk, second.pk]))
+
+    def test_exhausted_offer_still_blocks(self):
+        from apps.offers.usage import precheck_order
+        o = _offer(max_uses_total=1)
+        consume_offer_uses(self._order_with_lines(o, 1))
+        blocked = self._order_with_lines(o, 3)
+        self.assertIsNotNone(precheck_order(blocked))
+        with self.assertRaises(UsageLimitExceeded):
+            consume_offer_uses(blocked)
+
+
 class ConcurrencyTests(TransactionTestCase):
     reset_sequences = False
 
