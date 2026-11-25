@@ -88,9 +88,9 @@ class ModeTests(TestCase):
         self.assertEqual(delta.stock_mode(), 'shadow')
 
     @override_settings(SYNC_DELTA_STOCK='on')
-    def test_on_is_not_built_and_runs_as_shadow(self):
-        # ON needs 7 days of SHADOW with 0 misses and the owner's sign-off (doc 40 S2)
-        self.assertEqual(delta.stock_mode(), 'shadow')
+    def test_on(self):
+        # built 2026-11-26; switched only after 7 clean SHADOW days and the owner's sign-off (doc 40 S2)
+        self.assertEqual(delta.stock_mode(), 'on')
 
     @override_settings(SYNC_DELTA_STOCK='maybe')
     def test_junk_is_off(self):

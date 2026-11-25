@@ -1,9 +1,9 @@
 # 40 — SOFTECH Delta Sync (PERF-6): read only the rows that changed
 
-**Status:** ✅ DESIGN APPROVED by the owner (2026-11-19). Not built: each table's build is a
-separate step that the owner confirms first. Evidence gates (§10): G1 passed (morning and afternoon
-runs), G3 price passed, G4 passed; G2 and G3 cost still open. The §10.1 stock fix is merged (PR 279).
-No production code, no migration and no SOFTECH write is part of this document.
+**Status:** ✅ DESIGN APPROVED by the owner (2026-11-19). **Stock:** SHADOW built and live on the office
+since 2026-11-20 (PR 286); ON built 2026-11-26 (switch stays `shadow` until the owner signs off after 7 clean
+days, S2). Other tables: not built. Evidence gates (§10): G1 passed (morning and afternoon runs), G3 price
+passed, G4 passed; G2 and G3 cost still open. The §10.1 stock fix is merged (PR 279).
 **Builds on:** doc 30 *SOFTECH Load Reduction*, Phase 2 (steps 2.0–2.3). This document is the
 detailed plan for that phase.
 **Audit item:** `docs/full-project-audit/07_PERFORMANCE_AUDIT.md` PERF-6 · roadmap Wave 3.
@@ -143,6 +143,12 @@ every mode.
 - **Nightly full refresh** (per table, about 03:00–04:00, before the 06:00 morning chain):
   today's full step function, run once instead of 288 or 24 times. It corrects any missed row
   within one day and resets `last_full_at`.
+  **As built for stock (2026-11-26):** not a separate job. The **first fast run at or after 04:00 Cairo**
+  each day is a full read (`delta.stock_full_due`), so it can never overlap a fast run, and a PC that slept
+  through 04:00 catches up on its first run after waking. A first run without a watermark, a full-lane /
+  manual full run and a failed delta read are full too. Each full read in `on` stores a `StockFullCheck`:
+  rows it had to correct and sold-out rows it zeroed, per branch. That count is the stock reconcile of §6.2
+  for ON (0 on a clean day); it is shown on `/sync`.
 - **Weekly deep reconcile** (Friday 04:30): for each table, compare **counts and sums**
   between SOFTECH and our mirror (§6.2). It also lists rows that exist in our mirror but no
   longer in SOFTECH (deletes). The result is written to the `/sync` page. A difference opens

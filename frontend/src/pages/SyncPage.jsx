@@ -289,7 +289,7 @@ function DeltaShadowPanel() {
     <div data-tour="admin-sync-delta-shadow" className="bg-white rounded-2xl border border-gray-200 p-4">
       <SectionTitle icon="🔍">قراءة التغيّرات فقط — وضع المقارنة (المخزون)</SectionTitle>
       <p className="text-xs text-gray-500 mb-2">
-        الوضع الحالي: <b>{mode === 'shadow' ? 'مقارنة (shadow)' : 'متوقف (off)'}</b>.
+        الوضع الحالي: <b>{mode === 'on' ? 'تشغيل فعلي (on) — بنقرا المتغيّر بس + قراءة كاملة يومياً بعد ٤ الصبح' : mode === 'shadow' ? 'مقارنة (shadow)' : 'متوقف (off)'}</b>.
         {' '}القراءة الكاملة هي اللي بتكتب زي النهارده؛ في وضع المقارنة بنقرا كمان الصفوف اللي اتغيّرت بس ونقارن.
         {' '}«فوائت» = صف اتغيّر فعلاً والقراءة الصغيرة ماجابتهوش — لازم تفضل صفر ٧ أيام قبل التشغيل الفعلي.
       </p>
@@ -302,6 +302,19 @@ function DeltaShadowPanel() {
         </div>
       ) : (
         <div className="text-sm text-gray-400 mb-2">لسه مفيش مقارنات{mode === 'off' ? ' — الوضع متوقف.' : '.'}</div>
+      )}
+      {(data.full_checks || []).length > 0 && (
+        <div className="mb-3">
+          <div className="text-xs font-bold text-gray-600 mb-1">القراءات الكاملة (المطابقة اليومية): صفوف اتصحّحت = فرق سابه التشغيل السريع</div>
+          <div className="flex flex-wrap gap-1.5">
+            {data.full_checks.map(c => (
+              <span key={c.at} title={c.note || JSON.stringify(c.per_branch)}
+                className={`text-xs rounded-md px-2 py-1 tabnum ${c.ok ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
+                {format(new Date(c.at), 'd/M HH:mm')} · {c.reason} · تصحيح {c.corrected} · تصفير {c.zeroed}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
       {recent.length > 0 && (
         <div className="overflow-x-auto">

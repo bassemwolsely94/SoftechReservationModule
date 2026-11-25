@@ -159,7 +159,7 @@ def run_full_sync(full_history=False, manual=False):
         total += lc.run(sync_categories, sync_run)
         total += lc.run(sync_items, sync_run)
         total += lc.run(sync_item_barcodes, sync_run)
-        total += lc.run(sync_stock, sync_run)
+        total += lc.run(sync_stock, sync_run, full=True)   # the full lane always reads in full (doc 40 §3.2)
         total += lc.run(sync_customers, sync_run)
         total += lc.run(sync_sales, sync_run, full_history=full_history)
         total += lc.run(sync_users, sync_run)
@@ -1041,7 +1041,7 @@ def sync_item_barcodes(conn, sync_run):
 STOCK_RECONCILE_MIN_ROWS = 1000
 
 
-def sync_stock(conn, sync_run):
+def sync_stock(conn, sync_run, full=False):
     """
     stkbal PK: storecode + itemcode + branchcode
     Quantity column: nowqty
@@ -1052,9 +1052,24 @@ def sync_stock(conn, sync_run):
     P-56: only rows whose quantity / monthly / on-order changed (or are new) are
     written; an unchanged snapshot writes nothing. `last_synced` on a row is
     therefore "last changed"; data freshness reads the SyncRun/SyncLog, not rows.
+
+    Delta sync (doc 40): with SYNC_DELTA_STOCK=on a fast run reads only the rows stamped since the watermark
+    (apps/sync/delta.py) unless a full read is due (first run, the daily 04:00 full, `full=True` from the full
+    lane, or a failed delta read). The sold-out zeroing below only ever runs on a full read.
     """
     from django.utils import timezone
+    from apps.sync import delta
     run_ts = timezone.now()
+
+    mode = delta.stock_mode()
+    reason = 'full_lane' if full else ''
+    if mode == 'on' and not full:
+        reason = delta.stock_full_due() or ''
+        if not reason:
+            read = delta.delta_write_stock(conn, sync_run)
+            if read is not None:
+                return read
+            reason = 'fallback'
 
     import time as _time
     t_full = _time.monotonic()
@@ -1134,10 +1149,16 @@ def sync_stock(conn, sync_run):
     SyncLog.objects.create(sync_run=sync_run, table_name='stkbal', records_processed=count)
     logger.info(f"Stock synced: {count} rows, {len(changed)} changed (zeroed {zeroed} sold-out rows)")
 
+    # Delta sync ON (doc 40 §3.3): a full read resets the watermark and records how many rows the delta runs
+    # had left different from SOFTECH (the daily count-and-total check).
+    if mode == 'on':
+        delta.record_full_on(reason=reason or 'full', changed_keys={(o.item_id, o.branch_id, o.softech_store_code)
+                                                                     for o in changed},
+                             zeroed_keys=gone_keys, branch_map=branch_map, full_max=delta.max_stamp(rows),
+                             rows_full=count, full_ms=full_ms)
     # Delta sync SHADOW (doc 40 §6.1): compare this run's real changes with a "changed since the
     # watermark" read. Writes nothing it reads; off by default (SYNC_DELTA_STOCK).
-    from apps.sync import delta
-    if delta.stock_mode() == 'shadow':
+    elif mode == 'shadow':
         changed_keys = {(o.item_id, o.branch_id, o.softech_store_code) for o in changed}
         new_keys = {k for k in changed_keys if k not in current}
         delta.shadow_stock(conn, changed_keys=(changed_keys - new_keys) | gone_keys, new_keys=new_keys,
