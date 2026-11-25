@@ -118,6 +118,36 @@ def _resolve_all(codes) -> None:
             logger.error('attendance resolve failed: %s', type(exc).__name__)
 
 
+CLOSED_DEVICE_TITLE = 'جهاز مغلق أرسل بصمات'
+
+
+def _device_alert(device, kind, title, body) -> None:
+    """One `attendance_alert` per device per day and kind, to the HR managers. An alert is a
+    convenience: its failure must never refuse punches or a run report that are already safe."""
+    try:
+        from apps.hr.attendance.access import manager_recipients
+        from apps.notifications.models import Notification
+        day = timezone.localdate().isoformat()
+        with transaction.atomic():   # a savepoint: a failure can't poison the caller's transaction
+            for staff in manager_recipients():
+                Notification.send_to_user(
+                    staff, 'attendance_alert', title, body,
+                    dedup_key=f'att:{kind}:{device.pk}:{day}', bypass_role_gate=True,
+                    dedup_once=True)
+    except Exception as exc:  # see the docstring
+        logger.error('attendance alert failed: %s', type(exc).__name__)
+
+
+def _label(device) -> str:
+    return f'{device.name} ({device.location_label})' if device.location_label else device.name
+
+
+def alert_closed_device(device) -> None:
+    """New punches from a machine marked closed (either source): tell HR once per machine a day."""
+    _device_alert(device, 'closed_device', CLOSED_DEVICE_TITLE,
+                  f'الجهاز {_label(device)} مسجل كمغلق وأرسل بصمات.')
+
+
 def store_punches(device, rows, today=None) -> tuple[int, int]:
     """Store a batch, all or nothing. Returns (accepted, duplicate), which add up to len(rows)."""
     today = today or timezone.localdate()
@@ -133,8 +163,12 @@ def store_punches(device, rows, today=None) -> tuple[int, int]:
                        .values_list('user_code', 'raw_stamp', 'state'))
         new = [punch for key, punch in punches.items() if key not in existing]
         AttendancePunch.objects.bulk_create(new, ignore_conflicts=True)
-    # Duplicates too: the agent resends the whole log hourly, so an ID added since heals by itself.
+    # Duplicates too: the agent resends the whole log on every read (nightly, or «تجميع الآن»), so an
+    # ID added since heals by itself.
     _resolve_all({punch.user_code for punch in punches.values()})
+    if new and not device.is_active:
+        # Stored like any other (they are evidence); someone is still using a machine marked closed.
+        alert_closed_device(device)
     return len(new), len(rows) - len(new)
 
 

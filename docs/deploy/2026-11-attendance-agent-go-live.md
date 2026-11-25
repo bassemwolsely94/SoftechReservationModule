@@ -149,6 +149,82 @@ When the ERP moves to the VPS:
    put the new secret in `agent.ini` on the office PC, restart the agent, and in the "الماكينات" tab
    assign the machines to the new agent (and seed the machines and import the employees again).
 
+## Stage 1b: Linked Gates as a second source (read-only, optional)
+
+Stage 1b adds the legacy Linked Gates HR portal (SQL Server 2019 Express, instance `HR\SQLEXPRESS`,
+database `Linked_ERP_HR_v1`) as a second, **read-only** source next to our own collection. Design:
+`docs/superpowers/specs/2026-11-20-hr-attendance-linkedgates-sessions-design.md`. Do it after the
+steps above work. Nothing here writes to Linked Gates or to a machine.
+
+### Agent host: PC HR
+
+- The agent runs on **PC HR** (192.168.5.43), a virtual machine on the Hyper-V host **HQ-HV01**. It
+  holds the Linked Gates database, so the agent reads it locally.
+- When remote desktop refuses to connect, open PC HR from the **Hyper-V console** on HQ-HV01.
+- Install **ODBC Driver 18 for SQL Server** on PC HR, then `pip install pyodbc` in the agent's own
+  Python. The Linked Gates reader is optional: it runs only when `agent.ini` has a `[linkedgates]`
+  section (server, database, trusted, first_load_from; see `agent.ini.example` and
+  `attendance_agent/README.md`). An agent without the section never needs `pyodbc`.
+
+### Read-only login (IT person, on PC HR)
+
+Send the IT person the note at `docs/deploy/2026-11-linkedgates-readonly-login.md`
+(or the steps below). The agent's `agent.ini` uses `server = .\SQLEXPRESS` (the local instance), while SSMS shows `HR\SQLEXPRESS`. Prefer a **Windows account** (no password). In SSMS:
+
+```sql
+USE [master];
+CREATE LOGIN [<PC name>\elr-attendance] FROM WINDOWS;
+USE [Linked_ERP_HR_v1];
+CREATE USER [elr_attendance] FOR LOGIN [<PC name>\elr-attendance];
+ALTER ROLE db_datareader ADD MEMBER [elr_attendance];
+DENY INSERT, UPDATE, DELETE, EXECUTE, ALTER TO [elr_attendance];
+DENY SELECT ON dbo.Employee (Salary, Phone, Email, EmployeeImage) TO [elr_attendance];
+DENY SELECT ON dbo.Users TO [elr_attendance];
+DENY SELECT ON dbo.UserPermissions TO [elr_attendance];
+DENY SELECT ON dbo.Device (Password) TO [elr_attendance];
+```
+
+Only if a Windows account is impossible, use a SQL login (`CREATE LOGIN ... WITH PASSWORD =
+'<choose a strong one>', CHECK_POLICY = ON`) with the same user, role and DENYs, and set
+`trusted = no`, `user`, `password` in `agent.ini`. The password stays on PC HR; never email it or
+paste it into chat. Never use the website's `web.config` login.
+
+**Verify it is read-only:** as that account run `UPDATE <any table> SET <any column> = <any column>
+WHERE 1 = 0;`. It **must fail** with "permission denied". If it succeeds, stop and report.
+
+### Never do these on PC HR
+
+- **Never press F5 / Execute on a Linked Gates stored procedure in SSMS.** `sp_CalulateLogs` edits
+  and deletes data.
+- **Do not use the Device Panel buttons in Puma** (Delete Users Data, Restart, Power Off).
+- **Never revert the PC HR Hyper-V checkpoint from 2020.** It would roll the machine back.
+
+### Machine reading windows
+
+Puma Service (Linked Gates' own collector) runs on request only. Our agent reads the machines between
+**02:00 and 05:00**, and backs off for 10 minutes when a machine is busy.
+
+### Switch-on order (owner's word for each step)
+
+1. Deployment, by the coordinator: migration **`hr` 0015** (nullable day cut-off plus the Linked
+   Gates tables). Check with `python manage.py migrate --plan`, then migrate, then restart web and
+   scheduler.
+2. `HR_ATTENDANCE_ENABLED` (already on from step 8 above).
+3. Then `HR_ATTENDANCE_LINKEDGATES_ENABLED`. Restart web and scheduler.
+4. Add the `[linkedgates]` section on PC HR, restart the agent, and check the Linked Gates tab fills.
+5. `HR_ATTENDANCE_DAY_SOURCE` **stays `linkedgates`** for the one-month trial. Switch it to
+   `sessions` **only on the owner's word**, after a month in which every difference between the two
+   sources has been explained.
+
+### `sync_attendance_devices`
+
+Keeps the machine list and agent assignment in line with the corrected list.
+
+1. **Dry run first:** `python manage.py sync_attendance_devices`. It writes nothing; read the plan.
+2. Only with the owner's word: `python manage.py sync_attendance_devices --apply`, and
+   `--agent <name>` to assign every live machine to that agent.
+3. Never run `--apply` against the office database without the owner's word.
+
 ## Health alerts
 
 While `HR_ATTENDANCE_ENABLED` is on, the ERP checks the collection and sends an in-app notification

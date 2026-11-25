@@ -129,9 +129,15 @@ class AttendancePointsTests(TestCase):
         self._punch(e, 22, 5)
         self._punch(e, 5, 58, day=self.day + dt.timedelta(days=1))   # before the 04:00 boundary? no
         self._collected(through=self.day + dt.timedelta(days=2))
+        # HR decides which work day a punch belongs to, not gamification. With no fixed cut-off
+        # (the default since hr 0015) work sessions pair 22:05 → 05:58 into one shift.
+        Employee.objects.filter(pk=e.pk).update(day_boundary=None)
         self._judge()
-        # the 05:58 punch is after the 04:00 work-day boundary → it belongs to the next work day,
-        # so this day has a single punch: the HR boundary rule decides, not gamification
+        self.assertEqual(_rules(s), ['attendance_on_time'])
+        # A fixed 04:00 cut-off puts the 05:58 punch on the next work day → a single punch here.
+        Employee.objects.filter(pk=e.pk).update(day_boundary=dt.time(4, 0))
+        PointEvent.objects.filter(staff=s).delete()
+        self._judge()
         self.assertEqual(_rules(s), ['attendance_missing_punch'])
         Employee.objects.filter(pk=e.pk).update(day_boundary=dt.time(8, 0))
         PointEvent.objects.filter(staff=s).delete()

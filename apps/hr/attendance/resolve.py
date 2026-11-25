@@ -3,15 +3,20 @@ apps/hr/attendance/resolve.py — which employee a machine ID belongs to.
 
 The HR number is the machine number (owner), so an ID resolves when it equals an employee's HR
 number, unless a guard stops it. resolve_user_code recalculates from the current facts, so a punch
-can also become unresolved again. Only AttendancePunch.employee changes here, and only through
-queryset.update(): the punch's own data is never touched.
+can also become unresolved again. It links both sources: AttendancePunch.employee (ZK machines) and
+LinkedGatesPunch.employee (Linked Gates, by EnrollNo = the canonical HR number only: '01001' is not
+1001). Only those employee fields change here, and only through queryset.update(): the punch's own
+data is never touched.
 """
 import datetime
 from collections import defaultdict
 
 from django.db.models import Q
+from django.utils import timezone
 
-from apps.hr.models import AttendancePunch, ConflictConfirmation, DeviceUser, Employee
+from apps.hr.attendance.days import effective_boundary
+from apps.hr.models import (AttendancePunch, ConflictConfirmation, DeviceUser, Employee,
+                            LinkedGatesPunch)
 
 # A machine's internal slot, sent when its log holds no clean ID (8-byte logs). It means something
 # only on that machine, so it is never an employee and two machines' same slot is no conflict.
@@ -85,7 +90,7 @@ def _eligible(employee) -> Q:
     02:00 the morning after end_date is still end_date's, and 02:00 on start_date is not."""
     # A flagged punch has no date to trust, so the employment-date guard can't be checked.
     rule = Q(flag='', punch_date__isnull=False, punch_time__isnull=False)
-    early = Q(punch_time__lt=employee.day_boundary)     # work date = punch date - 1 day
+    early = Q(punch_time__lt=effective_boundary(employee))    # work date = punch date - 1 day
     if employee.start_date:
         rule &= (~early & Q(punch_date__gte=employee.start_date)) | (
             early & Q(punch_date__gt=employee.start_date))
@@ -95,10 +100,52 @@ def _eligible(employee) -> Q:
     return rule
 
 
+def lg_eligible_q(employee) -> Q:
+    """The Linked Gates twin of _eligible: the work date comes from check_time's Cairo local date
+    and time against the day boundary. work date >= start_date is check_time >= start_date at the
+    boundary; work date <= end_date is check_time < (end_date + 1 day) at the boundary."""
+    zone = timezone.get_current_timezone()
+    boundary = effective_boundary(employee)
+
+    def at(day):
+        return datetime.datetime.combine(day, boundary, tzinfo=zone)
+
+    rule = Q(flag='')
+    if employee.start_date:
+        rule &= Q(check_time__gte=at(employee.start_date))
+    if employee.end_date:
+        rule &= Q(check_time__lt=at(employee.end_date + datetime.timedelta(days=1)))
+    return rule
+
+
+def _lg_enroll_no(code):
+    """The Linked Gates EnrollNo for a machine ID, only when the ID is that number written the
+    canonical way (compare._canonical_enroll): '01001' and 1001 would otherwise flip-flop."""
+    if (isinstance(code, str) and code.isascii() and code.isdigit() and str(int(code)) == code
+            and int(code) <= 2147483647):
+        return int(code)
+    return None
+
+
+def _resolve_lg(code, employee) -> None:
+    enroll_no = _lg_enroll_no(code)
+    if enroll_no is None:
+        return
+    punches = LinkedGatesPunch.objects.filter(enroll_no=enroll_no)
+    if employee is None:
+        punches.filter(employee__isnull=False).update(employee=None)
+        return
+    eligible = lg_eligible_q(employee)
+    punches.filter(eligible).exclude(employee=employee).update(employee=employee)
+    punches.exclude(eligible).filter(employee__isnull=False).update(employee=None)
+
+
 def resolve_user_code(code) -> None:
-    """Link or unlink every stored punch of this ID. Safe to call any number of times."""
+    """Link or unlink every stored punch of this ID, from both sources (ZK machines and Linked
+    Gates). Safe to call any number of times."""
     punches = AttendancePunch.objects.filter(user_code=code)
     employee = _employee_for(code)
+    _resolve_lg(code, employee)
     if employee is None:
         punches.filter(employee__isnull=False).update(employee=None)
         return

@@ -99,6 +99,9 @@ class GateTests(Base):
             'issues/': (['GET'], 'view', 'issues/'),
             'unknown-ids/': (['GET'], 'view', 'unknown-ids/'),
             'devices/': (['GET'], 'view', 'devices/'),
+            'linkedgates/compare/': (['GET'], 'view', 'linkedgates/compare/'),
+            'linkedgates/compare/export/': (['GET'], 'view', 'linkedgates/compare/export/'),
+            'linkedgates/devices/': (['GET'], 'view', 'linkedgates/devices/'),
             'employees/<int:pk>/': (['PATCH'], 'manage', f'employees/{e}/'),
             'employees/<int:pk>/link/': (['POST'], 'manage', f'employees/{e}/link/'),
             'employees/<int:pk>/reject-link/': (['POST'], 'manage', f'employees/{e}/reject-link/'),
@@ -111,6 +114,7 @@ class GateTests(Base):
             'unknown-ids/<str:code>/unignore/': (['POST'], 'manage', 'unknown-ids/555/unignore/'),
             'conflicts/<str:code>/confirm/': (['POST'], 'manage', 'conflicts/555/confirm/'),
             'collect-now/': (['POST'], 'manage', 'collect-now/'),
+            'linkedgates/devices/<int:lg_device_id>/map/': (['POST'], 'manage', 'linkedgates/devices/7/map/'),
             'devices/<int:pk>/': (['PATCH'], 'admin', f'devices/{d}/'),
             'agents/': (['GET'], 'admin', 'agents/'),
             'agents/issue/': (['POST'], 'admin', 'agents/issue/'),
@@ -395,6 +399,20 @@ class MonthTests(Base):
         self.assertEqual(first['raw'][0]['machine'], 'جهاز ١')
         self.assertEqual(body['totals']['days_with_punches'], 2)
         self.assertEqual(body['employee']['hr_number'], '1001')
+
+    def test_days_endpoint_lists_each_days_sessions(self):
+        # Spec 5.3: session mode (no fixed day boundary) shows each day's sessions inline.
+        self.punch(stamp=4, date=_dt.date(2026, 10, 2), time=_dt.time(17, 0), employee=self.emp)
+        self.punch(stamp=5, date=_dt.date(2026, 10, 2), time=_dt.time(20, 0), employee=self.emp)
+        days = self.viewer.get(URL + f'employees/{self.emp.pk}/days/?month=2026-10').json()['days']
+        self.assertEqual(days[0]['sessions'], [{'first_in': '2026-10-01T09:00:00', 'last_out': '2026-10-01T17:30:00',
+                                                'worked_minutes': 510, 'needs_review': False}])
+        self.assertEqual(days[1]['sessions'], [{'first_in': '2026-10-02T09:00:00', 'last_out': '2026-10-02T20:00:00',
+                                                'worked_minutes': 480, 'needs_review': True}])
+        self.assertEqual(days[2]['sessions'], [])
+        Employee.objects.filter(pk=self.emp.pk).update(day_boundary=_dt.time(4, 0))
+        fixed = self.viewer.get(URL + f'employees/{self.emp.pk}/days/?month=2026-10').json()['days']
+        self.assertEqual(fixed[0]['sessions'], [])                      # a fixed boundary has none
 
     def test_days_for_unknown_employee_is_404(self):
         self.assertEqual(self.viewer.get(URL + 'employees/999999/days/?month=2026-10').status_code, 404)
@@ -921,15 +939,16 @@ class SeedTests(TestCase):
     def test_seed_devices_is_idempotent(self):
         self.run_seed()
         self.run_seed()
-        self.assertEqual(AttendanceDevice.objects.count(), 8)
+        self.assertEqual(AttendanceDevice.objects.count(), 16)
         by = {d.name: d for d in AttendanceDevice.objects.all()}
         self.assertEqual(by['Alia'].serial, 'A2ML173860738')
         self.assertEqual(by['Alia'].ip, '192.168.30.15')
-        self.assertEqual(by['8'].serial, 'A8ME185060308')
-        self.assertEqual((by['Alia'].location_label, by['8'].location_label), ('', ''))
+        self.assertEqual(by['Zahar'].serial, 'A8ME185060308')
         self.assertTrue(all(d.branch is None and d.port == 4370 for d in by.values()))
-        self.assertTrue(all(d.location_label for n, d in by.items() if n not in ('Alia', '8')))
-        self.assertEqual(by['Giza'].model_name, 'K14')
+        self.assertEqual(by['Balegh'].model_name, 'K14')
+        self.assertEqual(AttendanceDevice.objects.filter(is_active=True).count(), 7)
+        self.assertFalse(by['Aliaa'].is_active)
+        self.assertEqual(by['Aliaa'].location_label, 'مغلق')
 
     def test_seed_never_overwrites_an_edit(self):
         self.run_seed()

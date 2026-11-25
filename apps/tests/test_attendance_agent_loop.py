@@ -720,7 +720,7 @@ class LoopTests(TempDirTestCase):
             client_factory=factory or default_factory,
             now=lambda: NOW,
             clock=lambda: self.clock_value,
-            cache_path=self.root / 'devices.json',
+            cache_path=self.root / 'devices.json',            collect_window=None,    # the night window has its own tests
         )
 
     def test_first_tick_collects_and_sends_everything(self):
@@ -1448,3 +1448,95 @@ class RunForeverTests(TempDirTestCase):
         self.assertEqual(type(added[0]).__name__, 'RotatingFileHandler')
         self.assertGreater(added[0].maxBytes, 0)
         self.assertGreater(added[0].backupCount, 0)
+
+
+class NightWindowTests(TempDirTestCase):
+    """Scheduled reads only 02:00-05:00 (ERP-corrected time); collect-now ignores it; a busy
+    machine is left alone for 10 minutes."""
+
+    def make_loop(self, uploader, at, factory=None):
+        self.clock_value = 0
+        self.collected = []
+
+        def default_factory(target):
+            self.collected.append(target['serial'])
+            return FakeClient(serial=target['serial'])
+
+        return AgentLoop(
+            uploader=uploader, spool=self.spool, client_factory=factory or default_factory,
+            now=lambda: datetime(2026, 11, 7, at[0], at[1]), clock=lambda: self.clock_value,
+            cache_path=self.root / 'devices.json',
+        )
+
+    def test_scheduled_read_only_in_window(self):
+        from attendance_agent import collector
+        self.assertEqual(collector.COLLECT_WINDOW, (time(2, 0), time(5, 0)))
+        for at, expected in (((1, 59), 0), ((2, 0), 1), ((4, 59), 1), ((5, 0), 0), ((10, 0), 0)):
+            with self.subTest(at=at):
+                loop = self.make_loop(FakeUploader(), at)
+                loop.tick()
+                self.assertEqual(len(self.collected), expected)
+
+    def test_window_uses_the_corrected_clock(self):
+        # PC says 00:30, the ERP is 2 h ahead: 02:30 Cairo, inside the window.
+        server = datetime(2026, 11, 7, 2, 30).replace(tzinfo=timezone(timedelta(hours=2))).isoformat()
+        loop = self.make_loop(FakeUploader(server_time=server), (0, 30))
+        loop.tick()
+        self.assertEqual(len(self.collected), 1)
+
+    def test_collect_now_ignores_window(self):
+        loop = self.make_loop(FakeUploader(collect_now=True), (10, 0))
+        loop.tick()
+        self.assertEqual(len(self.collected), 1)
+
+    def test_busy_backoff_600(self):
+        from attendance_agent import collector
+        self.assertEqual(collector.BUSY_BACKOFF_SECONDS, 600)
+        attempts = []
+
+        def refusing(target):
+            attempts.append(self.clock_value)
+            raise ConnectionRefusedError('busy')
+
+        loop = self.make_loop(FakeUploader(), (3, 0), refusing)
+        loop.tick()
+        for seconds in (60, 301, 599):          # past the old 300 s gap, still inside 600 s
+            self.clock_value = seconds
+            loop.tick()
+        self.assertEqual(attempts, [0])
+        self.clock_value = 600
+        loop.tick()
+        self.assertEqual(attempts, [0, 600])
+
+    def test_other_failure_does_not_use_the_busy_backoff(self):
+        from attendance_agent import collector
+
+        def broken(target):
+            raise ZkProtocolError('bad table')
+
+        loop = self.make_loop(FakeUploader(), (3, 0), broken)
+        loop.tick()
+        self.assertEqual(loop._next_due['SN1'], collector.COLLECT_EVERY_SECONDS)
+
+    def test_mid_session_timeout_and_reset_use_the_busy_backoff(self):
+        # A machine that stops answering mid-session (the client's own deadline) or resets the
+        # connection is busy too: 600 s, not the hourly cadence.
+        from attendance_agent import collector
+        from attendance_agent.zk_client import ZkTimeout
+        for error in (ZkTimeout('the machine took too long to answer'), ConnectionResetError('reset')):
+            with self.subTest(error=type(error).__name__):
+                def failing(target, error=error):
+                    raise error
+
+                loop = self.make_loop(FakeUploader(), (3, 0), failing)
+                loop.tick()
+                self.assertEqual(loop._next_due['SN1'], collector.BUSY_BACKOFF_SECONDS)
+
+    def test_zk_timeout_is_a_protocol_error(self):
+        from attendance_agent.zk_client import ZkTimeout
+        self.assertTrue(issubclass(ZkTimeout, ZkProtocolError))
+
+    def test_freshness_cadence_matches_the_nightly_window(self):
+        # Machines are read once a night, so the freshness bar must not go stale an hour later.
+        from apps.sync.freshness import DOMAINS
+        self.assertGreaterEqual(DOMAINS['attendance']['cadence_min'], 24 * 60)

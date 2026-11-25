@@ -6,7 +6,7 @@
  * The server decides who sees and changes what (view / export / manage / admin, checked on every
  * route); the controls this page hides are a convenience, not the authorization.
  *
- * Tabs: month · days · issues · employees · devices.
+ * Tabs: month · days · issues · employees · devices · lg-compare (the Linked Gates trial).
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -18,6 +18,7 @@ import AccessTab from './hr-attendance/AccessTab'
 import DevicesTab from './hr-attendance/DevicesTab'
 import EmployeesTab from './hr-attendance/EmployeesTab'
 import IssuesTab from './hr-attendance/IssuesTab'
+import LgCompareTab from './hr-attendance/LgCompareTab'
 import MonthTab from './hr-attendance/MonthTab'
 import { thisMonth } from './hr-attendance/shared'
 
@@ -27,6 +28,7 @@ const TABS = [
   { key: 'issues',    label: '⚠️ مشاكل' },
   { key: 'employees', label: '👥 الموظفون' },
   { key: 'devices',   label: '🖐️ الماكينات' },
+  { key: 'lg-compare', label: '🔀 مقارنة لينكد جيتس' },
   { key: 'access',    label: '🔑 الصلاحيات', admin: true },
 ]
 
@@ -93,6 +95,7 @@ export default function HRAttendancePage() {
       {tab === 'issues' && <IssuesTab access={access} />}
       {tab === 'employees' && <EmployeesTab access={access} onOpenDays={openDays} />}
       {tab === 'devices' && <DevicesTab access={access} />}
+      {tab === 'lg-compare' && <LgCompareTab month={month} setMonth={setMonth} access={access} onOpenDays={openDays} />}
       {tab === 'access' && access.can_admin && <AccessTab />}
     </div>
   )

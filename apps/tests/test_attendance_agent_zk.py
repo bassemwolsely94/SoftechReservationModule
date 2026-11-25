@@ -843,6 +843,11 @@ class StandaloneTests(SimpleTestCase):
                 else:
                     continue
                 for name in names:
+                    # The one allowed third-party import: the optional Linked Gates reader.
+                    # It is imported lazily inside a function, and only needed when
+                    # [linkedgates] is configured.
+                    if name.split('.')[0] == 'pyodbc' and source.name == 'lg_reader.py':
+                        continue
                     self.assertIn(
                         name.split('.')[0], sys.stdlib_module_names,
                         f'{source.name} imports {name}',

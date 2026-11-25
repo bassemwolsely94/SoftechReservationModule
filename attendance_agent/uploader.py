@@ -13,7 +13,13 @@ import urllib.request
 HEADER = 'X-ElR-Attendance-Agent'
 TIMEOUT_SECONDS = 60
 _PREFIX = '/api/hr-attendance/agent'
-_KINDS = frozenset({'punches', 'roster', 'runs'})
+# Spool kind -> endpoint under _PREFIX. The two lg_ kinds are Linked Gates, sent straight
+# from its database (not spooled), to agent/lg/punches/ and agent/lg/reference/.
+_ENDPOINTS = {
+    'punches': 'punches', 'roster': 'roster', 'runs': 'runs',
+    'lg_punches': 'lg/punches', 'lg_reference': 'lg/reference',
+}
+_KINDS = frozenset(_ENDPOINTS)
 _RETRY_LATER_CODES = frozenset({401, 408, 429})
 
 
@@ -78,7 +84,7 @@ class Uploader:
     def send(self, kind, payload) -> None:
         if kind not in _KINDS:
             raise UploadError('unknown spool entry', permanent=True)
-        answer = self._json_object(self._request('POST', kind, payload))
+        answer = self._json_object(self._request('POST', _ENDPOINTS[kind], payload))
         if kind == 'punches':
             self._check_counts(answer, len(payload['punches']))
 

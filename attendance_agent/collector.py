@@ -9,12 +9,13 @@ import logging.handlers
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, time as clock_time, timedelta
 from pathlib import Path
 
+from .lg_reader import LinkedGatesReader, LinkedGatesSync, make_lg_connect
 from .spool import Spool
 from .uploader import Uploader, UploadError
-from .zk_client import ZkClient, ZkError, ZkProtocolError
+from .zk_client import ZkClient, ZkError, ZkProtocolError, ZkTimeout
 
 logger = logging.getLogger('attendance_agent')
 
@@ -25,6 +26,11 @@ COLLECT_EVERY_SECONDS = 3600
 # or a read fails. These are old machines, and the ZK program may be connected at the same
 # time. Measured from the end of the last read.
 MIN_READ_GAP_SECONDS = 300
+# Scheduled machine reads happen only between these local times (the ERP-corrected clock), when
+# nobody is punching. Collect-now ignores it.
+COLLECT_WINDOW = (clock_time(2, 0), clock_time(5, 0))
+# After a machine refused the connection or timed out (busy or unreachable), leave it alone this long.
+BUSY_BACKOFF_SECONDS = 600
 DRAIN_BUDGET_SECONDS = 300  # a long backlog must not keep machines waiting
 REFUSED_RETRY_SECONDS = 900  # a file the ERP refused waits, so newer files go first
 LOG_MAX_BYTES = 5 * 1024 * 1024
@@ -41,6 +47,30 @@ class AgentConfig:
     secret: str = field(repr=False)
     state_dir: Path = None
     comm_keys: dict = field(default_factory=dict, repr=False)
+    # The optional [linkedgates] section: server, database, trusted, user, password,
+    # first_load_from. None when the section is absent, so no Linked Gates code runs.
+    linkedgates: dict = field(default=None, repr=False)
+
+
+def _load_linkedgates(parser):
+    if not parser.has_section('linkedgates'):
+        return None
+    section = parser['linkedgates']
+    lg = {key: section.get(key, '').strip() for key in
+          ('server', 'database', 'trusted', 'user', 'password', 'first_load_from')}
+    if not lg['server'] or not lg['database']:
+        raise ValueError('the [linkedgates] section needs server and database')
+    lg['trusted'] = lg['trusted'].lower() in ('', 'yes', 'true', '1')
+    if not lg['trusted'] and not (lg['user'] and lg['password']):
+        raise ValueError('[linkedgates] needs user and password when trusted is not yes')
+    if lg['first_load_from']:
+        try:
+            lg['first_load_from'] = datetime.fromisoformat(lg['first_load_from'])
+        except ValueError:
+            raise ValueError('[linkedgates] first_load_from is not a date') from None
+    else:
+        lg['first_load_from'] = None
+    return lg
 
 
 def load_config(path) -> AgentConfig:
@@ -62,6 +92,7 @@ def load_config(path) -> AgentConfig:
     state_dir = parser.get('agent', 'state_dir', fallback='').strip()
     comm_keys = dict(parser['comm_keys']) if parser.has_section('comm_keys') else {}
     return AgentConfig(
+        linkedgates=_load_linkedgates(parser),
         erp_url=erp_url,
         secret=secret,
         state_dir=Path(state_dir) if state_dir else Path(path).parent / 'agent_state',
@@ -249,7 +280,14 @@ def _spool_results(serial, users, logs, spool, run):
     )
 
 
-def collect_device(device, client_factory, spool, now, collect_done=False, pc_offset=None) -> None:
+def _is_busy_error(exc) -> bool:
+    """A refused or reset connection, or a timeout (at connect or mid-session): the machine is
+    busy or unreachable right now."""
+    # socket.timeout is TimeoutError; ZkTimeout is the client's own session deadline.
+    return isinstance(exc, (ConnectionRefusedError, ConnectionResetError, TimeoutError, ZkTimeout))
+
+
+def collect_device(device, client_factory, spool, now, collect_done=False, pc_offset=None) -> bool:
     """Read one machine, disconnect, then spool. `now` is called, not a fixed time,
     because earlier machines may have taken minutes and drift must stay accurate.
     When the loop knows how far this PC's clock is from the ERP's, `now` is already
@@ -258,6 +296,8 @@ def collect_device(device, client_factory, spool, now, collect_done=False, pc_of
     A failed read spools only a failed run, so a part-read log is never reported as
     complete. The machine still holds its log for the next run. A failed save raises,
     so the caller can try the machine again soon.
+
+    Returns True when the machine refused the connection or timed out (the caller backs off).
     """
     serial = device['serial']
     run = {
@@ -272,10 +312,12 @@ def collect_device(device, client_factory, spool, now, collect_done=False, pc_of
     if collect_done:
         run['collect_done'] = True
     users = logs = None
+    busy = False
     try:
         users, logs = _read_machine(device, client_factory, run, now)
     except Exception as exc:  # any machine failure is reported, and must not stop others
         run['status'] = 'failed'
+        busy = _is_busy_error(exc)
         _note(run, _safe_error(exc))
         logger.warning('device %s failed: %s', serial, _safe_error(exc))
         if _quarantine_raw_log(exc, serial, spool):
@@ -295,6 +337,7 @@ def collect_device(device, client_factory, spool, now, collect_done=False, pc_of
         except OSError:
             pass  # the same disk problem; the raise below is what gets logged
         raise
+    return busy
 
 
 def drain(spool, uploader, budget_seconds=DRAIN_BUDGET_SECONDS, clock=time.monotonic,
@@ -355,7 +398,8 @@ def _valid_devices(devices):
 
 
 class AgentLoop:
-    def __init__(self, uploader, spool, client_factory, now, clock, cache_path, only_serial=None):
+    def __init__(self, uploader, spool, client_factory, now, clock, cache_path, only_serial=None,
+                 lg_sync=None, collect_window=COLLECT_WINDOW):
         self._uploader = uploader
         self._spool = spool
         self._client_factory = client_factory
@@ -363,11 +407,15 @@ class AgentLoop:
         self._clock = clock
         self._cache_path = Path(cache_path)
         self._only_serial = only_serial
+        self._collect_window = collect_window   # None = no window (tests)
+        self._busy_until = {}
         self._last_read = {}
         self._next_due = {}
         self._saved_devices = None
         self._held = {}
         self._collect_done_file = None
+        self._lg_sync = lg_sync          # None unless the ini has [linkedgates]
+        self._lg_enabled = False         # the ERP's `linkedgates` answer
         self._pc_offset = None   # seconds the ERP's (Cairo) wall clock is ahead of this PC's; None = not yet known
 
     def _corrected_now(self):
@@ -399,16 +447,26 @@ class AgentLoop:
                 logger.error('machine %s is not assigned to this agent', self._only_serial)
         clock = self._clock()
         run_all = self._should_run_all(devices, collect_now, clock)
-        targets = devices if run_all else [d for d in devices if self._is_due(d, clock)]
+        if run_all:
+            targets = devices
+        elif self._in_window():
+            targets = [d for d in devices if self._is_due(d, clock)]
+        else:
+            targets = []
         for index, device in enumerate(targets):
             serial = device['serial']
             try:
-                collect_device(
+                busy = collect_device(
                     device, self._client_factory, self._spool, self._corrected_now,
                     collect_done=run_all and index == len(targets) - 1,
                     pc_offset=self._pc_offset,
                 )
-                self._next_due[serial] = clock + COLLECT_EVERY_SECONDS
+                if busy:
+                    self._busy_until[serial] = clock + BUSY_BACKOFF_SECONDS
+                    self._next_due[serial] = clock + BUSY_BACKOFF_SECONDS
+                else:
+                    self._busy_until.pop(serial, None)
+                    self._next_due[serial] = clock + COLLECT_EVERY_SECONDS
             except Exception as exc:  # e.g. disk full: the next machine still gets its turn
                 logger.error('device %s run failed: %s', serial, _safe_error(exc))
                 self._next_due[serial] = clock + MIN_READ_GAP_SECONDS
@@ -417,6 +475,11 @@ class AgentLoop:
             pending = self._spool.pending()
             self._collect_done_file = pending[-1] if pending else None
         drain(self._spool, self._uploader, clock=self._clock, held=self._held)
+        if self._lg_sync is not None and self._lg_enabled:
+            if collect_now:
+                self._lg_sync.run(self._uploader, force=True)   # collect-now skips the 15-minute gap
+            else:
+                self._lg_sync.run(self._uploader)
 
     def _should_run_all(self, devices, collect_now, clock):
         """A collect-now request stays set until collect_done reaches the ERP. So once
@@ -429,8 +492,17 @@ class AgentLoop:
             return False
         return all(self._gap_passed(d, clock) for d in devices)
 
+    def _in_window(self):
+        if self._collect_window is None:
+            return True
+        start, end = self._collect_window
+        return start <= self._corrected_now().time() < end
+
     def _gap_passed(self, device, clock):
-        last = self._last_read.get(device['serial'])
+        serial = device['serial']
+        if clock < self._busy_until.get(serial, clock):
+            return False
+        last = self._last_read.get(serial)
         return last is None or clock - last >= MIN_READ_GAP_SECONDS
 
     def _is_due(self, device, clock):
@@ -443,9 +515,11 @@ class AgentLoop:
         except UploadError as exc:
             # The ERP being down must not stop collection, even after a PC restart.
             logger.warning('ERP config unavailable: %s', _safe_error(exc))
+            self._lg_enabled = False
             # The last known offset is kept, so stamps don't flip between corrected and not.
             return self._load_devices(), False
         self._pc_offset = self._learn_offset(config.get('server_time'))
+        self._lg_enabled = config.get('linkedgates') is True
         devices = _valid_devices(config['devices'])
         self._save_devices(devices)
         return devices, bool(config.get('collect_now'))
@@ -480,7 +554,15 @@ class AgentLoop:
 
 def _build_loop(config, only_serial=None):
     config.state_dir.mkdir(parents=True, exist_ok=True)
+    lg_sync = None
+    if config.linkedgates:
+        lg = config.linkedgates
+        lg_sync = LinkedGatesSync(
+            LinkedGatesReader(make_lg_connect(lg)),
+            config.state_dir / 'lg_cursor.json', datetime.now, lg['first_load_from'],
+        )
     return AgentLoop(
+        lg_sync=lg_sync,
         uploader=Uploader(config.erp_url, config.secret),
         spool=Spool(config.state_dir / 'spool'),
         client_factory=make_client_factory(config.comm_keys),
