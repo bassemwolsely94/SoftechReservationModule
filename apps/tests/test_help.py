@@ -1141,6 +1141,34 @@ class TrainingDigestTests(TestCase):
         self.assertEqual([r['id'] for r in s['finished_this_week']], [self.ph.id])
         self.assertEqual(s['complete'], 1)
 
+    def test_glossary_line(self):
+        """📖 line: total and places of avoided words still in the help, top 3, only while
+        there are any; the same check as «طبّق القاموس على الكل»."""
+        from unittest import mock
+        from apps.help import digest
+        from apps.help.models import HelpGlossaryTerm
+        base = {'team': 2, 'complete': 0, 'finished_this_week': [], 'stuck': [], 'failed': [], 'retake': [],
+                'notes': []}
+        g = {'total': 37, 'places': 5, 'top': [{'title': {'ar': f'مكان {i}'}, 'count': 10 - i} for i in range(3)]}
+        _, body = digest.render({**base, 'glossary': g})
+        self.assertIn('📖 لسه 37 كلمة مش على القاموس في 5 مكان: مكان 0 (10)، مكان 1 (9)، مكان 2 (8) و2 غيرها', body)
+        self.assertIn('«📖 طبّق القاموس على الكل»', body)
+        for empty in (None, {'total': 0, 'places': 0, 'top': []}):
+            _, body = digest.render({**base, 'glossary': empty})
+            self.assertNotIn('📖 لسه', body)
+        # end to end: a term the help text uses → the line is in the sent digest
+        self.assertNotIn('📖 لسه', digest.send_weekly(dry_run=True)[0][2])          # empty glossary
+        HelpGlossaryTerm.objects.create(preferred='الصفحة', avoid=['الشاشة'])
+        g = digest.week_glossary()
+        self.assertGreater(g['total'], 0)
+        self.assertLessEqual(len(g['top']), digest.MAX_GLOSSARY)
+        self.assertIn(f"📖 لسه {g['total']} كلمة", digest.send_weekly(dry_run=True)[0][2])
+        # a failing glossary check never stops the digest
+        with mock.patch('apps.help.glossary.audit_all', side_effect=RuntimeError('x')):
+            sent = digest.send_weekly(dry_run=True)
+        self.assertEqual(len(sent), 1)
+        self.assertNotIn('📖 لسه', sent[0][2])
+
     def test_sent_once_a_week_and_switch_off(self):
         from apps.config.models import SystemSetting
         from apps.help import digest

@@ -64,6 +64,9 @@ Status: ✅ BUILT 2026-10-10 — framework + content for every staff route (175 
   its count, avoided → agreed words and up to 3 sample sentences, most first. Read-only: «افتح وطبّق ←»
   opens that item's editor (screen editor, or the training editor via `?tkind=&tkey=`) where
   «📖 طبّق القاموس» replaces word by word.
+  The supervisors' weekly digest (2026-11-25, `digest.week_glossary()`, computed once per send) adds
+  «📖 لسه N كلمة مش على القاموس في M مكان: …» with the top 3 places, only while N > 0; a failing
+  check is logged and the digest goes out without the line.
 - **Elaborate tours (2026-10-25).** Every tour step — screen `tour` and module `flows` — has a one-line
   headline (`text`) and a longer explanation (`more`: what the button does, when to use it, what
   happens next, what to watch for), checked by `TourExplanationTests` (≥ 60 Arabic chars + English).

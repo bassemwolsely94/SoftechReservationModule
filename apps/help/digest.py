@@ -9,6 +9,8 @@ branches they can see:
   ❌ failed a quiz (best attempt on the current version below the pass mark)
   ⟳ must retake a quiz that changed after they passed it
   📝 the «what changed» one-liners trainers / developers wrote this week (same for all)
+  📖 words the glossary says to avoid that the help still uses, top places (same for all;
+     only while there are any — glossary.audit_all, read-only)
 Names are capped per line; the full list is in «دليل الاستخدام» ← «للمدربين».
 Delivered through apps.notifications (same as every other module); never raises.
 """
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 from .onboarding_views import STUCK_DAYS  # noqa: E402 — one rule for digest, team view, «تذكير»
 MAX_NAMES = 5
 MAX_NOTES = 3
+MAX_GLOSSARY = 3
 
 
 def enabled():
@@ -43,7 +46,16 @@ def week_notes(now=None):
     return recent_notes(days=7, now=now)
 
 
-def summary_for(supervisor, now=None, notes=None):
+def week_glossary():
+    """→ {'total', 'places', 'top': [{'title', 'count'}]}: where the help still uses words
+    the glossary says to avoid (glossary.audit_all — same check as «طبّق القاموس على الكل»)."""
+    from .glossary import audit_all
+    items = audit_all()
+    return {'total': sum(i['count'] for i in items), 'places': len(items),
+            'top': [{'title': i['title'], 'count': i['count']} for i in items[:MAX_GLOSSARY]]}
+
+
+def summary_for(supervisor, now=None, notes=None, glossary=None):
     """→ dict with the four lists (rows from onboarding_views.team_rows), scoped to
     the supervisor's branches; the supervisor is left out of their own digest."""
     from apps.users.models import StaffProfile
@@ -64,6 +76,7 @@ def summary_for(supervisor, now=None, notes=None):
         'failed': [r for r in rows if r['failed_quizzes']],
         'retake': [r for r in rows if r['retake_quizzes']],
         'notes': week_notes(now) if notes is None else notes,
+        'glossary': glossary,
     }
 
 
@@ -92,6 +105,13 @@ def render(s):
         shown = '؛ '.join(f"{n['title']['ar']}: «{n['note']}»" for n in s['notes'][:MAX_NOTES])
         more = len(s['notes']) - MAX_NOTES
         lines.append(f"📝 اتحدّث في التدريب ({len(s['notes'])}): {shown}" + (f' و{more} غيرها' if more > 0 else ''))
+    g = s.get('glossary')
+    if g and g['total']:
+        top = '، '.join(f"{t['title']['ar']} ({t['count']})" for t in g['top'])
+        more = g['places'] - len(g['top'])
+        lines.append(f"📖 لسه {g['total']} كلمة مش على القاموس في {g['places']} مكان: {top}"
+                     + (f' و{more} غيرها' if more > 0 else '')
+                     + ' — «للمدربين» ← «📖 طبّق القاموس على الكل».')
     lines.append('التفاصيل وزر «🔔 تذكير»: دليل الاستخدام ← للمدربين ← تقدّم الفريق في التدريب.')
     return '📊 ملخص التدريب الأسبوعي', '\n'.join(lines)
 
@@ -108,9 +128,14 @@ def send_weekly(now=None, dry_run=False):
     except Exception as exc:
         logger.warning('help training digest notes skipped: %s', exc)
         notes = []
+    try:
+        glossary = week_glossary()
+    except Exception as exc:
+        logger.warning('help training digest glossary skipped: %s', exc)
+        glossary = None
     for sup in recipients():
         try:
-            s = summary_for(sup, now, notes)
+            s = summary_for(sup, now, notes, glossary)
             if not s['team']:
                 continue
             title, body = render(s)
